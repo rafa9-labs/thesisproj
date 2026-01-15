@@ -18415,19 +18415,38 @@ class MLBacktester:
 #     "dqn":            {"random": 0,  "bayes": 0},
 # }
 
+
+# Used for thesis
+# TRIAL_COUNTS = {
+#     "logistic":       {"random": 20, "bayes": 40},
+#     "svm":            {"random": 20, "bayes": 40},
+#     "decision_tree":  {"random": 20, "bayes": 40},
+#     "random_forest":  {"random": 20, "bayes": 40},
+#     "xgboost":        {"random": 20, "bayes": 40},
+#     "lstm":           {"random": 20, "bayes": 40},
+#     "cnn":            {"random": 20, "bayes": 40},
+#     "transformer":    {"random": 20, "bayes": 40},
+#     "ensemble_adaptive_regime":     {"random": 20, "bayes": 40},
+#     "ensemble_cnn_lstm_xgboost":    {"random": 20, "bayes": 40},
+#     "dqn":            {"random": 0,  "bayes": 0},
+# }
+
+# For quick system check.
 TRIAL_COUNTS = {
-    "logistic":       {"random": 20, "bayes": 40},
-    "svm":            {"random": 20, "bayes": 40},
-    "decision_tree":  {"random": 20, "bayes": 40},
-    "random_forest":  {"random": 20, "bayes": 40},
-    "xgboost":        {"random": 20, "bayes": 40},
-    "lstm":           {"random": 20, "bayes": 40},
-    "cnn":            {"random": 20, "bayes": 40},
-    "transformer":    {"random": 20, "bayes": 40},
-    "ensemble_adaptive_regime":     {"random": 20, "bayes": 40},
-    "ensemble_cnn_lstm_xgboost":    {"random": 20, "bayes": 40},
-    "dqn":            {"random": 0,  "bayes": 0},
+    "logistic":       {"random": 3, "bayes": 3},
+    "svm":            {"random": 3, "bayes": 3},
+    "decision_tree":  {"random": 3, "bayes": 3},
+    "random_forest":  {"random": 3, "bayes": 3},
+    "xgboost":        {"random": 3, "bayes": 3},
+    "lstm":           {"random": 3, "bayes": 3},
+    "cnn":            {"random": 3, "bayes": 3},
+    "transformer":    {"random": 3, "bayes": 3},
+    "ensemble_adaptive_regime":     {"random": 3, "bayes": 3},
+    "ensemble_cnn_lstm_xgboost":    {"random": 3, "bayes": 3},
+    "dqn":            {"random": 3,  "bayes": 3},
 }
+
+
 
 def main() ->  None:
     """
@@ -18458,7 +18477,7 @@ def main() ->  None:
     SEEDS = [33333]
     REPEATS = 1
 
-    N_REAL_MONTHS = 36 # 36
+    N_REAL_MONTHS = 3 # 36
     END_DATE = "2025-12-01 00:00:00"   # end-of-Aug 2025, inclusive-ish for bar data
 
     # 1) Load feature configuration

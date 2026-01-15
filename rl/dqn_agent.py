@@ -468,6 +468,7 @@ class DQNAgent:
         self.model.save(model_path)
         with open(config_path, "w") as f:
             json.dump(self.config, f)
+            
         if _dqn_is_debug():
             print(f"✅ DQNAgent saved to: {model_path} and {config_path}")
 
