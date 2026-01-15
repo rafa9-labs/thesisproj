@@ -1,0 +1,40 @@
+{
+  "gamma": 0.99,
+
+  "episodes": 20,
+  "max_steps_per_episode": 30000,
+
+  "epsilon": 1.0,
+  "epsilon_min": 0.05,
+  "epsilon_decay_steps": 450000,
+
+  "learning_rate": 0.0003,
+  "batch_size": 128,
+
+  "buffer_size": 60000,
+  "warmup_steps": 10000,
+
+  "replay_freq": 4,
+  "target_update_freq": 500,
+
+  "action_size": 3,
+  "window": 20,
+
+  "use_prioritized_replay": true,
+  "per_alpha": 0.6,
+  "per_beta_start": 0.4,
+  "per_beta_steps": 450000,
+
+  "env_reward_clip": "tanh",
+  "env_reward_tanh_k": 3.0,
+  "env_reward_clip_range": [-1.0, 1.0],
+  "env_reward_norm": true,
+  "env_reward_norm_beta": 0.99,
+
+  "env_cost_scale_dqn": 1.5,
+  "env_turnover_penalty_dqn": 0.00001,
+
+  "log_every": 1000,
+
+  "seed": 11111
+}
