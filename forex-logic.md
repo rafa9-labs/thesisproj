@@ -1,0 +1,1 @@
+"Prioritize event-driven updates over polling. Use memoization for heavy technical indicator calculations (e.g., RSI or Moving Averages). Risk management (Stop Loss/Take Profit) must be calculated at the entry point and never re-calculated in the UI render loop."
