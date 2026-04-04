@@ -14,8 +14,10 @@ import glob
 import hashlib
 import json
 import math
+from math import sqrt
 import multiprocessing
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -25,7 +27,7 @@ import traceback
 import warnings
 from contextlib import contextmanager
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, Tuple
 
 # TensorFlow: quiet logs by default and avoid full-GPU preallocation.
 # Users can override these via environment variables before launching Python.
@@ -88,12 +90,6 @@ try:
     import matplotlib.pyplot as _plt
 except Exception:
     _plt = None
-
-try:
-    # Used only for cleanup without touching the main 'tf' alias
-    import tensorflow as _tf
-except Exception:
-    _tf = None
 
 try:
     # Heavy; used in prepare_features for indicators if enabled
@@ -182,14 +178,8 @@ from utilsNoWFO import (
 
 
 # --- Quiet TensorFlow logs (no determinism; keep random seeding) ---
-import os
-# Hide INFO and WARNING logs from TensorFlow; keep ERRORs visible
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
-
-# Tidy shared library path once (helps cut duplicate plugin scans)
-_ld = os.environ.get("LD_LIBRARY_PATH", "")
-if _ld:
-    os.environ["LD_LIBRARY_PATH"] = ":".join(dict.fromkeys(_ld.split(":")))
+# NOTE: TF_CPP_MIN_LOG_LEVEL already set at top of file; no duplicate needed.
+# LD_LIBRARY_PATH dedup removed — Linux-only, not relevant on Windows.
 
 # ── Data paths & constants ────────────────────────────────────────────────────
 CSV_1H    = "csv_data/EURUSD_10_years_H1_OANDA.csv"

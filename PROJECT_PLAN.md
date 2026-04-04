@@ -1,7 +1,7 @@
 # FX MLBacktester — Refactoring & UI Master Plan
 
-> **Last Updated**: 2024-04-04  
-> **Status**: Phase 0 (Prerequisites) — In Progress
+> **Last Updated**: 2026-04-04  
+> **Status**: Phase 0 (Prerequisites) — In Progress (Steps 0.1–0.4 done)
 
 ---
 
@@ -95,10 +95,10 @@ Walk-forward, cost-aware backtesting with causal feature/label construction, ens
 | Step | Description | Addresses | Status |
 |------|-------------|-----------|--------|
 | 0.1 | Create `PROJECT_PLAN.md` (this file) | — | ✅ |
-| 0.2 | Create `config.py` — centralized settings from `.env` + JSON | B1, B5 | ⬜ |
-| 0.3 | Add `if __name__ == "__main__"` guard to orchestrator | B4 | ⬜ |
-| 0.4 | Create `logging_config.py` — replace `print()`/`log_print()` with `logging` | B2 | ⬜ |
-| 0.5 | Remove duplicate imports and redundant TF initialization | B3, A3 | ⬜ |
+| 0.2 | Create `config.py` — centralized settings from `.env` + JSON | B1, B5 | ✅ |
+| 0.3 | Add `if __name__ == "__main__"` guard to orchestrator | B4 | ✅ |
+| 0.4 | Create `logging_config.py` — replace `print()`/`log_print()` with `logging` | B2 | ✅ |
+| 0.5 | Remove duplicate imports and redundant TF initialization | B3, A3 | ⬜ ← **current** |
 | 0.6 | Add lazy imports for TF/XGBoost (15-30s faster startup) | A6 | ⬜ |
 | 0.7 | Fix `LD_LIBRARY_PATH` and Linux-only assumptions | E2 | ⬜ |
 | 0.8 | Convert file paths to `pathlib.Path` throughout | Windows | ⬜ |
@@ -215,3 +215,96 @@ main
 - [ ] Long-running backtest doesn't freeze UI
 - [ ] Results tab shows correct equity curves and metrics
 - [ ] Export buttons produce valid CSV/PNG files
+
+---
+
+## 6. Working with Large Files — Safety Rules
+
+> **⚠️ MANDATORY**: These rules must be followed for ALL interactions with this project to avoid API errors from oversized context.
+
+### 6.1 Never Read Entire Large Files
+
+| File | Lines | Rule |
+|------|-------|------|
+| `MLBacktesterNoWFO.py` | ~19,400 | **NEVER** `read_file` — use `head`/`tail` or Python slicing only |
+| `utilsNoWFO.py` | ~6,600 | Read in chunks of ≤500 lines at a time |
+| `tuningNoWFO.py` | ~4,500 | Read in chunks of ≤500 lines at a time |
+| Small files (<500 lines) | — | Safe to read in full |
+
+### 6.2 Targeted Edits Only
+
+1. **Use `replace_in_file`** for ALL edits to large files — never `write_to_file`
+2. **One function at a time** — identify the target line range, read only that range, apply edit
+3. **Use `search_files` (regex)** to find patterns without loading the whole file
+4. **Use Python one-liners** for analysis: `python -c "..."` to count, find, extract
+
+### 6.3 Context Compacting Protocol
+
+After analyzing any section of code:
+
+1. **Summarize findings** in a 3–5 line compact note (not the raw code)
+2. **Discard raw file content** from working memory — rely on the summary
+3. **Use function signatures + line numbers** as the reference index
+4. **Maintain a "function index"** (name → line range) to avoid re-reading
+5. **Never re-read** a section you've already analyzed — trust your summary
+
+Example compact note:
+```
+L195-250: _configure_threadpool() — sets OMP/BLAS threads, uses os.environ.
+Duplicate of config.py logic. Safe to replace with config.get_settings() call.
+```
+
+### 6.4 Modularization is the Long-Term Fix
+
+Phase 2 (Extract Pipeline Modules) is the proper solution to the file size problem.
+Phase 0 and Phase 1 must be **surgical** — targeted edits only, no restructuring.
+The safety rules above ensure we can complete Phase 0 without hitting API limits.
+
+### 6.5 Pipeline Module Map (Modularization)
+
+> `MLBacktesterNoWFO.py` (19,441 lines) has been split into `pipeline/` package.
+> The composed `MLBacktester` class imports successfully with all 51 methods.
+
+**Standalone modules** (extracted from lines 295–1459):
+
+| Module | Lines | Contents |
+|--------|-------|----------|
+| `pipeline/_imports.py` | ~130 | Shared imports for all pipeline modules |
+| `pipeline/runtime.py` | ~70 | Thread budgets, GPU init, BLAS caps |
+| `pipeline/standalone_utils.py` | ~227 | `_norm_class_counts`, `print_block_summary`, `_load_csv_cached` |
+| `pipeline/memory_utils.py` | ~45 | `_hard_free`, `_apply_low_ram_overrides` |
+| `pipeline/dqn_config.py` | ~131 | `_load_default_dqn_cfg`, `_coerce_dqn_cfg` |
+| `pipeline/hpo_persistence.py` | ~151 | Save/load HPO configs to disk |
+| `pipeline/metrics.py` | ~124 | Sharpe, PSR, DSR, temperature, CV gates |
+| `pipeline/metrics_tuples.py` | ~549 | `_empty_metrics`, `_safe_metrics_return` |
+| `pipeline/main_cli.py` | ~1010 | `main()` function |
+
+**Mixin modules** (extracted from MLBacktester class, lines 1460–18440):
+
+| Module | Lines | Methods |
+|--------|-------|---------|
+| `pipeline/backtester/core_mixin.py` | ~746 | `__init__`, config helpers, `__repr__` |
+| `pipeline/backtester/data_mixin.py` | ~350 | `get_data`, `_ensure_feature_bank`, regime |
+| `pipeline/backtester/features_mixin.py` | ~839 | `prepare_features`, `scale_features`, labels |
+| `pipeline/backtester/deep_mixin.py` | ~870 | Keras fit, calibration, subprocess |
+| `pipeline/backtester/strategy_mixin.py` | ~3319 | `test_strategy` (largest mixin) |
+| `pipeline/backtester/ensemble_mixin.py` | ~1998 | `test_ensemble_strategy`, adaptive top3 |
+| `pipeline/backtester/dqn_mixin.py` | ~693 | `test_dqn_strategy` |
+| `pipeline/backtester/model_factory_mixin.py` | ~512 | `get_model`, sliding windows, predict |
+| `pipeline/backtester/evaluation_mixin.py` | ~493 | `evaluate_strategy`, walk-forward, logging |
+| `pipeline/backtester/run_mixin.py` | ~4178 | `run_strategy` (HPO loop) |
+| `pipeline/backtester/real_trading_mixin.py` | ~3092 | `real_trading_simulation` |
+
+**Usage**: `from pipeline.backtester.composed import MLBacktester`
+
+### 6.6 Function Index for MLBacktesterNoWFO.py (Original)
+
+> The original file is still present. This index maps line ranges for reference.
+
+| Function/Section | Lines | Notes |
+|------------------|-------|-------|
+| Module docstring + imports | 1–195 | Top-level imports, env setup |
+| `_configure_threadpool()` | ~195–250 | Thread config, duplicate of config.py |
+| `_init_gpu()` | ~507–520 | GPU init, TF |
+| `class MLBacktester` | 1460–18440 | **Now split into 11 mixins** |
+| `main()` | ~18441–19441 | Entry point with `__main__` guard |
