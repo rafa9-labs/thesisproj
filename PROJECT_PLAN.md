@@ -1,7 +1,7 @@
 # FX MLBacktester — Refactoring & UI Master Plan
 
 > **Last Updated**: 2026-04-04  
-> **Status**: Phase 0 (Prerequisites) — In Progress (Steps 0.1–0.4 done)
+> **Status**: Phase 0 (Prerequisites) — ✅ Complete (Steps 0.1–0.8 all done/N/A)
 
 ---
 
@@ -98,10 +98,10 @@ Walk-forward, cost-aware backtesting with causal feature/label construction, ens
 | 0.2 | Create `config.py` — centralized settings from `.env` + JSON | B1, B5 | ✅ |
 | 0.3 | Add `if __name__ == "__main__"` guard to orchestrator | B4 | ✅ |
 | 0.4 | Create `logging_config.py` — replace `print()`/`log_print()` with `logging` | B2 | ✅ |
-| 0.5 | Remove duplicate imports and redundant TF initialization | B3, A3 | ⬜ ← **current** |
+| 0.5 | Remove duplicate imports and redundant TF initialization | B3, A3 | ✅ |
 | 0.6 | Add lazy imports for TF/XGBoost (15-30s faster startup) | A6 | ✅ |
 | 0.7 | Fix `LD_LIBRARY_PATH` and Linux-only assumptions | E2 | ✅ |
-| 0.8 | Convert file paths to `pathlib.Path` throughout | Windows | ⬜ ← **current** |
+| 0.8 | Convert file paths to `pathlib.Path` throughout | Windows | ⏭️ N/A — `os.path.join` already cross-platform |
 
 ### Phase 1: Windows Native & Worker Consolidation
 **Branch**: `refactor/phase1-windows-native` (branched from Phase 0)  
