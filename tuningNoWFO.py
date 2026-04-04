@@ -117,9 +117,11 @@ def _record_hp_boundary_hit(name: str, value: float, low: float, high: float, ep
 # --- Quiet TensorFlow logs (no determinism; keep random seeding) ---
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
-_ld = os.environ.get("LD_LIBRARY_PATH", "")
-if _ld:
-    os.environ["LD_LIBRARY_PATH"] = ":".join(dict.fromkeys(_ld.split(":")))
+import sys as _sys
+if _sys.platform != "win32":
+    _ld = os.environ.get("LD_LIBRARY_PATH", "")
+    if _ld:
+        os.environ["LD_LIBRARY_PATH"] = ":".join(dict.fromkeys(_ld.split(":")))
 
 DISABLE_OPTUNA_PRUNING = os.getenv("MLB_DISABLE_OPTUNA_PRUNING", "0") == "1"
 SKIP_PLOTS = os.environ.get("MLB_SKIP_PLOTS", "0") == "1"
