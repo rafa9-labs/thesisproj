@@ -99,9 +99,9 @@ Walk-forward, cost-aware backtesting with causal feature/label construction, ens
 | 0.3 | Add `if __name__ == "__main__"` guard to orchestrator | B4 | ✅ |
 | 0.4 | Create `logging_config.py` — replace `print()`/`log_print()` with `logging` | B2 | ✅ |
 | 0.5 | Remove duplicate imports and redundant TF initialization | B3, A3 | ⬜ ← **current** |
-| 0.6 | Add lazy imports for TF/XGBoost (15-30s faster startup) | A6 | ⬜ |
-| 0.7 | Fix `LD_LIBRARY_PATH` and Linux-only assumptions | E2 | ⬜ |
-| 0.8 | Convert file paths to `pathlib.Path` throughout | Windows | ⬜ |
+| 0.6 | Add lazy imports for TF/XGBoost (15-30s faster startup) | A6 | ✅ |
+| 0.7 | Fix `LD_LIBRARY_PATH` and Linux-only assumptions | E2 | ✅ |
+| 0.8 | Convert file paths to `pathlib.Path` throughout | Windows | ⬜ ← **current** |
 
 ### Phase 1: Windows Native & Worker Consolidation
 **Branch**: `refactor/phase1-windows-native` (branched from Phase 0)  
