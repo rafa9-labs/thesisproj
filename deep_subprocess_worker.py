@@ -1,329 +1,210 @@
 #!/usr/bin/env python3
 """
-Re-plot per-bar model vs Buy&Hold using:
-  (1) Original price CSV (e.g., OANDA EURUSD M30) to compute canonical BH from mid_close
-  (2) A saved model_bar_compare.csv (from your experiment) to reuse the model equity curve + timestamp grid
+DEPRECATED: Use pipeline.workers.deep_fit_predict_worker via ProcessPoolExecutor instead.
 
-This avoids re-running Optuna / training. It only rebuilds BH and reuses the model equity curve.
+This file is kept for backward compatibility with MLBacktesterNoWFO.py (monolith),
+which calls it via subprocess.run(). The pipeline version uses ProcessPoolExecutor
+for better performance (reused worker process, proper error propagation).
 
-Typical usage (from your project root where utilsNoWFO.py is importable):
-  python replot_bar_compare.py \
-    --price-csv /path/EURUSD_10_years_M30_OANDA.csv \
-    --compare-csv /path/model_bar_compare.csv \
-    --model random_forest \
-    --out-dir /path/out
-
-If utilsNoWFO.py isn't importable from your current working directory:
-  python replot_bar_compare.py ... --project-root /home/benji/projects/thesisproj
-
-This script can output two thesis-valid BH baselines:
-  - Contract BH (Tradeable Grid): BH on the same bar grid as the engine evaluation.
-  - Context BH (Full Calendar): BH on the full price timeline for the month span,
-    with model equity forward-filled onto that full timeline.
+This worker:
+  1. Reads job.json for config
+  2. Loads .npy arrays from temp dir
+  3. Builds, fits, and predicts with a deep model
+  4. Writes proba_test.npy + out.json to temp dir
+  5. Exits with code 0 (success) or 1 (failure)
 """
 
-import argparse
-import sys
 import os
-import pandas as pd
-import numpy as np
+import sys
+import json
+import argparse
+import traceback
+
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 
-def _add_project_root(project_root: str | None):
-    if project_root:
-        project_root = os.path.abspath(project_root)
-        if project_root not in sys.path:
-            sys.path.insert(0, project_root)
+def _configure_tf():
+    """Configure TF for minimal memory footprint."""
+    try:
+        import tensorflow as tf
+        for gpu in tf.config.list_physical_devices("GPU"):
+            try:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            except Exception:
+                pass
+        try:
+            tf.config.threading.set_intra_op_parallelism_threads(1)
+            tf.config.threading.set_inter_op_parallelism_threads(1)
+        except Exception:
+            pass
+    except Exception:
+        pass
 
 
-def _load_compare(compare_csv: str, index_col: str | None):
-    df = pd.read_csv(compare_csv)
-
-    # Your saved compare CSV often uses "Unnamed: 0" as time index.
-    if index_col is None:
-        if "Unnamed: 0" in df.columns:
-            index_col = "Unnamed: 0"
-        elif "time" in df.columns:
-            index_col = "time"
-        else:
-            index_col = df.columns[0]
-
-    t = pd.to_datetime(df[index_col], utc=True, errors="coerce")
-    if t.isna().all():
-        raise ValueError(
-            f"Could not parse datetime from compare CSV column '{index_col}'. "
-            f"Columns={list(df.columns)}"
-        )
-    df = df.set_index(t).sort_index()
-    return df, index_col
+def _seed_everything(seed: int):
+    """Set random seeds for reproducibility."""
+    import random
+    import numpy as np
+    random.seed(seed)
+    np.random.seed(seed)
+    try:
+        import tensorflow as tf
+        tf.random.set_seed(seed)
+    except Exception:
+        pass
 
 
-def _pick_equity_column(compare_df: pd.DataFrame, model: str | None, equity_col: str | None):
-    if equity_col and equity_col in compare_df.columns:
-        return equity_col
-
-    if model:
-        cand = f"{model}_equity"
-        if cand in compare_df.columns:
-            return cand
-
-    equity_cols = [c for c in compare_df.columns if c.endswith("_equity")]
-    if equity_cols:
-        return equity_cols[0]
-
-    exclude = {"BH", "BH_fixed", "time"}
-    numeric = [
-        c for c in compare_df.columns
-        if c not in exclude and pd.api.types.is_numeric_dtype(compare_df[c])
-    ]
-    if numeric:
-        return numeric[0]
-
-    raise ValueError(f"Could not find an equity column. Available columns={list(compare_df.columns)}")
-
-
-def _rebase_to_one(s: pd.Series) -> pd.Series:
-    s = pd.to_numeric(s, errors="coerce").astype(float)
-    if s.isna().any():
-        s = s.ffill().bfill()
-    first = s.dropna().iloc[0] if s.dropna().size else np.nan
-    if np.isfinite(first) and first != 0.0:
-        return s / first
-    return s
-
-
-def _compute_bh_aligned(price_csv: str, target_index: pd.DatetimeIndex,
-                        time_col: str, close_col: str):
-    """
-    Compute BH from price CSV, then align it onto the provided target_index using merge_asof.
-    This is useful when the compare CSV index is a filtered/tradeable grid.
-    """
-    px = pd.read_csv(price_csv)
-    if time_col not in px.columns:
-        raise ValueError(f"Price CSV missing time column '{time_col}'. Columns={list(px.columns)}")
-    if close_col not in px.columns:
-        raise ValueError(f"Price CSV missing close column '{close_col}'. Columns={list(px.columns)}")
-
-    px[time_col] = pd.to_datetime(px[time_col], utc=True, errors="coerce")
-    px = px.dropna(subset=[time_col]).sort_values(time_col)
-
-    close = pd.to_numeric(px[close_col], errors="coerce").astype(float)
-    px = px.assign(_close=close).dropna(subset=["_close"])
-    ret = px["_close"].pct_change().fillna(0.0)
-    px["bh_true"] = (1.0 + ret).cumprod()
-
-    aligned = pd.merge_asof(
-        pd.DataFrame({"time": target_index}),
-        px[[time_col, "bh_true"]].rename(columns={time_col: "time"}),
-        on="time",
-        direction="backward",
-        allow_exact_matches=True,
-    ).set_index("time")["bh_true"].astype(float)
-
-    if aligned.isna().any():
-        aligned = aligned.ffill().bfill()
-
-    aligned = _rebase_to_one(aligned)
-    if not np.isfinite(aligned.iloc[0]) or aligned.iloc[0] == 0.0:
-        raise ValueError("Aligned BH has invalid first value; check timestamps/columns.")
-    return aligned
-
-
-def _compute_bh_full_calendar(
-    price_csv: str,
-    *,
-    start: pd.Timestamp,
-    end: pd.Timestamp,
-    time_col: str,
-    close_col: str,
-) -> pd.Series:
-    """Buy&Hold on the *full price timeline* between [start, end] (context baseline)."""
-    px = pd.read_csv(price_csv)
-    if time_col not in px.columns:
-        raise ValueError(f"Price CSV missing time column '{time_col}'. Columns={list(px.columns)}")
-    if close_col not in px.columns:
-        raise ValueError(f"Price CSV missing close column '{close_col}'. Columns={list(px.columns)}")
-
-    px[time_col] = pd.to_datetime(px[time_col], utc=True, errors="coerce")
-    px = px.dropna(subset=[time_col]).sort_values(time_col)
-    px = px[(px[time_col] >= start) & (px[time_col] <= end)]
-    if px.empty:
-        raise ValueError("No price rows inside requested [start, end] range.")
-
-    close = pd.to_numeric(px[close_col], errors="coerce").astype(float)
-    px = px.assign(_close=close).dropna(subset=["_close"])
-
-    ret = px["_close"].pct_change().fillna(0.0)
-    bh = (1.0 + ret).cumprod()
-
-    bh.index = pd.to_datetime(px[time_col].values, utc=True)
-    bh = bh.sort_index().astype(float)
-    bh = _rebase_to_one(bh)
-
-    if not np.isfinite(bh.iloc[0]) or bh.iloc[0] == 0.0:
-        raise ValueError("Full-calendar BH has invalid first value; check price data.")
-    return bh
+def _build_model(model_type: str, input_shape: tuple, params: dict):
+    """Build a compiled Keras model by type."""
+    mt = str(model_type).lower().strip()
+    if mt == "cnn":
+        from models.cnn import build_cnn
+        return build_cnn(input_shape, config=params)
+    elif mt == "lstm":
+        from models.lstm import build_lstm
+        return build_lstm(input_shape, config=params)
+    elif mt == "transformer":
+        from models.transformer import build_transformer
+        return build_transformer(input_shape, config=params)
+    else:
+        raise ValueError(f"Unknown deep model type: {model_type}")
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Re-plot model vs canonical BH using your existing plotting function."
-    )
-    ap.add_argument("--price-csv", required=True, help="Path to original price CSV (e.g., OANDA).")
-    ap.add_argument("--compare-csv", required=True, help="Path to model_bar_compare.csv generated by experiment.")
-    ap.add_argument("--project-root", default=None, help="Project root to add to PYTHONPATH (so utilsNoWFO imports).")
-    ap.add_argument("--model", default=None, help="Model name (e.g., random_forest). Used to pick {model}_equity.")
-    ap.add_argument("--equity-col", default=None, help="Explicit equity column name in compare CSV (overrides --model).")
-    ap.add_argument("--compare-index-col", default=None, help="Datetime column in compare CSV (default auto).")
-    ap.add_argument("--price-time-col", default="time", help="Datetime column in price CSV (default: time).")
-    ap.add_argument("--price-close-col", default="mid_close", help="Close column in price CSV (default: mid_close).")
-
-    ap.add_argument("--out-dir", default=None, help="Output directory for both CSV and PNG.")
-    ap.add_argument("--csv-dir", default=None, help="CSV output directory (optional).")
-    ap.add_argument("--png-dir", default=None, help="PNG output directory (optional).")
-    ap.add_argument("--out-prefix", default="results/model_bar_compare_replot",
-                    help="Prefix if no dirs supplied.")
-
-    ap.add_argument("--style", default="nature")
-    ap.add_argument("--palette", default="okabe_ito_no_black")
-    ap.add_argument("--bh-color", default="#666666")
-    ap.add_argument("--dpi", type=int, default=300)
-    ap.add_argument("--line-width", type=float, default=1.0)
-    ap.add_argument("--n-time-parts", type=int, default=10)
-    ap.add_argument("--overlap-mode", default="intersection", choices=["intersection", "union_rebase"])
-    ap.add_argument("--annotate-coverage", action="store_true",
-                    help="Show overlap % in legend labels.")
-    ap.add_argument("--no-save-csv", action="store_true", help="Do not write CSV output.")
-
-    ap.add_argument(
-        "--bh-baselines",
-        default="both",
-        choices=["contract", "calendar", "both"],
-        help=(
-            "Which BH baseline(s) to plot: "
-            "contract = BH on your tradeable/eval grid (system contract), "
-            "calendar = BH on full price timeline for the month span (context), "
-            "both = generate two PNGs."
-        ),
-    )
-
+    ap = argparse.ArgumentParser(description="Deep model fit+predict subprocess worker (DEPRECATED)")
+    ap.add_argument("--job_json", required=True, help="Path to job.json")
     args = ap.parse_args()
 
-    _add_project_root(args.project_root)
-
     try:
-        from utilsNoWFO import save_model_bar_comparison_outputs
-    except Exception as e:
-        raise SystemExit(
-            "Could not import save_model_bar_comparison_outputs from utilsNoWFO.py.\n"
-            "Run from your project root or pass --project-root <path>.\n"
-            f"Import error: {e}"
-        )
+        with open(args.job_json, "r", encoding="utf-8") as f:
+            job = json.load(f)
 
-    cmp, used_idx_col = _load_compare(args.compare_csv, args.compare_index_col)
-    equity_col = _pick_equity_column(cmp, args.model, args.equity_col)
+        import numpy as np
 
-    # --- model equity: always normalized to start at 1.0 for plotting consistency
-    eq = _rebase_to_one(cmp[equity_col])
+        seed = int(job.get("seed", 11111))
+        _configure_tf()
+        _seed_everything(seed)
 
-    models_arg = [args.model] if args.model else None
-    png_paths = []
+        X_train = np.load(job["X_train_path"], allow_pickle=False)
+        y_train = np.load(job["y_train_path"], allow_pickle=False)
+        X_test = np.load(job["X_test_path"], allow_pickle=False)
 
-    # --- (1) Contract BH: use compare CSV BH if available; otherwise recompute aligned
-    if args.bh_baselines in ("contract", "both"):
-        if "BH" in cmp.columns and pd.api.types.is_numeric_dtype(cmp["BH"]):
-            bh_contract = _rebase_to_one(cmp["BH"])
+        model_type = str(job["model_type"])
+        mode = str(job.get("mode", "seq"))
+        win = int(job.get("win", 0))
+        batch_size = int(job.get("batch_size", 128))
+        epochs = int(job.get("epochs", 20))
+        params = dict(job.get("params", {}))
+        features_config = dict(job.get("features_config", {}))
+
+        # Reshape if needed
+        if mode == "3d" and win > 0:
+            n = X_train.shape[0]
+            feats = X_train.shape[1]
+            if n >= win:
+                X_train = np.lib.stride_tricks.sliding_window_view(
+                    X_train, window_shape=win, axis=0
+                ).reshape(-1, win, feats)
+
+        if X_train.ndim == 3:
+            input_shape = (X_train.shape[1], X_train.shape[2])
         else:
-            bh_contract = _compute_bh_aligned(
-                price_csv=args.price_csv,
-                target_index=cmp.index,
-                time_col=args.price_time_col,
-                close_col=args.price_close_col,
-            )
+            input_shape = (X_train.shape[1],)
 
-        bt_plot_dict_contract = {
-            "BH": bh_contract,
-            equity_col: eq,
-        }
+        model = _build_model(model_type, input_shape, params)
 
-        png_paths.append(
-            (
-                "Buy-and-Hold (Tradeable Grid / Contract BH)",
-                save_model_bar_comparison_outputs(
-                    bt_plot_dict_contract,
-                    models=models_arg,
-                    out_prefix=f"{args.out_prefix}__bh_contract",
-                    style=args.style,
-                    palette=args.palette,
-                    bh_color=args.bh_color,
-                    n_time_parts=args.n_time_parts,
-                    dpi=args.dpi,
-                    line_width=args.line_width,
-                    out_dir=args.out_dir,
-                    csv_dir=args.csv_dir,
-                    png_dir=args.png_dir,
-                    overlap_mode=args.overlap_mode,
-                    annotate_coverage=args.annotate_coverage,
-                    save_csv=(not args.no_save_csv),
-                ),
-            )
+        callbacks = []
+        early_cb = getattr(model, "early_stop_callback", None)
+        if early_cb is not None:
+            callbacks.append(early_cb)
+
+        validation_split = 0.0
+        if early_cb is not None:
+            validation_split = float(features_config.get("deep_subprocess_val_split", 0.10))
+
+        fit_kwargs = dict(
+            x=X_train, y=y_train,
+            epochs=epochs,
+            batch_size=batch_size,
+            verbose=0,
+            shuffle=False,
         )
 
-    # --- (2) Context BH: full price timeline for the month span; model equity forward-filled
-    if args.bh_baselines in ("calendar", "both"):
-        start_cmp = cmp.index.min()
-        end_cmp = cmp.index.max()
+        if validation_split > 0 and early_cb is not None:
+            n = len(X_train)
+            n_val = max(1, int(round(n * validation_split)))
+            n_val = min(n_val, n - 1) if n > 1 else 1
+            split = n - n_val
+            fit_kwargs["x"] = X_train[:split]
+            fit_kwargs["y"] = y_train[:split]
+            fit_kwargs["validation_data"] = (X_train[split:], y_train[split:])
 
-        # Month-start in UTC for context baseline (matches your thesis intent: show full month context)
-        start_month = start_cmp.normalize().replace(day=1)
+        model.fit(callbacks=callbacks, **fit_kwargs)
 
-        bh_calendar = _compute_bh_full_calendar(
-            args.price_csv,
-            start=start_month,
-            end=end_cmp,
-            time_col=args.price_time_col,
-            close_col=args.price_close_col,
-        )
+        # Reshape test
+        X_test_use = X_test
+        if mode == "3d" and win > 0:
+            n = X_test.shape[0]
+            feats = X_test.shape[1]
+            if n >= win:
+                X_test_use = np.lib.stride_tricks.sliding_window_view(
+                    X_test, window_shape=win, axis=0
+                ).reshape(-1, win, feats)
 
-        # Forward-fill model equity onto the full calendar timeline.
-        # Before the first compare timestamp, keep neutral (flat at 1.0).
-        eq_calendar = eq.reindex(bh_calendar.index, method="ffill")
-        eq_calendar = eq_calendar.fillna(1.0)
-        eq_calendar = _rebase_to_one(eq_calendar)
+        pred_bs = int(features_config.get("deep_pred_batch_size", max(256, batch_size * 4)))
+        pred_bs_cap = int(features_config.get("deep_pred_batch_size_cap", 2048))
+        pred_bs = min(max(16, pred_bs), pred_bs_cap)
 
-        bt_plot_dict_calendar = {
-            "BH": bh_calendar,
-            equity_col: eq_calendar,
-        }
+        proba = model.predict(X_test_use, batch_size=pred_bs, verbose=0)
+        if proba.ndim == 1:
+            proba = proba.reshape(-1, 1)
 
-        png_paths.append(
-            (
-                "Buy-and-Hold (Full Calendar / Context BH)",
-                save_model_bar_comparison_outputs(
-                    bt_plot_dict_calendar,
-                    models=models_arg,
-                    out_prefix=f"{args.out_prefix}__bh_calendar",
-                    style=args.style,
-                    palette=args.palette,
-                    bh_color=args.bh_color,
-                    n_time_parts=args.n_time_parts,
-                    dpi=args.dpi,
-                    line_width=args.line_width,
-                    out_dir=args.out_dir,
-                    csv_dir=args.csv_dir,
-                    png_dir=args.png_dir,
-                    overlap_mode=args.overlap_mode,
-                    annotate_coverage=args.annotate_coverage,
-                    save_csv=(not args.no_save_csv),
-                ),
-            )
-        )
+        proba_out = job["proba_test_out"]
+        np.save(proba_out, proba.astype(np.float32))
 
-    print("\nDone.")
-    print("Compare index column used:", used_idx_col)
-    print("Equity column used:", equity_col)
-    for tag, p in png_paths:
-        print(f"{tag} PNG:", p)
+        # Coverage threshold
+        coverage_thr = float("nan")
+        try:
+            _mode = str(features_config.get("gating_mode", features_config.get("gate_mode", "threshold"))).lower()
+            _tar = features_config.get("target_active_rate", None)
+            _use_cov = (_mode == "coverage") or (_tar is not None and float(_tar) > 0)
+            if _use_cov and len(proba) > 100:
+                max_conf = np.max(proba, axis=1)
+                tgt = float(_tar) if (_tar is not None and float(_tar) > 0) else float(features_config.get("target_coverage", 0.10))
+                thr = float(np.quantile(max_conf, 1.0 - tgt))
+                coverage_thr = thr
+        except Exception:
+            pass
+
+        out_json = job["out_json"]
+        out = {"coverage_thr": coverage_thr, "n_test": int(proba.shape[0])}
+        with open(out_json, "w", encoding="utf-8") as f:
+            json.dump(out, f)
+
+        # Cleanup
+        try:
+            import tensorflow as tf
+            tf.keras.backend.clear_session()
+        except Exception:
+            pass
+        import gc
+        gc.collect()
+
+        sys.exit(0)
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[DEEP_SUBPROC_WORKER] Error: {e}\n{tb}", file=sys.stderr)
+        # Try to write error info
+        try:
+            with open(args.job_json, "r") as f:
+                job = json.load(f)
+            out_json = job.get("out_json", os.path.join(os.path.dirname(args.job_json), "out.json"))
+            with open(out_json, "w") as f:
+                json.dump({"error": str(e), "traceback": tb}, f)
+        except Exception:
+            pass
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -1941,15 +1941,11 @@ def _assert_free_ram(need_gb: float | str, trial=None) -> bool:
         if vram_need <= 0:
             return True
         try:
-            import subprocess, shlex
-            # free MiB per GPU; pick GPU 0
-            out = subprocess.check_output(
-                shlex.split("nvidia-smi --query-gpu=memory.free --format=csv,nounits,noheader"),
-                stderr=subprocess.DEVNULL,
-                timeout=2.0,
-            ).decode("utf-8", "ignore").strip().splitlines()
-            free_mib = float(out[0])
-            free_gb = free_mib / 1024.0
+            from pipeline.workers import get_gpu_free_memory_mb
+            free_list = get_gpu_free_memory_mb()
+            if not free_list:
+                return True  # No GPU or nvidia-smi unavailable — don't block
+            free_gb = free_list[0] / 1024.0  # Pick GPU 0
             return free_gb >= vram_need
         except Exception:
             # If nvidia-smi not present or parsing fails, don't block

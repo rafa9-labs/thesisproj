@@ -1,7 +1,7 @@
 # FX MLBacktester — Refactoring & UI Master Plan
 
 > **Last Updated**: 2026-04-04  
-> **Status**: Phase 0 (Prerequisites) — ✅ Complete (Steps 0.1–0.8 all done/N/A)
+> **Status**: Phase 1 (Windows Native) — 🔄 In Progress (Steps 1.1–1.3 done, 1.4 pending)
 
 ---
 
@@ -27,8 +27,9 @@ Walk-forward, cost-aware backtesting with causal feature/label construction, ens
 | `rl/dqn_agent.py` | Dueling Double-DQN with PER | ~400 |
 | `rl/environment.py` | Trading environment (gym-style) | ~300 |
 | `rl/replay_buffer.py` | Prioritized Experience Replay buffer | ~150 |
-| `deep_subprocess_worker.py` | Subprocess worker for deep model training | ~200 |
-| `run_one_month_worker.py` | Subprocess worker for monthly evaluation | ~200 |
+| `pipeline/workers.py` | ProcessPoolExecutor workers (deep fit+predict, GPU detect) | ~200 |
+| `deep_subprocess_worker.py` | **DEPRECATED** — subprocess worker for deep model training | ~200 |
+| `run_one_month_worker.py` | **DEPRECATED** — subprocess worker for monthly evaluation | ~200 |
 | `configs/feature_config.json` | Feature engineering parameters | — |
 | `configs/dqn_grid_config.json` | DQN hyperparameter grid | — |
 
@@ -109,10 +110,10 @@ Walk-forward, cost-aware backtesting with causal feature/label construction, ens
 
 | Step | Description | Addresses | Status |
 |------|-------------|-----------|--------|
-| 1.1 | Replace subprocess workers with `ProcessPoolExecutor` (spawn-safe) | A4 | ⬜ |
-| 1.2 | Consolidate `deep_subprocess_worker.py` + `run_one_month_worker.py` → `workers.py` | A4 | ⬜ |
-| 1.3 | Fix multiprocessing pickling issues (lambdas, closures, TF models) | B4, A4 | ⬜ |
-| 1.4 | Test full pipeline on Windows (all model types) | — | ⬜ |
+| 1.1 | Replace subprocess workers with `ProcessPoolExecutor` (spawn-safe) | A4 | ✅ `pipeline/workers.py` + `deep_mixin.py` updated |
+| 1.2 | Consolidate `deep_subprocess_worker.py` + `run_one_month_worker.py` → `pipeline/workers.py` | A4 | ✅ Workers consolidated; old files kept as deprecated shims |
+| 1.3 | Fix nvidia-smi / GPU detection to use cross-platform `get_gpu_free_memory_mb()` | B4, A4 | ✅ `tuningNoWFO.py` updated to use `pipeline.workers` |
+| 1.4 | Test full pipeline on Windows (all model types) | — | ⬜ Smoke test passed for imports; full run pending |
 
 ### Phase 2: Architecture — Extract Pipeline Modules
 **Branch**: `refactor/phase2-pipeline-modules`  

@@ -782,6 +782,34 @@ class DeepMixin:
         except Exception as _e:
             print(f"⚠️ [Calib/deep] model={model_type} skipped: {_e}")
             
+    # ------------------------------------------------------------------
+    # Lazy singleton ProcessPoolExecutor for deep model isolation.
+    # Reusing the same worker process avoids repeated TF import (~15-30s
+    # per call).  Created on first use, shut down in __del__ or atexit.
+    # ------------------------------------------------------------------
+    _deep_pool: "concurrent.futures.ProcessPoolExecutor | None" = None
+
+    @classmethod
+    def _get_deep_pool(cls) -> "concurrent.futures.ProcessPoolExecutor":
+        """Return (and lazily create) the shared deep-model worker pool."""
+        if cls._deep_pool is None or cls._deep_pool._shutdown_mutex.locked():
+            import concurrent.futures
+            cls._deep_pool = concurrent.futures.ProcessPoolExecutor(
+                max_workers=1,
+                mp_context=__import__("multiprocessing").get_context("spawn"),
+            )
+        return cls._deep_pool
+
+    @classmethod
+    def _shutdown_deep_pool(cls):
+        """Gracefully shut down the worker pool (called at exit)."""
+        if cls._deep_pool is not None:
+            try:
+                cls._deep_pool.shutdown(wait=False)
+            except Exception:
+                pass
+            cls._deep_pool = None
+
     def _deep_fit_predict_subprocess(
         self,
         *,
@@ -798,8 +826,14 @@ class DeepMixin:
         params: dict,
     ):
         """
-        Run deep fit+predict in a fresh subprocess to avoid TF/Keras
-        memory accumulation in the main process.
+        Run deep fit+predict in an isolated worker process via
+        ProcessPoolExecutor (spawn-safe on Windows).
+
+        Benefits over subprocess.run():
+          - Worker process is reused → no repeated TF import
+          - Proper exception propagation via Future.result()
+          - Same memory isolation (OS-level process boundary)
+
         Returns (proba_test: np.ndarray, coverage_thr: float).
         """
         in_cv = bool(getattr(self, "_in_optuna_cv", False))
@@ -809,6 +843,7 @@ class DeepMixin:
         if in_cv and (not allow_in_cv):
             return None, None
 
+        # --- Prepare temp dir + .npy files (same as before) ---
         tmpdir = tempfile.mkdtemp(prefix="mlb_deep_subproc_")
         Xtr_p = os.path.join(tmpdir, "X_train.npy")
         ytr_p = os.path.join(tmpdir, "y_train.npy")
@@ -820,16 +855,6 @@ class DeepMixin:
         np.save(Xtr_p, np.asarray(X_train_2d, dtype=np.float32))
         np.save(ytr_p, np.asarray(y_train_1d, dtype=np.int32))
         np.save(Xte_p, np.asarray(X_test_2d, dtype=np.float32))
-        
-        # Faster inference: allow a separate predict batch size (no effect on outputs)
-        try:
-            _cfg = dict(getattr(self, "features_config", {}) or {})
-            _train_bs = int(batch_size or 128)
-            pred_bs = int(_cfg.get("deep_pred_batch_size", max(256, _train_bs * 4)))
-            pred_bs_cap = int(_cfg.get("deep_pred_batch_size_cap", 2048))
-            pred_bs = int(min(max(16, pred_bs), pred_bs_cap))
-        except Exception:
-            pred_bs = int(batch_size or 128)
 
         job = {
             "model_type": str(model_type),
@@ -841,6 +866,7 @@ class DeepMixin:
             "epochs": int(epochs or 20),
             "params": dict(params or {}),
             "features_config": dict(getattr(self, "features_config", {}) or {}),
+            "seed": int(getattr(self, "_current_seed", 11111)),
             "X_train_path": Xtr_p,
             "y_train_path": ytr_p,
             "X_test_path": Xte_p,
@@ -850,21 +876,25 @@ class DeepMixin:
         with open(job_json, "w", encoding="utf-8") as f:
             json.dump(job, f)
 
-        worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deep_subprocess_worker.py")
-        cmd = [sys.executable, worker, "--job_json", job_json]
+        # --- Submit to ProcessPoolExecutor ---
         try:
-            subprocess.run(cmd, check=True)
+            from pipeline.workers import deep_fit_predict_worker
+            pool = self._get_deep_pool()
+            future = pool.submit(deep_fit_predict_worker, job_json)
+            result = future.result(timeout=600)  # 10-min timeout
         except Exception as e:
-            print(f"⚠️ [DEEP_SUBPROC] failed: {e}")
+            print(f"⚠️ [DEEP_WORKER] failed: {e}")
+            return None, None
+
+        if not result.get("success", False):
+            print(f"⚠️ [DEEP_WORKER] error: {result.get('error', 'unknown')}")
             return None, None
 
         try:
-            with open(out_json, "r", encoding="utf-8") as f:
-                out = json.load(f)
-            thr = float(out.get("coverage_thr", np.nan))
+            thr = float(result.get("coverage_thr", np.nan))
             proba = np.load(proba_out)
             return proba, thr
         except Exception as e:
-            print(f"⚠️ [DEEP_SUBPROC] load outputs failed: {e}")
+            print(f"⚠️ [DEEP_WORKER] load outputs failed: {e}")
             return None, None
 
