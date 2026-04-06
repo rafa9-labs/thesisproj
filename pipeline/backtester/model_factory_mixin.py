@@ -47,6 +47,9 @@ class ModelFactoryMixin:
         """
         Construct and return an instance of the specified model.
         Trials stay serialized; each fit uses many threads/GPU.
+
+        Tries the model registry first; falls back to the legacy
+        inline if/elif chain for backwards compatibility.
         """
         self._print_thread_budget(tag=model_type)  # show effective threads for this build
 
@@ -57,6 +60,17 @@ class ModelFactoryMixin:
         except Exception:
             seed = None
 
+        # ---------- Registry path (preferred) ----------
+        try:
+            from models.registry import build_model as _build
+            params.setdefault("seed", seed)
+            model = _build(model_type, use_proba=use_proba, **params)
+            if model is not None:
+                return model
+        except Exception:
+            pass  # fall through to legacy path
+
+        # ---------- Legacy inline path (fallback) ----------
         # --- local helper: guard invalid sklearn solver/penalty combos ---
         def _sanitize_logit_params(d: dict, *, ovr: bool = False) -> dict:
             p = dict(d or {})
