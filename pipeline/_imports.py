@@ -95,6 +95,12 @@ from utilsNoWFO import (
     _fmt_table_ascii,
 )
 
+# ── Late import of CLASS_DEFAULTS (must happen BEFORE pipeline.* imports below
+#    because refit → composed → strategy_mixin star-imports us while we're loading)
+from pipeline.metrics_tuples import CLASS_DEFAULTS, _safe_metrics_return, _empty_metrics  # noqa: F811,E402
+DEFAULT_CV = deepcopy(CLASS_DEFAULTS["cv"])
+DEFAULT_FEATURES = deepcopy(CLASS_DEFAULTS["features"])
+
 # ── Runtime knobs ──
 from pipeline.runtime import SAFE_CORES, CPU_TOTAL
 
@@ -207,10 +213,8 @@ _np = np
 # ── Runtime constants ──
 LOG_MODE = os.getenv("LOG_MODE", "COMPACT").upper()
 
-# Late import of CLASS_DEFAULTS to avoid circular import (metrics_tuples imports us via *)
-from pipeline.metrics_tuples import CLASS_DEFAULTS, _safe_metrics_return, _empty_metrics  # noqa: F811,E402
-DEFAULT_CV = deepcopy(CLASS_DEFAULTS["cv"])
-DEFAULT_FEATURES = deepcopy(CLASS_DEFAULTS["features"])
+# (CLASS_DEFAULTS, _safe_metrics_return, _empty_metrics, DEFAULT_CV, DEFAULT_FEATURES
+#  moved to top of import block — before pipeline.* imports — to break circular import)
 
 # ── Force-export underscore-prefixed symbols for `from pipeline._imports import *` ──
 # (Python skips _ names in star-imports unless listed in __all__)

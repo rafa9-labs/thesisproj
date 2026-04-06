@@ -33,20 +33,25 @@ except Exception:
     _tp_limits = None
 
 # ── GPU allow-growth ──
-try:
-    import tensorflow as _tf
-    for g in _tf.config.list_physical_devices("GPU"):
-        _tf.config.experimental.set_memory_growth(g, True)
-except Exception:
-    pass
+# Lazy: skip TF import entirely when only sklearn models are used.
+# Set TF_SKIP_INIT=1 to avoid the heavy TF load for logistic/xgboost runs.
+_TF_SKIP = os.environ.get("TF_SKIP_INIT", "0") == "1"
 
-# ── Force-CPU escape ──
-if os.environ.get("TF_FORCE_CPU", "0") == "1":
+if not _TF_SKIP:
     try:
-        import tensorflow as _tf2
-        _tf2.config.set_visible_devices([], "GPU")
+        import tensorflow as _tf
+        for g in _tf.config.list_physical_devices("GPU"):
+            _tf.config.experimental.set_memory_growth(g, True)
     except Exception:
         pass
+
+    # ── Force-CPU escape ──
+    if os.environ.get("TF_FORCE_CPU", "0") == "1":
+        try:
+            import tensorflow as _tf2
+            _tf2.config.set_visible_devices([], "GPU")
+        except Exception:
+            pass
 
 # ── Compute safe core count ──
 SAFE_CORES = _settings.compute.safe_cores
@@ -60,12 +65,13 @@ except Exception:
     pass
 
 # ── TensorFlow thread tuning ──
-try:
-    import tensorflow as _tf3
-    _tf3.config.threading.set_intra_op_parallelism_threads(SAFE_CORES)
-    _tf3.config.threading.set_inter_op_parallelism_threads(min(4, SAFE_CORES // 2))
-except Exception:
-    pass
+if not _TF_SKIP:
+    try:
+        import tensorflow as _tf3
+        _tf3.config.threading.set_intra_op_parallelism_threads(SAFE_CORES)
+        _tf3.config.threading.set_inter_op_parallelism_threads(min(4, SAFE_CORES // 2))
+    except Exception:
+        pass
 
 try:
     print(f"Trial thread budget = {SAFE_CORES} cores active per model fit.")

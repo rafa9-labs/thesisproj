@@ -134,16 +134,16 @@ Walk-forward, cost-aware backtesting with causal feature/label construction, ens
 
 ### Phase 3: Simplification & Cleanup
 **Branch**: `refactor/phase3-simplification`  
-**Goal**: Reduce complexity, remove dead code, simplify HPO.
+**Goal**: Reduce complexity, extract remaining monoliths, add performance caching.
 
 | Step | Description | Addresses | Status |
 |------|-------------|-----------|--------|
-| 3.1 | Strip dead code from `compute_full_evaluation_metrics` | A2 | ⬜ |
-| 3.2 | Move optional patches (TWAP, kill-switch, regime) to strategy pattern | A2 | ⬜ |
-| 3.3 | Simplify Optuna search space (remove legacy profile, reduce dimensions) | A2 | ⬜ |
-| 3.4 | Extract evaluation patches into plugin architecture | A2 | ⬜ |
-| 3.5 | Replace magic numbers with named constants | B5 | ⬜ |
-| 3.6 | Add `tests/test_causality.py` and `tests/test_metrics.py` | B6 | ⬜ |
+| 3.1 | Extract `compute_full_evaluation_metrics` from `utilsNoWFO.py` → `pipeline/metrics_eval.py` | A2 | 🔄 |
+| 3.2 | Feature disk cache (Parquet persistence, deferred from 2.9) | C1 | ⬜ |
+| 3.3 | Extract TWAP/kill-switch/regime patches from `strategy_mixin.py` → `pipeline/backtester/patches.py` | A2 | ⬜ |
+| 3.4 | Simplify Optuna search space (remove legacy profiles, reduce dimensions) | A2 | ⬜ |
+| 3.5 | Replace magic numbers with named constants in `config.py` | B5 | ⬜ |
+| 3.6 | Add `tests/test_causality.py` and `tests/test_eval_metrics.py` | B6 | ⬜ |
 
 ### Phase 4: Desktop UI Application
 **Branch**: `feature/phase4-desktop-ui`  

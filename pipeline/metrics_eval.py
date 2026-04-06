@@ -11,6 +11,177 @@ import pandas as pd
 from scipy.stats import kurtosis
 from sklearn.metrics import confusion_matrix
 
+# ---------------------------------------------------------------------------
+# Helper functions – moved here from utilsNoWFO.py (Phase 3.1)
+# These live in their final home so that metrics_eval.py is self-contained.
+# ---------------------------------------------------------------------------
+
+def _coerce_direction_labels(arr, labels=(-1, 0, 1), deadzone: float = 0.5):
+    """Coerce predictions/targets into discrete {-1,0,+1} labels."""
+    import numpy as _np
+    a = _np.asarray(arr)
+    if a.size == 0:
+        return a.astype(int)
+    if a.dtype.kind in ("f", "c"):
+        a = _np.where(a > deadzone, 1, _np.where(a < -deadzone, -1, 0))
+    else:
+        try:
+            a = a.astype(int, copy=False)
+        except Exception:
+            a = a.astype(float)
+            a = _np.where(a > deadzone, 1, _np.where(a < -deadzone, -1, 0))
+    valid = _np.isin(a, _np.array(labels, dtype=int))
+    if not bool(_np.all(valid)):
+        a = _np.where(valid, a, 0)
+    return a.astype(int, copy=False)
+
+
+def _auto_nw_lag(n: int, mode: str = "sqrt", x=None) -> int:
+    """Newey-West lag selection: 'sqrt' (default) or 'andrews' plug-in."""
+    import numpy as np
+    n = int(max(1, n))
+    m = (mode or "sqrt").lower()
+    if m == "andrews":
+        rho = 0.0
+        if x is not None:
+            x = np.asarray(x, dtype=float)
+            x = x[np.isfinite(x)]
+            if x.size > 3:
+                x0, x1 = x[:-1] - x[:-1].mean(), x[1:] - x[1:].mean()
+                den = float((x0**2).sum()) or 1.0
+                rho = float((x0 * x1).sum() / den)
+                rho = float(np.clip(rho, -0.99, 0.99))
+        c = 1.3221  # Bartlett kernel constant (Andrews 1991)
+        q = int(max(1, round(c * (n ** 0.2))))
+        return q
+    return int(np.floor(np.sqrt(n)))
+
+
+def hac_std(x, max_lag="auto") -> float:
+    """Newey-West (HAC) standard deviation for a 1D array/Series."""
+    import numpy as np
+    x = np.asarray(x, dtype=float)
+    x = x[np.isfinite(x)]
+    n = x.size
+    if n <= 1:
+        return 0.0
+    x = x - np.mean(x)
+    g0 = np.dot(x, x) / n
+    if isinstance(max_lag, str):
+        q = _auto_nw_lag(n, mode=max_lag, x=x)
+    else:
+        q = int(max(0, max_lag))
+    if q == 0:
+        var = g0
+    else:
+        var = g0
+        for k in range(1, q + 1):
+            w = 1.0 - k / (q + 1.0)  # Bartlett kernel
+            gamma_k = np.dot(x[:-k], x[k:]) / n
+            var += 2.0 * w * gamma_k
+    return float(np.sqrt(max(var, 0.0)))
+
+
+def estimate_frequency_per_year(index) -> float:
+    """Estimate bars-per-year from a DateTimeIndex."""
+    import numpy as np
+    import pandas as pd
+    if not hasattr(index, "tz"):
+        try:
+            index = pd.to_datetime(index, utc=True, errors="coerce")
+        except Exception:
+            return 252.0
+    if len(index) < 3:
+        return 252.0
+    by_day = pd.Series(1.0, index=index).groupby(index.floor("D")).count()
+    if by_day.empty:
+        return 252.0
+    bars_per_day = float(by_day.median())
+    days = pd.Index(by_day.index)
+    weekend_days = int(((days.dayofweek == 5) | (days.dayofweek == 6)).sum())
+    frac_weekend = weekend_days / max(1, len(days))
+    days_per_year = 365.0 if frac_weekend > 0.10 else 252.0
+    return max(1.0, bars_per_day * days_per_year)
+
+
+def compute_metrics(
+    returns,
+    positions,
+    frequency_per_year=None,
+    sharpe_cap=None,
+    use_hac: bool = True,
+    hac_max_lag="auto",
+    min_active_obs: int = 25,
+    std_floor: float = 1e-8,
+):
+    """Sharpe (annualized), max drawdown, trade count with HAC robust guards."""
+    import os, numpy as np
+    returns = returns.dropna()
+    if frequency_per_year is None:
+        try:
+            frequency_per_year = float(estimate_frequency_per_year(returns.index))
+        except Exception:
+            frequency_per_year = 252.0
+    ann_factor = float(np.sqrt(max(1.0, frequency_per_year)))
+    active = returns[np.abs(returns) > 1e-12]
+    n_active = int(active.size)
+    if n_active < int(min_active_obs):
+        sharpe = 0.0
+    else:
+        if use_hac:
+            std = float(hac_std(active, max_lag=hac_max_lag))
+        else:
+            std = float(active.std(ddof=1))
+        mean = float(active.mean())
+        sharpe = (mean / std) * ann_factor if (np.isfinite(std) and std >= std_floor) else 0.0
+    if sharpe_cap is None:
+        try:
+            cap_env = os.environ.get("SHARPE_CAP")
+            if cap_env is not None:
+                sharpe_cap = float(cap_env)
+        except Exception:
+            sharpe_cap = None
+    if sharpe_cap is not None and sharpe_cap > 0:
+        sharpe = float(np.clip(sharpe, -sharpe_cap, sharpe_cap))
+    cum = returns.cumsum().apply(np.exp)
+    drawdown = (cum / cum.cummax() - 1).min() if not cum.empty else 0.0
+    try:
+        p = positions
+        if p is None:
+            trades = 0
+        else:
+            if hasattr(p, "fillna"):
+                p = p.fillna(0)
+            p_arr = np.asarray(p, dtype=float)
+            if p_arr.size <= 1:
+                trades = 0
+            else:
+                p_dir = np.sign(p_arr)
+                trades = int(np.sum(np.abs(np.diff(p_dir))))
+    except Exception:
+        trades = 0
+    return round(sharpe, 2), round(drawdown, 4), trades
+
+
+def compute_geometric_mean_annualized(returns):
+    """Geometric mean annualized from per-period log returns."""
+    import numpy as np
+    n = len(returns)
+    if n == 0:
+        return np.nan
+    compounded = np.exp(returns.sum())
+    try:
+        bars_per_year = float(estimate_frequency_per_year(returns.index))
+    except Exception:
+        bars_per_year = 252.0
+    annual_factor = bars_per_year / max(1, n)
+    return compounded ** annual_factor - 1
+
+
+# ---------------------------------------------------------------------------
+# End of helpers moved from utilsNoWFO.py
+# ---------------------------------------------------------------------------
+
 def _macro_prec_f1_from_confusion(y_true, y_pred, labels=(-1,0,1)):
     cm = confusion_matrix(y_true, y_pred, labels=list(labels))
     # precision per class: TP / (TP + FP)
@@ -44,18 +215,6 @@ def compute_full_evaluation_metrics(
     Patch #5 (optional): daily/session kill-switch + cool-off (eval_use_kill_switch)
     """
     import os
-    import numpy as np
-    import pandas as pd
-    from sklearn.metrics import classification_report  # retained for compatibility
-    from scipy.stats import kurtosis
-
-    # Lazy imports from utilsNoWFO to avoid circular dependency
-    from utilsNoWFO import (
-        compute_metrics,
-        compute_geometric_mean_annualized,
-        estimate_frequency_per_year,
-        _coerce_direction_labels,
-    )
 
     # --- Preconditions ---
     if "returns" not in df.columns:

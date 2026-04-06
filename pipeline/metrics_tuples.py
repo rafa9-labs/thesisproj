@@ -4,7 +4,11 @@ Metrics tuple construction and validation.
 Extracted from MLBacktesterNoWFO.py lines 920-1459.
 """
 
-from pipeline._imports import *  # noqa: F401,F403
+import numpy as np
+from copy import deepcopy
+from utilsNoWFO import (
+    N_METRICS, ensure_metric_tuple, validate_metrics_shape,
+)
 
 def _empty_metrics(context: str = "") -> tuple:
     """
