@@ -1255,8 +1255,6 @@ def compute_full_evaluation_metrics(
         df["cost_total_turnover"] = pd.Series(cost_total_turn, index=df.index)
 
 
-
-    
     # Debug-only cost breakdown
     if debug_costs:
         try:
@@ -1578,46 +1576,6 @@ def _safe_mean(x):
     x = np.asarray(x, float); x = x[np.isfinite(x)]
     return float(np.mean(x)) if x.size else np.nan
 
-def _safe_std(x, ddof=1):
-    x = np.asarray(x, float); x = x[np.isfinite(x)]
-    if x.size <= ddof: return np.nan
-    s = float(np.std(x, ddof=ddof))
-    return s if s > _EPS else np.nan
-
-def annualize_from_monthlies(monthly_ret):
-    """CAGR from monthly returns r_m."""
-    r = np.asarray(monthly_ret, float); r = r[np.isfinite(r)]
-    if r.size == 0: return np.nan
-    gross = np.prod(1.0 + r)
-    years = r.size / 12.0
-    return float(gross ** (1.0/years) - 1.0) if years > 0 else np.nan
-
-
-def calmar_from_monthlies(monthly_ret, monthly_max_dd=None):
-    """Calmar = CAGR / |MaxDD|. If drawdown column provided, use its min."""
-    cagr = annualize_from_monthlies(monthly_ret)
-    if monthly_max_dd is not None:
-        dd = float(np.nanmin(monthly_max_dd))  # most negative
-        mdd = abs(dd) if np.isfinite(dd) else np.nan
-    else:
-        # Fallback: approximate from cum. equity per month
-        eq = np.cumprod(1.0 + np.asarray(monthly_ret, float))
-        if eq.size < 2: return np.nan
-        peak = np.maximum.accumulate(eq)
-        drawdowns = (eq / np.where(peak == 0, np.nan, peak)) - 1.0
-        mdd = abs(np.nanmin(drawdowns))
-    if not np.isfinite(cagr) or not np.isfinite(mdd) or mdd <= _EPS:
-        return np.nan
-    return float(cagr / mdd)
-
-def _expected_max_sharpe_sigma(sigma_sr, N):
-    # False Strategy Theorem approximation (Bailey & López de Prado, 2014)
-    if not (np.isfinite(sigma_sr) and sigma_sr > 0 and N and N >= 1):
-        return 0.0
-    gamma = 0.5772156649  # Euler–Mascheroni
-    return float(sigma_sr * ((1.0 - gamma) * norm.ppf(1.0 - 1.0/N)
-                             + gamma * norm.ppf(1.0 - 1.0/(N*e))))
-
 def _lisbon_now():
     try:
         from zoneinfo import ZoneInfo  # Py3.9+
@@ -1700,7 +1658,6 @@ def target_coverage_policy(model_type: str | None) -> float:
     return 0.15
  
 
-
 def enforce_target_coverage_policy(features_config: dict, model_type: str | None = None) -> dict:
     """In-place: set both target_active_rate and target_coverage to policy target."""
     fc = features_config if isinstance(features_config, dict) else {}
@@ -1719,7 +1676,6 @@ def _infer_family(model_type: str) -> str:
     This just forwards to model_category() so the logic is centralized here.
     """
     return model_category(model_type)
-
 
 
 def friendly_model_name(model_type: str) -> str:
@@ -1781,35 +1737,6 @@ def ensure_model_dirs(base_run_dir: str, model_type: str, model_name: str | None
     }
 
 
-def month_dir_path(model_base_dir: str, month_ix: int, *ignored) -> dict:
-    """
-    Month dir helper for the flat layout.
-
-    Modern usage in this codebase is:
-        month_dir_path(model_base_dir, month_ix)
-
-    We no longer create separate per-month directories. Instead, all files for a
-    given model are written to:
-
-        <model_base>/csv/
-        <model_base>/graphs/
-        <model_base>/heatmaps/
-
-    The month index is encoded in the *filename* (e.g. csv_month_1.csv,
-    monthly_equity_1.png), not in the directory tree.
-    """
-    import os
-
-    csv_dir = os.path.join(model_base_dir, "csv")
-    graphs_dir = os.path.join(model_base_dir, "graphs")
-    heatmaps_dir = os.path.join(model_base_dir, "heatmaps")
-
-    for d in (csv_dir, graphs_dir, heatmaps_dir):
-        os.makedirs(d, exist_ok=True)
-
-    return {"csv": csv_dir, "graphs": graphs_dir, "heatmaps": heatmaps_dir}
-
-
 def comparison_dirs(run_dir):
     """
     Build cross-model comparison dirs for a run.
@@ -1844,126 +1771,7 @@ def comparison_dirs(run_dir):
     }
 
 
-
 # --- utilsNoWFO.py: full cumulative growth plot --------------------------------
-def plot_full_cumulative_growth(
-    all_dfs,
-    filename_prefix="results/full_cumulative_growth",
-    debug=False,
-    y_anchor=1.0,
-    n_time_parts=10,
-    out_dir=None,
-    model_name=None,
-    dpi=300,
-    line_width=1.0,
-):
-    """Full test-horizon bar-by-bar growth with drawdown pane and month dividers."""
-    import os, numpy as np, pandas as pd, matplotlib.pyplot as plt
-    from matplotlib.ticker import PercentFormatter
-
-    if not all_dfs:
-        print("⚠️ No monthly DataFrames provided to plot cumulative growth.")
-        return
-
-    # Prefer continuous columns; else reconstruct from returns+pred with 1-bar delay
-    using_cont = True
-    if all(c in all_dfs[0].columns for c in ("cstrategy_cont","creturns_cont")):
-        bar_concat = pd.concat([df[["cstrategy_cont","creturns_cont"]] for df in all_dfs], axis=0).sort_index()
-        plot_df = bar_concat.rename(columns={"cstrategy_cont":"cstrategy", "creturns_cont":"creturns"})
-    else:
-        using_cont = False
-        # Concatenate only what we need to avoid copying huge DataFrames
-        reduced = []
-        for df in all_dfs:
-            if df is None or df.empty:
-                continue
-            if not {"returns", "pred"} <= set(df.columns):
-                continue
-            reduced.append(df[["returns", "pred"]])
-
-        if not reduced:
-            print("⚠️ plot_full_cumulative_growth: missing 'returns'/'pred' columns to reconstruct.")
-            return
-
-        full_df = pd.concat(reduced, axis=0).sort_index()
-        raw_pred = full_df["pred"].copy()
-        full_df["pred"] = raw_pred.shift(1).fillna(0.0)
-        full_df["strategy"] = full_df["pred"] * full_df["returns"]
-        plot_df = pd.DataFrame(
-            {
-                "cstrategy": full_df["strategy"].cumsum().apply(np.exp),
-                "creturns":  full_df["returns"].cumsum().apply(np.exp),
-            }
-        )
-
-
-    plot_df.index = pd.to_datetime(plot_df.index, utc=True, errors="coerce")
-
-    suffix = f"_{model_name}" if model_name else ""
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
-        csv_path = os.path.join(out_dir, f"full_cumulative_growth{suffix}.csv")
-        png_path = os.path.join(out_dir, f"full_cumulative_growth{suffix}.png")
-    else:
-        csv_path = f"{filename_prefix}{suffix}.csv"
-        png_path = f"{filename_prefix}{suffix}.png"
-    plot_df.to_csv(csv_path)
-    if debug:
-        print(f"[plot_full_cumulative_growth] saved CSV to: {csv_path}")
-
-
-    with apply_academic_style("nature", "okabe_ito_no_black"):
-        fig, (ax, ax_dd) = plt.subplots(2, 1, height_ratios=[3, 1.4], constrained_layout=True, sharex=True)
-        ax.plot(plot_df.index, plot_df["cstrategy"], linewidth=line_width, label=model_name or "Strategy")
-        ax.plot(plot_df.index, plot_df["creturns"],  linewidth=1.1, linestyle="--", color="#666666", label="BH")
-        try:
-            _set_even_time_ticks(ax, plot_df.index, n_parts=n_time_parts)
-        except Exception:
-            pass
-
-        # Month boundary dividers
-        try:
-            month_ends = [df.index[-1] for df in all_dfs if not df.empty]
-            for x in month_ends[:-1]:
-                ax.axvline(x=x, color="#BBBBBB", linewidth=0.6, alpha=0.7)
-        except Exception:
-            pass
-
-        # Y anchoring/padding
-        vals = plot_df.to_numpy()
-        finite_vals = vals[np.isfinite(vals)]
-        y_min = float(np.nanmin(finite_vals))
-        y_top = float(np.nanmax(finite_vals))
-        bottom = min(y_anchor, y_min) if (y_anchor is not None) else y_min
-        pad = 0.02 * (y_top - bottom if y_top > bottom else max(y_top, 1.0))
-        ax.set_ylim(bottom=bottom - pad, top=y_top + pad)
-        ax.margins(x=0)
-        ax.set_ylabel("Growth (×)")
-        title = (f"{model_name or 'Strategy'} — Full Cumulative Growth" + (" (continuous)" if using_cont else ""))
-        ax.set_title(title, pad=12)
-        ax.grid(True); ax.legend(loc="lower right", ncol=1, fontsize=9, frameon=False)
-
-        # Drawdown
-        dd = _compute_drawdown(plot_df["cstrategy"])
-        ax_dd.plot(dd.index, (dd * 100.0).values, linewidth=1.0)
-        ax_dd.set_ylabel("DD")
-        ax_dd.grid(True, alpha=0.25)
-        try:
-            _set_even_time_ticks(ax_dd, plot_df.index, n_parts=n_time_parts)
-        except Exception:
-            pass
-        ax_dd.yaxis.set_major_formatter(PercentFormatter(decimals=0))
-
-        fig.set_size_inches(12.0, 5.6)
-        fig.savefig(png_path, dpi=dpi, bbox_inches="tight")
-        plt.close(fig)
-        
-    if debug:
-        print(f"[plot_full_cumulative_growth] saved plot to: {png_path}")
-    return png_path
-
-
-
 def sanitize_proba(proba):
     """
     Clean and row-normalize predict_proba output:
@@ -2274,7 +2082,6 @@ def save_model_ranking_csv(df_rank, out_dir, filename="model_ranking_final.csv")
     return path
 
 
-
 def _set_even_time_ticks(ax, idx, n_parts=10, fmt=None, rotation=None):
     """
     Put exactly n_parts+1 evenly spaced ticks from first→last timestamp in idx.
@@ -2349,138 +2156,6 @@ def _compute_drawdown(equity: "pd.Series") -> "pd.Series":
     dd = s / peak - 1.0
     return dd
 
-
-def save_month_equity_graph(
-    df,
-    out_csv=None,
-    out_png="results/monthly_equity.png",
-    label_model="Model",
-    title=None,
-    dpi=300,
-    line_width=1.0,
-    style="nature",
-    palette="okabe_ito_no_black",
-):
-    """
-    Plot the *bar-by-bar* equity for a single month with a clean, thesis-ready layout:
-      • Top panel: strategy (solid) vs buy-and-hold (dashed)
-      • Bottom panel: drawdown (%) of strategy
-    Also writes a CSV with the per-bar cumulative series. To avoid overwriting
-    month summaries, if out_csv ends in csv_month_<k>.csv we'll write csv_month_<k>_bars.csv.
-    """
-    import os, numpy as np, pandas as pd, matplotlib.pyplot as plt
-    from matplotlib.ticker import PercentFormatter
-
-    if df is None or len(df) == 0:
-        print("⚠️ save_month_equity_graph: empty DataFrame.")
-        return None
-    if not all(c in df.columns for c in ("cstrategy_cont", "creturns_cont")):
-        print("⚠️ save_month_equity_graph: required columns missing.")
-        return None
-
-    # Optional bars CSV
-    if out_csv:
-        base = os.path.basename(out_csv)
-        if base.startswith("csv_month_") and base.endswith(".csv"):
-            root, ext = os.path.splitext(out_csv)
-            out_csv = root + "_bars" + ext
-        try:
-            os.makedirs(os.path.dirname(out_csv) or ".", exist_ok=True)
-            df[["cstrategy_cont","creturns_cont"]].to_csv(out_csv, index=True, float_format="%.10f")
-        except Exception as e:
-            print(f"⚠️ Could not write monthly bars CSV: {e}")
-
-    os.makedirs(os.path.dirname(out_png) or ".", exist_ok=True)
-
-    # Plot
-    with set_paper_style(
-        style=style,
-        palette=palette,
-        bw_line_styles=(palette == "print_bw"),
-    ):
-        fig, (ax, ax_dd) = plt.subplots(
-            2, 1, height_ratios=[3, 1.4], constrained_layout=True, sharex=True
-        )
-
-        # --- Build padded plot index so month starts at calendar day 1 ------
-        df_plot = df.copy()
-        idx = pd.to_datetime(df_plot.index)
-
-        if len(idx) >= 1:
-            month_start = idx[0].normalize().replace(day=1)
-            month_end = idx[-1]
-            try:
-                if len(idx) >= 2:
-                    bar_delta = idx[1] - idx[0]
-                else:
-                    bar_delta = pd.Timedelta("1D")
-            except Exception:
-                bar_delta = pd.Timedelta("1D")
-
-            full_idx = pd.date_range(
-                start=month_start,
-                end=month_end,
-                freq=bar_delta,
-                tz=idx.tz if getattr(idx, "tz", None) is not None else None,
-            )
-
-            # Pad strategy and BH as flat / neutral before first real bar
-            eq0 = float(df_plot["cstrategy_cont"].iloc[0])
-            bh0 = float(df_plot["creturns_cont"].iloc[0])
-
-            eq = pd.to_numeric(df_plot["cstrategy_cont"], errors="coerce").reindex(full_idx)
-            bh = pd.to_numeric(df_plot["creturns_cont"], errors="coerce").reindex(full_idx)
-
-            pre_mask = full_idx < idx[0]
-            eq.loc[pre_mask] = eq0
-            bh.loc[pre_mask] = bh0
-
-            eq = eq.ffill()
-            bh = bh.ffill()
-            plot_index = full_idx
-        else:
-            # Fallback: no padding, just use original
-            eq = pd.to_numeric(df_plot["cstrategy_cont"], errors="coerce")
-            bh = pd.to_numeric(df_plot["creturns_cont"], errors="coerce")
-            plot_index = df_plot.index
-
-        # Top: equity curves
-        ax.plot(plot_index, eq.values, linewidth=line_width, label=label_model)
-        ax.plot(plot_index, bh.values, linewidth=1.2, linestyle="--", color="#666666", label="BH")
-        _set_even_time_ticks(ax, plot_index, n_parts=8)
-
-        # Y limits anchored at ~1.0
-        y_min = float(np.nanmin([eq.min(), bh.min()]))
-        y_top = float(np.nanmax([eq.max(), bh.max()]))
-        bottom = min(1.0, y_min)
-        pad = 0.02 * (y_top - bottom if y_top > bottom else max(y_top, 1.0))
-        ax.set_ylim(bottom=bottom - pad, top=y_top + pad)
-
-        ax.margins(x=0)
-        ax.set_title(title or "Monthly Equity", pad=10)
-        ax.set_ylabel("Equity (×)")
-        ax.grid(True, alpha=0.25)
-        ax.legend(loc="lower right", ncol=1, fontsize=9, frameon=False)
-
-        # Bottom: drawdown
-        dd = _compute_drawdown(eq)
-        ax_dd.plot(dd.index, (dd * 100.0).values, linewidth=1.0)
-        ax_dd.yaxis.set_major_formatter(PercentFormatter(decimals=0))
-        ax_dd.set_ylabel("DD")
-        ax_dd.grid(True, alpha=0.25)
-        _set_even_time_ticks(ax_dd, plot_index, n_parts=8)
-
-        # annotate max DD
-        try:
-            dd_min = float(dd.min())
-            ax_dd.set_title(f"Max DD: {dd_min*100.0:.1f}%", fontsize=9, pad=2)
-        except Exception:
-            pass
-
-        fig.set_size_inches(11.8, 5.0)
-        fig.savefig(out_png, dpi=dpi, bbox_inches="tight")
-        plt.close(fig)
-    return out_png
 
 def build_trade_log_from_df(df, bar_minutes=None):
     """
@@ -2955,7 +2630,6 @@ def save_model_bar_comparison_outputs(
     return png_path
 
 
-
 # ---------------------------------------------------------------------------
 # Helper: short, thesis-friendly model labels for bottom bands
 # ---------------------------------------------------------------------------
@@ -2993,198 +2667,6 @@ def _short_model_label(name: str) -> str:
 
     return mapping.get(key, name)
 
-def _short_model_label(name: str) -> str:
-    """
-    Map long internal model names to short labels for figure band captions.
-    This does not affect any logic – only the text shown on the plots.
-    """
-    if not isinstance(name, str):
-        return str(name)
-
-    # Normalise a bit
-    key = name.lower().replace(" ", "_")
-
-    mapping = {
-        "logistic": "log",
-        "logit": "log",
-        "logistic_regression": "log",
-        "svm": "svm",
-        "svc": "svm",
-        "random_forest": "rf",
-        "rf": "rf",
-        "xgboost": "xgb",
-        "xgb": "xgb",
-        "cnn": "cnn",
-        "lstm": "lstm",
-        "transformer": "trf",
-        "ensemble_cnn_lstm_xgboost": "ens_cnn",
-        "ensemble_local_global": "ens_cnn",
-        "ensemble_adaptive_regime": "ens_adap",
-        "adaptive_regime": "ens_adap",
-        "ensemble_transformer_xgb_dqn": "ens_trf",
-        "transformer_xgb_dqn": "ens_trf",
-    }
-
-    return mapping.get(key, name)
-
-
-def _draw_model_label_band(
-    fig,
-    model_names,
-    model_colors=None,
-    y: float = 0.02,
-    dx: float = 0.08,
-):
-    """
-    Draw a tight, centered row of model labels in the bottom figure margin.
-
-    - model_names: list of raw model names (strings)
-    - model_colors: optional list of colors, same order as names
-    - y: vertical position in figure coordinates (0..1), should be
-         BELOW the x-axis label
-    - dx: horizontal spacing between labels in figure coordinates
-    """
-    if fig is None or not model_names:
-        return
-
-    # Deduplicate while preserving order
-    seen = set()
-    short_labels = []
-    colors = []
-    for i, name in enumerate(model_names):
-        lbl = _short_model_label(name)
-        if lbl in seen:
-            continue
-        seen.add(lbl)
-        short_labels.append(lbl)
-        if model_colors is not None and i < len(model_colors):
-            colors.append(model_colors[i])
-        else:
-            colors.append("black")
-
-    n = len(short_labels)
-    if n == 0:
-        return
-
-    # Center the row around 0.5 and use fixed spacing so they don't
-    # get spread to the edges of the figure.
-    total_width = dx * (n - 1)
-    x0 = 0.5 - total_width / 2.0
-
-    for i, (label, color) in enumerate(zip(short_labels, colors)):
-        x = x0 + i * dx
-        fig.text(
-            x,
-            y,
-            label,
-            transform=fig.transFigure,
-            ha="center",
-            va="bottom",
-            fontsize=9,
-            color=color,
-            zorder=50,
-            clip_on=False,
-            bbox=dict(
-                facecolor="white",
-                edgecolor="none",
-                alpha=0.85,
-                boxstyle="round,pad=0.2",
-            ),
-        )
-
-
-
-# Professional chart styling
-# ---------------------------
-from matplotlib import cycler
-
-
-
-# ===========================
-# Academic palettes & styles
-# ===========================
-from matplotlib import cycler
-
-# --- Palettes from the literature ---
-
-# Okabe–Ito qualitative (CUD) — Okabe & Ito
-OKABE_ITO = [
-    "#000000", "#E69F00", "#56B4E9", "#009E73",
-    "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#999999"
-]
-
-# Add below OKABE_ITO
-OKABE_ITO_NO_BLACK = [
-    "#E69F00", "#56B4E9", "#009E73",
-    "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#999999"
-]
-
-
-# Paul Tol 'bright' qualitative (SRON TN 09-002, issue 3.2)
-# https://personal.sron.nl/~pault/data/colourschemes.pdf
-TOL_BRIGHT = [
-    "#EE7733", "#0077BB", "#33BBEE",
-    "#EE3377", "#CC3311", "#009988", "#BBBBBB"
-]
-
-# Greyscale + line styles for print/BW (IEEE/print)
-GREYS = ["#000000", "#4D4D4D", "#7F7F7F", "#A6A6A6", "#BFBFBF", "#D9D9D9"]
-LINE_STYLES = ["-", "--", "-.", ":"]
-MARKERS = [None, "o", "s", "d", "^", "v", "x", "*", "P"]
-
-
-# Update the palettes map
-ACADEMIC_PALETTES = {
-    "okabe_ito": OKABE_ITO,
-    "okabe_ito_no_black": OKABE_ITO_NO_BLACK,  # <— new
-    "tol_bright": TOL_BRIGHT,
-    "print_bw": GREYS,
-}
-
-def _palette_cycle(name="okabe_ito"):
-    colors = ACADEMIC_PALETTES.get(name, OKABE_ITO)
-    return cycler(color=colors)
-
-# --- Themes with journal-style fonts/rcParams ---
-
-ACADEMIC_THEMES = {
-    # Nature journals — Helvetica/Arial, light grid, CUD-friendly colors by default
-    "nature": {
-        "figure.figsize": (12, 6),
-        "figure.dpi": 150, "savefig.dpi": 150, "savefig.bbox": "tight",
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "Liberation Sans", "Nimbus Sans"],
-        "font.size": 11, "axes.titlesize": 14, "axes.labelsize": 12,
-        "axes.facecolor": "white", "axes.edgecolor": "#333333",
-        "axes.grid": True, "grid.color": "#E6E6E6", "grid.linewidth": 0.8,
-        "axes.spines.top": False, "axes.spines.right": False,
-        "legend.frameon": False, "lines.linewidth": 2.0,
-    },
-    # IEEE-like grayscale/print — Times/serif, thicker lines, BW-friendly
-    "ieee_bw": {
-        "figure.figsize": (12, 6),
-        "figure.dpi": 300, "savefig.dpi": 300, "savefig.bbox": "tight",
-        "font.family": "serif",
-        "font.serif": ["Times New Roman", "Times", "DejaVu Serif", "STIXGeneral"],
-        "font.size": 10, "axes.titlesize": 13, "axes.labelsize": 11,
-        "axes.facecolor": "white", "axes.edgecolor": "black",
-        "axes.grid": True, "grid.color": "#D0D0D0", "grid.linewidth": 0.8,
-        "axes.spines.top": False, "axes.spines.right": False,
-        "legend.frameon": False, "lines.linewidth": 1.8,
-    },
-    # ACM-like — Libertine/Biolinum stack (falls back gracefully)
-    "acm": {
-        "figure.figsize": (12, 6),
-        "figure.dpi": 150, "savefig.dpi": 150, "savefig.bbox": "tight",
-        "font.family": "serif",
-        "font.serif": ["Linux Libertine", "Libertinus Serif", "Times New Roman", "Times", "DejaVu Serif"],
-        "font.size": 10, "axes.titlesize": 13, "axes.labelsize": 11,
-        "axes.facecolor": "white", "axes.edgecolor": "#333333",
-        "axes.grid": True, "grid.color": "#ECECEC", "grid.linewidth": 0.8,
-        "axes.spines.top": False, "axes.spines.right": False,
-        "legend.frameon": False, "lines.linewidth": 2.0,
-    },
-}
 
 def apply_academic_style(
     theme: str = "nature",
@@ -3428,7 +2910,6 @@ def set_paper_style(
     )
 
 
-
 def _features_from_params_names_only(params, base_features):
     """
     Reconstruct feature names from a flat params dict + base_features.
@@ -3648,7 +3129,6 @@ def save_feature_frequency_from_trials(
         plt.close(fig)
 
     return out_png
-
 
 
 def save_feature_frequency_from_monthly_results(
@@ -3924,7 +3404,6 @@ def save_group_equity_curves(
         plt.close(fig)
 
 
-
 # Optional: only used if you enable calibration / feature selection
 try:
     from sklearn.calibration import CalibratedClassifierCV
@@ -4081,13 +3560,6 @@ def build_features_from_params(df, params: dict, base_features):
         
     return features
 
-
-def realized_vol(returns: pd.Series, window: int = 30, min_periods: Optional[int] = None) -> pd.Series:
-    """Simple realized volatility proxy: sqrt(sum r^2) over window."""
-    if min_periods is None:
-        min_periods = max(5, window // 3)
-    rv2 = returns.pow(2).rolling(window, min_periods=min_periods).sum()
-    return np.sqrt(rv2)
 
 def bipower_variation(returns: pd.Series, window: int = 30, min_periods: Optional[int] = None) -> pd.Series:
     """Jump-robust bipower variation: (pi/2) * sum |r_t| |r_{t-1}| over window, then sqrt."""
@@ -4650,68 +4122,6 @@ def compute_dsr_scores(scores):
     return out
 
 
-def stationary_bootstrap(series, B=2000, p=0.1, rng=None):
-    """
-    Politis–Romano stationary bootstrap for dependent returns.
-
-    WARNING:
-    - This allocates an array with shape (B, n). For long series and large B this can
-      consume a lot of memory. Prefer `stationary_bootstrap_indices` + streaming
-      statistics (see `stationary_bootstrap_stat`) whenever possible.
-    """
-    series = _np.asarray(series, dtype=_np.float32)
-    series = series[_np.isfinite(series)]
-    n = int(series.size)
-    B = int(B)
-
-    if n == 0:
-        # Preserve previous (B, 0) empty shape convention
-        return _np.empty((B, 0), dtype=_np.float32)
-
-    # Simple guard against pathological allocations (~200MB at float32 threshold)
-    if n * B > 50_000_000:
-        raise MemoryError(
-            f"stationary_bootstrap: requested shape ({B}, {n}) is too large; "
-            "prefer stationary_bootstrap_indices + streaming stats."
-        )
-
-    rng = _np.random.default_rng(rng)
-    out = _np.empty((B, n), dtype=_np.float32)
-    for b in range(B):
-        i = rng.integers(0, n)
-        for t in range(n):
-            out[b, t] = series[i]
-            if rng.random() < p:
-                i = rng.integers(0, n)
-            else:
-                i = (i + 1) % n
-    return out
-
-def stationary_bootstrap_stat(series, B=500, p=0.1, rng=None, stat_fn=None):
-    """
-    Memory-light helper: instead of returning a full (B, n) matrix, compute a
-    scalar statistic on each bootstrap sample and return shape (B,).
-    """
-    series = _np.asarray(series, dtype=_np.float32)
-    series = series[_np.isfinite(series)]
-    n = int(series.size)
-    B = int(B)
-
-    if n == 0 or B <= 0:
-        return _np.empty((0,), dtype=_np.float32)
-
-    rng = _np.random.default_rng(rng)
-    stat_fn = stat_fn or (lambda x: _np.mean(x))
-    out = _np.empty((B,), dtype=_np.float32)
-
-    for b in range(B):
-        idx = stationary_bootstrap_indices(n, p=p, rng=rng)
-        out[b] = float(stat_fn(series[idx]))
-    return out
-
-
-
-
 def save_optuna_learning_summary(study, out_path, n_startup=10, penalty_value: float | None = None):
     """
     Writes a small JSON with diagnostics that the sampler is learning:
@@ -4803,7 +4213,6 @@ def fit_coverage_threshold_on_calibration(proba_cal: np.ndarray,
     return float(np.clip(thr, 0.0, 1.0))
 
 
-
 def apply_temperature_to_proba(proba: np.ndarray, T: float) -> np.ndarray:
     """Softmax temperature scaling in log-prob space (stable & model-agnostic)."""
     T = float(max(1e-3, T))
@@ -4812,7 +4221,6 @@ def apply_temperature_to_proba(proba: np.ndarray, T: float) -> np.ndarray:
     z -= z.max(axis=1, keepdims=True)
     ez = np.exp(z)
     return (ez / np.sum(ez, axis=1, keepdims=True)).astype(np.float32)
-
 
 
 def fit_temperature_from_proba(proba: np.ndarray, y_true: np.ndarray) -> float:
@@ -4854,24 +4262,6 @@ def probabilistic_sharpe_ratio(returns, sr_benchmark=0.0, periods_per_year=12):
     sr_hat = (mu / sd) * np.sqrt(periods_per_year)
     z = (sr_hat - float(sr_benchmark)) * np.sqrt(n)
     return float(_norm_cdf(z))
-
-def stationary_bootstrap_indices(n, p=0.1, rng=None):
-    """
-    Politis & Romano stationary bootstrap: geometric block lengths with prob p.
-    Returns an array of indices of length n.
-    """
-    import numpy as np
-    rng = rng or np.random.default_rng()
-    idx = np.empty(n, dtype=int)
-    start = rng.integers(0, n)
-    idx[0] = start
-    for t in range(1, n):
-        if rng.random() < p:
-            start = rng.integers(0, n)
-        else:
-            start = (start + 1) % n
-        idx[t] = start
-    return idx
 
 def save_month_equity_graph(
     df,
@@ -4959,7 +4349,6 @@ def save_month_equity_graph(
         fig.savefig(out_png, dpi=dpi, bbox_inches="tight")
         plt.close(fig)
     return out_png
-
 
 
 def save_feature_heatmap_for_single_month(
@@ -5153,84 +4542,6 @@ def month_dir_path(model_base_dir: str, month_ix: int, *ignored) -> dict:
 
 
 # --- SPA: single-strategy p-value (stationary bootstrap) -----------------------
-def spa_pvalue_single(
-    returns,
-    *args,
-    B: int = 1000,
-    p: float = 0.1,
-    block_frac: float | None = None,
-    seed: int | None = None,
-    # legacy/compat kwargs (ignored but accepted to avoid call-site errors)
-    sr_benchmark: float | None = None,
-    sr_star: float | None = None,
-    sr0: float | None = None,
-    benchmark: float | None = None,
-    benchmark_sr: float | None = None,
-    **kwargs,
-) -> float:
-    """
-    Single-strategy SPA-style p-value (H0: E[r] <= 0, H1: E[r] > 0), approximated via
-    Politis–Romano stationary bootstrap. Returns a one-sided p-value in [0, 1].
-
-    Parameters
-    ----------
-    returns : array-like
-        Series of (e.g., monthly) strategy simple returns.
-    B : int
-        Number of bootstrap replications (default 1000).
-    p : float
-        Stationary-bootstrap restart probability (avg block length ≈ 1/p). If
-        `block_frac` is provided, it takes precedence (alias).
-    seed : int | None
-        RNG seed for reproducibility.
-
-    Notes
-    -----
-    * We studentize by the sample std and use the centered series under H0.
-    * The result is Pr*_H0(T >= T_obs) with add-one smoothing.
-    * Accepts legacy aliases/extra args without effect for compatibility.
-    """
-    import numpy as _np
-
-    r = _np.asarray(returns, dtype=float)
-    r = r[_np.isfinite(r)]
-    n = int(r.size)
-    if n < 5:
-        return float("nan")
-
-    # Back-compat: allow a second positional arg to be passed (ignored safely)
-    if args and isinstance(args[0], (int, float)):
-        _ = float(args[0])  # benchmark placeholder; null is still mean <= 0
-
-    if block_frac is not None:
-        p = float(block_frac)
-
-    # Observed studentized mean (t-stat)
-    mu = float(_np.mean(r))
-    sd = float(_np.std(r, ddof=1))
-    if not _np.isfinite(sd) or sd == 0.0:
-        return float("nan")
-    t_obs = _np.sqrt(n) * (mu / sd)
-
-    # Bootstrap under H0: center series to zero mean, preserve dependence
-    rng = _np.random.default_rng(seed)
-    t_boot = _np.empty(int(B), dtype=float)
-    r0 = r - mu  # impose null mean
-    for b in range(int(B)):
-        idx = stationary_bootstrap_indices(n, p=float(p), rng=rng)
-        rb = r0[idx]
-        sdb = float(_np.std(rb, ddof=1))
-        if not _np.isfinite(sdb) or sdb == 0.0:
-            t_boot[b] = 0.0
-        else:
-            t_boot[b] = _np.sqrt(n) * (float(_np.mean(rb)) / sdb)
-
-    # One-sided p-value with add-one smoothing
-    pval = (float((t_boot >= t_obs).sum()) + 1.0) / (int(B) + 1.0)
-    if pval < 0.0: pval = 0.0
-    if pval > 1.0: pval = 1.0
-    return float(pval)
-
 def _fmt_table_ascii(headers, rows, title=None):
     if not rows:
         return
@@ -5607,143 +4918,6 @@ def _build_bar_compare_dict(all_bt: dict) -> dict:
             series[f"{name}_equity"] = bc["cstrategy_cont"]
 
     return series
-
-def compute_drawdown_curve(equity: pd.Series) -> pd.Series:
-    """
-    Convert a cumulative equity curve into an 'underwater' drawdown curve.
-
-    Parameters
-    ----------
-    equity : pd.Series
-        Cumulative equity (e.g. starting at 1.0).
-
-    Returns
-    -------
-    pd.Series
-        Drawdown in percentage terms (negative values), 0 at peaks.
-    """
-    eq = equity.astype(float)
-    peak = eq.cummax()
-    dd = (eq / peak) - 1.0  # from peak, so 0 at new highs, negative when underwater
-    return dd * 100.0
-
-def save_underwater_curve_group(
-    equity_df: pd.DataFrame,
-    out_path: str,
-    title: str = "Underwater / Drawdown Curve",
-    date_fmt: str = "%d/%m/%y",
-):
-    """
-    Save an 'underwater' plot for multiple models plus Buy-and-Hold.
-
-    equity_df : columns = model names (including 'BH' / 'buy_and_hold' or similar),
-                index = datetime
-    """
-    if SKIP_PLOTS:
-        return
-
-    import numpy as np
-    import matplotlib.pyplot as plt
-
-    if equity_df is None or equity_df.empty:
-        print("⚠️ Empty equity_df passed to save_underwater_curve_group.")
-        return
-
-    # Small helper to recognise BH-like columns
-    def _is_bh(col: str) -> bool:
-        key = str(col).lower().replace(" ", "_")
-        return key in {"bh", "buy_and_hold", "buyandhold", "buy_hold"}
-
-    with set_paper_style(
-        style=None,
-        palette=None,
-        bw_line_styles=False,
-    ):
-        fig, ax = plt.subplots(constrained_layout=True)
-
-        dd_min_global = None
-        bh_color = "#666666"
-        line_width = 1.0
-
-        for col in equity_df.columns:
-            series = equity_df[col].dropna()
-            if series.empty:
-                continue
-
-            dd = compute_drawdown_curve(series)
-
-            # Track global minimum drawdown for y-limits
-            this_min = float(np.nanmin(dd.values)) if dd.values.size else np.nan
-            if np.isfinite(this_min):
-                dd_min_global = this_min if dd_min_global is None else min(dd_min_global, this_min)
-
-            if _is_bh(col):
-                ax.plot(
-                    dd.index,
-                    dd.values,
-                    linestyle="--",
-                    linewidth=line_width,
-                    color=bh_color,
-                    label="Buy & Hold",
-                    zorder=2,
-                )
-            else:
-                color = ax._get_lines.get_next_color()
-                pretty = _pretty_bar_label_global(col)
-                short_label = _short_model_label(pretty)
-                ax.plot(
-                    dd.index,
-                    dd.values,
-                    linewidth=line_width,
-                    color=color,
-                    label=short_label,
-                    zorder=3,
-                )
-
-        ax.set_title(title, pad=12)
-        ax.set_ylabel("Drawdown (%)")
-        ax.set_xlabel("Date")
-
-        # Underwater style: 0 at top, negative downwards
-        ax.axhline(0.0, linewidth=1.0, linestyle="--")
-
-        if dd_min_global is not None and np.isfinite(dd_min_global):
-            # dd_min_global is negative; extend a bit lower
-            bottom = dd_min_global * 1.1 if dd_min_global < 0 else -1.0
-            ax.set_ylim(top=0.0, bottom=bottom)
-
-        ax.grid(True)
-
-        # Date formatting consistent with other equity plots
-        try:
-            _set_even_time_ticks(
-                ax,
-                equity_df.index,
-                n_parts=10,
-                fmt=date_fmt,
-                rotation=30,
-            )
-        except Exception:
-            pass
-
-        ax.margins(x=0)
-
-        # Legend on the right, outside the plot area
-        handles, labels_ = ax.get_legend_handles_labels()
-        if handles:
-            fig.subplots_adjust(right=0.80)
-            ax.legend(
-                handles,
-                labels_,
-                loc="center left",
-                bbox_to_anchor=(1.02, 0.5),
-                borderaxespad=0.0,
-                frameon=False,
-            )
-
-        fig.set_size_inches(11.0, 4.8)
-        fig.savefig(out_path, dpi=300, bbox_inches="tight")
-        plt.close(fig)
 
 def compute_drawdown_curve(equity: "pd.Series") -> "pd.Series":
     """
@@ -6311,51 +5485,6 @@ def save_model_rolling_performance_outputs(
     return png_path
 
 
-
-
-def _extend_index_to_calendar_start(df):
-    """
-    For plotting: extend the DataFrame index back to the first calendar day
-    of the first month in the data, using the inferred bar frequency.
-
-    This is *visual only*: values for the new leading timestamps are left
-    as NaN so that _neutral_fill_before_first_trade can later flatten them
-    to a neutral level (e.g. 1.0 after rebasing).
-    """
-    import pandas as pd
-
-    if df is None or df.empty:
-        return df
-
-    idx = pd.to_datetime(df.index)
-    if len(idx) == 0:
-        return df
-
-    # First calendar day of the first month
-    first_ts = idx[0]
-    month_start = first_ts.normalize().replace(day=1)
-    last_ts = idx[-1]
-
-    # Infer bar frequency from the first two timestamps, fallback to daily
-    try:
-        if len(idx) >= 2:
-            bar_delta = idx[1] - idx[0]
-        else:
-            bar_delta = pd.Timedelta("1D")
-    except Exception:
-        bar_delta = pd.Timedelta("1D")
-
-    full_idx = pd.date_range(
-        start=month_start,
-        end=last_ts,
-        freq=bar_delta,
-        tz=idx.tz if getattr(idx, "tz", None) is not None else None,
-    )
-
-    # Reindex without filling; neutral_fill will take care of the front
-    return df.reindex(full_idx)
-
-
 def _neutral_fill_before_first_trade(df, skip_cols=None):
     """
     For plotting: extend each series' first valid value backwards so that
@@ -6584,42 +5713,6 @@ def _norm_optuna_direction(direction: str | None) -> str:
     """
     d = str(direction or "maximize").strip().lower()
     return "minimize" if d == "minimize" else "maximize"
-
-def direction_safe_penalty(score: float, penalty: float, direction: str | None = None) -> float:
-    """
-    Apply a penalty in a direction-safe, monotonic way.
-
-    Invariants:
-    - maximize: final <= score  (penalty never improves score)
-    - minimize: final >= score  (penalty never improves score)
-    Penalty is applied as: score +/- abs(score)*penalty  (with penalty >= 0)
-    """
-    d = _norm_optuna_direction(direction)
-    try:
-        s = float(score)
-        p = float(penalty)
-    except Exception:
-        return score
-
-    if not math.isfinite(s) or not math.isfinite(p):
-        return score
-    if p <= 0.0:
-        return s
-
-    mag = abs(s)
-    if d == "maximize":
-        return s - mag * p
-    return s + mag * p
-
-def direction_safe_invalid_score(direction: str | None = None, sentinel: float = 9999.0) -> float:
-    """
-    Return a direction-safe sentinel for invalid/pruned outcomes.
-    - maximize => very low
-    - minimize => very high
-    """
-    d = _norm_optuna_direction(direction)
-    s = float(abs(sentinel))
-    return -s if d == "maximize" else +s
 
 def _bad_objective_for_direction(direction: str | None, magnitude: float = 9999.0) -> float:
     d = _norm_optuna_direction(direction)

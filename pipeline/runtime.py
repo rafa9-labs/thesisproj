@@ -67,4 +67,7 @@ try:
 except Exception:
     pass
 
-print(f"🧩 Trial thread budget = {SAFE_CORES} cores active per model fit.")
+try:
+    print(f"Trial thread budget = {SAFE_CORES} cores active per model fit.")
+except UnicodeEncodeError:
+    pass

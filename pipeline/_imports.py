@@ -48,10 +48,20 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.class_weight import compute_class_weight
 
+# ── Data paths & constants ──
+CSV_1H    = "csv_data/EURUSD_10_years_H1_OANDA.csv"
+CSV_4H    = "csv_data/EURUSD_10_years_H4_OANDA.csv"
+CSV_15MIN = os.environ.get("CSV_15MIN", "csv_data/EURUSD_10_years_M15_OANDA.csv")
+CSV_30MIN = os.environ.get("CSV_30MIN", "csv_data/EURUSD_10_years_M30_OANDA.csv")
+BASE_CSV  = CSV_30MIN  # switch base timeframe by changing this line
+
+# pandas preference
+pd.options.mode.copy_on_write = True  # type: ignore[attr-defined]
+
 # ── Logging ──
 from logging_config import log_print
 
-# ── Project-local (lightweight) ──
+# ── Project-local utilities ──
 from utilsNoWFO import (
     set_global_determinism,
     TRAIN_TEST_MONTHS, N_METRICS, METRIC_NAMES,
@@ -78,10 +88,27 @@ from utilsNoWFO import (
     enforce_day1_eval_anchor, first_tradable_test_bar,
     compute_required_test_warmup_bars,
     init_study_tree, model_category,
+    prefilter_features_train,
+    SKIP_PLOTS,
+    friendly_model_name,
+    build_model_ranking, save_model_ranking_csv,
+    _fmt_table_ascii,
 )
 
 # ── Runtime knobs ──
 from pipeline.runtime import SAFE_CORES, CPU_TOTAL
+
+# ── Pipeline utility modules ──
+from pipeline.standalone_utils import (
+    _load_csv_cached, _norm_class_counts,
+    print_block_summary, print_pruned_block_summary,
+)
+from pipeline.memory_utils import _hard_free, _apply_low_ram_overrides
+from pipeline.dqn_config import _load_default_dqn_cfg, _coerce_dqn_cfg
+from pipeline.hpo_persistence import save_hpo_config_to_disk, load_hpo_config_from_disk
+from pipeline.metrics import _apply_temperature_to_proba, _psr, _dsr_sign
+from pipeline.tuning.runner import run_optuna_tuning
+from pipeline.tuning.refit import final_refit_if_deep, _evaluate_original_no_refit
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -92,17 +119,16 @@ class _LazyModule:
     """Proxy that defers `import X` until first attribute access."""
     _UNSET = object()  # sentinel
 
-    def __init__(self, name: str, package: str | None = None):
-        self.__name__ = name
-        self.__package__ = package
+    def __init__(self, name, package=None):
+        self._name = name
+        self._package = package
         self._mod = self._UNSET
 
     def _resolve(self):
         if self._mod is self._UNSET:
-            mod = importlib.import_module(self.__name__, self.__package__)
+            mod = importlib.import_module(self._name, self._package)
             self._mod = mod
-            # Replace in caller modules so future lookups skip proxy
-            globals()[self.__name__.split(".")[-1]] = mod
+            globals()[self._name.split(".")[-1]] = mod
         return self._mod
 
     def __getattr__(self, attr):
@@ -110,7 +136,7 @@ class _LazyModule:
 
     def __repr__(self):
         if self._mod is self._UNSET:
-            return f"<LazyModule '{self.__name__}' (not yet loaded)>"
+            return f"<LazyModule '{self._name}' (not yet loaded)>"
         return repr(self._mod)
 
     def __dir__(self):
@@ -177,3 +203,27 @@ except Exception:
 CSV_ENGINE = _CSV_ENGINE
 _os = os
 _np = np
+
+# ── Runtime constants ──
+LOG_MODE = os.getenv("LOG_MODE", "COMPACT").upper()
+
+# Late import of CLASS_DEFAULTS to avoid circular import (metrics_tuples imports us via *)
+from pipeline.metrics_tuples import CLASS_DEFAULTS, _safe_metrics_return, _empty_metrics  # noqa: F811,E402
+DEFAULT_CV = deepcopy(CLASS_DEFAULTS["cv"])
+DEFAULT_FEATURES = deepcopy(CLASS_DEFAULTS["features"])
+
+# ── Force-export underscore-prefixed symbols for `from pipeline._imports import *` ──
+# (Python skips _ names in star-imports unless listed in __all__)
+import sys as _sys
+_mod = _sys.modules[__name__]
+_public_names = [n for n in dir(_mod) if not n.startswith('_')]
+_underscore_exports = [
+    '_load_csv_cached', '_norm_class_counts',
+    '_hard_free', '_apply_low_ram_overrides',
+    '_load_default_dqn_cfg', '_coerce_dqn_cfg',
+    '_apply_temperature_to_proba', '_psr', '_dsr_sign',
+    '_evaluate_original_no_refit',
+    '_safe_metrics_return', '_empty_metrics',
+    '_gc', '_os', '_np', '_plt', '_tp_limits', '_CSV_ENGINE',
+]
+__all__ = sorted(set(_public_names + _underscore_exports))

@@ -1,7 +1,7 @@
 # FX MLBacktester — Refactoring & UI Master Plan
 
-> **Last Updated**: 2026-04-04  
-> **Status**: Phase 1 (Windows Native) — 🔄 In Progress (Steps 1.1–1.3 done, 1.4 pending)
+> **Last Updated**: 2026-04-06  
+> **Status**: Phase 2 (Architecture) — 🔄 In Progress (Phases 0-1 complete, Phase 2 ~80% done)
 
 ---
 
@@ -113,7 +113,7 @@ Walk-forward, cost-aware backtesting with causal feature/label construction, ens
 | 1.1 | Replace subprocess workers with `ProcessPoolExecutor` (spawn-safe) | A4 | ✅ `pipeline/workers.py` + `deep_mixin.py` updated |
 | 1.2 | Consolidate `deep_subprocess_worker.py` + `run_one_month_worker.py` → `pipeline/workers.py` | A4 | ✅ Workers consolidated; old files kept as deprecated shims |
 | 1.3 | Fix nvidia-smi / GPU detection to use cross-platform `get_gpu_free_memory_mb()` | B4, A4 | ✅ `tuningNoWFO.py` updated to use `pipeline.workers` |
-| 1.4 | Test full pipeline on Windows (all model types) | — | ⬜ Smoke test passed for imports; full run pending |
+| 1.4 | Test full pipeline on Windows (all model types) | — | ✅ Full smoke test passed (logistic, 2 trials, end-to-end) |
 
 ### Phase 2: Architecture — Extract Pipeline Modules
 **Branch**: `refactor/phase2-pipeline-modules`  
@@ -121,16 +121,16 @@ Walk-forward, cost-aware backtesting with causal feature/label construction, ens
 
 | Step | Description | Addresses | Status |
 |------|-------------|-----------|--------|
-| 2.1 | Extract `pipeline/data_loader.py` from MLBacktesterNoWFO | A1 | ⬜ |
-| 2.2 | Extract `pipeline/features.py` from utilsNoWFO | A1, A2 | ⬜ |
-| 2.3 | Extract `pipeline/labels.py` (triple-barrier) | A2 | ⬜ |
-| 2.4 | Extract `pipeline/trainer.py` (model training + calibration) | A1 | ⬜ |
-| 2.5 | Extract `pipeline/evaluator.py` from utilsNoWFO | A2 | ⬜ |
-| 2.6 | Extract `pipeline/backtest.py` (walk-forward loop) | A1 | ⬜ |
+| 2.1 | Extract data loading → `pipeline/backtester/data_mixin.py` | A1 | ✅ |
+| 2.2 | Extract features → `pipeline/backtester/features_mixin.py` | A1, A2 | ✅ |
+| 2.3 | Extract labels (triple-barrier) into features + strategy mixins | A2 | ✅ |
+| 2.4 | Extract training → `pipeline/backtester/deep_mixin.py` + `model_factory_mixin.py` | A1 | ✅ |
+| 2.5 | Extract evaluation → `pipeline/backtester/evaluation_mixin.py` | A2 | ✅ |
+| 2.6 | Extract backtest loop → `pipeline/backtester/run_mixin.py` + `real_trading_mixin.py` | A1 | ✅ |
 | 2.7 | Create `models/base_model.py` (BaseModel ABC) | B7 | ⬜ |
 | 2.8 | Wrap all models to conform to BaseModel | B7 | ⬜ |
-| 2.9 | Add feature caching (keyed by data_hash + config_hash) | C1 | ⬜ |
-| 2.10 | Add explicit memory cleanup between model trains | D1 | ⬜ |
+| 2.9 | Add feature caching (keyed by data_hash + config_hash) | C1 | ⬜ Scaffold exists; disabled by default |
+| 2.10 | Add explicit memory cleanup between model trains | D1 | ✅ `pipeline/memory_utils.py` |
 
 ### Phase 3: Simplification & Cleanup
 **Branch**: `refactor/phase3-simplification`  

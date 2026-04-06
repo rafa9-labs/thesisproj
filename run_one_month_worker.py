@@ -49,8 +49,7 @@ def main():
     init_kwargs = cfg.get("init_kwargs", {})
 
     # Import AFTER TF config/seed
-    # ADAPT HERE if your class name / file differs:
-    from MLBacktesterNoWFO import MLBacktester
+    from pipeline.backtester.composed import MLBacktester
 
     bt = MLBacktester(**init_kwargs)
 

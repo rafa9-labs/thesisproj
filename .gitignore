@@ -17,6 +17,15 @@ results/
 optuna_runs/
 artifacts/
 
+# Smoke test outputs
+smoke_output*.txt
+
+# Archived/deprecated
+._archived
+*.py._archived
+_cleanup_utils.py
+_scan_names.py
+
 # OS/IDE
 .vscode/
 .DS_Store

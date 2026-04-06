@@ -2,6 +2,26 @@
 from pipeline._imports import *  # noqa: F401,F403
 
 
+def filter_params(d: dict, prefix: str) -> dict:
+    """Filter dict keys by prefix, stripping the prefix from returned keys."""
+    if not isinstance(d, dict):
+        return {}
+    L = len(prefix)
+    return {k[L:]: v for k, v in d.items() if isinstance(k, str) and k.startswith(prefix)}
+
+
+def ensure_dict(obj):
+    """Coerce obj to dict; return empty dict for None/non-dict input."""
+    if obj is None:
+        return {}
+    if isinstance(obj, dict):
+        return obj
+    try:
+        return dict(obj)
+    except Exception:
+        return {}
+
+
 class ModelFactoryMixin:
     """
     get_model, windows, predict chunked

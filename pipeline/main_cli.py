@@ -5,6 +5,31 @@ Extracted from MLBacktesterNoWFO.py lines 18441-end.
 """
 
 from pipeline._imports import *  # noqa: F401,F403
+from pipeline.metrics_tuples import CLASS_DEFAULTS, _safe_metrics_return, _empty_metrics  # noqa: F811
+from pipeline.backtester.composed import MLBacktester  # noqa: F811
+from pipeline.memory_utils import _apply_low_ram_overrides  # noqa: F811
+
+# ── CLI-level constants (from original MLBacktesterNoWFO.py) ──
+SAVE_METRICS = {
+    "per_month_metrics_csv": True,
+    "monthly_results_all_csv": True,
+    "monthly_results_per_rep_csv": True,
+}
+
+# Trial counts per model type (from original MLBacktesterNoWFO.py)
+TRIAL_COUNTS = {
+    "logistic":                    {"random": 5,  "bayes": 5},
+    "svm":                         {"random": 5,  "bayes": 5},
+    "random_forest":               {"random": 5,  "bayes": 10},
+    "decision_tree":               {"random": 5,  "bayes": 5},
+    "xgboost":                     {"random": 5,  "bayes": 15},
+    "lstm":                        {"random": 3,  "bayes": 7},
+    "cnn":                         {"random": 3,  "bayes": 7},
+    "transformer":                 {"random": 3,  "bayes": 7},
+    "dqn":                         {"random": 2,  "bayes": 3},
+    "ensemble_cnn_lstm_xgboost":   {"random": 2,  "bayes": 3},
+    "ensemble_adaptive_regime":    {"random": 2,  "bayes": 3},
+}
 
 def main() ->  None:
     """
@@ -35,7 +60,14 @@ def main() ->  None:
     SEEDS = [33333]
     REPEATS = 1
 
-    N_REAL_MONTHS = 3 # 36
+    # ── Smoke-test mode: override config for fast validation ──
+    _SMOKE = os.environ.get("SMOKE_TEST", "0") == "1"
+
+    if _SMOKE:
+        global TRIAL_COUNTS
+        TRIAL_COUNTS = {k: {"random": 1, "bayes": 1} for k in TRIAL_COUNTS}
+
+    N_REAL_MONTHS = 1 if _SMOKE else 3  # 36
     END_DATE = "2025-12-01 00:00:00"   # end-of-Aug 2025, inclusive-ish for bar data
 
     # 1) Load feature configuration
@@ -107,16 +139,19 @@ def main() ->  None:
 
 
     # 2) Choose models (edit this list as you like)
-    # Warning free, Hardware Performant and Optimized. 
-    MODEL_LIST = [
-        # Linear / margin baselines (shallow, low-capacity)
-        "logistic", 
-        # "svm", 
+    # Warning free, Hardware Performant and Optimized.
+    if _SMOKE:
+        MODEL_LIST = ["logistic"]  # fastest model, just 1 for smoke
+    else:
+        MODEL_LIST = [
+            # Linear / margin baselines (shallow, low-capacity)
+            "logistic", 
+            # "svm", 
 
-        # # Tree-based classical ML (nonlinear tabular learners)
-        # "random_forest", 
-        # "decision_tree",  
-        "xgboost",  
+            # # Tree-based classical ML (nonlinear tabular learners)
+            # "random_forest", 
+            # "decision_tree",  
+            "xgboost",  
         
         # # Deep supervised sequence models (learn temporal structure directly)
         # "lstm", 
