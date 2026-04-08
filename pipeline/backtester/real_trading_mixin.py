@@ -714,11 +714,14 @@ class RealTradingMixin:
                 train_start_naive = test_start_naive - pd.DateOffset(months=train_months)
                 train_end_naive   = test_start_naive - pd.Timedelta(minutes=30)
 
-                # make the slices tz-aware (UTC)
-                test_start  = test_start_naive.tz_localize('UTC')
-                test_end    = test_end_naive.tz_localize('UTC')
-                train_start = train_start_naive.tz_localize('UTC')
-                train_end   = train_end_naive.tz_localize('UTC')
+                # make the slices tz-aware (UTC) — safe for both naive and already-aware timestamps
+                def _ensure_utc(ts):
+                    return ts.tz_localize('UTC') if ts.tzinfo is None else ts.tz_convert('UTC')
+
+                test_start  = _ensure_utc(test_start_naive)
+                test_end    = _ensure_utc(test_end_naive)
+                train_start = _ensure_utc(train_start_naive)
+                train_end   = _ensure_utc(train_end_naive)
 
                 if train_end >= test_start:
                     print(f"❗ Sanity check failed: train_end ({train_end}) is not before test_start ({test_start})")
