@@ -26,6 +26,14 @@ smoke_output*.txt
 _cleanup_utils.py
 _scan_names.py
 
+# Virtual environments
+.venv/
+.venv-wsl/
+
+# GPU test helpers (not needed in repo)
+test_gpu_wsl.py
+test_gpu_wsl.sh
+
 # OS/IDE
 .vscode/
 .DS_Store
