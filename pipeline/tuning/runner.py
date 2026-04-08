@@ -80,6 +80,12 @@ def run_optuna_tuning(
     except Exception:
         save_hpo_config_to_disk = None
         get_hpo_config_dir = None
+
+    try:
+        from pipeline._imports import SKIP_PLOTS, SAVE_TRIAL_FEATURE_FREQ
+    except Exception:
+        SKIP_PLOTS = True
+        SAVE_TRIAL_FEATURE_FREQ = False
         
     # Work on a single consolidated copy of the DF across all trials
     train_data = train_data.copy()
