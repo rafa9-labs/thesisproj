@@ -2836,18 +2836,21 @@ class RealTradingMixin:
         
         rep = int(df_months['rep'].dropna().iloc[0]) if ('rep' in df_months.columns and df_months['rep'].notna().any()) else 1
 
-        save_feature_frequency_from_monthly_results(
-            df_months,
-            base_features=[],
-            out_png=os.path.join(buckets["All"]["heatmaps"], f"feature_frequency_monthly_rep{rep}.png"),
-            top_k=30,
-            style="nature",
-            palette="okabe_ito_no_black",
-            exclude_prefixes=("returns_lag", "hour"),
-            collapse_raw_lags=True,
-            out_csv=os.path.join(buckets["All"]["csv"], f"feature_frequency_monthly_rep{rep}.csv"),
-        )
-    
+        try:
+            save_feature_frequency_from_monthly_results(
+                df_months,
+                base_features=[],
+                out_png=os.path.join(buckets["All"]["heatmaps"], f"feature_frequency_monthly_rep{rep}.png"),
+                top_k=30,
+                style="nature",
+                palette="okabe_ito_no_black",
+                exclude_prefixes=("returns_lag", "hour"),
+                collapse_raw_lags=True,
+                out_csv=os.path.join(buckets["All"]["csv"], f"feature_frequency_monthly_rep{rep}.csv"),
+            )
+        except Exception as _e:
+            print(f"⚠️ Could not save monthly feature frequency heatmap: {_e}")
+
         # Per-bar comparison CSV/PNG — run ONCE (single model vs BH)
         try:
             if all_dfs:
