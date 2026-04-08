@@ -594,369 +594,84 @@ def compute_full_evaluation_metrics(
             session_flag_arr = None
 
 
-    pos_actual = np.zeros(n, dtype=float)
-    strat = np.zeros(n, dtype=float)
     trades_sig = np.zeros(n, dtype=float)
 
-    in_pos = False
-    dirn = 0.0
-    size_entry = 0.0
-    scaled_out = False
-    cum_pl = 0.0
-    mfe = 0.0
-    be_floor = 0.0
-    bars_held = 0
-    sigma_entry = None
+    # --- Build PatchConfig and delegate to execution_patches ---
+    from pipeline.backtester.execution_patches import PatchConfig, run_execution_loop
 
-    pos_target = 0.0
-    prev_pos_actual = 0.0
+    cfg = PatchConfig(
+        bars_per_day=bars_per_day,
+        annual_bars=annual_bars,
+        vol_floor=vol_floor,
+        use_vol_target=use_vol_target,
+        target_bar=target_bar,
+        max_lev=max_lev,
+        use_trail=use_trail,
+        tp1_z_base=tp1_z_base,
+        trail_k_base=trail_k_base,
+        dyn_vol=dyn_vol,
+        move_to_be=move_to_be,
+        max_hold_bars=max_hold_bars,
+        min_hold_bars=min_hold_bars,
+        use_twap=use_twap,
+        twap_span=twap_span,
+        impact_eta=impact_eta,
+        twap_freeze=twap_freeze,
+        use_regime=use_regime,
+        tp1_z_calm=tp1_z_calm,
+        tp1_z_normal=tp1_z_normal,
+        tp1_z_volatile=tp1_z_volatile,
+        trail_k_calm=trail_k_calm,
+        trail_k_normal=trail_k_normal,
+        trail_k_volatile=trail_k_volatile,
+        use_kill=use_kill,
+        kill_mode=kill_mode,
+        kill_pct=kill_pct,
+        kill_sigma_k=kill_sigma_k,
+        kill_until_session_end=kill_until_session_end,
+        kill_cooloff_bars=kill_cooloff_bars,
+        use_spread_guard=use_spread_guard,
+        spread_cap=spread_cap,
+        debug_costs=debug_costs,
+        eval_context=eval_context,
+    )
 
-    # TWAP state
-    ramp_active = False
-    ramp_start = -1
-    ramp_end = -1
-    ramp_src = 0.0
-    ramp_dst = 0.0
-
-    # Kill-switch state
-    kills_triggered = 0
-    kill_active = False
-    cooloff_remaining = 0
-    day_pl = 0.0
-    bars_flat_due_kill = 0
-
-    # Diagnostics
-    tp1_hits = 0
-    stop_hits = 0
-    timeouts = 0
-    flips_exits = 0
-    twap_events = 0
-    total_ramp_bars = 0
-    total_impact_cost = 0.0
-    total_slippage_cost = 0.0
-    spread_spike_blocked = 0
-    
-    # Optional: record per-bar cost components for auditing (no behavior change).
-    # Enabled automatically in debug_costs or explicitly via eval_record_cost_columns.
     record_cost_columns = bool(_cfg("eval_record_cost_columns", False)) or bool(debug_costs)
+
+    result = run_execution_loop(
+        df=df,
+        pred=pred,
+        rets=rets,
+        bar_vol=bar_vol,
+        gap_from_prev_bool=gap_from_prev_bool,
+        regime_code=regime_code,
+        cfg=cfg,
+        trading_costs=trading_costs,
+        slippage_factor=slippage_factor,
+        session_flag_arr=session_flag_arr,
+        record_cost_columns=record_cost_columns,
+    )
+
+    # Unpack results into local variables for post-loop code
+    pos_actual = result.pos_actual
+    strat = result.strat
+    tp1_hits = result.tp1_hits
+    stop_hits = result.stop_hits
+    timeouts = result.timeouts
+    flips_exits = result.flips_exits
+    twap_events = result.twap_events
+    total_ramp_bars = result.total_ramp_bars
+    total_impact_cost = result.total_impact_cost
+    total_slippage_cost = result.total_slippage_cost
+    spread_spike_blocked = result.spread_spike_blocked
+    kills_triggered = result.kills_triggered
+    bars_flat_due_kill = result.bars_flat_due_kill
     if record_cost_columns:
-        cost_spread_pf = np.zeros(n, dtype=float)     # fractional per fill
-        cost_slip_pf   = np.zeros(n, dtype=float)     # fractional per fill
-        cost_impact_bar = np.zeros(n, dtype=float)    # per bar
-        cost_total_turn = np.zeros(n, dtype=float)    # (slip_cost*delta_pos + impact) per bar
+        cost_spread_pf = result.cost_spread_pf
+        cost_slip_pf = result.cost_slip_pf
+        cost_impact_bar = result.cost_impact_bar
+        cost_total_turn = result.cost_total_turn
 
-
-    # Helpers
-    def start_ramp(i, new_target, current_actual):
-        nonlocal ramp_active, ramp_start, ramp_end, ramp_src, ramp_dst, twap_events
-        ramp_active = True
-        ramp_start = i
-        ramp_end = i + twap_span - 1
-        ramp_src = current_actual
-        ramp_dst = new_target
-        twap_events += 1
-
-    def ramped_position(i):
-        if not ramp_active:
-            return ramp_dst
-        prog = min(1.0, (i - ramp_start + 1) / float(twap_span))
-        return ramp_src + (ramp_dst - ramp_src) * prog
-
-    def get_entry_size(i, sigma_ref):
-        if use_vol_target:
-            denom = max(sigma_ref, vol_floor)
-            return min(max_lev, float(target_bar) / float(denom))
-        return 1.0
-
-    def regime_tp_trail(i, sigma_ref):
-        # effective tp1_z and trail_k for bar i
-        if not use_regime:
-            return float(tp1_z_base), float(trail_k_base)
-        code = regime_code[i]
-        if code == 0:  # calm
-            tp1 = tp1_z_calm if tp1_z_calm is not None else tp1_z_base
-            tk  = trail_k_calm if trail_k_calm is not None else trail_k_base
-        elif code == 2:  # volatile
-            tp1 = tp1_z_volatile if tp1_z_volatile is not None else tp1_z_base
-            tk  = trail_k_volatile if trail_k_volatile is not None else trail_k_base
-        else:  # normal
-            tp1 = tp1_z_normal if tp1_z_normal is not None else tp1_z_base
-            tk  = trail_k_normal if trail_k_normal is not None else trail_k_base
-        return float(tp1), float(tk)
-
-    def reset_daily_state():
-        nonlocal day_pl, kill_active, cooloff_remaining
-        day_pl = 0.0
-        kill_active = False
-        cooloff_remaining = 0
-
-    # Main loop
-    prev_date = None
-    for i in range(n):
-        ts = df.index[i]
-        cur_date = ts.date()
-        new_day = (prev_date is None) or (cur_date != prev_date)
-        prev_date = cur_date
-
-        # Reset daily state on new calendar day
-        if new_day:
-            reset_daily_state()
-        # Also reset if we prefer to end cool-off / kill at new session boundary
-        if kill_until_session_end and gap_from_prev_bool[i]:
-            reset_daily_state()
-
-        # If kill active, suppress signals (force flat target)
-        sig = np.sign(pred[i])
-
-        # Session gating (optional):
-        # - If we are OUTSIDE session and NOT currently in a position,
-        #   we block new entries by zeroing the signal used for logic.
-        # - If we are already in a position, we let the exit logic (TP/SL/trail)
-        #   handle it normally, even outside the session.
-        if session_flag_arr is not None and session_flag_arr[i] == 0 and (not in_pos):
-            sig_session = 0.0
-        else:
-            sig_session = sig
-
-
-        # SpreadGuard: block NEW entries on spike spreads (allow exits/holds)
-        # Use prev_pos_actual (executed position) so it works for both trail and non-trail paths.
-        if use_spread_guard:
-            try:
-                _spr_full = float(df["spread"].iloc[i]) if ("spread" in df.columns) else 0.0
-            except Exception:
-                _spr_full = 0.0
-
-            # Only block *new entries* (flat -> nonzero). Do NOT interfere with exits.
-            if (prev_pos_actual == 0.0) and (sig_session != 0.0) and np.isfinite(_spr_full) and (_spr_full > spread_cap):
-                sig_session = 0.0
-                spread_spike_blocked += 1
-
-                # Optional per-spike print (keep it behind debug_costs so it doesn’t spam normal runs)
-                if debug_costs:
-                    print(f"[Eval][SpreadGuard] spike @ {df.index[i]} spread={_spr_full:.6f} > cap={spread_cap:.6f} → block entry{_ctx}")
-
-
-        if use_kill:
-            if kill_active:
-                sig_for_logic = 0.0
-                bars_flat_due_kill += 1
-                if (not kill_until_session_end) and cooloff_remaining > 0:
-                    cooloff_remaining -= 1
-                if (not kill_until_session_end) and cooloff_remaining == 0:
-                    # Cool-off expired → resume
-                    kill_active = False
-            else:
-                sig_for_logic = sig_session
-        else:
-            sig_for_logic = sig_session
-
-        # ----------------------
-        # Trading logic branches
-        # ----------------------
-        if use_trail:
-            # ---- Patch #2 path with (optional) regime-adaptive thresholds ----
-            if not in_pos:
-                if sig_for_logic != 0.0:
-                    in_pos = True
-                    dirn = sig_for_logic
-                    sigma_entry = bar_vol[i]
-                    size_entry = get_entry_size(i, sigma_entry)
-                    scaled_out = False
-                    cum_pl = 0.0
-                    mfe = 0.0
-                    be_floor = 0.0
-                    bars_held = 0
-                    pos_target = dirn * size_entry
-                    if use_twap:
-                        start_ramp(i, pos_target, prev_pos_actual)
-                    else:
-                        ramp_active = False
-                        ramp_dst = pos_target
-                else:
-                    pos_target = 0.0
-            else:
-                # Update P&L state (executed pos used below for strat)
-                bars_held += 1
-                sigma_ref = bar_vol[i] if dyn_vol else sigma_entry
-                sigma_ref = max(sigma_ref, vol_floor)
-                cum_pl += dirn * rets[i]
-                mfe = max(mfe, cum_pl)
-
-                # Regime-adaptive TP1/trail
-                tp1_z_eff, trail_k_eff = regime_tp_trail(i, sigma_ref)
-
-                # TP1 → scale-out to 1/2
-                if (not scaled_out) and (cum_pl >= tp1_z_eff * sigma_ref):
-                    scaled_out = True
-                    tp1_hits += 1
-                    if move_to_be:
-                        be_floor = 0.0
-                    pos_target = dirn * (size_entry * 0.5)
-                    if use_twap:
-                        start_ramp(i, pos_target, prev_pos_actual)
-                    else:
-                        ramp_active = False
-                        ramp_dst = pos_target
-
-                # trailing stop
-                trail_level = mfe - trail_k_eff * sigma_ref
-                if move_to_be and scaled_out:
-                    trail_level = max(trail_level, be_floor)
-
-                # Min-hold logic: allow exit-to-flat anytime, but block flips before min_hold_bars
-                want_flat = (sig_for_logic == 0.0)
-                want_flip = (sig_for_logic == -dirn)
-
-                if min_hold_bars > 0 and bars_held < min_hold_bars:
-                    # Too early to flip; only allow exit to flat
-                    allow_flip = False
-                else:
-                    allow_flip = True
-
-                flip_or_flat = want_flat or (want_flip and allow_flip)
-                max_hold_hit = (max_hold_bars > 0 and bars_held >= max_hold_bars)
-                hit_stop = (cum_pl <= trail_level)
-
-                if hit_stop or flip_or_flat or (use_kill and kill_active) or max_hold_hit:
-                    if hit_stop:       stop_hits += 1
-                    if flip_or_flat:   flips_exits += 1
-                    if max_hold_hit:   timeouts += 1
-                    in_pos = False
-                    dirn = 0.0
-                    size_entry = 0.0
-                    scaled_out = False
-                    pos_target = 0.0
-                    if use_twap:
-                        start_ramp(i, pos_target, prev_pos_actual)
-                    else:
-                        ramp_active = False
-                        ramp_dst = pos_target
-        else:
-            # ---- Patch #1 / original path (no trailing) ----
-            prev_sig = np.sign(pred[i-1]) if i > 0 else 0.0
-            signal_change = (np.sign(sig_for_logic) != np.sign(prev_sig))
-            if signal_change and sig_for_logic != 0.0:
-                sigma_ref = bar_vol[i]
-                size_entry = get_entry_size(i, sigma_ref)
-                pos_target = sig_for_logic * (size_entry if (not use_twap or not twap_freeze) else size_entry)
-                if use_twap:
-                    start_ramp(i, pos_target, prev_pos_actual)
-                else:
-                    ramp_active = False
-                    ramp_dst = pos_target
-            elif signal_change and sig_for_logic == 0.0:
-                pos_target = 0.0
-                if use_twap:
-                    start_ramp(i, pos_target, prev_pos_actual)
-                else:
-                    ramp_active = False
-                    ramp_dst = pos_target
-            else:
-                if use_twap and twap_freeze:
-                    pass
-                else:
-                    if use_vol_target and not use_twap:
-                        denom = max(bar_vol[i], vol_floor)
-                        size_now = min(max_lev, float(target_bar) / float(denom))
-                        pos_target = np.sign(sig_for_logic) * size_now
-                    else:
-                        pos_target = np.sign(sig_for_logic) * (size_entry if size_entry else 1.0)
-
-        # --- Execute via TWAP ramp or instant ---
-        if use_twap:
-            pos_exe = ramped_position(i)
-            if ramp_active and i >= ramp_end:
-                ramp_active = False
-            if i >= ramp_start >= 0:
-                total_ramp_bars += 1
-        else:
-            pos_exe = ramp_dst if ramp_dst is not None else pos_target
-
-        # Costs & PnL this bar
-        delta_pos = abs(pos_exe - prev_pos_actual)
-
-        # CSV spread = ask_close - bid_close (FULL spread).
-        # With mid-price returns, per-fill cost is HALF spread.
-        spread_full = float(df["spread"].iloc[i]) if ("spread" in df.columns) else 0.0
-        
-        # IMPORTANT:
-        # spread_full is in PRICE units (ask-bid). Strategy PnL is computed in (log-)return space.
-        # Convert spread to a fractional drag by dividing by the current mid price (price column).
-        # Fallback keeps legacy behavior only if no usable price is available.
-        price_i = None
-        if "price" in df.columns:
-            try:
-                price_i = float(df["price"].iloc[i])
-            except Exception:
-                price_i = None
-        elif "mid_close" in df.columns:
-            try:
-                price_i = float(df["mid_close"].iloc[i])
-            except Exception:
-                price_i = None
-
-        if price_i is not None and np.isfinite(price_i) and price_i > 0.0:
-            spread_per_fill = 0.5 * (spread_full / price_i)   # fractional return drag per fill
-        else:
-            spread_per_fill = 0.5 * spread_full               # legacy fallback (assumes already normalized)
-
-        # Vol-aware slippage from _ensure_cost_columns (bps -> fractional return)
-        slip_bps = float(df["slippage_bps"].iloc[i]) if ("slippage_bps" in df.columns) else 0.0
-        slip_per_fill = slip_bps / 1e4
-
-        # Total per-fill drag, then multiply by turnover (delta_pos)
-        slip_cost = (spread_per_fill + (float(slippage_factor) * slip_per_fill)) if trading_costs else 0.0
-
-        impact = impact_eta * delta_pos if trading_costs else 0.0
-        total_impact_cost += float(impact)
-
-        if trading_costs:
-            try:
-                total_slippage_cost += float(slip_cost) * float(delta_pos)
-            except Exception:
-                pass
-            
-        if record_cost_columns:
-            try:
-                cost_spread_pf[i] = float(spread_per_fill)
-                cost_slip_pf[i] = float(slip_per_fill)
-                cost_impact_bar[i] = float(impact)
-                cost_total_turn[i] = float(slip_cost) * float(delta_pos) + float(impact)
-            except Exception:
-                pass
-
-        strat[i] = pos_exe * rets[i] - (slip_cost * delta_pos + impact)
-
-        pos_actual[i] = pos_exe
-        prev_pos_actual = pos_exe
-
-        # --- Kill-switch check/update (after booking this bar's P&L) ---
-        if use_kill:
-            # Accumulate today's P&L in log-return space
-            day_pl += strat[i]
-
-            # Compute today's loss limit
-            if kill_mode == "sigma":
-                # daily σ ≈ bar σ × sqrt(bars/day)
-                day_sigma_est = max(bar_vol[i], vol_floor) * np.sqrt(bars_per_day)
-                loss_limit = kill_sigma_k * day_sigma_est
-            else:
-                loss_limit = kill_pct  # log-return approximation of % loss
-
-            if (not kill_active) and (day_pl <= -float(loss_limit)):
-                # trigger kill for the rest of session/day or for cool-off bars
-                kills_triggered += 1
-                kill_active = True
-                if not kill_until_session_end and kill_cooloff_bars > 0:
-                    cooloff_remaining = kill_cooloff_bars
-                # Force target to flat going forward
-                pos_target = 0.0
-                if use_twap:
-                    start_ramp(i, 0.0, prev_pos_actual)
-                else:
-                    ramp_active = False
-                    ramp_dst = 0.0
 
     # Trades (reporting continuity)
     trades_sig[1:] = np.abs(np.sign(pred[1:]) - np.sign(pred[:-1])) / 2.0

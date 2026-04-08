@@ -64,6 +64,11 @@ class AppState:
         else:
             df.iloc[:, 0] = pd.to_datetime(df.iloc[:, 0], errors="coerce")
             df = df.set_index(df.columns[0]).sort_index()
+        # Map common OANDA column names to canonical names
+        col_map = {"mid_open": "open", "mid_high": "high", "mid_low": "low", "mid_close": "close"}
+        for original, canonical in col_map.items():
+            if original in df.columns and canonical not in df.columns:
+                df = df.rename(columns={original: canonical})
         price_cols = [c for c in ("open", "high", "low", "close", "volume") if c in df.columns]
         for c in price_cols:
             df[c] = pd.to_numeric(df[c], errors="coerce")
