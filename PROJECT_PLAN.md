@@ -1,311 +1,194 @@
-# FX MLBacktester — Refactoring & UI Master Plan
+# FX ML Backtester — Commercial Product Roadmap
 
-> **Last Updated**: 2026-04-06  
-> **Status**: Phase 2 (Architecture) — ✅ COMPLETE (118/118 tests passing)
-
----
-
-## 1. Program Overview
-
-FX MLBacktester is a production-grade, bar-based foreign exchange ML trading pipeline that enables rigorous, leak-free comparison of diverse model families — from classical classifiers (Logistic Regression, SVM, Random Forest, XGBoost) through deep learning architectures (CNN, LSTM, Transformer) and ensemble strategies (stacked meta-learners, regime-adaptive Mixture-of-Experts) to reinforcement learning (Dueling DQN with Prioritized Experience Replay).
-
-### Core Value Proposition
-Walk-forward, cost-aware backtesting with causal feature/label construction, ensuring all metrics reflect realistic after-cost, after-slippage trading performance with a strict one-bar execution delay.
-
-### Key Files
-
-| File | Role | Lines |
-|------|------|-------|
-| `MLBacktesterNoWFO.py` | Main orchestrator (training, HPO, monthly walk-forward, evaluation) | ~20,000+ |
-| `utilsNoWFO.py` | Feature engineering, metrics, calibration, gating, I/O, plotting | ~6,600 |
-| `tuningNoWFO.py` | Optuna HPO search space definition | ~4,500 |
-| `models/cnn.py` | 1D-CNN classifier (dual Conv1D + GlobalAveragePooling) | ~200 |
-| `models/lstm.py` | Stacked LSTM (bidirectional, dropout, batch norm) | ~200 |
-| `models/transformer.py` | Time-series Transformer (sinusoidal PE, multi-head attention) | ~250 |
-| `models/ensemble_cnn_lstm_xgboost.py` | CNN+LSTM → XGBoost stacking ensemble | ~500 |
-| `models/ensemble_adaptive_regime.py` | Regime-adaptive Mixture-of-Experts | ~600 |
-| `rl/dqn_agent.py` | Dueling Double-DQN with PER | ~400 |
-| `rl/environment.py` | Trading environment (gym-style) | ~300 |
-| `rl/replay_buffer.py` | Prioritized Experience Replay buffer | ~150 |
-| `pipeline/workers.py` | ProcessPoolExecutor workers (deep fit+predict, GPU detect) | ~200 |
-| `deep_subprocess_worker.py` | **DEPRECATED** — subprocess worker for deep model training | ~200 |
-| `run_one_month_worker.py` | **DEPRECATED** — subprocess worker for monthly evaluation | ~200 |
-| `configs/feature_config.json` | Feature engineering parameters | — |
-| `configs/dqn_grid_config.json` | DQN hyperparameter grid | — |
-
-### Technology Stack
-- **Language**: Python 3
-- **ML/DL**: TensorFlow/Keras, scikit-learn, XGBoost
-- **HPO**: Optuna (TPE sampler)
-- **Data**: pandas, NumPy, pyarrow
-- **Indicators**: `ta` library
-- **Parallelism**: joblib, concurrent.futures, threadpoolctl
-- **Hardware**: GPU-accelerated via TensorFlow CUDA; mixed precision (fp16) supported
+> **Last Updated**: 2026-04-08
+> **Strategy**: Option C — Web App (Streamlit) + Python SDK (pip-installable)
+> **Current Phase**: Phase 3 (Simplification) → Phase 4 (Streamlit Web App)
+> **Revenue Target**: £500-2K/month within 3 months of launch
 
 ---
 
-## 2. Identified Bottlenecks & Bad Practices
+## 1. Product Vision
 
-### Critical (🔴)
-| ID | Issue | File(s) |
-|----|-------|---------|
-| A1 | Monolithic orchestrator (~965 KB, 20K+ lines) | `MLBacktesterNoWFO.py` |
-| A2 | Monolithic utils (~6,600 lines, cyclomatic >40) | `utilsNoWFO.py` |
-| A4 | Subprocess spawning on Windows (5-10s per spawn) | `deep_subprocess_worker.py`, `run_one_month_worker.py` |
-| B1 | `os.environ` as global config scattered across 5+ files | Multiple |
-| B4 | No `if __name__ == "__main__"` guard → Windows crashes | `MLBacktesterNoWFO.py` |
-| B6 | Zero unit tests | — |
+**FX ML Backtester** is a professional-grade, walk-forward FX backtesting platform that lets traders and quants compare 10+ ML model families — from XGBoost to Deep Reinforcement Learning — with realistic cost-aware execution.
 
-### High (🟠)
-| ID | Issue | File(s) |
-|----|-------|---------|
-| A6 | No lazy imports (15-30s cold start for TF) | `MLBacktesterNoWFO.py` |
-| B2 | `print()` instead of `logging` module (hundreds of calls) | All files |
-| B7 | Inconsistent model interfaces (massive if/elif chains) | `MLBacktesterNoWFO.py` |
-| C1 | Redundant feature recomputation (hours of waste) | `MLBacktesterNoWFO.py` |
-| D1 | No memory cleanup between model trains (GPU OOM) | `MLBacktesterNoWFO.py` |
-| E1 | BLAS thread oversubscription race conditions | `MLBacktesterNoWFO.py`, `tuningNoWFO.py` |
-| F1 | Hardcoded model lists in source code | `MLBacktesterNoWFO.py` |
-| F2 | No structured progress reporting | All files |
+**Tagline**: *"The first backtesting engine built for ML model comparison."*
 
-### Medium (🟡)
-| ID | Issue | File(s) |
-|----|-------|---------|
-| A3 | Repeated TF/GPU initialization (3x) | Multiple |
-| A5 | Global CSV cache with `.copy()` (2.5GB transient) | `MLBacktesterNoWFO.py` |
-| C2 | Full DataFrame copied multiple times in evaluation | `utilsNoWFO.py` |
-| D2 | Optuna study lives in memory (hundreds of MB) | `tuningNoWFO.py` |
-| F3 | Results scattered across 50+ files | All output dirs |
-
-### Low (🟢)
-| ID | Issue | File(s) |
-|----|-------|---------|
-| B3 | Duplicate import statements | `MLBacktesterNoWFO.py` |
-| B5 | Magic numbers everywhere | All files |
-| C3 | DQN environment creates arrays on every step | `rl/environment.py` |
-| E2 | `LD_LIBRARY_PATH` manipulation (Linux-only) | `MLBacktesterNoWFO.py` |
+### Core Differentiators
+| Feature | Us | Competitors |
+|---------|----|-----------| 
+| Walk-forward validation | ✅ Monthly refit | ❌ Single train/test split |
+| Execution delay (1-bar) | ✅ Anti-look-ahead | ❌ Same-bar execution |
+| After-cost equity curves | ✅ Spread + slippage | 🟡 Sometimes |
+| Multi-model comparison | ✅ 10+ models at once | ❌ One model at a time |
+| Triple-barrier labeling | ✅ Advanced | ❌ Basic fixed horizon |
+| Regime-adaptive ensembles | ✅ MoE + stacking | ❌ Not available |
+| Deep RL (Dueling DQN) | ✅ Built-in | ❌ Not available |
 
 ---
 
-## 3. Phased Implementation Plan
+## 2. Delivery Model — Option C (Both)
 
-### Phase 0: Prerequisites & Foundation (Current)
-**Branch**: `refactor/phase0-foundation`  
-**Goal**: Fix critical Windows blockers and establish clean project structure.
-
-| Step | Description | Addresses | Status |
-|------|-------------|-----------|--------|
-| 0.1 | Create `PROJECT_PLAN.md` (this file) | — | ✅ |
-| 0.2 | Create `config.py` — centralized settings from `.env` + JSON | B1, B5 | ✅ |
-| 0.3 | Add `if __name__ == "__main__"` guard to orchestrator | B4 | ✅ |
-| 0.4 | Create `logging_config.py` — replace `print()`/`log_print()` with `logging` | B2 | ✅ |
-| 0.5 | Remove duplicate imports and redundant TF initialization | B3, A3 | ✅ |
-| 0.6 | Add lazy imports for TF/XGBoost (15-30s faster startup) | A6 | ✅ |
-| 0.7 | Fix `LD_LIBRARY_PATH` and Linux-only assumptions | E2 | ✅ |
-| 0.8 | Convert file paths to `pathlib.Path` throughout | Windows | ⏭️ N/A — `os.path.join` already cross-platform |
-
-### Phase 1: Windows Native & Worker Consolidation
-**Branch**: `refactor/phase1-windows-native` (branched from Phase 0)  
-**Goal**: Make the program run natively on Windows without WSL.
-
-| Step | Description | Addresses | Status |
-|------|-------------|-----------|--------|
-| 1.1 | Replace subprocess workers with `ProcessPoolExecutor` (spawn-safe) | A4 | ✅ `pipeline/workers.py` + `deep_mixin.py` updated |
-| 1.2 | Consolidate `deep_subprocess_worker.py` + `run_one_month_worker.py` → `pipeline/workers.py` | A4 | ✅ Workers consolidated; old files kept as deprecated shims |
-| 1.3 | Fix nvidia-smi / GPU detection to use cross-platform `get_gpu_free_memory_mb()` | B4, A4 | ✅ `tuningNoWFO.py` updated to use `pipeline.workers` |
-| 1.4 | Test full pipeline on Windows (all model types) | — | ✅ Full smoke test passed (logistic, 2 trials, end-to-end) |
-
-### Phase 2: Architecture — Extract Pipeline Modules
-**Branch**: `refactor/phase2-pipeline-modules`  
-**Goal**: Break monoliths into clean, testable modules.
-
-| Step | Description | Addresses | Status |
-|------|-------------|-----------|--------|
-| 2.1 | Extract data loading → `pipeline/backtester/data_mixin.py` | A1 | ✅ |
-| 2.2 | Extract features → `pipeline/backtester/features_mixin.py` | A1, A2 | ✅ |
-| 2.3 | Extract labels (triple-barrier) into features + strategy mixins | A2 | ✅ |
-| 2.4 | Extract training → `pipeline/backtester/deep_mixin.py` + `model_factory_mixin.py` | A1 | ✅ |
-| 2.5 | Extract evaluation → `pipeline/backtester/evaluation_mixin.py` | A2 | ✅ |
-| 2.6 | Extract backtest loop → `pipeline/backtester/run_mixin.py` + `real_trading_mixin.py` | A1 | ✅ |
-| 2.7 | Create `models/base_model.py` (BaseModel ABC) | B7 | ✅ |
-| 2.8 | Wrap all models to conform to BaseModel via registry | B7 | ✅ `models/registry.py` (10 builders) |
-| 2.9 | Feature caching tests + cache mechanism verified | C1 | ✅ 13 tests; disk persistence deferred to Phase 3 |
-| 2.10 | Add explicit memory cleanup between model trains | D1 | ✅ `pipeline/memory_utils.py` |
-
-### Phase 3: Simplification & Cleanup
-**Branch**: `refactor/phase3-simplification`  
-**Goal**: Reduce complexity, extract remaining monoliths, add performance caching.
-
-| Step | Description | Addresses | Status |
-|------|-------------|-----------|--------|
-| 3.1 | Extract `compute_full_evaluation_metrics` from `utilsNoWFO.py` → `pipeline/metrics_eval.py` | A2 | 🔄 |
-| 3.2 | Feature disk cache (Parquet persistence, deferred from 2.9) | C1 | ⬜ |
-| 3.3 | Extract TWAP/kill-switch/regime patches from `strategy_mixin.py` → `pipeline/backtester/patches.py` | A2 | ⬜ |
-| 3.4 | Simplify Optuna search space (remove legacy profiles, reduce dimensions) | A2 | ⬜ |
-| 3.5 | Replace magic numbers with named constants in `config.py` | B5 | ⬜ |
-| 3.6 | Add `tests/test_causality.py` and `tests/test_eval_metrics.py` | B6 | ⬜ |
-
-### Phase 4: Desktop UI Application
-**Branch**: `feature/phase4-desktop-ui`  
-**Goal**: Professional PySide6 desktop application.
-
-| Step | Description | Addresses | Status |
-|------|-------------|-----------|--------|
-| 4.1 | Set up PySide6 project structure (`ui/` package) | — | ⬜ |
-| 4.2 | Build main window with tab layout | — | ⬜ |
-| 4.3 | Build Data tab (CSV loading, preview, timeframe selection) | F1 | ⬜ |
-| 4.4 | Build Models tab (checkbox grid, model-specific params) | F1 | ⬜ |
-| 4.5 | Build Features tab (indicator toggles, windows, lag config) | F1 | ⬜ |
-| 4.6 | Build HPO tab (Optuna trials, TA profile, train months) | F1 | ⬜ |
-| 4.7 | Build Backtest tab (test months, seeds, costs, triple-barrier) | F1 | ⬜ |
-| 4.8 | Build Results tab (equity plots, metric tables, rankings) | F3 | ⬜ |
-| 4.9 | Implement `QThread` workers for long-running tasks | F2 | ⬜ |
-| 4.10 | Wire log console to `logging` handler | B2 | ⬜ |
-| 4.11 | Add progress bar with ETA estimation | F2 | ⬜ |
-| 4.12 | Add export to CSV/PNG buttons | F3 | ⬜ |
-| 4.13 | Create `main.py` entry point (UI or CLI mode) | — | ⬜ |
-
----
-
-## 4. Git Branching Strategy
+### Layer 1: Web App (Primary — Streamlit MVP)
+**Target**: Non-technical traders, students, fund managers
+**URL**: Streamlit Cloud → custom domain later
+**Monetization**: Freemium SaaS
 
 ```
-main
-├── refactor/phase0-foundation          ← Current
-│   └── refactor/phase1-windows-native  ← Branch from Phase 0
-│       └── refactor/phase2-pipeline-modules
-│           └── refactor/phase3-simplification
-│               └── feature/phase4-desktop-ui
+User Journey:
+1. Visit URL → Sign up (email/password)
+2. Select instrument (EURUSD, GBPUSD...)
+3. Select timeframe (M5, M15, M30, H1, H4, D1)
+4. Choose models to compare (checkboxes)
+5. Configure settings (months, spread, slippage, seeds)
+6. Click "Run Backtest" → progress bar
+7. View results: equity curves, metrics table, rankings
+8. Export: CSV, PNG, PDF report
 ```
 
-- Each phase branches from the **end of the previous phase**
-- Each phase is a **PR** with review + testing before merge to `main`
-- Commit messages follow conventional commits: `feat:`, `fix:`, `refactor:`, `chore:`
+### Layer 2: Python SDK (Secondary — pip-installable)
+**Target**: Quant developers, researchers
+**Distribution**: PyPI
+**Monetization**: Open-source core + premium models
+
+```python
+pip install fxbacktester
+
+from fxbacktester import MLBacktester, Config
+config = Config(models=["xgboost", "cnn", "lstm"], months=24)
+bt = MLBacktester(config)
+results = bt.run()
+results.metrics_table()
+results.equity_curve("xgboost")
+```
 
 ---
 
-## 5. Validation Checkpoints
+## 3. Commercial Phases
 
-### Phase 0 Validation
-- [ ] `python -c "import config"` works without errors
-- [ ] `python -c "import logging_config"` works without errors
-- [ ] `python MLBacktesterNoWFO.py` still runs (smoke test with 1 model, 1 month)
-- [ ] No duplicate TF initialization warnings in console output
-- [ ] All file paths work on Windows (no backslash/forward slash issues)
+### Phase 3: Pipeline Simplification ✅ MOSTLY COMPLETE
+**Branch**: `refactor/phase3-simplification` (current)
 
-### Phase 1 Validation
-- [ ] Full backtest runs on Windows without WSL
-- [ ] No `subprocess` calls remain in the hot path
-- [ ] Multiprocessing workers don't crash on spawn
-- [ ] All model types complete at least 1 month of walk-forward
+| Step | Description | Status |
+|------|-------------|--------|
+| 3.1 | Extract `compute_full_evaluation_metrics` → `pipeline/metrics_eval.py` | ✅ |
+| 3.2 | Fix circular imports, lazy TF init | ✅ |
+| 3.3 | Feature disk cache (Parquet) | ⬜ |
+| 3.4 | Simplify Optuna search space | ⬜ |
+| 3.5 | Replace magic numbers with named constants | ⬜ |
 
-### Phase 2 Validation
-- [ ] Extracted modules pass `pytest tests/`
-- [ ] Walk-forward output is **bit-for-bit identical** to pre-refactor output
-- [ ] Feature caching reduces repeated computation by >80%
+### Phase 4: Streamlit Web App 🔄 NEXT
+**Branch**: `feature/phase4-streamlit-ui`
 
-### Phase 3 Validation
-- [ ] `compute_full_evaluation_metrics` is <500 lines
-- [ ] Optuna search space has <25 dimensions
-- [ ] Causality tests pass
-- [ ] Metrics tests pass
+| Step | Description | Status | Est. |
+|------|-------------|--------|------|
+| 4.1 | Cherry-pick `app.py` + `src/ui/` from `init-proj` | ⬜ | 1h |
+| 4.2 | Create adapter: `pipeline/` backend → Streamlit frontend | ⬜ | 3h |
+| 4.3 | Build model selection sidebar (checkboxes, dropdowns) | ⬜ | 2h |
+| 4.4 | Build results dashboard (equity curves, metrics table) | ⬜ | 3h |
+| 4.5 | Add progress bar + cancellation for long runs | ⬜ | 2h |
+| 4.6 | Add export buttons (CSV, PNG) | ⬜ | 1h |
+| 4.7 | Test end-to-end: select → run → view → export | ⬜ | 2h |
+| 4.8 | Deploy to Streamlit Cloud | ⬜ | 30min |
 
-### Phase 4 Validation
-- [ ] UI launches via `python main.py`
-- [ ] All tabs functional and responsive
-- [ ] Long-running backtest doesn't freeze UI
-- [ ] Results tab shows correct equity curves and metrics
-- [ ] Export buttons produce valid CSV/PNG files
+### Phase 5: User Accounts + Monetization
+**Branch**: `feature/phase5-auth-billing`
+
+| Step | Description | Status |
+|------|-------------|--------|
+| 5.1 | Add Streamlit authenticator (stauth) | ⬜ |
+| 5.2 | User registration/login flow | ⬜ |
+| 5.3 | Save backtest results per user (SQLite) | ⬜ |
+| 5.4 | Free tier limits (3 backtests/day, 3 models max) | ⬜ |
+| 5.5 | Stripe integration for Pro tier | ⬜ |
+| 5.6 | Pro tier: unlimited backtests, all models, export | ⬜ |
+
+### Phase 6: Python SDK (pip-installable)
+**Branch**: `feature/phase6-pypi-package`
+
+| Step | Description | Status |
+|------|-------------|--------|
+| 6.1 | Create `pyproject.toml` + `setup.py` | ⬜ |
+| 6.2 | Define public API (`fxbacktester` package) | ⬜ |
+| 6.3 | Write 5 example Jupyter notebooks | ⬜ |
+| 6.4 | Write API documentation (Sphinx/MkDocs) | ⬜ |
+| 6.5 | Publish to PyPI | ⬜ |
+| 6.6 | Gate premium models behind license key | ⬜ |
+
+### Phase 7: Scale (React + FastAPI)
+| Step | Description | Status |
+|------|-------------|--------|
+| 7.1 | FastAPI backend wrapping `pipeline/` | ⬜ |
+| 7.2 | React/Next.js frontend (based on pomodoro patterns) | ⬜ |
+| 7.3 | PostgreSQL + Redis for user data/sessions | ⬜ |
+| 7.4 | Docker + cloud deployment (AWS/GCP) | ⬜ |
+| 7.5 | API rate limiting + usage analytics | ⬜ |
 
 ---
 
-## 6. Working with Large Files — Safety Rules
+## 4. Pricing Tiers
 
-> **⚠️ MANDATORY**: These rules must be followed for ALL interactions with this project to avoid API errors from oversized context.
+| Tier | Price | Features |
+|------|-------|----------|
+| **Free** | £0 | 3 backtests/day, 3 models, basic metrics, no export |
+| **Pro** | £19/mo | Unlimited backtests, all models, full metrics, CSV/PNG export |
+| **Team** | £49/mo | Pro + shared configs, team dashboard, priority support |
+| **API** | £99/mo | REST API access, custom data, webhooks, white-label |
 
-### 6.1 Never Read Entire Large Files
+---
 
-| File | Lines | Rule |
-|------|-------|------|
-| `MLBacktesterNoWFO.py` | ~19,400 | **NEVER** `read_file` — use `head`/`tail` or Python slicing only |
-| `utilsNoWFO.py` | ~6,600 | Read in chunks of ≤500 lines at a time |
-| `tuningNoWFO.py` | ~4,500 | Read in chunks of ≤500 lines at a time |
-| Small files (<500 lines) | — | Safe to read in full |
+## 5. Architecture — `init-proj` Disposition
 
-### 6.2 Targeted Edits Only
+| `init-proj` Component | Decision | Reason |
+|----------------------|----------|--------|
+| `app.py` | ✅ **Cherry-pick** | Working Streamlit entry point |
+| `src/ui/*` | ✅ **Cherry-pick** | Dashboard, controls, state modules |
+| `src/features/*` | 🔄 **Evaluate later** | Vectorized indicators — may replace mixin code |
+| `src/execution/*` | 🔄 **Evaluate later** | Risk management — useful for Pro tier |
+| `src/models/*` | ❌ **Skip** | We already have model wrappers + registry |
+| `src/core/config.py` | ❌ **Skip** | We have our own `config.py` |
+| `PHASE*.md`, design docs | 📝 **Archive** | Reference only, keep branch alive |
 
-1. **Use `replace_in_file`** for ALL edits to large files — never `write_to_file`
-2. **One function at a time** — identify the target line range, read only that range, apply edit
-3. **Use `search_files` (regex)** to find patterns without loading the whole file
-4. **Use Python one-liners** for analysis: `python -c "..."` to count, find, extract
+---
 
-### 6.3 Context Compacting Protocol
+## 6. Technical Stack
 
-After analyzing any section of code:
+| Layer | Current | Target |
+|-------|---------|--------|
+| Backend | `pipeline/` (Python) | Same — battle-tested |
+| Frontend v1 | None | Streamlit (fast to market) |
+| Frontend v2 | — | React/Next.js (scale) |
+| Auth | None | stauth → Supabase Auth |
+| Database | File system | SQLite → PostgreSQL |
+| Payments | None | Stripe |
+| Hosting | Local | Streamlit Cloud → AWS/GCP |
+| Package | None | PyPI (`fxbacktester`) |
 
-1. **Summarize findings** in a 3–5 line compact note (not the raw code)
-2. **Discard raw file content** from working memory — rely on the summary
-3. **Use function signatures + line numbers** as the reference index
-4. **Maintain a "function index"** (name → line range) to avoid re-reading
-5. **Never re-read** a section you've already analyzed — trust your summary
+---
 
-Example compact note:
-```
-L195-250: _configure_threadpool() — sets OMP/BLAS threads, uses os.environ.
-Duplicate of config.py logic. Safe to replace with config.get_settings() call.
-```
+## 7. Key Files Reference
 
-### 6.4 Modularization is the Long-Term Fix
+| File | Role |
+|------|------|
+| `pipeline/backtester/composed.py` | MLBacktester class (entry point for UI) |
+| `pipeline/main_cli.py` | CLI runner (reference for UI integration) |
+| `config.py` | Configuration (used by both CLI and UI) |
+| `models/registry.py` | Model registry (UI model selection) |
+| `pipeline/metrics_eval.py` | Evaluation metrics (UI results display) |
 
-Phase 2 (Extract Pipeline Modules) is the proper solution to the file size problem.
-Phase 0 and Phase 1 must be **surgical** — targeted edits only, no restructuring.
-The safety rules above ensure we can complete Phase 0 without hitting API limits.
+---
 
-### 6.5 Pipeline Module Map (Modularization)
+## 8. Validation Milestones
 
-> `MLBacktesterNoWFO.py` (19,441 lines) has been split into `pipeline/` package.
-> The composed `MLBacktester` class imports successfully with all 51 methods.
+### Phase 4 Complete When:
+- [ ] Streamlit app launches locally (`streamlit run app.py`)
+- [ ] User can select models and configure backtest
+- [ ] Backtest runs with progress feedback
+- [ ] Results display: equity curves + metrics table
+- [ ] Export works (CSV + PNG)
+- [ ] Deployed to Streamlit Cloud URL
 
-**Standalone modules** (extracted from lines 295–1459):
-
-| Module | Lines | Contents |
-|--------|-------|----------|
-| `pipeline/_imports.py` | ~130 | Shared imports for all pipeline modules |
-| `pipeline/runtime.py` | ~70 | Thread budgets, GPU init, BLAS caps |
-| `pipeline/standalone_utils.py` | ~227 | `_norm_class_counts`, `print_block_summary`, `_load_csv_cached` |
-| `pipeline/memory_utils.py` | ~45 | `_hard_free`, `_apply_low_ram_overrides` |
-| `pipeline/dqn_config.py` | ~131 | `_load_default_dqn_cfg`, `_coerce_dqn_cfg` |
-| `pipeline/hpo_persistence.py` | ~151 | Save/load HPO configs to disk |
-| `pipeline/metrics.py` | ~124 | Sharpe, PSR, DSR, temperature, CV gates |
-| `pipeline/metrics_tuples.py` | ~549 | `_empty_metrics`, `_safe_metrics_return` |
-| `pipeline/main_cli.py` | ~1010 | `main()` function |
-
-**Mixin modules** (extracted from MLBacktester class, lines 1460–18440):
-
-| Module | Lines | Methods |
-|--------|-------|---------|
-| `pipeline/backtester/core_mixin.py` | ~746 | `__init__`, config helpers, `__repr__` |
-| `pipeline/backtester/data_mixin.py` | ~350 | `get_data`, `_ensure_feature_bank`, regime |
-| `pipeline/backtester/features_mixin.py` | ~839 | `prepare_features`, `scale_features`, labels |
-| `pipeline/backtester/deep_mixin.py` | ~870 | Keras fit, calibration, subprocess |
-| `pipeline/backtester/strategy_mixin.py` | ~3319 | `test_strategy` (largest mixin) |
-| `pipeline/backtester/ensemble_mixin.py` | ~1998 | `test_ensemble_strategy`, adaptive top3 |
-| `pipeline/backtester/dqn_mixin.py` | ~693 | `test_dqn_strategy` |
-| `pipeline/backtester/model_factory_mixin.py` | ~512 | `get_model`, sliding windows, predict |
-| `pipeline/backtester/evaluation_mixin.py` | ~493 | `evaluate_strategy`, walk-forward, logging |
-| `pipeline/backtester/run_mixin.py` | ~4178 | `run_strategy` (HPO loop) |
-| `pipeline/backtester/real_trading_mixin.py` | ~3092 | `real_trading_simulation` |
-
-**Usage**: `from pipeline.backtester.composed import MLBacktester`
-
-### 6.6 Function Index for MLBacktesterNoWFO.py (Original)
-
-> The original file is still present. This index maps line ranges for reference.
-
-| Function/Section | Lines | Notes |
-|------------------|-------|-------|
-| Module docstring + imports | 1–195 | Top-level imports, env setup |
-| `_configure_threadpool()` | ~195–250 | Thread config, duplicate of config.py |
-| `_init_gpu()` | ~507–520 | GPU init, TF |
-| `class MLBacktester` | 1460–18440 | **Now split into 11 mixins** |
-| `main()` | ~18441–19441 | Entry point with `__main__` guard |
+### Phase 5 Complete When:
+- [ ] User registration/login works
+- [ ] Results persist across sessions
+- [ ] Free tier limits enforced
+- [ ] Stripe checkout works for Pro tier
