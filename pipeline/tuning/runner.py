@@ -481,7 +481,25 @@ def run_optuna_tuning(
     completed = [t for t in study.trials if t.state == TrialState.COMPLETE and t.value is not None]
 
     if not completed:
-        raise RuntimeError("No completed Optuna trials; cannot select Top-N.")
+        failed  = [t for t in study.trials if t.state == TrialState.FAIL]
+        pruned  = [t for t in study.trials if t.state == TrialState.PRUNED]
+        _msgs = []
+        for t in failed[-5:]:
+            _err = "unknown"
+            try:
+                _err = t.user_attrs.get("error", t.user_attrs.get("exception", "unknown"))
+            except Exception:
+                pass
+            _msgs.append(f"  Trial {t.number}: {_err}")
+        _summary = (
+            f"No completed Optuna trials "
+            f"(completed=0, failed={len(failed)}, pruned={len(pruned)}, total={len(study.trials)}). "
+        )
+        if _msgs:
+            _summary += "Last failures:\n" + "\n".join(_msgs)
+        else:
+            _summary += "No failure info available (all pruned?)."
+        raise RuntimeError(_summary)
 
     # 👉 Re-rank by Deflated Sharpe proxy (DSR)
     try:

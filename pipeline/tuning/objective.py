@@ -709,6 +709,68 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
             else:
                 raise optuna.TrialPruned("MiniBlockCV: non-finite CV score (no-trades/gating)")
 
+        # ------------------------------------------------------------------
+        # Quality Guard #1: Cap per-trial Sharpe at ±6.0
+        # Annualized Sharpe > 6 is unrealistic and usually from too few trades.
+        # This prevents lucky low-trade folds from dominating the objective.
+        # ------------------------------------------------------------------
+        _SHARPE_CAP = 6.0
+        if abs(score) > _SHARPE_CAP:
+            try:
+                trial.set_user_attr("sharpe_capped", f"{score:.3f}→{_SHARPE_CAP if score > 0 else -_SHARPE_CAP:.3f}")
+            except Exception:
+                pass
+            score = _np.clip(score, -_SHARPE_CAP, _SHARPE_CAP)
+
+        # ------------------------------------------------------------------
+        # Quality Guard #2: Minimum total trades floor across valid folds
+        # If the config produces < 40 trades total, it's not trading enough
+        # to be statistically meaningful → heavy penalty.
+        # ------------------------------------------------------------------
+        _MIN_TOTAL_TRADES = 40
+        _trades_cv = None
+        try:
+            _trades_cv = trial.user_attrs.get("trades_cv", None)
+            if _trades_cv is None:
+                _trades_cv = trial.user_attrs.get("trades_valid", None)
+        except Exception:
+            pass
+        if _trades_cv is not None:
+            try:
+                _total_trades = float(_trades_cv)
+            except Exception:
+                _total_trades = 0
+            if _total_trades < _MIN_TOTAL_TRADES:
+                _trade_penalty = 2.0 * (_MIN_TOTAL_TRADES - _total_trades) / _MIN_TOTAL_TRADES
+                score = score - _trade_penalty
+                try:
+                    trial.set_user_attr("min_trades_penalty", f"trades={_total_trades:.0f}<{_MIN_TOTAL_TRADES} pen={_trade_penalty:.3f}")
+                except Exception:
+                    pass
+
+        # ------------------------------------------------------------------
+        # Quality Guard #3: Penalize excessive active rate (> 0.30)
+        # An active rate >> target (0.15) means the confidence threshold
+        # is miscalibrated → penalty proportional to the overshoot.
+        # ------------------------------------------------------------------
+        _ACTIVE_RATE_CAP = 0.30
+        _ar_cv = None
+        try:
+            _ar_cv = trial.user_attrs.get("active_rate_cv", None)
+        except Exception:
+            pass
+        if _ar_cv is not None:
+            try:
+                _ar = float(_ar_cv)
+            except Exception:
+                _ar = 0.0
+            if _ar > _ACTIVE_RATE_CAP:
+                _ar_penalty = 3.0 * (_ar - _ACTIVE_RATE_CAP) / _ACTIVE_RATE_CAP
+                score = score - _ar_penalty
+                try:
+                    trial.set_user_attr("active_rate_penalty", f"ar={_ar:.3f}>{_ACTIVE_RATE_CAP} pen={_ar_penalty:.3f}")
+                except Exception:
+                    pass
 
         # ------------------------------------------------------------------
         # Rationale:

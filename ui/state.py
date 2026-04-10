@@ -64,7 +64,6 @@ class AppState:
         else:
             df.iloc[:, 0] = pd.to_datetime(df.iloc[:, 0], errors="coerce")
             df = df.set_index(df.columns[0]).sort_index()
-        # Map common OANDA column names to canonical names
         col_map = {"mid_open": "open", "mid_high": "high", "mid_low": "low", "mid_close": "close"}
         for original, canonical in col_map.items():
             if original in df.columns and canonical not in df.columns:
@@ -80,16 +79,17 @@ class AppState:
 
     @staticmethod
     def run_backtest(
-        model_type: str,
+        params: Dict[str, Any],
         csv_path: str,
-        n_months: int = 3,
-        n_trials: int = 5,
-        seed: int = 42,
-        trading_costs: bool = True,
-        trial_callback=None,
     ) -> Dict[str, Any]:
-        """Run a full walk-forward backtest via MLBacktester."""
+        """Run a full walk-forward backtest via MLBacktester using all UI params."""
         from pipeline.backtester.composed import MLBacktester
+
+        model_type = params.get("model_type", "logistic")
+        n_months = params.get("test_months", 1)
+        n_trials = params.get("n_trials", 10)
+        seed = params.get("seed", 42)
+        trading_costs = params.get("eval_use_trading_costs", True)
 
         feat_path = Path("configs/feature_config.json")
         with open(feat_path, "r") as f:
@@ -101,6 +101,49 @@ class AppState:
         if features_config.get("session_filter_mode") is None:
             features_config["session_filter_mode"] = "both"
 
+        # Merge UI-tunable params into features_config
+        _ui_overrides = {
+            "model_type": model_type,
+            "calibrate_method": params.get("calibrate_method", "sigmoid"),
+            "confidence_threshold": params.get("confidence_threshold", 0.8),
+            "target_active_rate": params.get("target_active_rate", 0.15),
+            "target_coverage": params.get("target_coverage", 0.15),
+            "eval_use_trading_costs": trading_costs,
+            "slip_norm_bps": params.get("slip_norm_bps", 0.25),
+            "lags": params.get("lags", 14),
+            "lag_depth": params.get("lag_depth", 1),
+            "use_fracdiff": params.get("use_fracdiff", True),
+            "fracdiff_d": params.get("fracdiff_d", 0.4),
+            "label_threshold": params.get("label_threshold", 0.0005),
+            "use_triple_barrier": params.get("use_triple_barrier", True),
+            "tb_pt_mult": params.get("tb_pt_mult", 2.0),
+            "tb_sl_mult": params.get("tb_sl_mult", 2.0),
+            "tb_neutral_zone": params.get("tb_neutral_zone", 0.5),
+            "tb_max_holding": params.get("tb_max_holding", 36),
+            # Logistic HPs
+            "logit_C": params.get("logit_C", 1.0),
+            "logit_solver": params.get("logit_solver", "lbfgs"),
+            "logit_penalty": params.get("logit_penalty", "l2"),
+            "logit_max_iter": params.get("logit_max_iter", 500),
+            "logit_tol": params.get("logit_tol", 0.0001),
+        }
+        # Indicator toggles
+        for key in (
+            "use_adx", "use_atr", "use_bbands", "use_ema", "use_sma",
+            "use_rsi", "use_macd", "use_stoch", "use_sar", "use_donchian",
+            "use_crossover_bins", "use_ma_spread", "use_price_ma_z",
+            "use_indicator_states", "use_mtf_ma", "use_mtf_alignment",
+            "use_mtf_align", "use_macd_atr_ratio", "use_triple_confirm",
+            "use_trend_confirm", "use_vol_managed_mom", "use_vm_mom",
+            "use_squeeze_breakout", "use_squeeze_expansion",
+            "use_atr_channel_breakout", "use_ext_atr_low_adx",
+            "use_reentry_mom", "use_slope_diff", "use_rv_features",
+        ):
+            if key in params:
+                _ui_overrides[key] = params[key]
+
+        features_config.update(_ui_overrides)
+
         df_preview = AppState.load_csv_data(csv_path)
         start_date = str(df_preview.index[0])
         end_date = str(df_preview.index[-1])
@@ -110,6 +153,7 @@ class AppState:
             "rep": 1,
             "n_trials": n_trials,
             "n_startup_trials": max(1, n_trials // 2),
+            "train_months": params.get("train_months", 36),
         }
 
         bt = MLBacktester(
@@ -130,12 +174,36 @@ class AppState:
             raise
 
         results = _extract_backtest_results(bt, df_sim, model_type)
+
+        # Try to load param importances from the latest optuna run
+        results.update(_load_latest_optuna_artifacts())
+
         try:
             if hasattr(bt, "free") and callable(bt.free):
                 bt.free(release_data=True)
         except Exception:
             pass
         return results
+
+
+def _load_latest_optuna_artifacts() -> Dict[str, Any]:
+    """Try to load param importances and best config from the latest optuna run."""
+    artifacts: Dict[str, Any] = {}
+    optuna_dir = Path("optuna_runs")
+    if not optuna_dir.exists():
+        return artifacts
+    dirs = sorted([d for d in optuna_dir.iterdir() if d.is_dir()], reverse=True)
+    if not dirs:
+        return artifacts
+    latest = dirs[0]
+    pi_file = latest / "param_importances.json"
+    if pi_file.exists():
+        try:
+            with open(pi_file) as f:
+                artifacts["param_importances"] = json.load(f)
+        except Exception:
+            pass
+    return artifacts
 
 
 def _extract_backtest_results(bt, df_sim: pd.DataFrame, model_type: str) -> Dict[str, Any]:

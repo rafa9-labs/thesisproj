@@ -84,7 +84,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
         # --- (B) Calibration knobs ---
         params["calibrate_method"] = trial.suggest_categorical(
-            "calibrate_method", ["", "isotonic", "sigmoid"]
+            "calibrate_method", ["sigmoid", "isotonic"]
         )
 
         deep_models = {"lstm", "cnn", "transformer"}
@@ -236,11 +236,11 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     # Tight stops + long holding horizons collapse the neutral class (timeouts),
     # causing 3-class folds to become effectively binary. Constrain TB so class=1
     # exists consistently across mini-block folds.
-    tb_pt_low, tb_pt_high = 1.50, 3.00
-    tb_sl_low, tb_sl_high = 1.50, 3.00
+    tb_pt_low, tb_pt_high = 1.00, 2.00
+    tb_sl_low, tb_sl_high = 1.00, 2.00
     tb_hold_low, tb_hold_high = 24, 48
     # Neutral band: multiplier on local σ; applies only on timeout.
-    tb_nz_low, tb_nz_high = 1.00, 2.00
+    tb_nz_low, tb_nz_high = 0.25, 0.75
  
 
     params["tb_pt_mult"] = trial.suggest_float("tb_pt_mult", tb_pt_low, tb_pt_high, step=0.25)
@@ -258,9 +258,9 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     # === Calibration method — probabilistic heads (STABLE CHOICES) ===
     # Use "" for "no calibration" to keep Optuna's distribution stable across the study.
     if _hpo_stage == "A_signal":
-         params["calibrate_method"] = str(_stage_cfg.get("stageA_calibrate_method", "") or "")
+         params["calibrate_method"] = str(_stage_cfg.get("stageA_calibrate_method", "sigmoid") or "sigmoid")
     else:
-        params["calibrate_method"] = trial.suggest_categorical("calibrate_method", ["", "isotonic", "sigmoid"])
+        params["calibrate_method"] = trial.suggest_categorical("calibrate_method", ["sigmoid", "isotonic"])
 
     # === Feature engineering toggles ===
     params["use_fracdiff"]     = trial.suggest_categorical("use_fracdiff", [False, True])

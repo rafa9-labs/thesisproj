@@ -202,7 +202,11 @@ except Exception:
 
 try:
     import ta  # noqa: F401
-except Exception:
+except Exception as _ta_err:
+    import logging as _logging
+    _logging.getLogger(__name__).error(
+        "Failed to import 'ta' (technical-analysis library): %s  — "
+        "Install with: pip install ta", _ta_err)
     ta = None
 
 # Keep aliases

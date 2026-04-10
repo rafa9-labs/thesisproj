@@ -71,6 +71,13 @@ class ModelFactoryMixin:
             pass  # fall through to legacy path
 
         # ---------- Legacy inline path (fallback) ----------
+        # --- sklearn version detection for deprecation-safe param handling ---
+        try:
+            import sklearn as _sk
+            _SK_GE_18 = tuple(int(x) for x in _sk.__version__.split('.')[:2]) >= (1, 8)
+        except Exception:
+            _SK_GE_18 = False
+
         # --- local helper: guard invalid sklearn solver/penalty combos ---
         def _sanitize_logit_params(d: dict, *, ovr: bool = False) -> dict:
             p = dict(d or {})
@@ -110,7 +117,23 @@ class ModelFactoryMixin:
             except Exception:
                 p["max_iter"] = 2000
             p["solver"]  = solver
-            p["penalty"] = penalty
+
+            # sklearn >=1.8 deprecated `penalty` param in favour of `l1_ratio` / C
+            if _SK_GE_18:
+                p.pop("penalty", None)          # remove to avoid FutureWarning
+                if penalty == "l2":
+                    p.setdefault("l1_ratio", 0)   # equivalent to penalty='l2'
+                elif penalty == "l1":
+                    p["l1_ratio"] = 1.0
+                # elasticnet keeps its own l1_ratio from above
+                # none → set C=inf (sklearn recommendation)
+                elif penalty == "none":
+                    p["C"] = float("inf")
+                # n_jobs has no effect since 1.8 — remove to avoid warning
+                p.pop("n_jobs", None)
+            else:
+                p["penalty"] = penalty
+
             return p
 
         # ========== DEEP MODELS (GPU; light CPU threads for input pipeline) ==========
@@ -307,12 +330,13 @@ class ModelFactoryMixin:
             logit_params = ensure_dict(_raw_logit)
             logit_params = _sanitize_logit_params(logit_params, ovr=False)
             logit_params.setdefault("solver", "saga")
-            logit_params.setdefault("penalty", "l2")
             logit_params.setdefault("max_iter", 2000)
             logit_params.setdefault("tol", 1e-3)
             logit_params.setdefault("class_weight", "balanced")
-            # `n_jobs` is accepted; used by liblinear/ovr; harmless for saga
-            logit_params.setdefault("n_jobs", int(os.environ.get("SKLEARN_JOBS", max(1, (os.cpu_count() or 2) - 1))))
+            # Only set penalty/n_jobs for sklearn <1.8 (sanitizer already handled >=1.8)
+            if not _SK_GE_18:
+                logit_params.setdefault("penalty", "l2")
+                logit_params.setdefault("n_jobs", int(os.environ.get("SKLEARN_JOBS", max(1, (os.cpu_count() or 2) - 1))))
             if seed is not None: logit_params.setdefault("random_state", seed)
             model = Pipeline([("std", StandardScaler()), ("logit", LogisticRegression(**logit_params))])
             

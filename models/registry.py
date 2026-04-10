@@ -142,9 +142,29 @@ def _build_logistic(*, use_proba=True, **params):
         logit_params["max_iter"] = 2000
 
     logit_params["solver"] = solver
-    logit_params["penalty"] = penalty
+
+    # sklearn >=1.8 deprecated `penalty` and `n_jobs`
+    try:
+        import sklearn as _sk
+        _sk_ge_18 = tuple(int(x) for x in _sk.__version__.split('.')[:2]) >= (1, 8)
+    except Exception:
+        _sk_ge_18 = False
+
+    if _sk_ge_18:
+        logit_params.pop("penalty", None)
+        if penalty == "l2":
+            logit_params.setdefault("l1_ratio", 0)
+        elif penalty == "l1":
+            logit_params["l1_ratio"] = 1.0
+        elif penalty == "none":
+            logit_params["C"] = float("inf")
+        # elasticnet keeps its own l1_ratio from above
+        logit_params.pop("n_jobs", None)
+    else:
+        logit_params["penalty"] = penalty
+        logit_params.setdefault("n_jobs", int(os.environ.get("SKLEARN_JOBS", max(1, (os.cpu_count() or 2) - 1))))
+
     logit_params.setdefault("class_weight", "balanced")
-    logit_params.setdefault("n_jobs", int(os.environ.get("SKLEARN_JOBS", max(1, (os.cpu_count() or 2) - 1))))
     if seed is not None:
         logit_params.setdefault("random_state", seed)
 

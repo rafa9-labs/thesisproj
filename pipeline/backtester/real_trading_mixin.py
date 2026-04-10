@@ -28,6 +28,17 @@ class RealTradingMixin:
         self.eq_concat  = pd.DataFrame()
         self._in_real_sim = True
         self._in_optuna_cv = False
+
+        # ------------------------------------------------------------------
+        # SAVE_* toggle dicts — control which per-month artifacts are written.
+        # These were referenced but never defined (caused NameError at line 2604).
+        # Defaults: enable trade CSVs, disable heavy per-month PNGs/CSVs.
+        # Override via config["save_trades"] / config["save_metrics"] / etc.
+        # ------------------------------------------------------------------
+        SAVE_TRADES = dict(config.get("save_trades", {})) if isinstance(config.get("save_trades"), dict) else {}
+        SAVE_METRICS = dict(config.get("save_metrics", {})) if isinstance(config.get("save_metrics"), dict) else {}
+        SAVE_FEATURES = dict(config.get("save_features", {})) if isinstance(config.get("save_features"), dict) else {}
+        SAVE_EQUITY = dict(config.get("save_equity", {})) if isinstance(config.get("save_equity"), dict) else {}
         
         # ------------------------------------------------------------
         # Freeze the baseline feature config at entry to real-trading sim
@@ -37,8 +48,12 @@ class RealTradingMixin:
             self._rt_sim_base_features_config = deepcopy(getattr(self, 'features_config', {}) or {})
         except Exception:
             self._rt_sim_base_features_config = {}
-            
-        
+
+        # --- helper: make any timestamp tz-aware (UTC) safely ---
+        def _ensure_dt(ts):
+            """Convert naive Timestamp to UTC, pass aware ones through."""
+            return ts.tz_localize('UTC') if ts.tzinfo is None else ts.tz_convert('UTC')
+
         # repetition index (for file naming); defaults to 1 if not provided
         rep_idx = int(config.get("rep", 1))
 
@@ -530,21 +545,46 @@ class RealTradingMixin:
                 if "n_trials" not in hpo_cfg:
                     hpo_cfg["n_trials"] = default_random + default_bayes
 
+                # Fix 3: enforce minimum trial counts to survive a few failures
+                _min_total = 10
+                if int(hpo_cfg.get("n_trials", 0)) < _min_total:
+                    hpo_cfg["n_trials"] = _min_total
+                if int(hpo_cfg.get("n_startup_trials", 0)) < 5:
+                    hpo_cfg["n_startup_trials"] = 5
+
                 # IMPORTANT: for HPO we want the full dataset available, not the per-month slice
                 self.data = full_data.copy()
 
                 # We only need params for this model_type
-                res_hpo = self.run_strategy(
-                    hpo_cfg,
-                    models_to_test=[model_type],
-                    n_trials=hpo_cfg["n_trials"],
-                    n_startup_trials=hpo_cfg["n_startup_trials"],
-                )
-                # In hpo_only mode we return (None, best_params)
-                if isinstance(res_hpo, tuple) and len(res_hpo) >= 2 and isinstance(res_hpo[1], dict):
-                    global_hpo_best = res_hpo[1]
+                try:
+                    res_hpo = self.run_strategy(
+                        hpo_cfg,
+                        models_to_test=[model_type],
+                        n_trials=hpo_cfg["n_trials"],
+                        n_startup_trials=hpo_cfg["n_startup_trials"],
+                    )
+                except RuntimeError as _hpo_err:
+                    _hpo_msg = str(_hpo_err)
+                    if "No completed Optuna trials" in _hpo_msg:
+                        log_print(
+                            f"⚠️ Global HPO failed: {_hpo_msg[:200]}... "
+                            f"Falling back to per-month WFO tuning.",
+                            level="COMPACT",
+                        )
+                        global_hpo_best = None
+                        self._global_hpo_best = None
+                        self._global_hpo_topN = []
+                        # Skip the rest of the HPO block
+                        _hpo_failed = True
+                    else:
+                        raise
                 else:
-                    global_hpo_best = getattr(self, "_optuna_best_for_wfo", None)
+                    _hpo_failed = False
+                    # In hpo_only mode we return (None, best_params)
+                    if isinstance(res_hpo, tuple) and len(res_hpo) >= 2 and isinstance(res_hpo[1], dict):
+                        global_hpo_best = res_hpo[1]
+                    else:
+                        global_hpo_best = getattr(self, "_optuna_best_for_wfo", None)
 
                 # If the study persisted a Top-N pool, load it back from disk; otherwise
                 # fall back to any in-memory Top-5 captured during the study.
@@ -714,14 +754,11 @@ class RealTradingMixin:
                 train_start_naive = test_start_naive - pd.DateOffset(months=train_months)
                 train_end_naive   = test_start_naive - pd.Timedelta(minutes=30)
 
-                # make the slices tz-aware (UTC) — safe for both naive and already-aware timestamps
-                def _ensure_utc(ts):
-                    return ts.tz_localize('UTC') if ts.tzinfo is None else ts.tz_convert('UTC')
-
-                test_start  = _ensure_utc(test_start_naive)
-                test_end    = _ensure_utc(test_end_naive)
-                train_start = _ensure_utc(train_start_naive)
-                train_end   = _ensure_utc(train_end_naive)
+                # make the slices tz-aware (UTC) — uses _ensure_dt defined at method top
+                test_start  = _ensure_dt(test_start_naive)
+                test_end    = _ensure_dt(test_end_naive)
+                train_start = _ensure_dt(train_start_naive)
+                train_end   = _ensure_dt(train_end_naive)
 
                 if train_end >= test_start:
                     print(f"❗ Sanity check failed: train_end ({train_end}) is not before test_start ({test_start})")
@@ -1729,7 +1766,8 @@ class RealTradingMixin:
                         # Keep the calibration mapping consistent with the CV-selected params.
                         # (Confidence thresholds are only comparable under the same calibration method.)
                         if _params_clean.get("calibrate_method") is not None:
-                            _effective["calibrate_method"] = str(_params_clean.get("calibrate_method")).lower()
+                            _cal_raw = str(_params_clean.get("calibrate_method") or "").strip().lower()
+                            _effective["calibrate_method"] = _cal_raw if _cal_raw in ("sigmoid", "isotonic") else "sigmoid"
                             
                         # --- Real-sim only: bump target_active_rate to offset downstream gates (does NOT affect CV) ---
                         try:
