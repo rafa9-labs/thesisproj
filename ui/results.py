@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import json
 import os
+import io
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from ui.charts import (
@@ -97,9 +98,13 @@ def _render_full_results(results: Dict[str, Any]):
     # ── Window A: KPI Summary ──
     _render_kpi_cards(metrics, model_type)
 
+    # ── Export Buttons ──
+    _render_export_bar(results, model_type)
+
     # ── Window B: Equity Curve ──
     if equity_curve is not None and not equity_curve.empty:
-        st.plotly_chart(equity_curve_chart(equity_curve), use_container_width=True)
+        eq_fig = equity_curve_chart(equity_curve)
+        st.plotly_chart(eq_fig, width="stretch")
 
     # ── Window C: Monthly Breakdown ──
     if not monthly_df.empty:
@@ -108,7 +113,7 @@ def _render_full_results(results: Dict[str, Any]):
             st.subheader("📅 Monthly Breakdown")
             _render_monthly_table(monthly_df)
         with col2:
-            st.plotly_chart(monthly_returns_chart(monthly_df), use_container_width=True)
+            st.plotly_chart(monthly_returns_chart(monthly_df), width="stretch")
 
     # ── Window D: HPO Diagnostics ──
     _render_hpo_diagnostics(results)
@@ -172,6 +177,64 @@ def _render_monthly_table(monthly_df: pd.DataFrame):
         st.dataframe(monthly_df, use_container_width=True)
 
 
+def _render_export_bar(results: Dict[str, Any], model_type: str):
+    """Export buttons: download metrics CSV and equity curve PNG."""
+    st.markdown("#### 📤 Export Results")
+    c1, c2, c3 = st.columns(3)
+
+    # --- CSV export: metrics + monthly breakdown ---
+    with c1:
+        metrics = results.get("metrics", {})
+        monthly_df = results.get("monthly_df", pd.DataFrame())
+        parts = []
+        if metrics:
+            row = pd.DataFrame([{k: v for k, v in metrics.items()}])
+            parts.append(("metrics", row))
+        if not monthly_df.empty:
+            parts.append(("monthly", monthly_df))
+        if parts:
+            buf = io.StringIO()
+            for name, df in parts:
+                buf.write(f"# {name}\n")
+                df.to_csv(buf, index=False)
+                buf.write("\n")
+            csv_bytes = buf.getvalue().encode()
+            st.download_button(
+                "📊 Download Metrics CSV",
+                data=csv_bytes,
+                file_name=f"backtest_{model_type}_metrics.csv",
+                mime="text/csv",
+                key="export_csv_btn",
+            )
+
+    # --- PNG export: equity curve chart ---
+    with c2:
+        equity_curve = results.get("equity_curve")
+        if equity_curve is not None and not equity_curve.empty:
+            fig = equity_curve_chart(equity_curve)
+            img_bytes = fig.to_image(format="png", width=1200, height=500, scale=2)
+            st.download_button(
+                "📈 Download Equity Curve PNG",
+                data=img_bytes,
+                file_name=f"backtest_{model_type}_equity.png",
+                mime="image/png",
+                key="export_png_btn",
+            )
+
+    # --- JSON export: best config ---
+    with c3:
+        best_cfg = results.get("best_config")
+        if best_cfg:
+            json_bytes = json.dumps(best_cfg, indent=2).encode()
+            st.download_button(
+                "🔧 Download Config JSON",
+                data=json_bytes,
+                file_name=f"backtest_{model_type}_config.json",
+                mime="application/json",
+                key="export_json_btn",
+            )
+
+
 def _render_hpo_diagnostics(results: Dict[str, Any]):
     """HPO parameter importance and optimization trace."""
     pi = results.get("param_importances")
@@ -179,10 +242,10 @@ def _render_hpo_diagnostics(results: Dict[str, Any]):
         st.subheader("🔬 HPO Diagnostics")
         col1, col2 = st.columns(2)
         with col1:
-            st.plotly_chart(param_importance_chart(pi), use_container_width=True)
+            st.plotly_chart(param_importance_chart(pi), width="stretch")
         with col2:
             trial_vals = results.get("trial_values", [])
             if trial_vals:
-                st.plotly_chart(optimization_trace_chart(trial_vals), use_container_width=True)
+                st.plotly_chart(optimization_trace_chart(trial_vals), width="stretch")
             else:
                 st.info("No trial history available for this run.")

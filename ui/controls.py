@@ -89,7 +89,7 @@ def render_nav_bar() -> int:
         st.markdown("# 📈 FX ML Backtester")
     with run_col:
         st.markdown("<br>", unsafe_allow_html=True)
-        run_clicked = st.button("🚀 Run Backtest", type="primary", use_container_width=True)
+        run_clicked = st.button("🚀 Run Backtest", type="primary", width="stretch")
 
     # Nav bar: icon buttons
     cols = st.columns(len(TABS))
@@ -100,7 +100,7 @@ def render_nav_bar() -> int:
             if st.button(
                 label,
                 key=f"_nav_btn_{i}",
-                use_container_width=True,
+                width="stretch",
             ):
                 st.session_state["_nav_tab"] = i
                 st.rerun()
@@ -153,7 +153,7 @@ def _render_data_tab():
         data_info = DATA_FILES[data_key]
         st.caption(f"File: `{data_info['path']}`  |  TF: {data_info['tf']}")
 
-        if st.button("📂 Preview Data", key="preview_data_btn", use_container_width=True):
+        if st.button("📂 Preview Data", key="preview_data_btn", width="stretch"):
             try:
                 df = AppState.load_csv_data(data_info["path"])
                 st.session_state["preview_df"] = df.head(20)
@@ -170,7 +170,7 @@ def _render_data_tab():
 
     with c2:
         if "preview_df" in st.session_state:
-            st.dataframe(st.session_state["preview_df"], use_container_width=True, height=350)
+            st.dataframe(st.session_state["preview_df"], width="stretch", height=350)
         else:
             st.info("Click **Preview Data** to see the first 20 rows.")
 

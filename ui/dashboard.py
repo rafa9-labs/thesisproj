@@ -57,4 +57,4 @@ def _render_landing():
 def _render_data_preview(df: pd.DataFrame):
     """Show a data preview table."""
     st.subheader("📊 Data Preview")
-    st.dataframe(df, use_container_width=True, height=250)
+    st.dataframe(df, width="stretch", height=250)
