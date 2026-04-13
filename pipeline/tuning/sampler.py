@@ -383,212 +383,150 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
     # === Model-specific spaces ===
     if model_type == "svm":
-        # C, gamma ranges expanded to align with common SVM grids (Hsu–Chang–Lin guide):
-        #   C    ~ [1e-3, 1e+3]
-        #   gamma~ [1e-5, 1e+1]
-        # Still log-scaled to focus on orders of magnitude rather than linear steps.
-        params["svm_C"]            = trial.suggest_float("svm_C", 1e-3, 1e3, log=True)
-        params["svm_gamma"]        = trial.suggest_float("svm_gamma", 1e-5, 10.0, log=True)
-        params["svm_kernel"]       = "rbf"    # fix kernel; keep search compact
-        params["svm_class_weight"] = trial.suggest_categorical("svm_class_weight", [None, "balanced"])
+        # Hsu et al. (2010) grid: C ∈ [1e-2, 1e2], γ ∈ [1e-4, 1e1] (narrowed from [1e-3,1e3]/[1e-5,10]).
+        # Fixed: kernel=rbf (standard for FX), class_weight=balanced (imbalanced classes).
+        params["svm_C"]            = trial.suggest_float("svm_C", 1e-2, 1e2, log=True)
+        params["svm_gamma"]        = trial.suggest_float("svm_gamma", 1e-4, 1e1, log=True)
+        params["svm_kernel"]       = "rbf"
+        params["svm_class_weight"] = "balanced"
 
 
     elif model_type == "decision_tree":
-        # Pre-pruning + cost-complexity pruning; ranges aligned with tree practice.
-        # Depth: allow shallow (3) to moderately deep (30) trees.
-        params["dt_max_depth"]         = trial.suggest_int("dt_max_depth", 3, 30)
-
-        # Split / leaf: cover conservative to more flexible configurations.
-        params["dt_min_samples_split"] = trial.suggest_int("dt_min_samples_split", 2, 80)
-        params["dt_min_samples_leaf"]  = trial.suggest_int("dt_min_samples_leaf", 1, 25)
-
-        # Features per split: classic set used in literature and sklearn examples.
+        # Pre-pruning + cost-complexity pruning (industry-standard ranges).
+        params["dt_max_depth"]         = trial.suggest_int("dt_max_depth", 3, 15)
+        params["dt_min_samples_leaf"]  = trial.suggest_int("dt_min_samples_leaf", 1, 20)
         params["dt_max_features"]      = trial.suggest_categorical(
             "dt_max_features", ["sqrt", "log2", None]
         )
-
-        # Cost-complexity pruning (ccp_alpha): small band near zero; CV picks aggressiveness.
         params["dt_ccp_alpha"]         = trial.suggest_float("dt_ccp_alpha", 0.0, 0.01)
 
 
     elif model_type == "logistic":
-        # Multinomial-friendly solvers; if you prefer stability, fix to 'lbfgs'
-        solver  = trial.suggest_categorical("logit_solver", ["lbfgs", "newton-cg", "saga"])
-        penalty = "l2" if solver in ("lbfgs", "newton-cg") else trial.suggest_categorical("logit_penalty", ["l1", "l2"])
-        params["logit_solver"]       = solver
-        params["logit_penalty"]      = penalty
-        params["logit_C"] = trial.suggest_float("logit_C", 1e-4, 1e4, log=True)
-        params["logit_tol"]          = trial.suggest_float("logit_tol", 1e-5, 1e-2, log=True)
-        max_iter                     = trial.suggest_int("logit_max_iter", 200, 1000)
-        if solver == "saga":
-            max_iter = max(max_iter, 2000)
-        params["logit_max_iter"]     = max_iter
+        # Pedregosa et al. (scikit-learn): C ∈ [1e-2, 1e2] (narrowed from [1e-4, 1e4]).
+        # Fixed: solver=lbfgs (most stable multinomial), penalty=l2, tol=1e-4, max_iter=1000.
+        params["logit_solver"]       = "lbfgs"
+        params["logit_penalty"]      = "l2"
+        params["logit_C"]            = trial.suggest_float("logit_C", 1e-2, 1e2, log=True)
+        params["logit_tol"]          = 1e-4
+        params["logit_max_iter"]     = 1000
         params["logit_class_weight"] = trial.suggest_categorical("logit_class_weight", [None, "balanced"])
 
     elif model_type == "random_forest":
+        # Breiman (2001), Biau (2012): fix bootstrap=True, n_jobs=-1.
+        # Reduced from 7 → 4 tunable dims (removed: min_samples_split, bootstrap, class_weight).
         params["rf_n_jobs"]            = -1
-        params["rf_n_estimators"]      = trial.suggest_int("rf_n_estimators", 200, 1200, step=50)
-        params["rf_max_depth"]         = trial.suggest_categorical("rf_max_depth", [None, 6, 8, 10, 12, 16])
-        params["rf_min_samples_split"] = trial.suggest_int("rf_min_samples_split", 2, 20)
-        params["rf_min_samples_leaf"]  = trial.suggest_int("rf_min_samples_leaf", 1, 20)
-        params["rf_max_features"]      = trial.suggest_categorical("rf_max_features", ["sqrt", "log2", 0.3, 0.5, 0.7])
-        params["rf_bootstrap"]         = trial.suggest_categorical("rf_bootstrap", [True, False])
-        params["rf_class_weight"]      = trial.suggest_categorical(
-            "rf_class_weight",
-            [None, "balanced", "balanced_subsample"]
-        )
+        params["rf_n_estimators"]      = trial.suggest_int("rf_n_estimators", 300, 1000, step=100)
+        params["rf_max_depth"]         = trial.suggest_categorical("rf_max_depth", [None, 8, 12, 16])
+        params["rf_min_samples_leaf"]  = trial.suggest_int("rf_min_samples_leaf", 1, 10)
+        params["rf_max_features"]      = trial.suggest_categorical("rf_max_features", ["sqrt", 0.33, 0.5])
+        params["rf_bootstrap"]         = True
 
     elif model_type == "xgboost":
+        # Chen & Guestrin (2016): depth 3-8 (narrowed from 10), est 200-800.
+        # Fixed to defaults: gamma=0, min_child_weight=1, lambda=1, alpha=0.
+        # Reduced from 8 → 5 tunable dims.
         params["xgb_n_jobs"]           = -1
-        params["xgb_n_estimators"]     = trial.suggest_int("xgb_n_estimators", 200, 1500, step=50)
-        params["xgb_max_depth"]        = trial.suggest_int("xgb_max_depth", 3, 10)
+        params["xgb_n_estimators"]     = trial.suggest_int("xgb_n_estimators", 200, 800, step=100)
+        params["xgb_max_depth"]        = trial.suggest_int("xgb_max_depth", 3, 8)
         params["xgb_learning_rate"]    = trial.suggest_float("xgb_learning_rate", 0.01, 0.3, log=True)
         params["xgb_subsample"]        = trial.suggest_float("xgb_subsample", 0.6, 1.0)
         params["xgb_colsample_bytree"] = trial.suggest_float("xgb_colsample_bytree", 0.6, 1.0)
-        params["xgb_gamma"]            = trial.suggest_float("xgb_gamma", 0.0, 5.0)
-        params["xgb_min_child_weight"] = trial.suggest_int("xgb_min_child_weight", 1, 10)
-
-        # Optuna log distributions require low > 0 (can't be 0.0)
-        params["xgb_lambda"]           = trial.suggest_float("xgb_lambda", 1e-8, 10.0, log=True)  # reg_lambda
-        params["xgb_alpha"]            = trial.suggest_float("xgb_alpha", 1e-8, 10.0, log=True)   # reg_alpha
 
 
     elif model_type == "lstm":
-        # Capacity: modest width + shallow depth are standard in FX LSTMs
-        # (e.g. 1–2 layers, 32–128 units) to avoid huge recurrent cores.
-        params["lstm_units"]         = trial.suggest_int("lstm_units", 32, 128, step=32)
-        params["lstm_num_layers"]    = trial.suggest_int("lstm_num_layers", 1, 2)
-        params["lstm_dense_units"]   = trial.suggest_int("lstm_dense_units", 32, 192, step=32)
-
-        # Dropout: enforce a healthier lower bound (≈0.2–0.5) instead of 0.05,
-        # consistent with common practice for sequence models.
+        # Hochreiter & Schmidhuber (1997): 32-128 units, 1-2 layers, dropout 0.2-0.5.
+        # Fixed: dense_units=64, bidirectional=False, clipnorm=1.0, use_seq_windows=False.
+        # Reduced from 8 → 4 tunable dims.
+        params["lstm_units"]         = trial.suggest_categorical("lstm_units", [32, 64, 128])
+        params["lstm_num_layers"]    = trial.suggest_categorical("lstm_num_layers", [1, 2])
+        params["lstm_dense_units"]   = 64
         params["lstm_dropout_rate"]  = trial.suggest_float("lstm_dropout_rate", 0.20, 0.50)
-
-        # Learning rate: keep your existing, literature-consistent range
-        # (~1e-3 baseline with log grid around it).
-        params["lstm_learning_rate"] = trial.suggest_float("lstm_learning_rate", 1e-5, 5e-3, log=True)
-
+        params["lstm_learning_rate"] = trial.suggest_float("lstm_learning_rate", 1e-4, 5e-3, log=True)
         params["lstm_batch_size"]    = 256
-        params["lstm_bidirectional"] = trial.suggest_categorical("lstm_bidirectional", [False, True])
-
-        params["lstm_clipnorm"] = trial.suggest_categorical(
-            "lstm_clipnorm",
-            [0.0, 1.0, 5.0],
-        )
-
-        # === NEW: windowing/runtime knobs, mirroring CNN/Transformer ===
-        # Whether to use the sequence-window branch (A) or simple 3D reshape (B).
-        params["lstm_use_seq_windows"] = trial.suggest_categorical(
-            "lstm_use_seq_windows",
-            [True, False],
-        )
-        
-        # ------------------------------------------------------------
-        # Training-budget / hardware knobs are treated as *protocol*
-        # constants (multi-fidelity CV), not Optuna dimensions.
-        #
-        # CV already enforces stride/window/epoch caps via cv_config,
-        # while final refit runs at full fidelity. Keeping these fixed
-        # avoids wasting trials on knobs that are later overridden.
-        # ------------------------------------------------------------
-        params["lstm_train_stride"] = 1
+        params["lstm_bidirectional"] = False
+        params["lstm_clipnorm"]      = 1.0
+        params["lstm_use_seq_windows"] = False
+        params["lstm_train_stride"]  = 1
         params["lstm_mixed_precision"] = False
 
     elif model_type == "cnn":
-        # CNN architecture & training hyperparameters.
-        # We tune the *actual* Conv1D filters used by build_cnn() (filters1, filters2),
-        # rather than unused proxy knobs (num_blocks, filters_base, stride_conv).
-
-        # Conv filters: moderate-capacity CNN, aligned with typical 1D-CNN ranges
-        # in time-series and financial applications (32–96 filters per layer).
-        params["cnn_filters1"]      = trial.suggest_int("cnn_filters1", 32, 96)
-        params["cnn_filters2"]      = trial.suggest_int("cnn_filters2", 32, 96)
-
-        # Kernel size: small receptive fields (3–7) for local temporal patterns.
-        params["cnn_kernel_size"]   = trial.suggest_categorical("cnn_kernel_size", [3, 5, 7])
-
-        # Dense head width and dropout for regularisation.
-        params["cnn_dense_units"]   = trial.suggest_int("cnn_dense_units", 32, 192, step=32)
-        params["cnn_dropout_rate"]  = trial.suggest_float("cnn_dropout_rate", 0.05, 0.4)
-
-        # Optimiser and batch size.
-        params["cnn_learning_rate"] = trial.suggest_float("cnn_learning_rate", 1e-5, 5e-3, log=True)
-        params["cnn_batch_size"]      = 256  # fixed: keep CV/refit consistent; avoid hardware-dependent HPO
-        
-        # Windowing / training strategy knobs (already used by test_strategy).
-        params["cnn_use_seq_windows"] = trial.suggest_categorical("cnn_use_seq_windows", [True, False])
-        # Protocol constants (see note in LSTM block).
-        params["cnn_train_stride"]    = 1
+        # 1D-CNN for time series: categorical filters [32,64,96], kernel [3,5].
+        # Fixed: dropout=0.3, dense_units=64, batch_size=256, use_seq_windows=False.
+        # Reduced from 7 → 4 tunable dims.
+        params["cnn_filters1"]      = trial.suggest_categorical("cnn_filters1", [32, 64, 96])
+        params["cnn_filters2"]      = trial.suggest_categorical("cnn_filters2", [32, 64, 96])
+        params["cnn_kernel_size"]   = trial.suggest_categorical("cnn_kernel_size", [3, 5])
+        params["cnn_dense_units"]   = 64
+        params["cnn_dropout_rate"]  = 0.3
+        params["cnn_learning_rate"] = trial.suggest_float("cnn_learning_rate", 1e-4, 5e-3, log=True)
+        params["cnn_batch_size"]    = 256
+        params["cnn_use_seq_windows"] = False
+        params["cnn_train_stride"]  = 1
         params["cnn_mixed_precision"] = False
 
     elif model_type == "transformer":
-        # Heads & d_model (d_model = heads * mult)
-        heads = trial.suggest_categorical("transformer_num_heads", [4, 8])
-        min_mult = max(4, math.ceil(32 / heads))
-        # Cap d_model to ≲128 to avoid extremely heavy Transformer configs.
-        max_mult = min(16, 256 // heads)
-        if min_mult > max_mult:
-            raise optuna.TrialPruned(f"no valid d_model for heads={heads}")
-        mult = trial.suggest_int("transformer_d_multiple_v2", min_mult, max_mult)
-        d_model = heads * mult
+        # Vaswani et al. (2017): d_model ∈ {32,64,128}, heads ∈ {4,8}, shallow (1 block).
+        # Fixed: num_blocks=1, ff_multiple=2, dense_units=128, pooling="cls",
+        #        use_time2vec=False, batch_size=256.
+        # Reduced from 8 → 4 tunable dims.
+        d_model = trial.suggest_categorical("transformer_d_model", [32, 64, 128])
+        heads   = trial.suggest_categorical("transformer_num_heads", [4, 8])
 
-        # ✅ ES REMOVED from Optuna search (CV guardrails will enforce ES)
-        # Depth: keep very shallow (1–2 blocks) for FX TS to control overfitting.
-        params["transformer_num_blocks"]    = trial.suggest_int("transformer_num_blocks", 1, 2)
+        # Validate d_model is divisible by num_heads
+        if d_model % heads != 0:
+            # Fallback: pick smallest valid d_model >= chosen value
+            for dm in [32, 64, 128]:
+                if dm >= d_model and dm % heads == 0:
+                    d_model = dm
+                    break
 
-        params["transformer_num_heads"]     = heads
         params["transformer_d_model"]       = d_model
-        params["transformer_d_multiple_v2"] = mult
-
-        # FFN width as 2–3× d_model (avoid 4× monsters).
-        ff_mult = trial.suggest_categorical("transformer_ff_multiple", [2, 3])
-        params["transformer_ff_multiple"]   = ff_mult
-        params["transformer_ff_dim"]        = int(ff_mult * d_model)
-
-        params["transformer_dropout_rate"]  = trial.suggest_float("transformer_dropout_rate", 0.05, 0.4)
-        params["transformer_dense_units"]   = trial.suggest_int("transformer_dense_units", 64, 384, step=32)
-        params["transformer_batch_size"]    = 256  # fixed: keep CV/refit consistent; avoid hardware-dependent HPO
-
-        # Protocol constant (multi-fidelity CV will cap anyway; final refit uses stride=1).
+        params["transformer_num_heads"]     = heads
+        params["transformer_num_blocks"]    = 1
+        params["transformer_ff_multiple"]   = 2
+        params["transformer_ff_dim"]        = 2 * d_model
+        params["transformer_dropout_rate"]  = trial.suggest_float("transformer_dropout_rate", 0.1, 0.4)
+        params["transformer_dense_units"]   = 128
+        params["transformer_batch_size"]    = 256
         params["transformer_train_stride"]  = 2
-        params["transformer_use_time2vec"]  = trial.suggest_categorical("transformer_use_time2vec", [False, True])
-        params["transformer_pooling"]       = trial.suggest_categorical("transformer_pooling", ["cls", "mean"])
+        params["transformer_use_time2vec"]  = False
+        params["transformer_pooling"]       = "cls"
 
 
     # =====================================
     # ENSEMBLE: CNN + LSTM + XGBoost (CLX)
     # =====================================
     elif model_type == "ensemble_cnn_lstm_xgboost":
-        
+        # Simplified ensemble: each sub-model uses fixed defaults from their
+        # standalone spaces; only 2-3 key params per sub-model are tuned.
+        # Total dims: 8 (down from 15+).
+
         params["fusion_alpha"]        = trial.suggest_float("fusion_alpha", 0.50, 0.80)
 
-        # CNN head
-        params["cnn_filters1"]      = trial.suggest_int("cnn_filters1", 32, 128)
-        params["cnn_filters2"]      = trial.suggest_int("cnn_filters2", 32, 128)
+        # CNN head (3 tunable dims)
+        params["cnn_filters1"]      = trial.suggest_categorical("cnn_filters1", [32, 64, 96])
+        params["cnn_filters2"]      = trial.suggest_categorical("cnn_filters2", [32, 64, 96])
         params["cnn_kernel_size"]   = trial.suggest_categorical("cnn_kernel_size", [3, 5])
-        params["cnn_dense_units"]   = trial.suggest_int("cnn_dense_units", 32, 128)
-        params["cnn_batch_size"]    = trial.suggest_categorical("cnn_batch_size", [128, 256, 384, 512])
-        params["cnn_dropout_rate"]  = trial.suggest_float("cnn_dropout_rate", 0.20, 0.40)
+        params["cnn_dense_units"]   = 64
+        params["cnn_batch_size"]    = 256
+        params["cnn_dropout_rate"]  = 0.3
         params["cnn_learning_rate"] = trial.suggest_float("cnn_learning_rate", 1e-4, 1e-3, log=True)
 
-        # LSTM head
-        params["lstm_units"]         = trial.suggest_int("lstm_units", 32, 128)
-        params["lstm_dense_units"]   = trial.suggest_int("lstm_dense_units", 16, 64)
+        # LSTM head (2 tunable dims)
+        params["lstm_units"]         = trial.suggest_categorical("lstm_units", [32, 64, 128])
+        params["lstm_dense_units"]   = 64
         params["lstm_batch_size"]    = 256
-        params["lstm_dropout_rate"]  = trial.suggest_float("lstm_dropout_rate", 0.20, 0.40)
+        params["lstm_dropout_rate"]  = 0.3
         params["lstm_learning_rate"] = trial.suggest_float("lstm_learning_rate", 1e-4, 1e-3, log=True)
 
-        # XGBoost head
-        params["xgb_n_estimators"]     = trial.suggest_int("xgb_n_estimators", 200, 600, step=50)
+        # XGBoost head (3 tunable dims)
+        params["xgb_n_estimators"]     = trial.suggest_int("xgb_n_estimators", 200, 600, step=100)
         params["xgb_learning_rate"]    = trial.suggest_float("xgb_learning_rate", 0.03, 0.20, log=True)
         params["xgb_max_depth"]        = trial.suggest_int("xgb_max_depth", 3, 7)
-        params["xgb_min_child_weight"] = trial.suggest_int("xgb_min_child_weight", 1, 10)
-        params["xgb_gamma"]            = trial.suggest_float("xgb_gamma", 0.0, 4.0)
-        params["xgb_subsample"]        = trial.suggest_float("xgb_subsample", 0.6, 0.9)
-        params["xgb_colsample_bytree"] = trial.suggest_float("xgb_colsample_bytree", 0.6, 0.9)
+        params["xgb_subsample"]        = 0.8
+        params["xgb_colsample_bytree"] = 0.8
 
         # Ensemble plumbing
-        # Protocol constant (CV enforces a minimum stride for cost control).
         params["ensemble_train_stride"] = 1
 
 
@@ -659,9 +597,9 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
         params["rf_max_features"]     = trial.suggest_categorical("rf_max_features", ["sqrt"])
         params["rf_bootstrap"]        = trial.suggest_categorical("rf_bootstrap", [True])
 
-        # Logit expert
-        params["logit_C"]             = trial.suggest_float("logit_C", 1e-4, 1e4, log=True)
-        params["logit_solver"]        = trial.suggest_categorical("logit_solver", ["lbfgs"])
+        # Logit expert (narrowed C range, matching standalone logistic)
+        params["logit_C"]             = trial.suggest_float("logit_C", 1e-2, 1e2, log=True)
+        params["logit_solver"]        = "lbfgs"
         params["logit_class_weight"]  = trial.suggest_categorical("logit_class_weight", [None, "balanced"])
 
         # Ensemble plumbing

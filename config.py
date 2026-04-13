@@ -155,6 +155,82 @@ class HPOConfig:
 
 
 # ---------------------------------------------------------------------------
+# Optuna Search Space (industry-standard ranges)
+# ---------------------------------------------------------------------------
+# Centralised hyperparameter ranges per model type.
+# References:
+#   - Logistic: Pedregosa et al. (scikit-learn), C ∈ [1e-2, 1e2]
+#   - XGBoost:  Chen & Guestrin (2016), depth 3-8, lr [0.01, 0.3]
+#   - SVM:      Hsu et al. (2010), C ∈ [1e-2, 1e2], γ ∈ [1e-4, 1e1]
+#   - RF:       Breiman (2001), Biau (2012), fix bootstrap, tune depth/leaf
+#   - LSTM:     Hochreiter & Schmidhuber (1997), 32-128 units, dropout 0.2-0.5
+#   - CNN:      1D-CNN for time series, 32-96 filters, kernel 3-5
+#   - Transformer: Vaswani et al. (2017), d_model ∈ {32,64,128}, heads ∈ {4,8}
+# ---------------------------------------------------------------------------
+SEARCH_SPACE = {
+    # -- Logistic Regression --
+    "logistic": {
+        "solver": "lbfgs",           # fixed: most stable for multinomial
+        "penalty": "l2",             # fixed: lbfgs only supports l2
+        "C": (1e-2, 1e2, True),      # (low, high, log_scale)
+        "max_iter": 1000,            # fixed: convergence, not a tuning knob
+        "tol": 1e-4,                 # fixed: convergence precision
+        "class_weight": [None, "balanced"],
+    },
+    # -- XGBoost --
+    "xgboost": {
+        "n_estimators": (200, 800, 100),   # (low, high, step)
+        "max_depth": (3, 8),                # narrowed from 10
+        "learning_rate": (0.01, 0.3, True), # (low, high, log_scale)
+        "subsample": (0.6, 1.0),
+        "colsample_bytree": (0.6, 1.0),
+        # Fixed to defaults: gamma=0, min_child_weight=1, lambda=1, alpha=0
+    },
+    # -- SVM --
+    "svm": {
+        "C": (1e-2, 1e2, True),            # narrowed from [1e-3, 1e3]
+        "gamma": (1e-4, 1e1, True),         # narrowed from [1e-5, 10]
+        "kernel": "rbf",                    # fixed: standard for FX
+        "class_weight": "balanced",         # fixed: standard for imbalanced FX
+    },
+    # -- Random Forest --
+    "random_forest": {
+        "n_estimators": (300, 1000, 100),
+        "max_depth": [None, 8, 12, 16],
+        "min_samples_leaf": (1, 10),
+        "max_features": ["sqrt", 0.33, 0.5],
+        # Fixed: bootstrap=True, class_weight=None, n_jobs=-1
+    },
+    # -- LSTM --
+    "lstm": {
+        "units": [32, 64, 128],             # categorical, not int range
+        "num_layers": [1, 2],
+        "dropout_rate": (0.2, 0.5),
+        "learning_rate": (1e-4, 5e-3, True), # narrowed from [1e-5, ...]
+        # Fixed: dense_units=64, bidirectional=False, clipnorm=1.0,
+        #        batch_size=256, use_seq_windows=False
+    },
+    # -- CNN --
+    "cnn": {
+        "filters": [32, 64, 96],            # categorical
+        "kernel_size": [3, 5],              # narrowed from [3, 5, 7]
+        "learning_rate": (1e-4, 5e-3, True),
+        # Fixed: dropout=0.3, dense_units=64, batch_size=256,
+        #        use_seq_windows=False
+    },
+    # -- Transformer --
+    "transformer": {
+        "d_model": [32, 64, 128],
+        "num_heads": [4, 8],
+        "dropout_rate": (0.1, 0.4),
+        "learning_rate": (1e-4, 5e-3, True),
+        # Fixed: num_blocks=1, ff_multiple=2, dense_units=128,
+        #        pooling="cls", use_time2vec=False, batch_size=256
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # DQN
 # ---------------------------------------------------------------------------
 @dataclass
