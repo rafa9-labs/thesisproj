@@ -211,15 +211,21 @@ def _render_export_bar(results: Dict[str, Any], model_type: str):
     with c2:
         equity_curve = results.get("equity_curve")
         if equity_curve is not None and not equity_curve.empty:
-            fig = equity_curve_chart(equity_curve)
-            img_bytes = fig.to_image(format="png", width=1200, height=500, scale=2)
-            st.download_button(
-                "📈 Download Equity Curve PNG",
-                data=img_bytes,
-                file_name=f"backtest_{model_type}_equity.png",
-                mime="image/png",
-                key="export_png_btn",
-            )
+            try:
+                fig = equity_curve_chart(equity_curve)
+                img_bytes = fig.to_image(format="png", width=1200, height=500, scale=2)
+                st.download_button(
+                    "📈 Download Equity Curve PNG",
+                    data=img_bytes,
+                    file_name=f"backtest_{model_type}_equity.png",
+                    mime="image/png",
+                    key="export_png_btn",
+                )
+            except ValueError as e:
+                if "kaleido" in str(e).lower():
+                    st.info("📦 Install kaleido for PNG export: `pip install kaleido`")
+                else:
+                    raise
 
     # --- JSON export: best config ---
     with c3:
