@@ -11,12 +11,12 @@
 
 > **Goal**: Bullet-proof the backtesting engine. No data leaks, no crashes, reproducible results.
 
-- [ ] **3.1** Data leakage audit
-  - Verify no future data bleeds in feature computation (all indicators look backward only)
-  - Verify labeling uses only past/current bar data
-  - Verify walk-forward split is strictly chronological (train ≤ test)
-  - Verify 1-bar execution delay enforced in every execution path
-  - **Files**: `pipeline/backtester/composed.py`, `pipeline/backtester/execution_patches.py`
+- [x] **3.1** Data leakage audit ✅ DONE (2026-04-12)
+  - Verify no future data bleeds in feature computation (all indicators look backward only) ✅ PASS
+  - Verify labeling uses only past/current bar data ✅ PASS
+  - Verify walk-forward split is strictly chronological (train ≤ test) ✅ PASS
+  - Verify 1-bar execution delay enforced in every execution path ✅ PASS
+  - **Files**: `pipeline/backtester/composed.py`, `pipeline/backtester/execution_patches.py`, `FINDINGS_data_leakage_audit.md`
   - **Est**: 4h
 
 - [ ] **3.2** Feature disk cache (Parquet)
