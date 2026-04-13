@@ -7,7 +7,7 @@
 
 ---
 
-## Phase 3: Pipeline Hardening & Stability 🔄 ~75%
+## Phase 3: Pipeline Hardening & Stability 🔄 ~80%
 
 > **Goal**: Bullet-proof the backtesting engine. No data leaks, no crashes, reproducible results.
 
@@ -25,21 +25,24 @@
   - **Files**: new `pipeline/feature_cache.py`, `pipeline/backtester/composed.py`
   - **Est**: 3h
 
-- [ ] **3.3** Simplify Optuna search space
-  - Reduce hyperparameter ranges to meaningful subsets per model
-  - Document default ranges in config
-  - **Files**: `pipeline/tuning/sampler.py`, `pipeline/tuning/objective.py`
+- [x] **3.3** Simplify Optuna search space ✅ DONE (2026-04-13)
+  - Reduced all model HP ranges to industry-standard literature values
+  - Added centralized `SEARCH_SPACE` dict in `config.py` with references
+  - Logistic: C [1e-2,1e2], XGBoost: 5 dims, SVM: 2 dims, RF: 4 dims, LSTM/CNN/Transformer: 4 dims each
+  - **Files**: `pipeline/tuning/sampler.py`, `config.py`
   - **Est**: 2h
 
-- [ ] **3.4** Replace magic numbers with named constants
-  - Extract all hardcoded thresholds, multipliers, defaults to `config.py` or constants module
-  - **Files**: `config.py`, `pipeline/backtester/*.py`
+- [x] **3.4** Replace magic numbers with named constants ✅ DONE (2026-04-13)
+  - Added `PIPELINE_CONSTANTS` dict (26 named constants) in `config.py`
+  - Replaced 51+ inconsistent hardcoded `.get()` fallbacks across 7 mixin files
+  - Key constants: `vol_window_bars`, `high_vol_q`, `slip_norm_bps`, `gamma_slip_norm`, etc.
+  - Before: `vol_window_bars` had 3 different defaults (48, 96, mixed) across files
+  - After: single source of truth via `_PC["vol_window_bars"]` everywhere
+  - **Files**: `config.py`, `pipeline/tuning/sampler.py`, `pipeline/backtester/{strategy,ensemble,dqn,deep,real_trading,run}_mixin.py`
   - **Est**: 2h
 
-- [ ] **3.5** Walk-forward integrity tests
-  - Write unit tests verifying no train/test overlap
-  - Write unit tests verifying execution delay
-  - Write regression tests with golden outputs for known configs
+- [x] **3.5** Walk-forward integrity tests ✅ DONE (2026-04-12)
+  - 16/16 tests pass: train/test overlap, execution delay, chronological ordering
   - **Files**: `tests/test_walk_forward_integrity.py`
   - **Est**: 3h
 

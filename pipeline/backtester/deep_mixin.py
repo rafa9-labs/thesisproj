@@ -1,4 +1,5 @@
 """Auto-extracted mixin — see composed.py for the full MLBacktester."""
+from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 
 
@@ -495,8 +496,8 @@ class DeepMixin:
             high = float(_get_cfg("eval_slip_bps_hi", _get_cfg("cv_slippage_bps_high", 0.30)))
             # Optional middle regime (used as safe fallback if high-vol threshold is missing)
             med  = float(_get_cfg("eval_slip_bps_med", _get_cfg("cv_slippage_bps_med", (base + high) / 2.0)))
-            vol_w = int(_get_cfg("vol_window_bars", 48))
-            qhi   = float(_get_cfg("high_vol_q", 0.80))
+            vol_w = int(_get_cfg("vol_window_bars", _PC["vol_window_bars"]))
+            qhi   = float(_get_cfg("high_vol_q", _PC["high_vol_q"]))
 
             # Optional override: caller may provide a precomputed (train-anchored) threshold.
             # If not provided, DO NOT derive a threshold from the eval df (leakage).

@@ -1,4 +1,5 @@
 """Auto-extracted mixin — see composed.py for the full MLBacktester."""
+from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 
 
@@ -2467,9 +2468,9 @@ class RunMixin:
 
                             # Dynamic αβγ and coverage nudge
                             alpha = float(cfg_f.get("alpha_vol_z", _cd.get("alpha_vol_z", 0.0)))
-                            beta  = float(cfg_f.get("beta_spread_norm", _cd.get("beta_spread_norm", 0.0)))
-                            gamma = float(cfg_f.get("gamma_slip_norm", _cd.get("gamma_slip_norm", 0.0)))
-                            band  = float(cfg_f.get("runtime_active_band_margin", _cd.get("runtime_active_band_margin", 0.05)))
+                            beta  = float(cfg_f.get("beta_spread_norm", _cd.get("beta_spread_norm", _PC["beta_spread_norm"])))
+                            gamma = float(cfg_f.get("gamma_slip_norm", _cd.get("gamma_slip_norm", _PC["gamma_slip_norm"])))
+                            band  = float(cfg_f.get("runtime_active_band_margin", _cd.get("runtime_active_band_margin", _PC["runtime_active_band_margin"])))
                             step  = float(cfg_f.get("runtime_conf_nudge", _cd.get("runtime_conf_nudge", 0.01)))
                             
                             # Prefer actually-used (sanitized) nudge params from this block, when available.

@@ -1,4 +1,5 @@
 """Auto-extracted mixin — see composed.py for the full MLBacktester."""
+from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 
 
@@ -779,8 +780,8 @@ class EnsembleMixin:
         try:
             if "returns" in train_data.columns:
                 _cfg_cost_src = getattr(self, "features_config", {}) or {}
-                vol_w = int(_cfg_cost_src.get("vol_window_bars", 48))
-                qhi   = float(_cfg_cost_src.get("high_vol_q", 0.75))
+                vol_w = int(_cfg_cost_src.get("vol_window_bars", _PC["vol_window_bars"]))
+                qhi   = float(_cfg_cost_src.get("high_vol_q", _PC["high_vol_q"]))
                 _rv_tr = realized_vol(train_data["returns"].astype(float), window=vol_w)
                 _rv_tr = _rv_tr.dropna()
                 if len(_rv_tr) > 0:
@@ -1543,7 +1544,7 @@ class EnsembleMixin:
         
         rets_all, sprd_all, slip_all = self._get_cost_arrays_aligned(_cost_src, _all_idx)
         
-        vol_w = int(cfg_gate.get("vol_window_bars", 48))
+        vol_w = int(cfg_gate.get("vol_window_bars", _PC["vol_window_bars"]))
         rv_all = realized_vol(rets_all, window=vol_w).to_numpy(dtype=np.float32)
 
         rv_m, rv_s = np.nan, np.nan
@@ -1574,10 +1575,10 @@ class EnsembleMixin:
         spread_norm_all = np.divide(sprd_all, den_all, out=np.zeros_like(sprd_all, dtype=np.float32), where=np.isfinite(den_all))
         
         a = float(cfg_gate.get("alpha_vol_z", 0.004))
-        b = float(cfg_gate.get("beta_spread_norm", 0.008))
-        g = float(cfg_gate.get("gamma_slip_norm", 0.004))
-        slip_norm_bps = float(cfg_gate.get("slip_norm_bps", 0.25))
-        min_slip_norm_bps = float(cfg_gate.get("min_slip_norm_bps", 0.05))
+        b = float(cfg_gate.get("beta_spread_norm", _PC["beta_spread_norm"]))
+        g = float(cfg_gate.get("gamma_slip_norm", _PC["gamma_slip_norm"]))
+        slip_norm_bps = float(cfg_gate.get("slip_norm_bps", _PC["slip_norm_bps"]))
+        min_slip_norm_bps = float(cfg_gate.get("min_slip_norm_bps", _PC["min_slip_norm_bps"]))
         slip_norm_bps = max(slip_norm_bps, min_slip_norm_bps, 1e-6)
 
         vol_z_cap = float(cfg_gate.get("vol_z_cap", 6.0))
@@ -1616,7 +1617,7 @@ class EnsembleMixin:
         # --- Soft coverage-drift nudge (mirrors test_strategy runtime control) ---
         try:
             tgt   = float(merged.get("target_active_rate", merged.get("target_coverage", 0.10)))
-            band  = float(merged.get("runtime_active_band_margin", 0.05))
+            band  = float(merged.get("runtime_active_band_margin", _PC["runtime_active_band_margin"]))
             win_k = int(merged.get("runtime_coverage_window", 96))
             step  = float(merged.get("runtime_conf_nudge", 0.01))
             n_nudge = int(_eval_idx.size)

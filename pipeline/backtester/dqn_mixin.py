@@ -1,4 +1,5 @@
 """Auto-extracted mixin — see composed.py for the full MLBacktester."""
+from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 
 
@@ -157,8 +158,8 @@ class DQNMixin:
         try:
             if "returns" in train_data.columns:
                 _cfg_cost_src = getattr(self, "features_config", {}) or {}
-                vol_w = int(_cfg_cost_src.get("vol_window_bars", 48))
-                qhi   = float(_cfg_cost_src.get("high_vol_q", 0.75))
+                vol_w = int(_cfg_cost_src.get("vol_window_bars", _PC["vol_window_bars"]))
+                qhi   = float(_cfg_cost_src.get("high_vol_q", _PC["high_vol_q"]))
                 _rv_tr = realized_vol(train_data["returns"].astype(float), window=vol_w)
                 _rv_tr = _rv_tr.dropna()
                 if len(_rv_tr) > 0:

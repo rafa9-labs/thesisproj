@@ -1,4 +1,5 @@
 """Auto-extracted mixin — see composed.py for the full MLBacktester."""
+from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 
 
@@ -232,8 +233,8 @@ class RealTradingMixin:
                 try:
                     if cfg_cost.get("high_vol_thr", None) is None:
                         from utilsNoWFO import realized_vol as _rv_fn
-                        _vol_w = int(cfg_cost.get("vol_window_bars", 48))
-                        _qhi   = float(cfg_cost.get("high_vol_q", 0.80))
+                        _vol_w = int(cfg_cost.get("vol_window_bars", _PC["vol_window_bars"]))
+                        _qhi   = float(cfg_cost.get("high_vol_q", _PC["high_vol_q"]))
 
                         train_bars = full_data.loc[train_start:train_end].copy()
 
@@ -268,8 +269,8 @@ class RealTradingMixin:
                         _thr = cfg_cost.get("high_vol_thr", None)
                         if _thr is None:
                             from utilsNoWFO import realized_vol as _rv_fn
-                            vol_w = int(cfg_cost.get("vol_window_bars", 96))
-                            qhi   = float(cfg_cost.get("high_vol_q", 0.85))
+                            vol_w = int(cfg_cost.get("vol_window_bars", _PC["vol_window_bars"]))
+                            qhi   = float(cfg_cost.get("high_vol_q", _PC["high_vol_q"]))
                             _train = self.data.loc[train_start:train_end]
                             if (
                                 _train is not None
@@ -809,8 +810,8 @@ class RealTradingMixin:
                         pass
 
                     if isinstance(_train_for_thr, pd.DataFrame) and "returns" in _train_for_thr.columns and len(_train_for_thr) > 10:
-                        _vol_w = int((config or {}).get("vol_window_bars", (getattr(self, "features_config", {}) or {}).get("vol_window_bars", 96)))
-                        _qhi   = float((config or {}).get("high_vol_q", (getattr(self, "features_config", {}) or {}).get("high_vol_q", 0.85)))
+                        _vol_w = int((config or {}).get("vol_window_bars", (getattr(self, "features_config", {}) or {}).get("vol_window_bars", _PC["vol_window_bars"])))
+                        _qhi   = float((config or {}).get("high_vol_q", (getattr(self, "features_config", {}) or {}).get("high_vol_q", _PC["high_vol_q"])))
                         _rv = _realized_vol(pd.to_numeric(_train_for_thr["returns"], errors="coerce").astype(float), window=_vol_w)
                         _rv = _rv.dropna()
                         if len(_rv) > 0:

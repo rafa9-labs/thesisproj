@@ -1,4 +1,5 @@
 """Auto-extracted mixin — see composed.py for the full MLBacktester."""
+from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 
 
@@ -529,8 +530,8 @@ class StrategyMixin:
             
             try:
                 from utilsNoWFO import realized_vol as _rv_fn
-                _vol_w = int(cfg_f.get("vol_window_bars", 48))
-                _qhi   = float(cfg_f.get("high_vol_q", 0.80))
+                _vol_w = int(cfg_f.get("vol_window_bars", _PC["vol_window_bars"]))
+                _qhi   = float(cfg_f.get("high_vol_q", _PC["high_vol_q"]))
                 _rv  = _rv_fn(train_data_scaled["returns"].astype(float), window=_vol_w)
                 _thr = float(_rv.quantile(_qhi))
                 if np.isfinite(_thr):
@@ -1501,7 +1502,7 @@ class StrategyMixin:
                     # -------------------------------
                     # Causal volatility scaling patch
                     # -------------------------------
-                    vol_w = int(cfg_f.get("vol_window_bars", 48))
+                    vol_w = int(cfg_f.get("vol_window_bars", _PC["vol_window_bars"]))
 
                     # 1) Compute volatility scale + denom floor from TRAIN (causal)
                     rv_m_tr, rv_s_tr, den_floor_tr = float("nan"), float("nan"), float("nan")
@@ -1539,9 +1540,9 @@ class StrategyMixin:
 
                     # αβγ coefficients unchanged
                     a = float(cfg_f.get("alpha_vol_z", 0.01))
-                    b = float(cfg_f.get("beta_spread_norm", 0.02))
-                    g = float(cfg_f.get("gamma_slip_norm", 0.01))
-                    slip_norm_bps = float(cfg_f.get("slip_norm_bps", 10.0))
+                    b = float(cfg_f.get("beta_spread_norm", _PC["beta_spread_norm"]))
+                    g = float(cfg_f.get("gamma_slip_norm", _PC["gamma_slip_norm"]))
+                    slip_norm_bps = float(cfg_f.get("slip_norm_bps", _PC["slip_norm_bps"]))
                     max_conf_thr = float(cfg_f.get("max_conf_thr", 0.90))
 
                     thr_full = (
@@ -1585,7 +1586,7 @@ class StrategyMixin:
                     # --- Soft coverage-drift nudge (regime-aware, non-forcing) ---
                     try:
                         tgt   = float(cfg_f.get("target_active_rate", cfg_f.get("target_coverage", 0.10)))
-                        band  = float(cfg_f.get("runtime_active_band_margin", 0.05))
+                        band  = float(cfg_f.get("runtime_active_band_margin", _PC["runtime_active_band_margin"]))
                         win_k = int(cfg_f.get("runtime_coverage_window", 96))
                         step  = float(cfg_f.get("runtime_conf_nudge", 0.01))
 
@@ -1812,7 +1813,7 @@ class StrategyMixin:
                         # Volatility z-score (realized vol over window)
                         vol_w = int(cfg_f.get(
                             "vol_window_bars",
-                            _global_f.get("vol_window_bars", 96)
+                            _global_f.get("vol_window_bars", _PC["vol_window_bars"])
                         ))
 
                         # --- Train-anchored vol scaling (avoid ex-post test-month stats) ---
@@ -1845,10 +1846,10 @@ class StrategyMixin:
 
                         # 3) αβγ: volatility-, spread-, and slippage-aware threshold bump
                         a = float(cfg_f.get("alpha_vol_z", _global_f.get("alpha_vol_z", 0.004)))
-                        b = float(cfg_f.get("beta_spread_norm", _global_f.get("beta_spread_norm", 0.008)))
-                        g = float(cfg_f.get("gamma_slip_norm", _global_f.get("gamma_slip_norm", 0.004)))
-                        slip_norm_bps = float(cfg_f.get("slip_norm_bps", _global_f.get("slip_norm_bps", 0.25)))
-                        min_slip_norm_bps = float(cfg_f.get("min_slip_norm_bps", _global_f.get("min_slip_norm_bps", 0.05)))
+                        b = float(cfg_f.get("beta_spread_norm", _global_f.get("beta_spread_norm", _PC["beta_spread_norm"])))
+                        g = float(cfg_f.get("gamma_slip_norm", _global_f.get("gamma_slip_norm", _PC["gamma_slip_norm"])))
+                        slip_norm_bps = float(cfg_f.get("slip_norm_bps", _global_f.get("slip_norm_bps", _PC["slip_norm_bps"])))
+                        min_slip_norm_bps = float(cfg_f.get("min_slip_norm_bps", _global_f.get("min_slip_norm_bps", _PC["min_slip_norm_bps"])))
                         slip_norm_bps = max(slip_norm_bps, min_slip_norm_bps, 1e-6)
 
                         vol_z_cap = float(cfg_f.get("vol_z_cap", _global_f.get("vol_z_cap", 6.0)))
@@ -1933,7 +1934,7 @@ class StrategyMixin:
 
                             band = float(cfg_f.get(
                                 "runtime_active_band_margin",
-                                _global_f.get("runtime_active_band_margin", 0.05)
+                                _global_f.get("runtime_active_band_margin", _PC["runtime_active_band_margin"])
                             ))
                             win_k = int(cfg_f.get(
                                 "runtime_coverage_window",
@@ -2303,7 +2304,7 @@ class StrategyMixin:
                         _all_idx = test_data_scaled.index
                         rets_all, sprd_all, slip_all = self._get_cost_arrays_aligned(_cost_src, _all_idx)
 
-                        vol_w = int(cfg_f.get("vol_window_bars", 48))
+                        vol_w = int(cfg_f.get("vol_window_bars", _PC["vol_window_bars"]))
                     
                         rv_m_tr, rv_s_tr, den_floor_tr = np.nan, np.nan, np.nan
                         try:
@@ -2329,9 +2330,9 @@ class StrategyMixin:
 
                         # Dynamic αβγ coefficients (small by default) and slippage scaling in bps
                         a = float(cfg_f.get("alpha_vol_z", 0.01))
-                        b = float(cfg_f.get("beta_spread_norm", 0.02))
-                        g = float(cfg_f.get("gamma_slip_norm", 0.01))
-                        slip_norm_bps = float(cfg_f.get("slip_norm_bps", 10.0))
+                        b = float(cfg_f.get("beta_spread_norm", _PC["beta_spread_norm"]))
+                        g = float(cfg_f.get("gamma_slip_norm", _PC["gamma_slip_norm"]))
+                        slip_norm_bps = float(cfg_f.get("slip_norm_bps", _PC["slip_norm_bps"]))
                         max_conf_thr = float(cfg_f.get("max_conf_thr", 0.90))
                     
                         thr_full = (
@@ -2374,7 +2375,7 @@ class StrategyMixin:
                         # --- Soft coverage-drift nudge (regime-aware, non-forcing) ---
                         try:
                             tgt   = float(cfg_f.get("target_active_rate", cfg_f.get("target_coverage", 0.10)))
-                            band  = float(cfg_f.get("runtime_active_band_margin", 0.05))
+                            band  = float(cfg_f.get("runtime_active_band_margin", _PC["runtime_active_band_margin"]))
                             win_k = int(cfg_f.get("runtime_coverage_window", 96))
                             step  = float(cfg_f.get("runtime_conf_nudge", 0.01))
 
@@ -2523,7 +2524,7 @@ class StrategyMixin:
                         _eval_idx = test_data_scaled.index
                         rets, sprd, slip = self._get_cost_arrays_aligned(_cost_src, _eval_idx)
 
-                        vol_w = int(cfg_f.get("vol_window_bars", 48))
+                        vol_w = int(cfg_f.get("vol_window_bars", _PC["vol_window_bars"]))
                         rv = realized_vol(rets, window=vol_w).to_numpy(dtype=np.float32)
                     
                         # --- Causal scaling: compute μ/σ (and a safe floor) from TRAIN only ---
@@ -2549,10 +2550,10 @@ class StrategyMixin:
                         spread_norm = np.divide(sprd, den, out=np.zeros_like(sprd, dtype=np.float32), where=np.isfinite(den))
 
                         a = float(cfg_f.get("alpha_vol_z", 0.004))
-                        b = float(cfg_f.get("beta_spread_norm", 0.008))
-                        g = float(cfg_f.get("gamma_slip_norm", 0.004))
-                        slip_norm_bps = float(cfg_f.get("slip_norm_bps", 0.25))
-                        min_slip_norm_bps = float(cfg_f.get("min_slip_norm_bps", 0.05))
+                        b = float(cfg_f.get("beta_spread_norm", _PC["beta_spread_norm"]))
+                        g = float(cfg_f.get("gamma_slip_norm", _PC["gamma_slip_norm"]))
+                        slip_norm_bps = float(cfg_f.get("slip_norm_bps", _PC["slip_norm_bps"]))
+                        min_slip_norm_bps = float(cfg_f.get("min_slip_norm_bps", _PC["min_slip_norm_bps"]))
                         slip_norm_bps = max(slip_norm_bps, min_slip_norm_bps, 1e-6)
 
                         vol_z_cap = float(cfg_f.get("vol_z_cap", 6.0))
@@ -2569,7 +2570,7 @@ class StrategyMixin:
                         # --- Soft coverage-drift nudge (regime-aware, non-forcing) ---
                         try:
                             tgt   = float(cfg_f.get("target_active_rate", cfg_f.get("target_coverage", 0.10)))
-                            band  = float(cfg_f.get("runtime_active_band_margin", 0.05))
+                            band  = float(cfg_f.get("runtime_active_band_margin", _PC["runtime_active_band_margin"]))
                             win_k = int(cfg_f.get("runtime_coverage_window", 96))
                             step  = float(cfg_f.get("runtime_conf_nudge", 0.01))
 
@@ -2876,7 +2877,7 @@ class StrategyMixin:
                 _eval_idx = test_data_scaled.index
                 rets, sprd, slip = self._get_cost_arrays_aligned(_cost_src, _eval_idx)
 
-                vol_w = int(cfg_f.get("vol_window_bars", 48))
+                vol_w = int(cfg_f.get("vol_window_bars", _PC["vol_window_bars"]))
                 # --- Train-anchored vol scaling (avoid ex-post test-month stats) ---
                 rv_m_tr, rv_s_tr, den_floor_tr = np.nan, np.nan, np.nan
                 try:
@@ -2905,8 +2906,8 @@ class StrategyMixin:
 
                 # safer αβγ defaults (small nudges, not giant jumps)
                 a = float(cfg_f.get("alpha_vol_z", 0.004))
-                b = float(cfg_f.get("beta_spread_norm", 0.008))
-                g = float(cfg_f.get("gamma_slip_norm", 0.004))
+                b = float(cfg_f.get("beta_spread_norm", _PC["beta_spread_norm"]))
+                g = float(cfg_f.get("gamma_slip_norm", _PC["gamma_slip_norm"]))
 
                 # cap the drivers (prevents spikes from blowing up thr)
                 vol_z_cap = float(cfg_f.get("vol_z_cap", 6.0))
@@ -2917,8 +2918,8 @@ class StrategyMixin:
                 spread_norm = np.clip(spread_norm, 0.0, spread_norm_cap).astype(np.float32)
 
                 # slippage normalization (make denominator never tiny, and cap ratio)
-                slip_norm_bps = float(cfg_f.get("slip_norm_bps", 0.25))
-                min_slip_norm_bps = float(cfg_f.get("min_slip_norm_bps", 0.05))
+                slip_norm_bps = float(cfg_f.get("slip_norm_bps", _PC["slip_norm_bps"]))
+                min_slip_norm_bps = float(cfg_f.get("min_slip_norm_bps", _PC["min_slip_norm_bps"]))
                 slip_norm_bps = max(slip_norm_bps, min_slip_norm_bps, 1e-6)
 
                 slip_norm = np.clip(slip / slip_norm_bps, 0.0, slip_ratio_cap).astype(np.float32)
@@ -2948,7 +2949,7 @@ class StrategyMixin:
                 # --- Soft coverage-drift nudge (regime-aware, non-forcing) ---
                 try:
                     tgt   = float(cfg_f.get("target_active_rate", cfg_f.get("target_coverage", 0.10)))
-                    band  = float(cfg_f.get("runtime_active_band_margin", 0.05))
+                    band  = float(cfg_f.get("runtime_active_band_margin", _PC["runtime_active_band_margin"]))
                     win_k = int(cfg_f.get("runtime_coverage_window", 96))
                     step  = float(cfg_f.get("runtime_conf_nudge", 0.01))
 

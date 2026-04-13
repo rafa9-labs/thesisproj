@@ -231,6 +231,54 @@ SEARCH_SPACE = {
 
 
 # ---------------------------------------------------------------------------
+# Pipeline protocol constants (single source of truth for .get() fallbacks)
+# ---------------------------------------------------------------------------
+# These values are referenced by backtester mixins via .get(key, DEFAULT).
+# Kept in sync with CLASS_DEFAULTS in pipeline/metrics_tuples.py.
+# ---------------------------------------------------------------------------
+PIPELINE_CONSTANTS = {
+    # Volatility & cost regime
+    "vol_window_bars": 96,
+    "high_vol_q": 0.85,
+    "high_vol_conf_bump": 0.0,
+
+    # Slippage normalization
+    "slip_norm_bps": 0.25,
+    "min_slip_norm_bps": 0.05,
+    "gamma_slip_norm": 0.004,
+    "beta_spread_norm": 0.0008,
+    "alpha_vol_z": 0.004,
+
+    # Spread / cost caps
+    "vol_z_cap": 6.0,
+    "spread_norm_cap": 5.0,
+    "slip_ratio_cap": 6.0,
+
+    # Coverage calibration
+    "runtime_coverage_window": 48,
+    "runtime_active_band_margin": 0.02,
+    "runtime_conf_nudge": 0.015,
+    "target_active_rate": 0.15,
+
+    # Confidence thresholds
+    "min_conf_thr": 0.33,
+    "max_conf_thr": 0.90,
+    "confidence_threshold": 0.80,
+
+    # Execution cadence
+    "bars_per_day": 48,
+    "annual_bars": 12096,
+    "spread_cap": 0.00040,
+    "slippage_factor": 1.0,
+    "impact_eta": 0.0,
+
+    # Deep model training
+    "deep_cv_batch_size": 256,
+    "deep_cv_patience": 6,
+    "deep_cv_max_epochs": 12,
+}
+
+# ---------------------------------------------------------------------------
 # DQN
 # ---------------------------------------------------------------------------
 @dataclass

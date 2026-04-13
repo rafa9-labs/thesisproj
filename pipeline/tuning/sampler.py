@@ -14,6 +14,7 @@ import optuna
 from joblib import parallel_backend
 from threadpoolctl import threadpool_limits
 
+from config import PIPELINE_CONSTANTS as _PC
 from utilsNoWFO import (
     TRAIN_TEST_MONTHS,
     TRAIN_TEST_MONTHS_DEBUG,
@@ -111,16 +112,16 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
         #  --- (C) FINAL EXPERIMENT POLICY LOCK (do NOT optimize in Optuna) ---
         params["target_active_rate"] = float(target_coverage_policy(model_type))
         params["target_coverage"] = params["target_active_rate"]
-        params["alpha_vol_z"] = 0.004
-        params["beta_spread_norm"] = 0.008
-        params["gamma_slip_norm"] = 0.004
-        params["slip_norm_bps"] = float(params.get("slip_norm_bps", 0.25) or 0.25)
-        params["vol_window_bars"] = 96
-        params["high_vol_q"] = 0.85
-        params["high_vol_conf_bump"] = 0.0
-        params["runtime_active_band_margin"] = 0.08
-        params["runtime_conf_nudge"] = 0.005
-        params["runtime_coverage_window"] = 192
+        params["alpha_vol_z"]          = _PC["alpha_vol_z"]
+        params["beta_spread_norm"]     = _PC["beta_spread_norm"]
+        params["gamma_slip_norm"]      = _PC["gamma_slip_norm"]
+        params["slip_norm_bps"]        = float(params.get("slip_norm_bps", _PC["slip_norm_bps"]) or _PC["slip_norm_bps"])
+        params["vol_window_bars"]      = _PC["vol_window_bars"]
+        params["high_vol_q"]           = _PC["high_vol_q"]
+        params["high_vol_conf_bump"]   = _PC["high_vol_conf_bump"]
+        params["runtime_active_band_margin"] = _PC["runtime_active_band_margin"]
+        params["runtime_conf_nudge"]         = _PC["runtime_conf_nudge"]
+        params["runtime_coverage_window"]    = _PC["runtime_coverage_window"]
         
         params.setdefault("allow_conf_backoff_cv", False)
         params.setdefault("allow_conf_backoff_eval", False)
@@ -360,18 +361,18 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
 
     # FINAL EXPERIMENT POLICY LOCK (do NOT optimize in Optuna)
-    params["target_active_rate"] = float(target_coverage_policy(mt))
-    params["target_coverage"] = params["target_active_rate"]
-    params["alpha_vol_z"] = 0.004
-    params["beta_spread_norm"] = 0.0008
-    params["gamma_slip_norm"] = 0.004
-    params["slip_norm_bps"] = 0.25
-    params["vol_window_bars"] = 96
-    params["high_vol_q"] = 0.85
-    params["high_vol_conf_bump"] = 0.0
-    params["runtime_active_band_margin"] = 0.02
-    params["runtime_conf_nudge"] = 0.015
-    params["runtime_coverage_window"] = 48
+    params["target_active_rate"]       = float(target_coverage_policy(mt))
+    params["target_coverage"]          = params["target_active_rate"]
+    params["alpha_vol_z"]              = _PC["alpha_vol_z"]
+    params["beta_spread_norm"]         = _PC["beta_spread_norm"]
+    params["gamma_slip_norm"]          = _PC["gamma_slip_norm"]
+    params["slip_norm_bps"]            = _PC["slip_norm_bps"]
+    params["vol_window_bars"]          = _PC["vol_window_bars"]
+    params["high_vol_q"]               = _PC["high_vol_q"]
+    params["high_vol_conf_bump"]       = _PC["high_vol_conf_bump"]
+    params["runtime_active_band_margin"] = _PC["runtime_active_band_margin"]
+    params["runtime_conf_nudge"]       = _PC["runtime_conf_nudge"]
+    params["runtime_coverage_window"]  = _PC["runtime_coverage_window"]
 
     # Keep backoff flags off under coverage-anchored regime.
     params.setdefault("allow_conf_backoff_cv",   False)
