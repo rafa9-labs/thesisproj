@@ -1,0 +1,10 @@
+# Cline Project Rules
+
+## End-of-Session Git Push
+
+- **ALWAYS** push all work to GitHub before ending a session.
+- Before completing a task, run `git add -A && git status` to check for uncommitted changes.
+- If there are uncommitted changes, commit them with a descriptive message.
+- After committing, always run `git push origin <current-branch>` to push to GitHub.
+- Verify the push succeeded before reporting task completion.
+- This rule applies even if the task itself is not git-related — all accumulated work must be pushed.
