@@ -169,6 +169,28 @@ class FeaturesMixin:
             self._last_used_features = list(feat_cached)
             return df_cached, feat_cached  # (df_out, features)
 
+        # --- Disk cache: try loading before recomputing ---
+        if not base_only and not in_cv:
+            try:
+                from pipeline.feature_cache import load_from_disk
+                import hashlib as _hashlib_dl, json as _json_dl
+                _disk_key = _hashlib_dl.sha256(
+                    _json_dl.dumps(cache_key, default=str).encode()
+                ).hexdigest()[:16]
+                _disk_cached = load_from_disk(_disk_key)
+                if _disk_cached is not None:
+                    df_out, features = _disk_cached
+                    self._last_used_features = list(features)
+                    # Also populate in-memory cache so subsequent calls in same run are fast
+                    if cache_enabled:
+                        self._feat_cache[cache_key] = (df_out, tuple(features))
+                    if LOG_MODE in {"COMPACT", "DEBUG"}:
+                        print(f"[DISK_CACHE] HIT key={_disk_key[:8]} rows={len(df_out)} feats={len(features)}")
+                    return df_out, list(features)
+            except Exception as _e:
+                if debug:
+                    print(f"[DISK_CACHE] load failed: {_e}")
+
         # ---------- 1) Params & toggles ----------
         # Windows (accept *_window aliases)
         window_sma = int(ind_win.get("sma", ind_win.get("sma_window", 20)))
@@ -694,6 +716,21 @@ class FeaturesMixin:
         # Keep last-used feature list for logging/diagnostics
         features = list(features)
         self._last_used_features = list(features)
+
+        # --- Disk cache: always persist (independent of in-memory toggle) ---
+        if not base_only and not in_cv:
+            try:
+                from pipeline.feature_cache import compute_disk_key, save_to_disk
+                import hashlib as _hashlib, json as _json
+                # Derive a stable disk key from the in-memory cache_key tuple
+                _disk_key = _hashlib.sha256(
+                    _json.dumps(cache_key, default=str).encode()
+                ).hexdigest()[:16]
+                save_to_disk(_disk_key, df_out, features)
+            except Exception as _e:
+                # Disk cache is purely an optimization — never crash
+                if debug:
+                    print(f"[DISK_CACHE] save failed: {_e}")
 
         # Store engineered slice in per-run cache so later calls can reuse it.
         # We store the features as an immutable tuple to avoid accidental mutation.

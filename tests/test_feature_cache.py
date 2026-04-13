@@ -172,3 +172,97 @@ class TestClearFeatureCacheMethod:
         sig = inspect.signature(ml_backtester_class._clear_feature_cache)
         params = [p for p in sig.parameters.values() if p.name != "self"]
         assert len(params) == 0, "_clear_feature_cache should take no args beyond self"
+
+
+# ---------------------------------------------------------------------------
+# Disk cache tests (pipeline.feature_cache)
+# ---------------------------------------------------------------------------
+
+import tempfile
+import shutil
+import pandas as pd
+import numpy as np
+
+
+class TestDiskCache:
+    """Tests for the Parquet disk cache in pipeline.feature_cache."""
+
+    def setup_method(self):
+        """Create a temp cache dir for each test."""
+        import pipeline.feature_cache as fc
+        self._orig_dir = fc._CACHE_DIR
+        self._tmp = tempfile.mkdtemp()
+        fc._CACHE_DIR = type(fc._CACHE_DIR)(self._tmp) / ".feature_cache"
+
+    def teardown_method(self):
+        import pipeline.feature_cache as fc
+        fc._CACHE_DIR = self._orig_dir
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def test_save_and_load_roundtrip(self):
+        from pipeline.feature_cache import save_to_disk, load_from_disk
+        df = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+        feats = ["a", "b"]
+        save_to_disk("test_key_1", df, feats)
+        result = load_from_disk("test_key_1")
+        assert result is not None
+        df_loaded, feats_loaded = result
+        pd.testing.assert_frame_equal(df_loaded, df)
+        assert feats_loaded == feats
+
+    def test_load_returns_none_for_missing(self):
+        from pipeline.feature_cache import load_from_disk
+        assert load_from_disk("nonexistent_key_xyz") is None
+
+    def test_different_config_different_key(self):
+        from pipeline.feature_cache import compute_disk_key
+        import tempfile, os
+        # Create a fake CSV
+        tmp = os.path.join(self._tmp, "fake.csv")
+        with open(tmp, "w") as f:
+            f.write("a,b\n1,2\n")
+        key1 = compute_disk_key(tmp, {"lags": 10, "use_sma": True})
+        key2 = compute_disk_key(tmp, {"lags": 20, "use_sma": True})
+        assert key1 != key2
+
+    def test_same_config_same_key(self):
+        from pipeline.feature_cache import compute_disk_key
+        import tempfile, os
+        tmp = os.path.join(self._tmp, "fake.csv")
+        with open(tmp, "w") as f:
+            f.write("a,b\n1,2\n")
+        cfg = {"lags": 10, "use_sma": True}
+        k1 = compute_disk_key(tmp, cfg)
+        k2 = compute_disk_key(tmp, cfg)
+        assert k1 == k2
+
+    def test_corrupt_parquet_handled_gracefully(self):
+        from pipeline.feature_cache import save_to_disk, load_from_disk, disk_cache_dir
+        import json
+        # Write a valid entry then corrupt the parquet
+        df = pd.DataFrame({"x": [1.0]})
+        save_to_disk("corrupt_test", df, ["x"])
+        pq_path = disk_cache_dir() / "corrupt_test.parquet"
+        # Overwrite with garbage
+        pq_path.write_bytes(b"NOT_A_PARQUET_FILE")
+        result = load_from_disk("corrupt_test")
+        assert result is None  # should not crash
+        # Corrupt file should have been cleaned up
+        assert not pq_path.exists()
+
+    def test_clear_disk_cache(self):
+        from pipeline.feature_cache import save_to_disk, clear_disk_cache, load_from_disk
+        save_to_disk("clear_test", pd.DataFrame({"a": [1.0]}), ["a"])
+        assert load_from_disk("clear_test") is not None
+        count = clear_disk_cache()
+        assert count >= 2  # parquet + json sidecar
+        assert load_from_disk("clear_test") is None
+
+    def test_disk_cache_stats(self):
+        from pipeline.feature_cache import save_to_disk, disk_cache_stats
+        save_to_disk("stats_test", pd.DataFrame({"a": np.arange(100.0)}), ["a"])
+        stats = disk_cache_stats()
+        assert stats["files"] >= 2
+        assert isinstance(stats["mb"], float)
+        # Parquet is very compact; 100 floats may round to 0.00 MB, so just check >= 0
+        assert stats["mb"] >= 0

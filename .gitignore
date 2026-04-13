@@ -16,6 +16,7 @@ joblib_tmp/
 results/
 optuna_runs/
 artifacts/
+.feature_cache/
 
 # Smoke test outputs
 smoke_output*.txt
