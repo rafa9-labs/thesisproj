@@ -4,9 +4,21 @@ Phase 4.2a — feature builders, selectors, and transformers.
 """
 from __future__ import annotations
 
+import os
 import numpy as np
 import pandas as pd
-from typing import List, Optional
+from typing import List, Optional, Sequence
+
+
+def _fracdiff_weights(d: float, size: int, thresh: float = 1e-4) -> np.ndarray:
+    """Compute fracdiff weight vector; trim trailing weights below thresh."""
+    w = [1.0]
+    for k in range(1, size):
+        wk = -w[-1] * (d - k + 1) / k
+        if abs(wk) < thresh:
+            break
+        w.append(wk)
+    return np.array(w, dtype="float64")
 
 
 def add_cyclic_hour_features(df: pd.DataFrame, hour_col: str = "hour") -> pd.DataFrame:
