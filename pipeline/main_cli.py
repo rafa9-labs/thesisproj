@@ -57,8 +57,11 @@ def main() ->  None:
     # SEEDS = [11111, 22222, 33333]
     # SEEDS = [22222, 33333]
     
-    SEEDS = [33333]
-    REPEATS = 1
+    # ── Configurable via environment variables ──
+    # SEEDS: comma-separated list, e.g. "11111,22222,33333"
+    _env_seeds = os.environ.get("SEEDS", "")
+    SEEDS = [int(s.strip()) for s in _env_seeds.split(",") if s.strip()] if _env_seeds else [33333]
+    REPEATS = int(os.environ.get("REPEATS", "1"))
 
     # ── Smoke-test mode: override config for fast validation ──
     _SMOKE = os.environ.get("SMOKE_TEST", "0") == "1"
@@ -67,7 +70,7 @@ def main() ->  None:
         global TRIAL_COUNTS
         TRIAL_COUNTS = {k: {"random": 1, "bayes": 1} for k in TRIAL_COUNTS}
 
-    N_REAL_MONTHS = 1 if _SMOKE else 3  # 36
+    N_REAL_MONTHS = int(os.environ.get("N_MONTHS", "1" if _SMOKE else "3"))  # default 36 for full run
     END_DATE = "2025-12-01 00:00:00"   # end-of-Aug 2025, inclusive-ish for bar data
 
     # 1) Load feature configuration
@@ -138,9 +141,15 @@ def main() ->  None:
     log_print(f"\n📁 Study folder: {RUN_DIR}", level="COMPACT")
 
 
-    # 2) Choose models (edit this list as you like)
-    # Warning free, Hardware Performant and Optimized.
-    if _SMOKE:
+    # 2) Choose models — configurable via MODEL_LIST env var
+    # Examples:
+    #   MODEL_LIST=logistic             (single model)
+    #   MODEL_LIST=logistic,xgboost,cnn (multi-model)
+    #   unset → uses hardcoded defaults below
+    _env_models = os.environ.get("MODEL_LIST", "")
+    if _env_models:
+        MODEL_LIST = [m.strip() for m in _env_models.split(",") if m.strip()]
+    elif _SMOKE:
         MODEL_LIST = ["logistic"]  # fastest model, just 1 for smoke
     else:
         MODEL_LIST = [
