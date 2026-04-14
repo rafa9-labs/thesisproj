@@ -20,6 +20,7 @@ artifacts/
 
 # Smoke test outputs
 smoke_output*.txt
+test_results/
 
 # Archived/deprecated
 ._archived
