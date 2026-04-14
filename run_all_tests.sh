@@ -26,6 +26,12 @@ export LD_LIBRARY_PATH="${CUDA_LIBS}/usr/lib/wsl/lib:${LD_LIBRARY_PATH:-}"
 source "$VENV/bin/activate"
 cd "$PROJ"
 
+# ── Ensure pytest is available ──
+if ! python -m pytest --version >/dev/null 2>&1; then
+    echo "📦 Installing pytest..."
+    pip install pytest -q
+fi
+
 # ── Create results directory ──
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 RESULT_DIR="$PROJ/test_results"
