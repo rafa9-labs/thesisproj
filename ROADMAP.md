@@ -1,13 +1,13 @@
 # FX ML Backtester — Product Roadmap
 
-> **Last Updated**: 2026-04-12
+> **Last Updated**: 2026-04-14
 > **Branch**: `feature/phase4-streamlit-ui`
 > **Revenue Target**: £500–2K/month within 3 months of launch
 > **Philosophy**: Optimize → Feature Parity → Polish → Secure → Deploy → Scale → Enrich → Automate
 
 ---
 
-## Phase 3: Pipeline Hardening & Stability 🔄 ~80%
+## Phase 3: Pipeline Hardening & Stability ✅ COMPLETE
 
 > **Goal**: Bullet-proof the backtesting engine. No data leaks, no crashes, reproducible results.
 
@@ -19,10 +19,15 @@
   - **Files**: `pipeline/backtester/composed.py`, `pipeline/backtester/execution_patches.py`, `FINDINGS_data_leakage_audit.md`
   - **Est**: 4h
 
-- [ ] **3.2** Feature disk cache (Parquet)
+- [x] **3.2** Feature disk cache (Parquet) ✅ DONE (2026-04-14)
   - Cache computed features per month to avoid recomputation on reruns
-  - Cache key = hash(data file + feature config + indicator toggles)
-  - **Files**: new `pipeline/feature_cache.py`, `pipeline/backtester/composed.py`
+  - Cache key = SHA256(data file + size + mtime + canonical feature config) → 16-char hex
+  - Parquet + JSON sidecar in `.feature_cache/` (gitignored)
+  - Load path: `features_mixin.py` lines 172-193 (before TA recomputation)
+  - Save path: `features_mixin.py` lines 720-733 (after feature engineering)
+  - 3-layer architecture: in-memory slice cache → disk cache → fresh computation
+  - Saves 30-120s per model rerun on 100K+ row DataFrames
+  - **Files**: `pipeline/feature_cache.py`, `pipeline/backtester/features_mixin.py`
   - **Est**: 3h
 
 - [x] **3.3** Simplify Optuna search space ✅ DONE (2026-04-13)
