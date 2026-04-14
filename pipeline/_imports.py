@@ -232,6 +232,7 @@ _underscore_exports = [
     '_apply_temperature_to_proba', '_psr', '_dsr_sign',
     '_evaluate_original_no_refit',
     '_safe_metrics_return', '_empty_metrics',
+    '_fmt_table_ascii', '_build_bar_compare_dict',
     '_gc', '_os', '_np', '_plt', '_tp_limits', '_CSV_ENGINE',
 ]
 __all__ = sorted(set(_public_names + _underscore_exports))
