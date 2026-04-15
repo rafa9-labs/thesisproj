@@ -102,17 +102,19 @@
   - **Files**: `ui/charts.py`, `ui/results.py`, `ui/controls.py`
   - **Est**: 4h
 
-- [ ] **4.5** Verify all model types work end-to-end 🔄 PARTIAL (2026-04-15)
-  - ✅ Logistic — verified via `tests/smoke_all_models.py`
-  - ✅ XGBoost — verified via `tests/smoke_all_models.py`
-  - ✅ CNN, LSTM, Transformer — smoke tested (CPU); CNN/LSTM PASS, Transformer PASS
-  - ✅ DQN — path constants fixed (`DQN_GRID_CONFIG_PATH`, `MODEL_DQN_PATH`, `DQN_AGENT_CONFIG_PATH` added to `_imports.py`)
-  - ✅ Ensemble (CNN-LSTM-XGBoost) — PASS
-  - 🔄 Ensemble (adaptive regime) — `cv='prefit'` replaced with `FrozenEstimator` fallback for sklearn ≥1.6
+- [ ] **4.5** Verify all model types work end-to-end 🔄 MOSTLY COMPLETE (2026-04-15)
+  - ✅ Logistic — PASS (31s, 4 trades)
+  - ✅ XGBoost — PASS (22s, 6 trades)
+  - ✅ CNN — PASS (42s, 60 trades)
+  - ✅ LSTM — PASS (76s, 60 trades)
+  - ✅ Transformer — PASS (48s, 60 trades)
+  - ✅ Ensemble (CNN-LSTM-XGBoost) — PASS (100s, 64 trades)
+  - ✅ Ensemble (adaptive regime) — PASS (28s, 54 trades) — `cv='prefit'` fixed with `FrozenEstimator`
+  - 🔄 DQN — `RewardProcessWrapper`/`TradingEnv`/`CostAwareWrapper` imports added to `dqn_mixin.py`; import chain verified, needs full smoke retest
   - Smoke test enhanced: detects silent failures (0 trades = FAIL, not PASS)
   - Each model: train → predict → trade → metrics → display
-  - **Files**: `models/*.py`, `pipeline/_imports.py`, `models/ensemble_adaptive_regime.py`, `tests/smoke_all_models.py`
-  - **Est**: 4h (1h remaining — re-verify DQN + adaptive regime after fixes)
+  - **Files**: `models/*.py`, `pipeline/_imports.py`, `pipeline/backtester/dqn_mixin.py`, `models/ensemble_adaptive_regime.py`, `tests/smoke_all_models.py`
+  - **Est**: 4h (0.5h remaining — re-verify DQN full smoke test)
 
 **Phase 4 complete when**: All `init-proj` features are present, all model types run end-to-end without errors.
 
@@ -126,11 +128,13 @@
   - ✅ UI loads in browser, sidebar renders, all 6 tabs functional (Puppeteer verified)
   - ✅ Logistic model runs end-to-end via smoke test
   - ✅ XGBoost model runs end-to-end via smoke test
-  - ⬜ CNN/LSTM/Transformer — pending GPU or CPU-fallback verification
+  - ✅ CNN/LSTM/Transformer — all pass on CPU (42s/76s/48s)
+  - ✅ Ensemble models (CNN-LSTM-XGBoost, adaptive regime) — both pass
+  - 🔄 DQN — import fix applied, needs full retest
   - ⬜ Full backtest from UI with equity curves + KPI cards + monthly breakdown
   - ⬜ HPO diagnostics display verification
   - **Files**: `tests/smoke_all_models.py`
-  - **Est**: 2h (1h remaining)
+  - **Est**: 2h (0.5h remaining)
 
 - [ ] **5.2** Cancellation support
   - Add "Stop" button during long backtests

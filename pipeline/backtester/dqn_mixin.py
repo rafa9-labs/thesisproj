@@ -1,6 +1,8 @@
 """Auto-extracted mixin — see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
+from rl.environment import TradingEnv
+from rl.wrappers import CostAwareWrapper, RewardProcessWrapper
 
 
 class DQNMixin:
