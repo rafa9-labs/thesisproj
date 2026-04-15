@@ -63,6 +63,69 @@ def check_rl_deps():
         return False
 
 
+def _check_results_for_model(model_type: str) -> tuple[bool, str]:
+    """Check if results were actually produced (not just 'no crash').
+    
+    Scans the most recent results directory for CSV ranking files.
+    Returns (has_real_results, detail).
+    """
+    import glob
+    results_dir = os.path.join(_project_root, "results")
+    if not os.path.isdir(results_dir):
+        return False, "No results directory found"
+    
+    # Find the most recent results folder
+    result_folders = sorted(glob.glob(os.path.join(results_dir, "*")))
+    if not result_folders:
+        return False, "No result folders found"
+    
+    latest = result_folders[-1]
+    
+    # Search for ranking CSV that contains actual trade data
+    ranking_files = []
+    for root, dirs, files in os.walk(latest):
+        for f in files:
+            if "ranking" in f.lower() and f.endswith(".csv"):
+                ranking_files.append(os.path.join(root, f))
+    
+    if not ranking_files:
+        return False, "No ranking CSV found"
+    
+    # Read the most recent ranking file and check for our model
+    import pandas as pd
+    for rf in reversed(ranking_files):
+        try:
+            df = pd.read_csv(rf)
+            model_col = None
+            for col in df.columns:
+                if "model" in col.lower():
+                    model_col = col
+                    break
+            if model_col is None:
+                continue
+            
+            # Find our model
+            mask = df[model_col].astype(str).str.lower().str.contains(
+                model_type.split("_")[0], na=False
+            )
+            if mask.any():
+                row = df[mask].iloc[0]
+                trades_col = None
+                for col in df.columns:
+                    if "trades" in col.lower():
+                        trades_col = col
+                        break
+                if trades_col:
+                    n_trades = int(row.get(trades_col, 0))
+                    if n_trades == 0:
+                        return False, f"0 trades produced (model ran but no signals)"
+                    return True, f"{n_trades} trades produced"
+        except Exception:
+            continue
+    
+    return True, "Results found (trade count check skipped)"
+
+
 def run_one_model(model_type: str) -> dict:
     """Run a single model through the pipeline in smoke mode.
     
@@ -84,7 +147,14 @@ def run_one_model(model_type: str) -> dict:
         from pipeline.main_cli import main
         main()
         elapsed = time.perf_counter() - t0
-        return {"model": model_type, "status": "PASS", "elapsed": elapsed, "error": None}
+        
+        # Check if results were actually produced (not just "no crash")
+        has_results, detail = _check_results_for_model(model_type)
+        if not has_results:
+            return {"model": model_type, "status": "FAIL", "elapsed": elapsed,
+                    "error": f"Silent failure: {detail}"}
+        
+        return {"model": model_type, "status": "PASS", "elapsed": elapsed, "error": detail}
     except Exception as e:
         elapsed = time.perf_counter() - t0
         return {"model": model_type, "status": "FAIL", "elapsed": elapsed, "error": str(e)}

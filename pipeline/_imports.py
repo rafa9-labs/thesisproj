@@ -55,6 +55,12 @@ CSV_15MIN = os.environ.get("CSV_15MIN", "csv_data/EURUSD_10_years_M15_OANDA.csv"
 CSV_30MIN = os.environ.get("CSV_30MIN", "csv_data/EURUSD_10_years_M30_OANDA.csv")
 BASE_CSV  = CSV_30MIN  # switch base timeframe by changing this line
 
+# ── DQN paths ──
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DQN_GRID_CONFIG_PATH = os.path.join(_REPO_ROOT, "configs", "dqn_grid_config.json")
+MODEL_DQN_PATH = os.path.join(_REPO_ROOT, "dqn_model.h5")
+DQN_AGENT_CONFIG_PATH = os.path.join(_REPO_ROOT, "dqn_agent_config.json")
+
 # pandas preference
 pd.options.mode.copy_on_write = True  # type: ignore[attr-defined]
 
