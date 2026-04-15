@@ -22,11 +22,9 @@ artifacts/
 smoke_output*.txt
 test_results/
 
-# Archived/deprecated
-._archived
+# Archived/deprecated scripts (audit/surgery tools)
+_archive/
 *.py._archived
-_cleanup_utils.py
-_scan_names.py
 
 # Virtual environments
 .venv/
