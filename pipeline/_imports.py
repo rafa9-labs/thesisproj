@@ -92,6 +92,7 @@ from utilsNoWFO import (
     SKIP_PLOTS,
     friendly_model_name,
     build_model_ranking, save_model_ranking_csv,
+    save_monthly_model_stats,
     _fmt_table_ascii,
 )
 
