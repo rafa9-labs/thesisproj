@@ -111,3 +111,41 @@ try:
     print(f"Trial thread budget = {SAFE_CORES} cores active per model fit.")
 except UnicodeEncodeError:
     pass
+
+
+# ── Public GPU status helper ──
+# Heavy models (CNN, LSTM, Transformer, DQN) should run on GPU when available.
+# Usage:  from pipeline.runtime import gpu_status, GPU_DEVICES
+#         info = gpu_status()
+
+GPU_AVAILABLE = False
+GPU_DEVICES: list[str] = []
+
+def _detect_gpu():
+    """Detect available GPUs without importing TF eagerly."""
+    global GPU_AVAILABLE, GPU_DEVICES
+    try:
+        import tensorflow as _tf_g
+        GPU_DEVICES = [d.name for d in _tf_g.config.list_physical_devices("GPU")]
+        GPU_AVAILABLE = len(GPU_DEVICES) > 0
+    except Exception:
+        GPU_AVAILABLE = False
+        GPU_DEVICES = []
+
+# Lazy detection — only when first queried
+_gpu_checked = False
+
+def gpu_status() -> dict:
+    """Return GPU status dict.  Heavy models should warn if GPU_AVAILABLE is False."""
+    global _gpu_checked
+    if not _gpu_checked:
+        _detect_gpu()
+        _gpu_checked = True
+    return {
+        "available": GPU_AVAILABLE,
+        "devices": GPU_DEVICES,
+        "mode": "GPU" if GPU_AVAILABLE else "CPU",
+    }
+
+# Models that benefit significantly from GPU acceleration
+GPU_RECOMMENDED_MODELS = {"cnn", "lstm", "transformer", "dqn"}

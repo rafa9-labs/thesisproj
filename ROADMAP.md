@@ -480,14 +480,17 @@ wsl -d Ubuntu-22.04 -- bash /mnt/c/Users/rafa/ML_Trading/thesisproj/run_wsl.sh \
 | File | Role |
 |------|------|
 | `app.py` | Streamlit entry point |
-| `ui/controls.py` | Nav bar + 6-tab layout |
+| `ui/controls.py` | Nav bar + 6-tab layout + GPU warnings |
 | `ui/state.py` | AppState + backtest adapter |
 | `ui/results.py` | Results display + export |
 | `ui/dashboard.py` | Dashboard renderer |
 | `ui/charts.py` | Plotly chart builders |
 | `pipeline/backtester/composed.py` | MLBacktester engine |
+| `pipeline/runtime.py` | GPU detection, thread budgets, CUDA config |
 | `config.py` | Global configuration |
 | `models/registry.py` | Model registry |
+| `run_smoke_gpu.bat` | GPU smoke test launcher (Windows → WSL) |
+| `run_smoke_gpu.sh` | GPU smoke test script (WSL + CUDA) |
 
 ## Completion Criteria Summary
 

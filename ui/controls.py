@@ -196,8 +196,25 @@ def _render_model_tab():
             help="Probability calibration applied after model prediction",
         )
 
-    # Model-specific HPs
+    # ── GPU warning for heavy models ──
     mt = model_type.lower() if isinstance(model_type, str) else str(model_type).lower()
+    _GPU_HEAVY = {"cnn", "lstm", "transformer", "dqn"}
+    if mt in _GPU_HEAVY:
+        try:
+            from pipeline.runtime import gpu_status, GPU_RECOMMENDED_MODELS
+            gs = gpu_status()
+            if not gs["available"]:
+                st.warning(
+                    f"⚠️ **{mt.upper()}** runs significantly faster on GPU. "
+                    f"No GPU detected — running on CPU (may take 10-70+ minutes). "
+                    f"Consider running via WSL with GPU enabled (`run_smoke_gpu.bat`)."
+                )
+            else:
+                st.success(f"🎮 GPU acceleration active: {', '.join(gs['devices'])}")
+        except Exception:
+            pass  # Don't block UI if runtime module fails
+
+    # Model-specific HPs
     if mt == "logistic":
         st.markdown("#### Logistic Regression Hyperparameters")
         c1, c2 = st.columns(2)
