@@ -7,6 +7,16 @@
 - Refer to it as "forex pipeline" or "the pipeline" in all conversations and documentation.
 - Never use the word "thesis" in any context related to this project.
 
+## Terminal Syntax (PowerShell 5.1)
+
+- The default terminal is **Windows PowerShell 5.1**, NOT cmd.exe.
+- **NEVER** use `&&` to chain commands — it causes a ParserError. Use `;` instead.
+- **NEVER** use `cd /d` — that's cmd.exe syntax. In PowerShell, just use `cd C:\Path`.
+- If you absolutely need cmd.exe syntax, wrap it: `cmd.exe /c "command1 && command2"`.
+- Examples:
+  - BAD: `cd /d c:\path && python script.py 2>&1`
+  - GOOD: `cd C:\path ; python script.py 2>&1`
+
 ## End-of-Session Git Push
 
 - **ALWAYS** push all work to GitHub before ending a session.

@@ -69,6 +69,29 @@
 
 ---
 
+## Sprint 1: Model Comparison & Leaderboard ✅ DONE (2026-04-15)
+
+> **Goal**: One-command multi-model comparison with ranked leaderboard and significance testing.
+
+- [x] **S1.1** Model comparison module ✅ DONE
+  - `pipeline/model_comparison.py` — post-process pipeline results into clean leaderboard
+  - Scans latest `results/` directory, loads ranking CSVs, equity curves
+  - ASCII leaderboard table with friendly column labels
+  - Paired t-test significance testing between model pairs (monthly returns)
+  - Export full comparison report (leaderboard CSV/JSON + equity curves + significance)
+  - CLI: `python -m pipeline.model_comparison` (auto-finds latest results)
+  - **Files**: `pipeline/model_comparison.py`
+  - **Est**: 2h
+
+- [x] **S1.2** Comparison launcher ✅ DONE
+  - `run_comparison.bat` — one-command multi-model runner
+  - Modes: `smoke` (all 8 models, 1 trial), `full` (all trials, 3 months), `quick` (logistic+xgboost), `analyze` (existing results only), `gpu` (WSL)
+  - Automatically runs leaderboard + significance after backtests
+  - **Files**: `run_comparison.bat`
+  - **Est**: 0.5h
+
+---
+
 ## Phase 4: Feature Parity with `init-proj` 🔄 IN PROGRESS
 
 > **Goal**: Backport all features from the old `init-proj` codebase so nothing is lost.
@@ -491,6 +514,8 @@ wsl -d Ubuntu-22.04 -- bash /mnt/c/Users/rafa/ML_Trading/thesisproj/run_wsl.sh \
 | `models/registry.py` | Model registry |
 | `run_smoke_gpu.bat` | GPU smoke test launcher (Windows → WSL) |
 | `run_smoke_gpu.sh` | GPU smoke test script (WSL + CUDA) |
+| `pipeline/model_comparison.py` | Model comparison & leaderboard module |
+| `run_comparison.bat` | One-command multi-model comparison runner |
 
 ## Completion Criteria Summary
 
