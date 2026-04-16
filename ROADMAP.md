@@ -92,7 +92,230 @@
 
 ---
 
-## Phase 4: Feature Parity with `init-proj` 🔄 IN PROGRESS
+## Sprint 2: Advanced Execution Models ⬜ NOT STARTED
+
+> **Goal**: Professional-grade trading simulation with position sizing, trailing stops, risk management.
+> **Maps to**: Phase 4.2 (indicators) + Phase 4.3 (execution models)
+> **Est**: 6-8h
+
+- [ ] **S2.1** Position sizing models
+  - Fixed fractional sizing (% of equity per trade)
+  - Kelly criterion position sizing
+  - Fixed lot sizing (current behavior, as baseline)
+  - Volatility-adjusted sizing (ATR-based)
+  - Configurable via `config.py` and UI controls
+  - **Files**: new `pipeline/execution/position_sizing.py`, `config.py`
+  - **Est**: 2h
+
+- [ ] **S2.2** Stop-loss / take-profit management
+  - Fixed SL/TP in pips
+  - ATR-based dynamic SL/TP
+  - Breakeven stop management
+  - Partial close (scale-out) at TP levels
+  - **Files**: new `pipeline/execution/stops.py`, `pipeline/backtester/execution_patches.py`
+  - **Est**: 2h
+
+- [ ] **S2.3** Trailing stop implementation
+  - Standard trailing stop (fixed pips)
+  - ATR trailing stop
+  - Chandelier exit
+  - Configurable activation threshold
+  - **Files**: new `pipeline/execution/trailing.py`
+  - **Est**: 1.5h
+
+- [ ] **S2.4** Risk management framework
+  - Max drawdown circuit breaker (pause trading when DD > threshold)
+  - Max consecutive losses limit
+  - Daily loss limit
+  - Correlation-aware position limits
+  - **Files**: new `pipeline/execution/risk_manager.py`
+  - **Est**: 1.5h
+
+- [ ] **S2.5** Execution model integration
+  - Wire execution models into `execution_patches.py`
+  - Add execution config to UI sidebar
+  - Execution model selection dropdown in backtest config
+  - Metrics breakdown: gross vs net, impact of each cost component
+  - **Files**: `pipeline/backtester/execution_patches.py`, `ui/controls.py`
+  - **Est**: 1h
+
+---
+
+## Sprint 3: Multi-Currency Expansion ⬜ NOT STARTED
+
+> **Goal**: Support 5+ currency pairs across 3 timeframes (15 data configs).
+> **Maps to**: New capability
+> **Est**: 4-5h
+
+- [ ] **S3.1** Data download automation
+  - OANDA API downloader for multiple pairs
+  - Pairs: EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD (+ XAUUSD gold)
+  - Timeframes: M30, H1, H4
+  - Rate-limited, resumable downloads
+  - **Files**: `CSVDownloadOanda.py`, new `pipeline/data_downloader.py`
+  - **Est**: 2h
+
+- [ ] **S3.2** Multi-pair backtest runner
+  - Extend `pipeline/main_cli.py` to iterate over pairs
+  - Cross-pair leaderboard (normalized metrics for fair comparison)
+  - Pair-specific HPO configs
+  - **Files**: `pipeline/main_cli.py`, `pipeline/model_comparison.py`
+  - **Est**: 2h
+
+- [ ] **S3.3** Cross-pair comparison UI
+  - Pair selector dropdown in UI
+  - Cross-pair equity curve overlay
+  - Heatmap: model × pair Sharpe ratio grid
+  - **Files**: `ui/controls.py`, `ui/charts.py`
+  - **Est**: 1h
+
+---
+
+## Sprint 4: Docker + CI/CD ⬜ NOT STARTED
+
+> **Goal**: One-click deploy, automated testing pipeline.
+> **Maps to**: Phase 7.1 + 7.2
+> **Est**: 3-4h
+
+- [ ] **S4.1** Dockerfile + docker-compose
+  - Multi-stage build (slim image)
+  - GPU passthrough config for deep models
+  - Streamlit on port 8501
+  - Volume mounts for data and results
+  - **Files**: new `Dockerfile`, `docker-compose.yml`
+  - **Est**: 2h
+
+- [ ] **S4.2** CI/CD pipeline (GitHub Actions)
+  - Lint (ruff/flake8) on every PR
+  - Unit tests on every push
+  - Integration tests on merge to main
+  - Auto-deploy to Streamlit Cloud on main merge
+  - **Files**: new `.github/workflows/ci.yml`
+  - **Est**: 1.5h
+
+---
+
+## Sprint 5: Comprehensive Tests + Benchmarks ⬜ NOT STARTED
+
+> **Goal**: Bulletproof confidence in results. 200+ tests, mutation testing, benchmarks.
+> **Maps to**: Phase 11
+> **Est**: 4-6h
+
+- [ ] **S5.1** AI-generated unit tests for pipeline/
+  - Target >80% line coverage for all pipeline modules
+  - **Files**: `tests/test_pipeline_*.py`
+  - **Est**: 2h
+
+- [ ] **S5.2** AI-generated unit tests for models/
+  - Test all 8 model types: train, predict, shape validation
+  - **Files**: `tests/test_models_*.py`
+  - **Est**: 1h
+
+- [ ] **S5.3** Performance benchmarks
+  - Benchmark backtest duration per model
+  - Detect speed regressions
+  - Memory usage profiling
+  - **Files**: new `tests/benchmarks/`
+  - **Est**: 1h
+
+- [ ] **S5.4** Golden output regression tests
+  - Golden output files for known configs
+  - Compare new results against golden
+  - Alert on unexpected metric changes
+  - **Files**: `tests/golden/`
+  - **Est**: 1h
+
+---
+
+## Sprint 6: News & Sentiment Features ⬜ NOT STARTED
+
+> **Goal**: News-derived features for smarter backtesting. Unique differentiator.
+> **Maps to**: Phase 10
+> **Est**: 6-8h
+
+- [ ] **S6.1** News scraper
+  - RSS feeds (Reuters, Bloomberg, FX-specific)
+  - NewsAPI integration
+  - Economic calendar (NFP, FOMC, CPI)
+  - Rate-limited, cached, deduplicated
+  - **Files**: new `news/scraper.py`
+  - **Est**: 2h
+
+- [ ] **S6.2** Sentiment analysis
+  - finBERT integration for financial sentiment
+  - VADER for quick scoring
+  - Per-article sentiment score → daily/hourly aggregation
+  - **Files**: new `news/sentiment.py`
+  - **Est**: 2h
+
+- [ ] **S6.3** News-derived features in pipeline
+  - Sentiment score as input feature
+  - News volume as volatility proxy
+  - Event flags (pre-NFP, post-FOMC)
+  - Walk-forward safe (only past news used)
+  - **Files**: `pipeline/backtester/features_mixin.py`, `news/`
+  - **Est**: 2h
+
+- [ ] **S6.4** News overlay on charts
+  - Mark major events on equity curve
+  - Event impact analysis
+  - **Files**: `ui/charts.py`
+  - **Est**: 1h
+
+---
+
+## Sprint 7: Professional UI Polish ⬜ NOT STARTED
+
+> **Goal**: Slick, production-ready interface. Mobile-responsive, dark/light mode.
+> **Maps to**: Phase 5 + Phase 4.4
+> **Est**: 10h
+
+- [ ] **S7.1** End-to-end UI smoke test completion
+  - Full backtest from UI with equity curves + KPI cards
+  - HPO diagnostics display
+  - All 8 models verified via UI
+  - **Files**: `tests/smoke_all_models.py`
+  - **Est**: 1h
+
+- [ ] **S7.2** Cancellation support
+  - "Stop" button during long backtests
+  - `threading` + `st.stop()` pattern
+  - Clean resource cleanup on cancellation
+  - **Files**: `app.py`, `ui/state.py`
+  - **Est**: 2h
+
+- [ ] **S7.3** UI polish & error states
+  - Loading spinners for all async operations
+  - Graceful error messages (no raw tracebacks)
+  - Responsive layout (mobile-friendly)
+  - Consistent spacing, fonts, color scheme
+  - Dark/light mode toggle
+  - **Files**: `ui/*.py`, `app.py`
+  - **Est**: 3h
+
+- [ ] **S7.4** Export verification
+  - CSV download: metrics + monthly breakdown
+  - PNG download: equity curve chart
+  - JSON download: best configuration
+  - **Files**: `ui/results.py`
+  - **Est**: 2h
+
+- [ ] **S7.5** Deploy to Streamlit Cloud
+  - `.streamlit/secrets.toml` template
+  - `packages.txt` for system deps
+  - Push to Streamlit Cloud
+  - **Est**: 1h
+
+- [ ] **S7.6** Model comparison UI
+  - Side-by-side equity curves
+  - Parameter sensitivity analysis
+  - Leaderboard embedded in UI
+  - **Files**: `ui/charts.py`, `ui/results.py`
+  - **Est**: 1h
+
+---
+
+## Phase 4: Feature Parity with `init-proj` ✅ MOSTLY COMPLETE
 
 > **Goal**: Backport all features from the old `init-proj` codebase so nothing is lost.
 
