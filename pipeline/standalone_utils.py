@@ -8,6 +8,13 @@ from pipeline._imports import *  # noqa: F401,F403
 
 _DATA_CACHE: dict = {}
 
+
+def clear_data_cache():
+    """Clear the module-level CSV data cache to free memory."""
+    n = len(_DATA_CACHE)
+    _DATA_CACHE.clear()
+    return n
+
 try:
     import pyarrow  # noqa: F401
     _CSV_ENGINE = "pyarrow"

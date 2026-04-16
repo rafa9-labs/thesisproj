@@ -360,6 +360,13 @@ def main() ->  None:
                     _tf.keras.backend.clear_session()
                 except Exception:
                     pass
+                try:
+                    from pipeline.backtester.deep_mixin import DeepMixin
+                    DeepMixin._shutdown_deep_pool()
+                except Exception:
+                    pass
+                from pipeline.standalone_utils import clear_data_cache
+                clear_data_cache()
                 import gc, time
                 gc.collect()
                 time.sleep(0.05)

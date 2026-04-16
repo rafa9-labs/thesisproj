@@ -71,6 +71,13 @@ class DataMixin:
         self.df_1h = _load_csv_cached(_csv_1h, parse_dates=["time"], index_col="time")
         self.df_4h = _load_csv_cached(_csv_4h, parse_dates=["time"], index_col="time")
 
+        # Slice H1/H4 to actual date range (don't keep full 10-year history)
+        try:
+            self.df_1h = self.df_1h.loc[self.start:self.end]
+            self.df_4h = self.df_4h.loc[self.start:self.end]
+        except Exception:
+            pass
+
         # 🔽 Downcast numeric columns in 1H / 4H to float32 as well
         for _df in (self.df_1h, self.df_4h):
             for _col in _df.columns:

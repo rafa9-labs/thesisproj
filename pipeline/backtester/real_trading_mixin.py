@@ -472,6 +472,9 @@ class RealTradingMixin:
 
         out_dir, _stamp = make_results_run_dir() 
         full_data = self.data.copy()
+        for col in full_data.columns:
+            if pd.api.types.is_float_dtype(full_data[col]):
+                full_data[col] = full_data[col].astype("float32", copy=False)
         
         # FeatureBank: keep a stable source across month slices so base indicators
         # are computed once and then reindexed to each month.

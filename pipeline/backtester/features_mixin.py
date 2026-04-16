@@ -257,7 +257,9 @@ class FeaturesMixin:
 
         # ---------- 2) Base indicators ----------
         df = df.copy()
-        price_col = cfg.get("price_col", "price")
+        for col in df.columns:
+            if pd.api.types.is_float_dtype(df[col]):
+                df[col] = df[col].astype("float32", copy=False)
         if price_col not in df.columns:
             price_col = "close" if "close" in df.columns else price_col
 
@@ -618,7 +620,14 @@ class FeaturesMixin:
 
             # ---------- 5) One-shot concat of base columns ----------
             if base_cols:
-                df = pd.concat([df, pd.DataFrame(base_cols, index=df.index)], axis=1)
+                for name, series in base_cols.items():
+                    if hasattr(series, 'astype') and series.dtype != np.float32:
+                        try:
+                            series = series.astype("float32")
+                        except (ValueError, TypeError):
+                            pass
+                    df[name] = series
+                del base_cols
                 df = df.loc[:, ~df.columns.duplicated(keep="last")]
 
             # ---- Regime features (trend_score, vol_score, regime_id/one-hot) ----
@@ -635,22 +644,25 @@ class FeaturesMixin:
 
         # ---------- 6) Lags and rolling expansions ----------
         new_cols = {}
-        missing_for_expansion = []  # CLEANUP: aggregate missing warnings
+        missing_for_expansion = []
 
         if cfg.get("include_raw_lags", True) and "returns" in df:
             for lag in range(1, num_lags + 1):
-                new_cols[f"returns_lag{lag}"] = df["returns"].shift(lag)
+                new_cols[f"returns_lag{lag}"] = df["returns"].shift(lag).astype("float32")
 
         for feat in base_features:
             if feat not in df.columns:
                 missing_for_expansion.append(feat)
                 continue
+            src = df[feat]
+            if src.dtype != np.float32:
+                src = src.astype("float32")
             for k in range(1, lag_depth + 1):
-                new_cols[f"{feat}_lag{k}"] = df[feat].shift(k)
+                new_cols[f"{feat}_lag{k}"] = src.shift(k)
             for w in roll_windows:
-                new_cols[f"{feat}_rollmean{w}"]  = df[feat].rolling(w).mean()
-                new_cols[f"{feat}_rollstd{w}"]   = df[feat].rolling(w).std()
-                new_cols[f"{feat}_rollslope{w}"] = self.rolling_slope(df[feat], w)
+                new_cols[f"{feat}_rollmean{w}"]  = src.rolling(w).mean()
+                new_cols[f"{feat}_rollstd{w}"]   = src.rolling(w).std()
+                new_cols[f"{feat}_rollslope{w}"] = self.rolling_slope(src, w).astype("float32")
 
         # DEBUG: print once, not per feature
         if debug and missing_for_expansion:
@@ -675,7 +687,10 @@ class FeaturesMixin:
                 new_cols["hour_sin"] = np.sin(hour_rad)
                 new_cols["hour_cos"] = np.cos(hour_rad)
 
-        df_out = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+        for name, series in new_cols.items():
+            df[name] = series
+        del new_cols
+        df_out = df
 
         # ---------- 8) Finalize feature list, fill, dropna ----------
         features: list[str] = [f for f in (list(new_cols.keys()) + base_features) if f in df_out.columns]
@@ -844,7 +859,8 @@ class FeaturesMixin:
         stds = stds.where(stds != 0, 1e-8)
 
         df = df.copy()
-        df[features] = (df[features] - means) / stds
+        feat_block = df[features].astype("float32", copy=False)
+        df[features] = (feat_block - means) / stds
 
         # Replace infs that can still appear from pathological inputs
         df[features] = df[features].replace([np.inf, -np.inf], np.nan)
