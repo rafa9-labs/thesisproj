@@ -206,6 +206,22 @@ CLASS_DEFAULTS = {
         "sizing_initial_equity": 10000.0,
         "sizing_max_leverage": 5.0,
 
+        # --- Stop-loss / take-profit (Sprint 2 — S2.2) ---
+        "stop_method": "none",
+        "stop_sl_pips": 30.0,
+        "stop_tp_pips": 60.0,
+        "stop_sl_atr_mult": 2.0,
+        "stop_tp_atr_mult": 3.0,
+        "stop_sl_sigma_mult": 2.0,
+        "stop_tp_sigma_mult": 3.0,
+        "stop_pip_value": 0.0001,
+        "stop_use_be": False,
+        "stop_be_trigger_pips": 20.0,
+        "stop_use_partial_close": False,
+        "stop_tp1_ratio": 0.5,
+        "stop_tp1_pips": 30.0,
+        "stop_tp2_pips": 0.0,
+
         # --- CV-time caps for keras models (early stopping regime) ---
         "deep_cv_max_epochs": 12,
         "deep_cv_batch_size": 256,

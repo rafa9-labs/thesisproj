@@ -3,6 +3,7 @@ pipeline.execution — Advanced execution models for the FX backtester.
 
 Submodules:
   position_sizing  — Fixed, fractional, Kelly, ATR, vol-target sizers
+  stops            — Fixed-pips, ATR, sigma SL/TP + breakeven + partial close
 """
 
 from pipeline.execution.position_sizing import (
@@ -13,10 +14,25 @@ from pipeline.execution.position_sizing import (
     update_state,
 )
 
+from pipeline.execution.stops import (
+    StopMethod,
+    StopConfig,
+    StopLevels,
+    compute_stop_levels,
+    check_stop_hit,
+    check_breakeven,
+)
+
 __all__ = [
     "SizingMethod",
     "SizingConfig",
     "SizingState",
     "compute_size",
     "update_state",
+    "StopMethod",
+    "StopConfig",
+    "StopLevels",
+    "compute_stop_levels",
+    "check_stop_hit",
+    "check_breakeven",
 ]

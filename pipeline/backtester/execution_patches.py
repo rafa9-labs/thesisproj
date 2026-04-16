@@ -33,6 +33,15 @@ from pipeline.execution.position_sizing import (
     update_state as _update_sizing_state,
 )
 
+from pipeline.execution.stops import (
+    StopConfig,
+    StopLevels,
+    StopMethod as _StopMethod,
+    compute_stop_levels as _compute_stop_levels,
+    check_stop_hit as _check_stop_hit,
+    check_breakeven as _check_breakeven,
+)
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -99,6 +108,22 @@ class PatchConfig:
     sizing_max_leverage: float = 5.0
     sizing_contract_size: float = 100_000.0
 
+    # Patch #0b — Stop-loss / take-profit (Sprint 2)
+    stop_method: str = "none"
+    stop_sl_pips: float = 30.0
+    stop_tp_pips: float = 60.0
+    stop_sl_atr_mult: float = 2.0
+    stop_tp_atr_mult: float = 3.0
+    stop_sl_sigma_mult: float = 2.0
+    stop_tp_sigma_mult: float = 3.0
+    stop_pip_value: float = 0.0001
+    stop_use_be: bool = False
+    stop_be_trigger_pips: float = 20.0
+    stop_use_partial_close: bool = False
+    stop_tp1_ratio: float = 0.5
+    stop_tp1_pips: float = 30.0
+    stop_tp2_pips: float = 0.0
+
     # Diagnostics
     debug_costs: bool = False
     eval_context: Optional[str] = None
@@ -132,6 +157,14 @@ class LoopResult:
     # Position-sizing diagnostics
     sizing_method_used: str = "fixed"
     final_equity: float = 10_000.0
+
+    # Stop/TP diagnostics
+    sl_hits: int = 0
+    tp_hits: int = 0
+    tp1_partial_hits: int = 0
+    tp2_full_hits: int = 0
+    be_activations: int = 0
+    stop_method_used: str = "none"
 
     # Optional per-bar cost audit arrays (None when not recording)
     cost_spread_pf: Optional[np.ndarray] = None
@@ -269,6 +302,36 @@ def run_execution_loop(
     sizing_state = SizingState(equity=cfg.sizing_initial_equity)
     trade_pnl_accum = 0.0
 
+    # --- Stop-loss / take-profit setup (Sprint 2) ---
+    stop_method = cfg.stop_method
+    _has_high_low = ("high" in df.columns or "High" in df.columns) and (
+        "low" in df.columns or "Low" in df.columns
+    )
+    stop_cfg = StopConfig(
+        method=stop_method,
+        sl_pips=cfg.stop_sl_pips,
+        tp_pips=cfg.stop_tp_pips,
+        sl_atr_mult=cfg.stop_sl_atr_mult,
+        tp_atr_mult=cfg.stop_tp_atr_mult,
+        sl_sigma_mult=cfg.stop_sl_sigma_mult,
+        tp_sigma_mult=cfg.stop_tp_sigma_mult,
+        pip_value=cfg.stop_pip_value,
+        use_be=cfg.stop_use_be,
+        be_trigger_pips=cfg.stop_be_trigger_pips,
+        use_partial_close=cfg.stop_use_partial_close,
+        tp1_ratio=cfg.stop_tp1_ratio,
+        tp1_pips=cfg.stop_tp1_pips,
+        tp2_pips=cfg.stop_tp2_pips,
+    )
+    active_stop_levels: Optional[StopLevels] = None
+    entry_price: float = 0.0
+    stop_sl_hits = 0
+    stop_tp_hits = 0
+    stop_tp1_partial_hits = 0
+    stop_tp2_full_hits = 0
+    stop_be_activations = 0
+    partial_closed = False
+
     def _get_atr(i):
         if _has_atr_col:
             try:
@@ -276,6 +339,34 @@ def run_execution_loop(
             except Exception:
                 return 0.0
         return 0.0
+
+    def _get_price(i):
+        for col in ("close", "Close", "mid_close", "price"):
+            if col in df.columns:
+                try:
+                    v = float(df[col].iloc[i])
+                    if v > 0 and np.isfinite(v):
+                        return v
+                except Exception:
+                    pass
+        return 0.0
+
+    def _get_high_low(i):
+        h_col = "high" if "high" in df.columns else ("High" if "High" in df.columns else None)
+        l_col = "low" if "low" in df.columns else ("Low" if "Low" in df.columns else None)
+        hi = 0.0
+        lo = 0.0
+        if h_col:
+            try:
+                hi = float(df[h_col].iloc[i])
+            except Exception:
+                pass
+        if l_col:
+            try:
+                lo = float(df[l_col].iloc[i])
+            except Exception:
+                pass
+        return hi, lo
 
     # --- Inner helpers (closures over mutable state) ---
 
@@ -393,6 +484,15 @@ def run_execution_loop(
                     mfe = 0.0
                     be_floor = 0.0
                     bars_held = 0
+                    partial_closed = False
+                    entry_price = _get_price(i)
+                    if stop_method != "none" and entry_price > 0:
+                        active_stop_levels = _compute_stop_levels(
+                            stop_cfg, entry_price, dirn,
+                            atr=_get_atr(i), bar_vol=bar_vol[i],
+                        )
+                    else:
+                        active_stop_levels = None
                     pos_target = dirn * size_entry
                     if use_twap:
                         start_ramp(i, pos_target, prev_pos_actual)
@@ -408,48 +508,96 @@ def run_execution_loop(
                 cum_pl += dirn * rets[i]
                 mfe = max(mfe, cum_pl)
 
-                # Regime-adaptive TP1/trail
-                tp1_z_eff, trail_k_eff = regime_tp_trail(i, sigma_ref)
+                # --- Stop/TP check (S2.2) ---
+                stop_exit = False
+                if active_stop_levels is not None and stop_method != "none":
+                    _cur_price = _get_price(i)
+                    _bar_hi, _bar_lo = _get_high_low(i)
+                    if _cur_price > 0:
+                        if stop_cfg.use_be and not partial_closed:
+                            old_sl = active_stop_levels.sl_price
+                            _check_breakeven(stop_cfg, active_stop_levels, entry_price, dirn, _cur_price)
+                            if active_stop_levels.sl_price != old_sl:
+                                stop_be_activations += 1
+                        _hit, _hit_type = _check_stop_hit(active_stop_levels, _cur_price, dirn, _bar_hi, _bar_lo)
+                        if _hit:
+                            if _hit_type == "sl":
+                                stop_sl_hits += 1
+                                stop_exit = True
+                            elif _hit_type == "tp":
+                                stop_tp_hits += 1
+                                stop_exit = True
+                            elif _hit_type == "tp1" and stop_cfg.use_partial_close and not partial_closed:
+                                stop_tp1_partial_hits += 1
+                                partial_closed = True
+                                pos_target = dirn * (size_entry * (1.0 - stop_cfg.tp1_ratio))
+                                if use_twap:
+                                    start_ramp(i, pos_target, prev_pos_actual)
+                                else:
+                                    ramp_active = False
+                                    ramp_dst = pos_target
+                            elif _hit_type == "tp2":
+                                stop_tp2_full_hits += 1
+                                stop_exit = True
 
-                # TP1 → scale-out to 1/2
-                if (not scaled_out) and (cum_pl >= tp1_z_eff * sigma_ref):
-                    scaled_out = True
-                    tp1_hits += 1
-                    if move_to_be:
-                        be_floor = 0.0
-                    pos_target = dirn * (size_entry * 0.5)
+                if stop_exit:
+                    if sizing_method != "fixed":
+                        _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
+                        trade_pnl_accum = 0.0
+                    in_pos = False
+                    dirn = 0.0
+                    size_entry = 0.0
+                    scaled_out = False
+                    active_stop_levels = None
+                    pos_target = 0.0
                     if use_twap:
                         start_ramp(i, pos_target, prev_pos_actual)
                     else:
                         ramp_active = False
                         ramp_dst = pos_target
-
-                # trailing stop
-                trail_level = mfe - trail_k_eff * sigma_ref
-                if move_to_be and scaled_out:
-                    trail_level = max(trail_level, be_floor)
-
-                # Min-hold logic
-                want_flat = (sig_for_logic == 0.0)
-                want_flip = (sig_for_logic == -dirn)
-
-                if min_hold_bars > 0 and bars_held < min_hold_bars:
-                    allow_flip = False
                 else:
-                    allow_flip = True
+                    # Regime-adaptive TP1/trail
+                    tp1_z_eff, trail_k_eff = regime_tp_trail(i, sigma_ref)
 
-                flip_or_flat = want_flat or (want_flip and allow_flip)
-                max_hold_hit = (max_hold_bars > 0 and bars_held >= max_hold_bars)
-                hit_stop = (cum_pl <= trail_level)
+                    # TP1 → scale-out to 1/2
+                    if (not scaled_out) and (cum_pl >= tp1_z_eff * sigma_ref):
+                        scaled_out = True
+                        tp1_hits += 1
+                        if move_to_be:
+                            be_floor = 0.0
+                        pos_target = dirn * (size_entry * 0.5)
+                        if use_twap:
+                            start_ramp(i, pos_target, prev_pos_actual)
+                        else:
+                            ramp_active = False
+                            ramp_dst = pos_target
 
-                if hit_stop or flip_or_flat or (use_kill and kill_active) or max_hold_hit:
-                    if hit_stop:       stop_hits += 1
-                    if flip_or_flat:   flips_exits += 1
-                    if max_hold_hit:   timeouts += 1
-                    if sizing_method != "fixed":
-                        _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
-                        trade_pnl_accum = 0.0
-                    in_pos = False
+                    # trailing stop
+                    trail_level = mfe - trail_k_eff * sigma_ref
+                    if move_to_be and scaled_out:
+                        trail_level = max(trail_level, be_floor)
+
+                    # Min-hold logic
+                    want_flat = (sig_for_logic == 0.0)
+                    want_flip = (sig_for_logic == -dirn)
+
+                    if min_hold_bars > 0 and bars_held < min_hold_bars:
+                        allow_flip = False
+                    else:
+                        allow_flip = True
+
+                    flip_or_flat = want_flat or (want_flip and allow_flip)
+                    max_hold_hit = (max_hold_bars > 0 and bars_held >= max_hold_bars)
+                    hit_stop = (cum_pl <= trail_level)
+
+                    if hit_stop or flip_or_flat or (use_kill and kill_active) or max_hold_hit:
+                        if hit_stop:       stop_hits += 1
+                        if flip_or_flat:   flips_exits += 1
+                        if max_hold_hit:   timeouts += 1
+                        if sizing_method != "fixed":
+                            _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
+                            trade_pnl_accum = 0.0
+                        in_pos = False
                     dirn = 0.0
                     size_entry = 0.0
                     scaled_out = False
@@ -598,6 +746,12 @@ def run_execution_loop(
         bars_flat_due_kill=bars_flat_due_kill,
         sizing_method_used=sizing_method,
         final_equity=sizing_state.equity,
+        sl_hits=stop_sl_hits,
+        tp_hits=stop_tp_hits,
+        tp1_partial_hits=stop_tp1_partial_hits,
+        tp2_full_hits=stop_tp2_full_hits,
+        be_activations=stop_be_activations,
+        stop_method_used=stop_method,
         cost_spread_pf=cost_spread_pf,
         cost_slip_pf=cost_slip_pf,
         cost_impact_bar=cost_impact_bar,
