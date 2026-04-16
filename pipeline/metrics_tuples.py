@@ -196,6 +196,16 @@ CLASS_DEFAULTS = {
         "slippage_factor": 1.0,
         "eval_impact_eta": 0.0,
 
+        # --- Position sizing (Sprint 2 — S2.1) ---
+        "sizing_method": "fixed",
+        "sizing_risk_fraction": 0.02,
+        "sizing_kelly_fraction": 0.5,
+        "sizing_kelly_min_trades": 10,
+        "sizing_atr_risk_pct": 0.02,
+        "sizing_atr_sl_mult": 2.0,
+        "sizing_initial_equity": 10000.0,
+        "sizing_max_leverage": 5.0,
+
         # --- CV-time caps for keras models (early stopping regime) ---
         "deep_cv_max_epochs": 12,
         "deep_cv_batch_size": 256,

@@ -9,12 +9,13 @@ Contains:
 - run_execution_loop(): the main bar-by-bar execution loop with all patches
 
 Patches:
-  #1 — Vol-target sizer       (eval_use_vol_target)
+  #0 — Position sizer          (sizing_method: fixed/fractional/kelly/atr/vol_target)
+  #1 — Vol-target sizer        (eval_use_vol_target, legacy — delegates to #0 when sizing_method="vol_target")
   #2 — Trailing stop / scale-out (eval_use_scaleout_trail)
-  #3 — TWAP executor           (eval_use_twap_execution)
-  #4 — Regime adapter          (eval_use_regime_adaptive)
-  #5 — Kill switch             (eval_use_kill_switch)
-  +  SpreadGuard               (eval_use_spread_guard)
+  #3 — TWAP executor            (eval_use_twap_execution)
+  #4 — Regime adapter           (eval_use_regime_adaptive)
+  #5 — Kill switch              (eval_use_kill_switch)
+  +  SpreadGuard                (eval_use_spread_guard)
 """
 
 from __future__ import annotations
@@ -23,6 +24,14 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
+
+from pipeline.execution.position_sizing import (
+    SizingConfig,
+    SizingState,
+    SizingMethod,
+    compute_size as _compute_size,
+    update_state as _update_sizing_state,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +88,17 @@ class PatchConfig:
     use_spread_guard: bool = True
     spread_cap: float = 0.00040
 
+    # Patch #0 — Position sizing (Sprint 2)
+    sizing_method: str = "fixed"
+    sizing_risk_fraction: float = 0.02
+    sizing_kelly_fraction: float = 0.5
+    sizing_kelly_min_trades: int = 10
+    sizing_atr_risk_pct: float = 0.02
+    sizing_atr_sl_mult: float = 2.0
+    sizing_initial_equity: float = 10_000.0
+    sizing_max_leverage: float = 5.0
+    sizing_contract_size: float = 100_000.0
+
     # Diagnostics
     debug_costs: bool = False
     eval_context: Optional[str] = None
@@ -108,6 +128,10 @@ class LoopResult:
     spread_spike_blocked: int = 0
     kills_triggered: int = 0
     bars_flat_due_kill: int = 0
+
+    # Position-sizing diagnostics
+    sizing_method_used: str = "fixed"
+    final_equity: float = 10_000.0
 
     # Optional per-bar cost audit arrays (None when not recording)
     cost_spread_pf: Optional[np.ndarray] = None
@@ -225,6 +249,34 @@ def run_execution_loop(
     total_slippage_cost = 0.0
     spread_spike_blocked = 0
 
+    # --- Position-sizing setup (Sprint 2) ---
+    sizing_method = cfg.sizing_method
+    _has_atr_col = "atr_14" in df.columns
+    sizing_cfg = SizingConfig(
+        method=sizing_method,
+        risk_fraction=cfg.sizing_risk_fraction,
+        kelly_fraction=cfg.sizing_kelly_fraction,
+        kelly_min_trades=cfg.sizing_kelly_min_trades,
+        atr_risk_pct=cfg.sizing_atr_risk_pct,
+        atr_sl_mult=cfg.sizing_atr_sl_mult,
+        initial_equity=cfg.sizing_initial_equity,
+        max_leverage=cfg.sizing_max_leverage,
+        contract_size=cfg.sizing_contract_size,
+        target_bar=target_bar,
+        vol_floor=vol_floor,
+        max_lev=max_lev,
+    )
+    sizing_state = SizingState(equity=cfg.sizing_initial_equity)
+    trade_pnl_accum = 0.0
+
+    def _get_atr(i):
+        if _has_atr_col:
+            try:
+                return float(df["atr_14"].iloc[i])
+            except Exception:
+                return 0.0
+        return 0.0
+
     # --- Inner helpers (closures over mutable state) ---
 
     def start_ramp(i, new_target, current_actual):
@@ -243,10 +295,13 @@ def run_execution_loop(
         return ramp_src + (ramp_dst - ramp_src) * prog
 
     def get_entry_size(i, sigma_ref):
-        if use_vol_target:
-            denom = max(sigma_ref, vol_floor)
-            return min(max_lev, float(target_bar) / float(denom))
-        return 1.0
+        if sizing_method == "fixed":
+            if use_vol_target:
+                denom = max(sigma_ref, vol_floor)
+                return min(max_lev, float(target_bar) / float(denom))
+            return 1.0
+        atr_i = _get_atr(i)
+        return _compute_size(sizing_state, sigma_ref, atr_i, sizing_cfg)
 
     def regime_tp_trail(i, sigma_ref):
         if not use_regime:
@@ -391,6 +446,9 @@ def run_execution_loop(
                     if hit_stop:       stop_hits += 1
                     if flip_or_flat:   flips_exits += 1
                     if max_hold_hit:   timeouts += 1
+                    if sizing_method != "fixed":
+                        _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
+                        trade_pnl_accum = 0.0
                     in_pos = False
                     dirn = 0.0
                     size_entry = 0.0
@@ -405,6 +463,9 @@ def run_execution_loop(
             # ---- Patch #1 / original path (no trailing) ----
             prev_sig = np.sign(pred[i-1]) if i > 0 else 0.0
             signal_change = (np.sign(sig_for_logic) != np.sign(prev_sig))
+            if signal_change and prev_sig != 0.0 and sizing_method != "fixed":
+                _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
+                trade_pnl_accum = 0.0
             if signal_change and sig_for_logic != 0.0:
                 sigma_ref = bar_vol[i]
                 size_entry = get_entry_size(i, sigma_ref)
@@ -489,6 +550,10 @@ def run_execution_loop(
 
         strat[i] = pos_exe * rets[i] - (slip_cost * delta_pos + impact)
 
+        sizing_state.equity += strat[i]
+        if in_pos:
+            trade_pnl_accum += strat[i]
+
         pos_actual[i] = pos_exe
         prev_pos_actual = pos_exe
 
@@ -531,6 +596,8 @@ def run_execution_loop(
         spread_spike_blocked=spread_spike_blocked,
         kills_triggered=kills_triggered,
         bars_flat_due_kill=bars_flat_due_kill,
+        sizing_method_used=sizing_method,
+        final_equity=sizing_state.equity,
         cost_spread_pf=cost_spread_pf,
         cost_slip_pf=cost_slip_pf,
         cost_impact_bar=cost_impact_bar,

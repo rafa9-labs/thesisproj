@@ -329,6 +329,33 @@ class MemoryConfig:
 
 
 # ---------------------------------------------------------------------------
+# Execution Models (Sprint 2)
+# ---------------------------------------------------------------------------
+@dataclass
+class ExecutionConfig:
+    """Position sizing, stop-loss, trailing-stop, and risk-management settings."""
+    sizing_method: str = "fixed"
+    risk_fraction: float = 0.02
+    kelly_fraction: float = 0.5
+    kelly_min_trades: int = 10
+    atr_risk_pct: float = 0.02
+    atr_sl_mult: float = 2.0
+    initial_equity: float = 10_000.0
+    max_leverage: float = 5.0
+    contract_size: float = 100_000.0
+
+    def __post_init__(self):
+        self.sizing_method = _env("SIZING_METHOD", self.sizing_method).strip().lower()
+        self.risk_fraction = _env_float("SIZING_RISK_FRACTION", self.risk_fraction)
+        self.kelly_fraction = _env_float("SIZING_KELLY_FRACTION", self.kelly_fraction)
+        self.kelly_min_trades = _env_int("SIZING_KELLY_MIN_TRADES", self.kelly_min_trades)
+        self.atr_risk_pct = _env_float("SIZING_ATR_RISK_PCT", self.atr_risk_pct)
+        self.atr_sl_mult = _env_float("SIZING_ATR_SL_MULT", self.atr_sl_mult)
+        self.initial_equity = _env_float("SIZING_INITIAL_EQUITY", self.initial_equity)
+        self.max_leverage = _env_float("SIZING_MAX_LEVERAGE", self.max_leverage)
+
+
+# ---------------------------------------------------------------------------
 # Top-level Settings
 # ---------------------------------------------------------------------------
 @dataclass
@@ -341,6 +368,7 @@ class Settings:
     dqn: DQNConfig = field(default_factory=DQNConfig)
     features: FeatureConfig = field(default_factory=FeatureConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    execution: ExecutionConfig = field(default_factory=ExecutionConfig)
 
     # Experimental defaults (was CLASS_DEFAULTS in MLBacktesterNoWFO)
     experiment: Dict[str, Any] = field(default_factory=dict)
