@@ -42,6 +42,15 @@ from pipeline.execution.stops import (
     check_breakeven as _check_breakeven,
 )
 
+from pipeline.execution.trailing import (
+    TrailingConfig,
+    TrailingState,
+    TrailingMethod as _TrailingMethod,
+    update_trailing_state as _update_trailing_state,
+    is_activated as _is_trailing_activated,
+    compute_trailing_sl as _compute_trailing_sl,
+)
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -124,6 +133,15 @@ class PatchConfig:
     stop_tp1_pips: float = 30.0
     stop_tp2_pips: float = 0.0
 
+    # Patch #0c — Trailing stops (Sprint 2)
+    trailing_method: str = "none"
+    trailing_pips: float = 30.0
+    trailing_atr_mult: float = 3.0
+    trailing_chandelier_atr_mult: float = 3.0
+    trailing_chandelier_lookback: int = 22
+    trailing_activation_pips: float = 10.0
+    trailing_pip_value: float = 0.0001
+
     # Diagnostics
     debug_costs: bool = False
     eval_context: Optional[str] = None
@@ -165,6 +183,10 @@ class LoopResult:
     tp2_full_hits: int = 0
     be_activations: int = 0
     stop_method_used: str = "none"
+
+    # Trailing stop diagnostics
+    trailing_activations: int = 0
+    trailing_method_used: str = "none"
 
     # Optional per-bar cost audit arrays (None when not recording)
     cost_spread_pf: Optional[np.ndarray] = None
@@ -332,6 +354,20 @@ def run_execution_loop(
     stop_be_activations = 0
     partial_closed = False
 
+    # --- Trailing stop setup (Sprint 2) ---
+    trailing_method = cfg.trailing_method
+    trailing_cfg = TrailingConfig(
+        method=trailing_method,
+        trail_pips=cfg.trailing_pips,
+        trail_atr_mult=cfg.trailing_atr_mult,
+        chandelier_atr_mult=cfg.trailing_chandelier_atr_mult,
+        chandelier_lookback=cfg.trailing_chandelier_lookback,
+        activation_pips=cfg.trailing_activation_pips,
+        pip_value=cfg.trailing_pip_value,
+    )
+    active_trailing_state: Optional[TrailingState] = None
+    trailing_activations_count = 0
+
     def _get_atr(i):
         if _has_atr_col:
             try:
@@ -493,6 +529,11 @@ def run_execution_loop(
                         )
                     else:
                         active_stop_levels = None
+                    if trailing_method != "none":
+                        active_trailing_state = TrailingState()
+                        active_trailing_state.reset(trailing_cfg.chandelier_lookback)
+                    else:
+                        active_trailing_state = None
                     pos_target = dirn * size_entry
                     if use_twap:
                         start_ramp(i, pos_target, prev_pos_actual)
@@ -507,6 +548,30 @@ def run_execution_loop(
                 sigma_ref = max(sigma_ref, vol_floor)
                 cum_pl += dirn * rets[i]
                 mfe = max(mfe, cum_pl)
+
+                # --- Trailing stop update (S2.3) ---
+                if active_trailing_state is not None and trailing_method != "none":
+                    _tr_hi, _tr_lo = _get_high_low(i)
+                    if _tr_hi > 0:
+                        _update_trailing_state(trailing_cfg, active_trailing_state, _tr_hi, _tr_lo)
+                    _tr_price = _get_price(i)
+                    if _tr_price > 0 and _is_trailing_activated(
+                        trailing_cfg, active_trailing_state,
+                        entry_price, _tr_price, dirn,
+                    ):
+                        if not active_trailing_state.activated or active_trailing_state.activated:
+                            if not active_trailing_state.activated:
+                                trailing_activations_count += 1
+                        _new_trail_sl = _compute_trailing_sl(
+                            trailing_cfg, active_trailing_state, dirn, _get_atr(i),
+                        )
+                        if _new_trail_sl > 0 and active_stop_levels is not None:
+                            if dirn > 0:
+                                if _new_trail_sl > active_stop_levels.sl_price:
+                                    active_stop_levels.sl_price = _new_trail_sl
+                            else:
+                                if active_stop_levels.sl_price == 0 or _new_trail_sl < active_stop_levels.sl_price:
+                                    active_stop_levels.sl_price = _new_trail_sl
 
                 # --- Stop/TP check (S2.2) ---
                 stop_exit = False
@@ -549,6 +614,7 @@ def run_execution_loop(
                     size_entry = 0.0
                     scaled_out = False
                     active_stop_levels = None
+                    active_trailing_state = None
                     pos_target = 0.0
                     if use_twap:
                         start_ramp(i, pos_target, prev_pos_actual)
@@ -752,6 +818,8 @@ def run_execution_loop(
         tp2_full_hits=stop_tp2_full_hits,
         be_activations=stop_be_activations,
         stop_method_used=stop_method,
+        trailing_activations=trailing_activations_count,
+        trailing_method_used=trailing_method,
         cost_spread_pf=cost_spread_pf,
         cost_slip_pf=cost_slip_pf,
         cost_impact_bar=cost_impact_bar,

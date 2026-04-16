@@ -222,6 +222,15 @@ CLASS_DEFAULTS = {
         "stop_tp1_pips": 30.0,
         "stop_tp2_pips": 0.0,
 
+        # --- Trailing stops (Sprint 2 — S2.3) ---
+        "trailing_method": "none",
+        "trailing_pips": 30.0,
+        "trailing_atr_mult": 3.0,
+        "trailing_chandelier_atr_mult": 3.0,
+        "trailing_chandelier_lookback": 22,
+        "trailing_activation_pips": 10.0,
+        "trailing_pip_value": 0.0001,
+
         # --- CV-time caps for keras models (early stopping regime) ---
         "deep_cv_max_epochs": 12,
         "deep_cv_batch_size": 256,
