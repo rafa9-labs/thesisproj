@@ -45,6 +45,21 @@ class CoreMixin:
         self.symbol = symbol
         self.start = start
         self.end = end
+
+        # --- Resolve pair-specific config (S3.2) ---
+        from pipeline.pair_config import get_pair_config, resolve_csv_paths
+        try:
+            self._pair_config = get_pair_config(symbol)
+            self._csv_paths = resolve_csv_paths(symbol)
+        except ValueError:
+            from pipeline.pair_config import PairConfig
+            self._pair_config = PairConfig(
+                symbol=symbol,
+                oanda_name=symbol[:3] + "_" + symbol[3:] if len(symbol) == 6 else symbol,
+                pip_value=0.0001,
+            )
+            self._csv_paths = {}
+
         # If trading_costs is explicitly provided at construction, it must not be overwritten
         # by any loaded/merged config later (GlobalHPO reuse, etc.).
         self._trading_costs_locked = (trading_costs is not None)
@@ -73,6 +88,11 @@ class CoreMixin:
 
         # ✅ Instance-private copy so in-class mutations never leak outward
         self.features_config = deepcopy(features_config) if features_config else {}
+
+        # --- Inject pair-specific pip_value (S3.2) ---
+        if isinstance(self.features_config, dict):
+            self.features_config["stop_pip_value"] = self._pair_config.pip_value
+            self.features_config["trailing_pip_value"] = self._pair_config.pip_value
         
         # --- Resolve slippage_factor (explicit config > ctor arg). ---
         # Prevent silent 0.0 when trading_costs are enabled.

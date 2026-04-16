@@ -18,7 +18,8 @@ class DataMixin:
         Uses tuned windows from features_config['indicator_windows'] and prefers precomputed columns if present.
         """
         # ---- 30m base data ----
-        raw = _load_csv_cached(BASE_CSV, parse_dates=["time"], index_col="time")
+        _base_csv = self._csv_paths.get("base", BASE_CSV)
+        raw = _load_csv_cached(_base_csv, parse_dates=["time"], index_col="time")
 
         # normalize column names expected downstream
         raw.rename(columns={"mid_close": "price", "mid_high": "high", "mid_low": "low"}, inplace=True)
@@ -65,8 +66,10 @@ class DataMixin:
             self._ny_mask = pd.Series(True, index=self.data.index)  # safe fallback
 
         # ---- 1H and 4H for MTF features (cached) ----
-        self.df_1h = _load_csv_cached(CSV_1H, parse_dates=["time"], index_col="time")
-        self.df_4h = _load_csv_cached(CSV_4H, parse_dates=["time"], index_col="time")
+        _csv_1h = self._csv_paths.get("H1", CSV_1H)
+        _csv_4h = self._csv_paths.get("H4", CSV_4H)
+        self.df_1h = _load_csv_cached(_csv_1h, parse_dates=["time"], index_col="time")
+        self.df_4h = _load_csv_cached(_csv_4h, parse_dates=["time"], index_col="time")
 
         # 🔽 Downcast numeric columns in 1H / 4H to float32 as well
         for _df in (self.df_1h, self.df_4h):

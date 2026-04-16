@@ -62,6 +62,7 @@ def main() ->  None:
     _env_seeds = os.environ.get("SEEDS", "")
     SEEDS = [int(s.strip()) for s in _env_seeds.split(",") if s.strip()] if _env_seeds else [33333]
     REPEATS = int(os.environ.get("REPEATS", "1"))
+    PAIR = os.environ.get("PAIR", "EURUSD").upper()
 
     # ── Smoke-test mode: override config for fast validation ──
     _SMOKE = os.environ.get("SMOKE_TEST", "0") == "1"
@@ -281,7 +282,7 @@ def main() ->  None:
 
                 # Instantiate a fresh backtester for this model
                 bt = MLBacktester(
-                    symbol="EURUSD",
+                    symbol=PAIR,
                     start="2019-10-01 00:00:00",
                     end=END_DATE,
                     trading_costs=False,
