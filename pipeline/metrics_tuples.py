@@ -231,6 +231,22 @@ CLASS_DEFAULTS = {
         "trailing_activation_pips": 10.0,
         "trailing_pip_value": 0.0001,
 
+        # --- Risk management (Sprint 2 — S2.4) ---
+        "risk_use_dd_breaker": False,
+        "risk_max_drawdown_pct": 0.20,
+        "risk_dd_resume": "session_end",
+        "risk_dd_cooloff_bars": 48,
+        "risk_use_daily_loss": False,
+        "risk_max_daily_loss_pct": 0.03,
+        "risk_max_daily_loss_sigma": 3.0,
+        "risk_daily_loss_mode": "pct",
+        "risk_use_consec_loss": False,
+        "risk_max_consecutive_losses": 5,
+        "risk_consec_resume": "session_end",
+        "risk_consec_cooloff_bars": 48,
+        "risk_initial_equity": 10000.0,
+        "risk_max_open_positions": 1,
+
         # --- CV-time caps for keras models (early stopping regime) ---
         "deep_cv_max_epochs": 12,
         "deep_cv_batch_size": 256,

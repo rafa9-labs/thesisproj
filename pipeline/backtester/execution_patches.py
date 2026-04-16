@@ -51,6 +51,18 @@ from pipeline.execution.trailing import (
     compute_trailing_sl as _compute_trailing_sl,
 )
 
+from pipeline.execution.risk_manager import (
+    RiskConfig,
+    RiskState,
+    should_suppress_entry as _risk_should_suppress,
+    check_drawdown as _risk_check_drawdown,
+    check_daily_loss as _risk_check_daily_loss,
+    update_after_trade as _risk_update_after_trade,
+    tick_cooloffs as _risk_tick_cooloffs,
+    reset_daily as _risk_reset_daily,
+    get_pause_reason as _risk_get_pause_reason,
+)
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -142,6 +154,22 @@ class PatchConfig:
     trailing_activation_pips: float = 10.0
     trailing_pip_value: float = 0.0001
 
+    # Patch #0d — Risk management (Sprint 2)
+    risk_use_dd_breaker: bool = False
+    risk_max_drawdown_pct: float = 0.20
+    risk_dd_resume: str = "session_end"
+    risk_dd_cooloff_bars: int = 48
+    risk_use_daily_loss: bool = False
+    risk_max_daily_loss_pct: float = 0.03
+    risk_max_daily_loss_sigma: float = 3.0
+    risk_daily_loss_mode: str = "pct"
+    risk_use_consec_loss: bool = False
+    risk_max_consecutive_losses: int = 5
+    risk_consec_resume: str = "session_end"
+    risk_consec_cooloff_bars: int = 48
+    risk_initial_equity: float = 10_000.0
+    risk_max_open_positions: int = 1
+
     # Diagnostics
     debug_costs: bool = False
     eval_context: Optional[str] = None
@@ -187,6 +215,13 @@ class LoopResult:
     # Trailing stop diagnostics
     trailing_activations: int = 0
     trailing_method_used: str = "none"
+
+    # Risk manager diagnostics
+    risk_dd_breaches: int = 0
+    risk_daily_loss_breaches: int = 0
+    risk_consec_loss_breaches: int = 0
+    risk_bars_paused: int = 0
+    risk_manager_active: bool = False
 
     # Optional per-bar cost audit arrays (None when not recording)
     cost_spread_pf: Optional[np.ndarray] = None
@@ -368,6 +403,28 @@ def run_execution_loop(
     active_trailing_state: Optional[TrailingState] = None
     trailing_activations_count = 0
 
+    # --- Risk management setup (Sprint 2) ---
+    risk_any_active = (
+        cfg.risk_use_dd_breaker or cfg.risk_use_daily_loss or cfg.risk_use_consec_loss
+    )
+    risk_cfg = RiskConfig(
+        risk_use_dd_breaker=cfg.risk_use_dd_breaker,
+        risk_max_drawdown_pct=cfg.risk_max_drawdown_pct,
+        risk_dd_resume=cfg.risk_dd_resume,
+        risk_dd_cooloff_bars=cfg.risk_dd_cooloff_bars,
+        risk_use_daily_loss=cfg.risk_use_daily_loss,
+        risk_max_daily_loss_pct=cfg.risk_max_daily_loss_pct,
+        risk_max_daily_loss_sigma=cfg.risk_max_daily_loss_sigma,
+        risk_daily_loss_mode=cfg.risk_daily_loss_mode,
+        risk_use_consec_loss=cfg.risk_use_consec_loss,
+        risk_max_consecutive_losses=cfg.risk_max_consecutive_losses,
+        risk_consec_resume=cfg.risk_consec_resume,
+        risk_consec_cooloff_bars=cfg.risk_consec_cooloff_bars,
+        risk_initial_equity=cfg.risk_initial_equity,
+        risk_max_open_positions=cfg.risk_max_open_positions,
+    )
+    risk_state = RiskState(equity_peak=cfg.risk_initial_equity)
+
     def _get_atr(i):
         if _has_atr_col:
             try:
@@ -464,6 +521,8 @@ def run_execution_loop(
         # Reset daily state on new calendar day
         if new_day:
             reset_daily_state()
+            if risk_any_active:
+                _risk_reset_daily(risk_state)
         # Also reset if we prefer to end cool-off / kill at new session boundary
         if kill_until_session_end and gap_from_prev_bool[i]:
             reset_daily_state()
@@ -490,6 +549,11 @@ def run_execution_loop(
 
                 if debug_costs:
                     print(f"[Eval][SpreadGuard] spike @ {df.index[i]} spread={_spr_full:.6f} > cap={spread_cap:.6f} → block entry{_ctx}")
+
+        # Risk manager signal suppression (S2.4)
+        if risk_any_active and _risk_should_suppress(risk_state):
+            sig_session = 0.0
+            _risk_tick_cooloffs(risk_cfg, risk_state)
 
         if use_kill:
             if kill_active:
@@ -606,6 +670,8 @@ def run_execution_loop(
                                 stop_exit = True
 
                 if stop_exit:
+                    if risk_any_active:
+                        _risk_update_after_trade(risk_cfg, risk_state, trade_pnl_accum, trade_pnl_accum > 0)
                     if sizing_method != "fixed":
                         _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
                         trade_pnl_accum = 0.0
@@ -660,6 +726,8 @@ def run_execution_loop(
                         if hit_stop:       stop_hits += 1
                         if flip_or_flat:   flips_exits += 1
                         if max_hold_hit:   timeouts += 1
+                        if risk_any_active:
+                            _risk_update_after_trade(risk_cfg, risk_state, trade_pnl_accum, trade_pnl_accum > 0)
                         if sizing_method != "fixed":
                             _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
                             trade_pnl_accum = 0.0
@@ -679,6 +747,8 @@ def run_execution_loop(
             signal_change = (np.sign(sig_for_logic) != np.sign(prev_sig))
             if signal_change and prev_sig != 0.0 and sizing_method != "fixed":
                 _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
+                if risk_any_active:
+                    _risk_update_after_trade(risk_cfg, risk_state, trade_pnl_accum, trade_pnl_accum > 0)
                 trade_pnl_accum = 0.0
             if signal_change and sig_for_logic != 0.0:
                 sigma_ref = bar_vol[i]
@@ -793,6 +863,11 @@ def run_execution_loop(
                     ramp_active = False
                     ramp_dst = 0.0
 
+        # --- Risk manager bar-level checks (S2.4) ---
+        if risk_any_active:
+            _risk_check_drawdown(risk_cfg, risk_state, sizing_state.equity)
+            _risk_check_daily_loss(risk_cfg, risk_state, strat[i], bar_vol[i], bars_per_day)
+
     # ==================================================================
     # Return results
     # ==================================================================
@@ -824,4 +899,9 @@ def run_execution_loop(
         cost_slip_pf=cost_slip_pf,
         cost_impact_bar=cost_impact_bar,
         cost_total_turn=cost_total_turn,
+        risk_dd_breaches=risk_state.dd_breaches,
+        risk_daily_loss_breaches=risk_state.daily_loss_breaches,
+        risk_consec_loss_breaches=risk_state.consec_loss_breaches,
+        risk_bars_paused=risk_state.bars_paused,
+        risk_manager_active=risk_any_active,
     )

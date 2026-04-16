@@ -5,6 +5,7 @@ Submodules:
   position_sizing  — Fixed, fractional, Kelly, ATR, vol-target sizers
   stops            — Fixed-pips, ATR, sigma SL/TP + breakeven + partial close
   trailing         — Fixed-pips, ATR, Chandelier trailing stops
+  risk_manager     — Drawdown breaker, daily loss limit, consecutive loss limit
 """
 
 from pipeline.execution.position_sizing import (
@@ -33,6 +34,18 @@ from pipeline.execution.trailing import (
     compute_trailing_sl,
 )
 
+from pipeline.execution.risk_manager import (
+    RiskConfig,
+    RiskState,
+    should_suppress_entry,
+    get_pause_reason,
+    check_drawdown,
+    check_daily_loss,
+    update_after_trade,
+    tick_cooloffs,
+    reset_daily,
+)
+
 __all__ = [
     "SizingMethod",
     "SizingConfig",
@@ -51,4 +64,13 @@ __all__ = [
     "update_trailing_state",
     "is_activated",
     "compute_trailing_sl",
+    "RiskConfig",
+    "RiskState",
+    "should_suppress_entry",
+    "get_pause_reason",
+    "check_drawdown",
+    "check_daily_loss",
+    "update_after_trade",
+    "tick_cooloffs",
+    "reset_daily",
 ]
