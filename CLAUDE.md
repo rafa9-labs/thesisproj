@@ -186,16 +186,25 @@ Tools: fetch_html, fetch_markdown, fetch_txt, fetch_json, fetch_readable, fetch_
 | Sprint | Topic | Status | Est |
 |--------|-------|--------|-----|
 | **Sprint 1** | Model Comparison + Leaderboard | ✅ DONE | 3-4h |
-| **Sprint 2** | Advanced Execution Models | ⬜ NEXT | 6-8h |
+| **Sprint 2** | Advanced Execution Models | 🔄 IN PROGRESS | 6-8h |
 | **Sprint 3** | Multi-Currency Expansion | ⬜ TODO | 4-5h |
 | **Sprint 4** | Docker + CI/CD | ⬜ TODO | 3-4h |
 | **Sprint 5** | Comprehensive Tests + Benchmarks | ⬜ TODO | 4-6h |
 | **Sprint 6** | News & Sentiment Features | ⬜ TODO | 6-8h |
-| **Sprint 7** | Professional UI Polish | ⬜ TODO | 10h |
+| **Sprint 7** | FastAPI Backend | ⬜ TODO | 8-10h |
+| **Sprint 8** | React Frontend | ⬜ TODO | 20-25h |
+| **Sprint 9** | Electron Desktop Shell | ⬜ TODO | 10-12h |
+| **Sprint 10** | Security & Licensing (Paddle) | ⬜ TODO | 12-15h |
+| **Sprint 11** | Installer & Auto-Update | ⬜ TODO | 6-8h |
+| **Sprint 12** | Commercial Infrastructure | ⬜ TODO | 8-10h |
+| **Sprint 13** | Beta & Launch | ⬜ TODO | 6-8h |
 
-**Next task**: Sprint 2 — Advanced Execution Models
-- Position sizing (Kelly, fixed fractional, ATR-based)
-- Stop-loss / take-profit management
+**Product target**: Commercial Electron desktop app (React + FastAPI + Python), sold via Paddle.
+**Pricing**: Hybrid — one-time purchase + annual updates subscription.
+
+**Next task**: Sprint 2 — Advanced Execution Models (S2.1 done, S2.2 next)
+- ~~Position sizing (Kelly, fixed fractional, ATR-based)~~ ✅ S2.1 DONE
+- Stop-loss / take-profit management ← CURRENT
 - Trailing stops (standard, ATR, Chandelier exit)
 - Risk management framework (DD circuit breaker, loss limits)
 - Integration into pipeline + UI
@@ -225,14 +234,15 @@ See `ROADMAP.md` for full sprint details with sub-tasks and file references.
 
 | File | Role |
 |------|------|
-| `app.py` | Streamlit entry point |
-| `config.py` | Global configuration + constants |
+| `app.py` | Streamlit entry point (interim dev UI) |
+| `config.py` | Global configuration + constants + ExecutionConfig |
 | `pipeline/backtester/composed.py` | MLBacktester engine |
+| `pipeline/backtester/execution_patches.py` | Execution loop + PatchConfig + LoopResult |
+| `pipeline/execution/position_sizing.py` | Position sizing models (S2.1) |
 | `pipeline/main_cli.py` | CLI runner |
 | `pipeline/runtime.py` | GPU detection, CUDA config |
 | `pipeline/model_comparison.py` | Model comparison & leaderboard |
 | `models/registry.py` | Model registry |
-| `ROADMAP.md` | Full product roadmap (sprints + phases) |
-| `PROJECT_PLAN.md` | Commercial product plan |
-| `.clinerules` | Cline-specific rules (superset of this file) |
+| `ROADMAP.md` | Full product roadmap (13 sprints) |
+| `OPENCODE_CONTINUE.md` | Continuation context for AI sessions |
 | `CLAUDE.md` | This file — AI assistant context |

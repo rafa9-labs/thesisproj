@@ -264,445 +264,363 @@
 
 ---
 
-## Sprint 7: Professional UI Polish ⬜ NOT STARTED
+## Sprint 7: FastAPI Backend ⬜ NOT STARTED
 
-> **Goal**: Slick, production-ready interface. Mobile-responsive, dark/light mode.
-> **Maps to**: Phase 5 + Phase 4.4
-> **Est**: 10h
+> **Goal**: Decouple pipeline engine from Streamlit into a proper REST API.
+> **Est**: 8-10h
 
-- [ ] **S7.1** End-to-end UI smoke test completion
-  - Full backtest from UI with equity curves + KPI cards
-  - HPO diagnostics display
-  - All 8 models verified via UI
-  - **Files**: `tests/smoke_all_models.py`
+- [ ] **S7.1** FastAPI project scaffold
+  - `api/` package with `main.py`, routers, middleware
+  - CORS config for local React frontend
+  - Lifecycle management (startup/shutdown events)
+  - **Files**: `api/__init__.py`, `api/main.py`
   - **Est**: 1h
 
-- [ ] **S7.2** Cancellation support
-  - "Stop" button during long backtests
-  - `threading` + `st.stop()` pattern
-  - Clean resource cleanup on cancellation
-  - **Files**: `app.py`, `ui/state.py`
-  - **Est**: 2h
-
-- [ ] **S7.3** UI polish & error states
-  - Loading spinners for all async operations
-  - Graceful error messages (no raw tracebacks)
-  - Responsive layout (mobile-friendly)
-  - Consistent spacing, fonts, color scheme
-  - Dark/light mode toggle
-  - **Files**: `ui/*.py`, `app.py`
+- [ ] **S7.2** Core API endpoints
+  - `POST /api/v1/backtest` — run backtest with config payload
+  - `GET /api/v1/backtest/{id}/status` — poll progress
+  - `GET /api/v1/backtest/{id}/results` — fetch results + metrics
+  - `GET /api/v1/models` — list available models + registry
+  - `GET /api/v1/config` — get/set pipeline configuration
+  - **Files**: `api/routers/backtest.py`, `api/routers/models.py`, `api/routers/config.py`
   - **Est**: 3h
 
-- [ ] **S7.4** Export verification
-  - CSV download: metrics + monthly breakdown
-  - PNG download: equity curve chart
-  - JSON download: best configuration
-  - **Files**: `ui/results.py`
+- [ ] **S7.3** WebSocket progress streaming
+  - `WS /api/v1/backtest/{id}/ws` — real-time progress events
+  - Events: model training start/complete, epoch progress, fold complete, final metrics
+  - **Files**: `api/routers/ws.py`
   - **Est**: 2h
 
-- [ ] **S7.5** Deploy to Streamlit Cloud
-  - `.streamlit/secrets.toml` template
-  - `packages.txt` for system deps
-  - Push to Streamlit Cloud
+- [ ] **S7.4** Data & results management
+  - `GET /api/v1/data/pairs` — list available currency pairs + timeframes
+  - `POST /api/v1/data/download` — trigger data download (OANDA)
+  - `GET /api/v1/results` — list past backtest results
+  - `GET /api/v1/export/{id}` — export results as CSV/JSON
+  - **Files**: `api/routers/data.py`, `api/routers/results.py`
+  - **Est**: 2h
+
+- [ ] **S7.5** Background task queue
+  - Long-running backtests in background threads (not blocking API)
+  - Task ID tracking, cancellation support
+  - Concurrent backtest limit (resource protection)
+  - **Files**: `api/tasks.py`
+  - **Est**: 2h
+
+---
+
+## Sprint 8: React Frontend ⬜ NOT STARTED
+
+> **Goal**: Professional desktop-grade React UI that replaces Streamlit as the user-facing product.
+> **Architecture**: Vite + TypeScript + React 18 + TailwindCSS + shadcn/ui
+> **Est**: 20-25h
+
+- [ ] **S8.1** React project scaffold
+  - Vite + TypeScript + React 18
+  - TailwindCSS + shadcn/ui component library
+  - React Router for multi-page navigation
+  - API client layer (axios + WebSocket hook)
+  - **Files**: `frontend/` package
+  - **Est**: 2h
+
+- [ ] **S8.2** Layout shell & navigation
+  - Sidebar nav (dashboard, backtest, results, compare, settings)
+  - Dark/light mode toggle with system preference detection
+  - Responsive layout (works in Electron window 1280x800+)
+  - System tray integration stub
+  - **Files**: `frontend/src/layout/`
+  - **Est**: 2h
+
+- [ ] **S8.3** Dashboard page
+  - KPI cards (total backtests, best Sharpe, avg win rate, equity curve thumbnail)
+  - Recent backtests table with quick actions
+  - Model performance heatmap (model x pair Sharpe grid)
+  - **Files**: `frontend/src/pages/Dashboard/`
+  - **Est**: 3h
+
+- [ ] **S8.4** Backtest configuration page
+  - Model selector (multi-select for comparison)
+  - Currency pair + timeframe dropdowns
+  - Execution model config (position sizing, stops, risk manager)
+  - Feature toggles panel
+  - HPO settings
+  - "Run Backtest" button with progress bar via WebSocket
+  - **Files**: `frontend/src/pages/Backtest/`
+  - **Est**: 4h
+
+- [ ] **S8.5** Results & charts page
+  - Equity curve (Plotly.js — interactive, zoomable, crosshair)
+  - KPI cards grid (Sharpe, Sortino, max DD, total return, win rate, profit factor)
+  - Monthly returns heatmap
+  - Trade log table (sortable, filterable)
+  - Export buttons (CSV, PNG, JSON)
+  - **Files**: `frontend/src/pages/Results/`
+  - **Est**: 5h
+
+- [ ] **S8.6** Model comparison page
+  - Side-by-side equity curve overlay
+  - Leaderboard table (sortable by any metric)
+  - Paired t-test significance indicators
+  - Parameter sensitivity chart
+  - **Files**: `frontend/src/pages/Compare/`
+  - **Est**: 3h
+
+- [ ] **S8.7** Settings page
+  - Pipeline config editor (JSON editor with validation)
+  - GPU/compute settings
+  - Data source management (OANDA API key, pair download)
+  - License activation UI (for S10 integration)
+  - **Files**: `frontend/src/pages/Settings/`
+  - **Est**: 2h
+
+- [ ] **S8.8** Error handling & loading states
+  - Global error boundary with user-friendly messages
+  - Loading skeletons for all data-fetching components
+  - Toast notifications for success/error/warning
+  - Retry logic for failed API calls
+  - **Files**: `frontend/src/components/ErrorBoundary/`, `frontend/src/hooks/`
+  - **Est**: 2h
+
+---
+
+## Sprint 9: Electron Desktop Shell ⬜ NOT STARTED
+
+> **Goal**: Wrap React + FastAPI into a native-feeling desktop application.
+> **Architecture**: Electron main process + Python subprocess + React BrowserWindow
+> **Est**: 10-12h
+
+- [ ] **S9.1** Electron scaffold
+  - `electron/` directory with main process
+  - BrowserWindow config (min size 1280x800, frameless option)
+  - Dev vs production mode detection
+  - **Files**: `electron/main.ts`, `electron/preload.ts`
+  - **Est**: 2h
+
+- [ ] **S9.2** Python backend lifecycle management
+  - Spawn FastAPI subprocess from Electron main process
+  - Port discovery (find available localhost port)
+  - Health check polling until backend is ready
+  - Graceful shutdown (SIGTERM → wait → SIGKILL)
+  - Log forwarding from Python to Electron console
+  - **Files**: `electron/python.ts`
+  - **Est**: 3h
+
+- [ ] **S9.3** Native menus & system tray
+  - Application menu (File, Edit, View, Backtest, Help)
+  - System tray icon with status (running, backtesting, error)
+  - Tray context menu (show window, run backtest, quit)
+  - **Files**: `electron/tray.ts`, `electron/menu.ts`
+  - **Est**: 2h
+
+- [ ] **S9.4** PyInstaller integration
+  - `forex_pipeline.spec` — bundle Python + all dependencies
+  - Include React build as static assets served by FastAPI
+  - Single-directory bundle (not --onefile, for faster startup)
+  - Test on clean Windows 10/11 VM
+  - **Files**: `forex_pipeline.spec`, `scripts/build_python.bat`
+  - **Est**: 3h
+
+- [ ] **S9.5** Electron build pipeline
+  - electron-builder config for Windows (.exe, .msi)
+  - Code signing (self-signed for dev, proper cert for production)
+  - Include bundled Python as extraResource
+  - NSIS installer customization
+  - **Files**: `electron-builder.yml`, `scripts/build_electron.bat`
+  - **Est**: 2h
+
+---
+
+## Sprint 10: Security & Licensing ⬜ NOT STARTED
+
+> **Goal**: Protect source code and implement Paddle-based license key validation.
+> **Pricing model**: Hybrid — one-time purchase + annual updates subscription
+> **Est**: 12-15h
+
+- [ ] **S10.1** Code protection
+  - Critical pipeline modules compiled with Cython (`.py` → `.pyd`)
+  - PyInstaller with `--key` (AES encryption of bytecode)
+  - Strip docstrings and debug symbols from production build
+  - Anti-debugging checks in launcher
+  - **Files**: `setup_cython.py`, `scripts/build_secure.bat`
+  - **Est**: 4h
+
+- [ ] **S10.2** Paddle SDK integration
+  - Paddle seller account setup + product configuration
+  - License key generation via Paddle API
+  - License activation endpoint (online verification)
+  - Offline grace period (7 days without internet)
+  - **Files**: `api/licensing/paddle.py`, `api/licensing/__init__.py`
+  - **Est**: 3h
+
+- [ ] **S10.3** Machine fingerprinting
+  - Hardware ID generation (CPU serial + MAC + disk serial + motherboard)
+  - License binding to machine (one license = one machine, configurable)
+  - Machine transfer flow (deactivate old, activate new)
+  - **Files**: `api/licensing/fingerprint.py`
+  - **Est**: 2h
+
+- [ ] **S10.4** License enforcement in app
+  - License check on startup (blocking — show activation dialog if unlicensed)
+  - Trial mode (14-day full access, then restricted)
+  - Feature gating (free: 3 models + basic execution; paid: all models + advanced execution)
+  - License status in Settings page
+  - **Files**: `electron/license.ts`, `frontend/src/components/LicenseDialog/`
+  - **Est**: 2h
+
+- [ ] **S10.5** Encrypted local storage
+  - Encrypted SQLite for user settings, backtest history, license state
+  - Key derivation from machine fingerprint + app secret
+  - Secure credential storage (OANDA API key, etc.)
+  - **Files**: `api/storage.py`
+  - **Est**: 2h
+
+- [ ] **S10.6** Security audit
+  - Dependency vulnerability scan (`pip audit`, `npm audit`)
+  - Input validation on all API endpoints
+  - Rate limiting on API routes
+  - No secrets in compiled binary
+  - **Files**: `api/middleware/security.py`
+  - **Est**: 2h
+
+---
+
+## Sprint 11: Installer & Auto-Update ⬜ NOT STARTED
+
+> **Goal**: Professional Windows installer with automatic updates.
+> **Est**: 6-8h
+
+- [ ] **S11.1** Windows installer (Inno Setup / NSIS)
+  - Custom installer wizard with branding
+  - Start menu shortcut + desktop shortcut
+  - File association (.fxbacktest for sharing configs)
+  - Uninstaller with "keep data" option
+  - Silent install option for enterprise deployment
+  - **Files**: `installer/setup.iss`
+  - **Est**: 3h
+
+- [ ] **S11.2** Auto-update system
+  - GitHub Releases as update source
+  - Version check on startup
+  - Differential updates (patch only changed files)
+  - Update notification in UI (download + install button)
+  - Rollback mechanism if update fails
+  - **Files**: `electron/updater.ts`, `frontend/src/components/UpdateNotification/`
+  - **Est**: 3h
+
+- [ ] **S11.3** Crash reporting
+  - Sentry integration (Electron + Python error capture)
+  - User opt-in for anonymous crash reports
+  - Breadcrumbs for debugging
+  - **Files**: `electron/sentry.ts`, `api/middleware/error_tracking.py`
   - **Est**: 1h
 
-- [ ] **S7.6** Model comparison UI
-  - Side-by-side equity curves
-  - Parameter sensitivity analysis
-  - Leaderboard embedded in UI
-  - **Files**: `ui/charts.py`, `ui/results.py`
+- [ ] **S11.4** First-run experience
+  - Welcome wizard (set data path, configure OANDA API key, choose default pair)
+  - Quick start guide / interactive tutorial
+  - Sample backtest with pre-loaded data (demo mode)
+  - **Files**: `frontend/src/pages/Welcome/`
   - **Est**: 1h
 
 ---
 
-## Phase 4: Feature Parity with `init-proj` ✅ MOSTLY COMPLETE
+## Sprint 12: Commercial Infrastructure ⬜ NOT STARTED
 
-> **Goal**: Backport all features from the old `init-proj` codebase so nothing is lost.
+> **Goal**: Everything needed to sell and support the product via Paddle.
+> **Pricing**: Free trial (14 days) → Pro (£149 one-time + £49/year updates) → Team (£299 + £99/year)
+> **Est**: 8-10h
 
-- [ ] **4.1** Audit `init-proj` feature set
-  - Document all indicators in `init-proj/src/features/*` vs current pipeline
-  - Document all execution models in `init-proj/src/execution/*` vs current
-  - Document all UI features in `init-proj/src/ui/*` vs current `ui/`
-  - Create gap analysis spreadsheet
+- [ ] **S12.1** Paddle product & pricing setup
+  - Paddle product page: FX Backtester Pro
+  - Pricing tiers configured in Paddle dashboard
+  - Discount codes for launch promotion
+  - License email templates (welcome, renewal reminder)
   - **Est**: 2h
 
-- [ ] **4.2** Backport missing indicators
-  - Vectorized indicator implementations from `init-proj/src/features/`
-  - Any missing TA-Lib wrappers, custom indicators
-  - Add toggle controls in UI Features tab
-  - **Files**: `pipeline/backtester/deep_mixin.py`, `ui/controls.py`
-  - **Est**: 4h
-
-- [ ] **4.3** Backport execution models
-  - Risk management from `init-proj/src/execution/`
-  - Position sizing models (fixed fractional, Kelly, etc.)
-  - Stop-loss / take-profit management
-  - Trailing stops
-  - **Files**: `pipeline/backtester/execution_patches.py`, new `pipeline/execution/`
-  - **Est**: 6h
-
-- [ ] **4.4** Backport missing UI features
-  - Any missing dashboards, charts, comparison views
-  - Model comparison (side-by-side equity curves)
-  - Parameter sensitivity analysis
-  - **Files**: `ui/charts.py`, `ui/results.py`, `ui/controls.py`
-  - **Est**: 4h
-
-- [ ] **4.5** Verify all model types work end-to-end 🔄 MOSTLY COMPLETE (2026-04-15)
-  - ✅ Logistic — PASS (31s, 4 trades)
-  - ✅ XGBoost — PASS (22s, 6 trades)
-  - ✅ CNN — PASS (42s, 60 trades)
-  - ✅ LSTM — PASS (76s, 60 trades)
-  - ✅ Transformer — PASS (48s, 60 trades)
-  - ✅ Ensemble (CNN-LSTM-XGBoost) — PASS (100s, 64 trades)
-  - ✅ Ensemble (adaptive regime) — PASS (28s, 54 trades) — `cv='prefit'` fixed with `FrozenEstimator`
-  - ✅ DQN — `RewardProcessWrapper`/`TradingEnv`/`CostAwareWrapper` imports fixed in `dqn_mixin.py`; import chain verified, training starts and runs correctly; very slow on CPU (~70+ min for 20 eps × 30K steps with walk-forward folds) — functional but recommended to run on GPU
-  - Smoke test enhanced: detects silent failures (0 trades = FAIL, not PASS)
-  - Each model: train → predict → trade → metrics → display
-  - **Files**: `models/*.py`, `pipeline/_imports.py`, `pipeline/backtester/dqn_mixin.py`, `models/ensemble_adaptive_regime.py`, `tests/smoke_all_models.py`
-  - **Est**: 4h ✅ DONE
-
-**Phase 4 complete when**: All `init-proj` features are present, all model types run end-to-end without errors.
-
----
-
-## Phase 5: UI Polish & Streamlit Cloud Deploy 🔄 ~75%
-
-> **Goal**: Professional, elegant UI that works flawlessly. Ready for public access.
-
-- [ ] **5.1** End-to-end smoke test 🔄 PARTIAL (2026-04-15)
-  - ✅ UI loads in browser, sidebar renders, all 6 tabs functional (Puppeteer verified)
-  - ✅ Logistic model runs end-to-end via smoke test
-  - ✅ XGBoost model runs end-to-end via smoke test
-  - ✅ CNN/LSTM/Transformer — all pass on CPU (42s/76s/48s)
-  - ✅ Ensemble models (CNN-LSTM-XGBoost, adaptive regime) — both pass
-  - ✅ DQN — import fix verified, training runs correctly (slow on CPU ~70+ min)
-  - ⬜ Full backtest from UI with equity curves + KPI cards + monthly breakdown
-  - ⬜ HPO diagnostics display verification
-  - **Files**: `tests/smoke_all_models.py`
-  - **Est**: 2h (0.5h remaining)
-
-- [ ] **5.2** Cancellation support
-  - Add "Stop" button during long backtests
-  - Use `threading` + `st.stop()` pattern
-  - Clean up resources on cancellation
-  - **Files**: `app.py`, `ui/state.py`
-  - **Est**: 2h
-
-- [ ] **5.3** UI polish & error states
-  - Loading spinners for all async operations
-  - Graceful error messages (no raw tracebacks to user)
-  - Responsive layout (mobile-friendly)
-  - Consistent spacing, fonts, color scheme
-  - Dark/light mode support
-  - **Files**: `ui/*.py`, `app.py`
-  - **Est**: 4h
-
-- [ ] **5.4** Export verification
-  - CSV download: metrics + monthly breakdown
-  - PNG download: equity curve chart
-  - JSON download: best configuration
-  - PDF report generation (optional)
-  - **Files**: `ui/results.py`
-  - **Est**: 2h
-
-- [ ] **5.5** Deploy to Streamlit Cloud
-  - Create `.streamlit/secrets.toml` template
-  - Create `packages.txt` for system dependencies
-  - Push to Streamlit Cloud
-  - Configure custom domain (optional)
-  - **Est**: 1h
-
-**Phase 5 complete when**: App is live on Streamlit Cloud, all features work in browser, export downloads work.
-
----
-
-## Phase 6: Security, Auth & User Database ⬜ NOT STARTED
-
-> **Goal**: User accounts, secure data handling, rate limiting. Production-ready security.
-
-- [ ] **6.1** User authentication (streamlit-authenticator)
-  - Registration flow (email + password)
-  - Login/logout flow
-  - Password hashing (bcrypt)
-  - Session management with cookies
-  - **Files**: new `ui/auth.py`, `ui/state.py`
-  - **Est**: 4h
-
-- [ ] **6.2** User database (SQLite → PostgreSQL)
-  - SQLite for local/dev, PostgreSQL for production
-  - Schema: users, backtest_results, user_configs
-  - Migration scripts (Alembic)
-  - **Files**: new `db/` package, `db/models.py`, `db/migrations/`
-  - **Est**: 6h
-
-- [ ] **6.3** Results persistence per user
-  - Save backtest results to DB after each run
-  - Load previous results from DB (not just filesystem)
-  - User dashboard: history of all past runs
-  - **Files**: `ui/results.py`, `ui/state.py`, `db/`
-  - **Est**: 4h
-
-- [ ] **6.4** Security audit
-  - Input validation on all user inputs (SQL injection, XSS)
-  - CSRF protection
-  - Rate limiting (per-user backtest throttling)
-  - `.env` secrets management (no hardcoded keys)
-  - Dependency vulnerability scan (`pip audit`)
-  - **Files**: `ui/validators.py`, `.env.example`, `requirements_freeze.txt`
-  - **Est**: 4h
-
-- [ ] **6.5** Free tier limits
-  - 3 backtests/day for free users
-  - 3 models max for free users
-  - Usage tracking in DB
-  - Upgrade prompt when limits hit
-  - **Files**: `ui/controls.py`, `db/`
+- [ ] **S12.2** Landing page / marketing website
+  - Next.js or Astro static site
+  - Hero section with demo GIF/video
+  - Features grid, pricing table, testimonials placeholder
+  - "Buy Now" button → Paddle checkout
+  - Blog section for SEO
+  - **Files**: `website/` package
   - **Est**: 3h
 
-**Phase 6 complete when**: Users can register, login, run backtests (with limits), results persist across sessions.
-
----
-
-## Phase 7: Deployability & Infrastructure ⬜ NOT STARTED
-
-> **Goal**: One-click deploy, CI/CD, monitoring. Ops-ready.
-
-- [ ] **7.1** Dockerfile + docker-compose
-  - Reproducible Python environment
-  - GPU passthrough config for deep models
-  - Multi-stage build (slim image)
-  - **Files**: new `Dockerfile`, `docker-compose.yml`
-  - **Est**: 3h
-
-- [ ] **7.2** CI/CD pipeline (GitHub Actions)
-  - Lint (ruff/flake8) on every PR
-  - Unit tests on every push
-  - Integration tests on merge to main
-  - Auto-deploy to Streamlit Cloud / AWS
-  - **Files**: new `.github/workflows/ci.yml`
-  - **Est**: 3h
-
-- [ ] **7.3** Health checks & monitoring
-  - `/health` endpoint
-  - Uptime monitoring (UptimeRobot or similar)
-  - Error tracking (Sentry integration)
-  - Performance metrics (backtest duration, memory usage)
-  - **Files**: new `monitoring/`
-  - **Est**: 2h
-
-- [ ] **7.4** Backup strategy
-  - Automated daily DB backups
-  - Backup rotation (keep last 30 days)
-  - Restore procedure documented
-  - **Est**: 2h
-
-- [ ] **7.5** SSL/TLS & domain setup
-  - Custom domain with HTTPS
-  - SSL certificate (Let's Encrypt)
-  - DNS configuration
-  - **Est**: 1h
-
-- [ ] **7.6** Auto-scaling strategy
-  - Document scaling plan for traffic spikes
-  - Queue system for backtest jobs (Celery + Redis)
-  - Horizontal scaling considerations
-  - **Est**: 2h
-
-**Phase 7 complete when**: `docker-compose up` launches the full stack, CI/CD runs green, monitoring alerts work.
-
----
-
-## Phase 8: Multi-User Platform & Monetization ⬜ NOT STARTED
-
-> **Goal**: Scale to many users, Stripe billing, team features.
-
-- [ ] **8.1** FastAPI backend
-  - Decouple backtest engine from Streamlit
-  - REST API with versioned endpoints (`/api/v1/`)
-  - API key authentication
-  - Async job queue for long-running backtests
-  - **Files**: new `api/` package
-  - **Est**: 8h
-
-- [ ] **8.2** React/Next.js frontend
-  - Professional SPA replacing Streamlit for scale
-  - Responsive design (mobile + desktop)
-  - Real-time backtest progress (WebSocket)
-  - **Files**: new `frontend/` package
-  - **Est**: 2 weeks
-
-- [ ] **8.3** Redis caching layer
-  - Cache hot results (popular backtests)
-  - Session store
-  - Rate limiting backend
-  - **Est**: 3h
-
-- [ ] **8.4** User isolation & sandboxing
-  - Per-user data isolation
-  - Per-user resource limits (CPU, memory, time)
-  - User workspace separation
-  - **Est**: 4h
-
-- [ ] **8.5** Team/org support
-  - Shared configs within teams
-  - Team dashboard with combined results
-  - Role-based access (admin, member, viewer)
-  - **Est**: 6h
-
-- [ ] **8.6** Stripe billing integration
-  - Free tier: 3 backtests/day, 3 models, no export
-  - Pro tier: £19/mo — unlimited, all models, full export
-  - Team tier: £49/mo — Pro + shared configs, team dashboard
-  - API tier: £99/mo — REST API, webhooks, white-label
-  - **Files**: new `billing/` package
-  - **Est**: 6h
-
-- [ ] **8.7** White-label / embed support
-  - Embeddable widgets for partners
-  - Custom branding options
-  - API documentation portal
-  - **Est**: 4h
-
-**Phase 8 complete when**: Multiple users can run backtests simultaneously, billing works, teams can collaborate.
-
----
-
-## Phase 9: Python SDK & Distribution ⬜ NOT STARTED
-
-> **Goal**: `pip install fxbacktester` — secondary revenue stream.
-
-- [ ] **9.1** Package structure
-  - `pyproject.toml` with proper metadata
-  - Clean public API: `MLBacktester`, `Config`, `Results`
-  - **Files**: new `fxbacktester/` package
-  - **Est**: 4h
-
-- [ ] **9.2** Jupyter notebooks (5 examples)
-  - Quick start: basic backtest
-  - Multi-model comparison
-  - Custom feature engineering
-  - Walk-forward analysis deep dive
-  - Exporting & reporting
-  - **Files**: new `notebooks/`
-  - **Est**: 4h
-
-- [ ] **9.3** API documentation (MkDocs)
-  - Full API reference
+- [ ] **S12.3** Documentation site
+  - MkDocs Material theme
   - Getting started guide
-  - Advanced usage docs
-  - Deploy to ReadTheDocs
-  - **Files**: new `docs/`
-  - **Est**: 4h
-
-- [ ] **9.4** PyPI publish
-  - Test on TestPyPI first
-  - Automated publishing via CI/CD
-  - Version management (semver)
+  - API reference (auto-generated from FastAPI schemas)
+  - Execution models guide
+  - FAQ / troubleshooting
+  - **Files**: `docs/` directory
   - **Est**: 2h
 
-- [ ] **9.5** License key gating
-  - Premium models behind license key
-  - License validation server
-  - Graceful degradation for free users
-  - **Est**: 4h
+- [ ] **S12.4** Legal & compliance
+  - Terms of Service (software license agreement)
+  - Privacy Policy
+  - Disclaimer (not financial advice)
+  - EULA for commercial use
+  - **Files**: `legal/` directory
+  - **Est**: 1h
 
-**Phase 9 complete when**: `pip install fxbacktester` works, docs are live, notebooks run.
+- [ ] **S12.5** Analytics & monitoring
+  - Anonymous usage telemetry (model usage, feature adoption)
+  - Download tracking via Paddle webhooks
+  - Conversion funnel monitoring (trial → paid)
+  - **Files**: `api/middleware/analytics.py`
+  - **Est**: 1h
 
 ---
 
-## Phase 10: News & Sentiment Integration ⬜ NOT STARTED
+## Sprint 13: Beta & Launch ⬜ NOT STARTED
 
-> **Goal**: News-derived features for smarter backtesting. Event-driven analysis.
+> **Goal**: Ship to real users, iterate, launch publicly.
+> **Est**: 6-8h (+ 2 weeks beta period)
 
-- [ ] **10.1** News scraper
-  - RSS feeds (Reuters, Bloomberg, FX-specific)
-  - NewsAPI integration
-  - Economic calendar scraping (NFP, FOMC, CPI)
-  - Rate-limited, cached, deduplicated
-  - **Files**: new `news/` package
-  - **Est**: 6h
+- [ ] **S13.1** Closed beta
+  - Recruit 10-20 beta testers (forex forums, Reddit, Discord)
+  - Beta build with telemetry + feedback button
+  - Feedback collection form (in-app + Google Forms)
+  - Known issues tracker
+  - **Est**: 2h setup + 2 weeks beta period
 
-- [ ] **10.2** Sentiment analysis
-  - finBERT integration for financial sentiment
-  - VADER for quick scoring
-  - Per-article sentiment score
-  - Aggregated daily/hourly sentiment features
-  - **Files**: new `news/sentiment.py`
-  - **Est**: 4h
-
-- [ ] **10.3** News-derived features in pipeline
-  - Sentiment score as input feature
-  - News count/volume as volatility proxy
-  - Event flags (pre-NFP, post-FOMC)
-  - Integrate into walk-forward (only past news used)
-  - **Files**: `pipeline/backtester/deep_mixin.py`, `news/`
-  - **Est**: 4h
-
-- [ ] **10.4** News overlay on charts
-  - Mark major events on equity curve
-  - News timeline alongside backtest results
-  - Event impact analysis (how did NFP affect this strategy?)
-  - **Files**: `ui/charts.py`, `ui/results.py`
+- [ ] **S13.2** Performance optimization
+  - Profile cold start time (target < 5 seconds to UI)
+  - Optimize backtest memory for 8GB RAM machines
+  - Reduce Electron bundle size (tree-shaking, lazy loading)
+  - FastAPI startup optimization
   - **Est**: 3h
 
-- [ ] **10.5** Event-driven backtesting
-  - Filter backtest to only trade around major events
-  - Event-strategy comparison
-  - Calendar-aware walk-forward
-  - **Est**: 4h
+- [ ] **S13.3** Launch preparation
+  - Product Hunt listing draft
+  - Social media announcements (Twitter/X, LinkedIn, Reddit r/algotrading)
+  - Email list setup (Mailchimp/ConvertKit)
+  - Demo video recording (2-minute walkthrough)
+  - Press kit (screenshots, logos, feature list)
+  - **Est**: 2h
 
-**Phase 10 complete when**: News features are available in the UI, sentiment scores improve model metrics.
+- [ ] **S13.4** Post-launch monitoring
+  - Monitor Paddle sales dashboard
+  - Sentry error rates
+  - Customer support channel (email + Discord)
+  - Weekly metrics review (sales, crashes, feature requests)
+  - **Est**: ongoing
 
 ---
 
-## Phase 11: Automated AI Testing ⬜ NOT STARTED
+## Superseded Phases
 
-> **Goal**: AI-generated comprehensive test suite. Mutation testing. Coverage enforcement.
+The following phases from the original roadmap are **superseded** by the desktop app strategy (Sprints 7-13):
 
-- [ ] **11.1** AI-generated unit tests
-  - Use AI to generate tests for all `pipeline/` modules
-  - Use AI to generate tests for all `models/` modules
-  - Use AI to generate tests for all `ui/` modules
-  - Target: >80% line coverage
-  - **Files**: `tests/test_*.py`
-  - **Est**: 6h
+| Old Phase | Status | Replaced By |
+|-----------|--------|-------------|
+| Phase 5 (Streamlit Cloud) | Partial — Streamlit stays as dev tool | Not deployed to cloud; React desktop app is the product |
+| Phase 6 (Auth & User DB) | Cancelled | S10 (licensing) — no multi-user DB needed |
+| Phase 8 (Multi-User + Stripe) | Cancelled | S12 (Paddle) — desktop billing model |
+| Phase 9 (Python SDK) | Deferred | Post-launch consideration |
 
-- [ ] **11.2** Integration test harness
-  - End-to-end: model selection → train → predict → trade → metrics → UI render
-  - Test all model types in sequence
-  - Test all data files (EURUSD H1, H4, M30)
-  - **Files**: `tests/test_integration_full.py`
-  - **Est**: 4h
-
-- [ ] **11.3** Mutation testing
-  - Use `mutmut` to verify tests catch real bugs
-  - Target: >85% mutation kill rate
-  - Fix weak tests that miss mutations
-  - **Est**: 3h
-
-- [ ] **11.4** Coverage enforcement in CI
-  - Fail CI if coverage drops below 80%
-  - Coverage badge in README
-  - Per-module coverage reporting
-  - **Files**: `.github/workflows/ci.yml`
-  - **Est**: 2h
-
-- [ ] **11.5** Performance benchmarks
-  - Benchmark backtest duration per model
-  - Detect speed regressions in CI
-  - Memory usage profiling
-  - **Files**: new `tests/benchmarks/`
-  - **Est**: 3h
-
-- [ ] **11.6** Regression test suite
-  - Golden output files for known configs
-  - Compare new results against golden
-  - Alert on unexpected metric changes
-  - **Files**: `tests/golden/`
-  - **Est**: 3h
-
-**Phase 11 complete when**: CI runs 200+ tests in <5min, coverage >80%, mutation kill rate >85%.
+Phase 4 (Feature Parity) is ~90% complete — only 4.1-4.4 remain (audit + backport from `init-proj`).
+Phase 7 (Docker + CI/CD) is now Sprint 4.
+Phase 10 (News & Sentiment) is now Sprint 6.
+Phase 11 (Testing) is now Sprint 5.
 
 ---
 
@@ -725,7 +643,7 @@ wsl -d Ubuntu-22.04 -- bash /mnt/c/Users/rafa/ML_Trading/thesisproj/run_wsl.sh \
 
 | File | Role |
 |------|------|
-| `app.py` | Streamlit entry point |
+| `app.py` | Streamlit entry point (dev UI, interim) |
 | `ui/controls.py` | Nav bar + 6-tab layout + GPU warnings |
 | `ui/state.py` | AppState + backtest adapter |
 | `ui/results.py` | Results display + export |
@@ -735,21 +653,42 @@ wsl -d Ubuntu-22.04 -- bash /mnt/c/Users/rafa/ML_Trading/thesisproj/run_wsl.sh \
 | `pipeline/runtime.py` | GPU detection, thread budgets, CUDA config |
 | `config.py` | Global configuration |
 | `models/registry.py` | Model registry |
+| `pipeline/execution/position_sizing.py` | Position sizing models (S2.1) |
+| `pipeline/backtester/execution_patches.py` | Execution loop + patches |
 | `run_smoke_gpu.bat` | GPU smoke test launcher (Windows → WSL) |
 | `run_smoke_gpu.sh` | GPU smoke test script (WSL + CUDA) |
 | `pipeline/model_comparison.py` | Model comparison & leaderboard module |
 | `run_comparison.bat` | One-command multi-model comparison runner |
 
+## Full Sprint Sequence
+
+| Sprint | Topic | Est | Status |
+|--------|-------|-----|--------|
+| **S1** | Model Comparison & Leaderboard | 3-4h | DONE |
+| **S2** | Advanced Execution Models | 6-8h | IN PROGRESS |
+| **S3** | Multi-Currency Expansion | 4-5h | TODO |
+| **S4** | Docker + CI/CD | 3-4h | TODO |
+| **S5** | Comprehensive Tests + Benchmarks | 4-6h | TODO |
+| **S6** | News & Sentiment Features | 6-8h | TODO |
+| **S7** | FastAPI Backend | 8-10h | TODO |
+| **S8** | React Frontend | 20-25h | TODO |
+| **S9** | Electron Desktop Shell | 10-12h | TODO |
+| **S10** | Security & Licensing (Paddle) | 12-15h | TODO |
+| **S11** | Installer & Auto-Update | 6-8h | TODO |
+| **S12** | Commercial Infrastructure | 8-10h | TODO |
+| **S13** | Beta & Launch | 6-8h | TODO |
+
 ## Completion Criteria Summary
 
-| Phase | When it's done |
-|-------|---------------|
-| 3 | No data leaks, features cached, tests pass |
-| 4 | All `init-proj` features present, all models work |
-| 5 | App live on cloud, export works, UI polished |
-| 6 | Users can register/login, results persist, rate-limited |
-| 7 | Docker one-click deploy, CI green, monitoring active |
-| 8 | Multi-user, Stripe billing, team features |
-| 9 | `pip install fxbacktester` works |
-| 10 | News features improve model metrics |
-| 11 | 200+ tests, >80% coverage, mutation kill >85% |
+| Sprint | When it's done |
+|--------|---------------|
+| S1-S2 | Execution models complete, all sizing/stop/risk models work |
+| S3-S4 | Multi-currency supported, Docker builds pass, CI green |
+| S5-S6 | 200+ tests, >80% coverage, news features integrated |
+| S7 | FastAPI serves all pipeline operations via REST + WebSocket |
+| S8 | React UI replaces Streamlit for all user interactions |
+| S9 | Electron wraps React + Python into desktop app |
+| S10 | Code protected, Paddle licensing active, feature gating works |
+| S11 | Windows installer + auto-update functional |
+| S12 | Product listed on Paddle, landing page live, docs published |
+| S13 | Beta tested, publicly launched, first sales |
