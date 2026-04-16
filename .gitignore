@@ -19,6 +19,9 @@ optuna_runs/
 artifacts/
 .feature_cache/
 
+# Database
+data/*.db
+
 # Smoke test outputs
 smoke_output*.txt
 test_results/
