@@ -1,7 +1,7 @@
 # FX ML Backtester — Product Roadmap
 
-> **Last Updated**: 2026-04-15
-> **Branch**: `feature/phase4-streamlit-ui`
+> **Last Updated**: 2026-04-17
+> **Branch**: `feature/sprint2-execution-models`
 > **Revenue Target**: £500–2K/month within 3 months of launch
 > **Philosophy**: Optimize → Feature Parity → Polish → Secure → Deploy → Scale → Enrich → Automate
 
@@ -92,44 +92,40 @@
 
 ---
 
-## Sprint 2: Advanced Execution Models ⬜ NOT STARTED
+## Sprint 2: Advanced Execution Models ✅ COMPLETE
 
 > **Goal**: Professional-grade trading simulation with position sizing, trailing stops, risk management.
 > **Maps to**: Phase 4.2 (indicators) + Phase 4.3 (execution models)
 > **Est**: 6-8h
 
-- [ ] **S2.1** Position sizing models
+- [x] **S2.1** Position sizing models ✅ DONE (commit `6f00605`)
   - Fixed fractional sizing (% of equity per trade)
   - Kelly criterion position sizing
   - Fixed lot sizing (current behavior, as baseline)
   - Volatility-adjusted sizing (ATR-based)
   - Configurable via `config.py` and UI controls
-  - **Files**: new `pipeline/execution/position_sizing.py`, `config.py`
-  - **Est**: 2h
+  - **Files**: `pipeline/execution/position_sizing.py`, `config.py`
 
-- [ ] **S2.2** Stop-loss / take-profit management
+- [x] **S2.2** Stop-loss / take-profit management ✅ DONE (commit `6e15059`)
   - Fixed SL/TP in pips
   - ATR-based dynamic SL/TP
   - Breakeven stop management
   - Partial close (scale-out) at TP levels
-  - **Files**: new `pipeline/execution/stops.py`, `pipeline/backtester/execution_patches.py`
-  - **Est**: 2h
+  - **Files**: `pipeline/execution/stops.py`
 
-- [ ] **S2.3** Trailing stop implementation
+- [x] **S2.3** Trailing stop implementation ✅ DONE (commit `1d8768d`)
   - Standard trailing stop (fixed pips)
   - ATR trailing stop
   - Chandelier exit
   - Configurable activation threshold
-  - **Files**: new `pipeline/execution/trailing.py`
-  - **Est**: 1.5h
+  - **Files**: `pipeline/execution/trailing.py`
 
-- [ ] **S2.4** Risk management framework
+- [x] **S2.4** Risk management framework ✅ DONE (commit `3fdf551`)
   - Max drawdown circuit breaker (pause trading when DD > threshold)
   - Max consecutive losses limit
   - Daily loss limit
   - Correlation-aware position limits
-  - **Files**: new `pipeline/execution/risk_manager.py`
-  - **Est**: 1.5h
+  - **Files**: `pipeline/execution/risk_manager.py`
 
 - [ ] **S2.5** Execution model integration
   - Wire execution models into `execution_patches.py`
@@ -141,26 +137,24 @@
 
 ---
 
-## Sprint 3: Multi-Currency Expansion ⬜ NOT STARTED
+## Sprint 3: Multi-Currency Expansion ✅ COMPLETE
 
 > **Goal**: Support 5+ currency pairs across 3 timeframes (15 data configs).
 > **Maps to**: New capability
 > **Est**: 4-5h
 
-- [ ] **S3.1** Data download automation
+- [x] **S3.1** Data download automation ✅ DONE (commit `8371310`)
   - OANDA API downloader for multiple pairs
   - Pairs: EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD (+ XAUUSD gold)
   - Timeframes: M30, H1, H4
   - Rate-limited, resumable downloads
-  - **Files**: `CSVDownloadOanda.py`, new `pipeline/data_downloader.py`
-  - **Est**: 2h
+  - **Files**: `pipeline/data_downloader.py`
 
-- [ ] **S3.2** Multi-pair backtest runner
+- [x] **S3.2** Multi-pair backtest runner ✅ DONE (commit `8371310`)
   - Extend `pipeline/main_cli.py` to iterate over pairs
   - Cross-pair leaderboard (normalized metrics for fair comparison)
   - Pair-specific HPO configs
   - **Files**: `pipeline/main_cli.py`, `pipeline/model_comparison.py`
-  - **Est**: 2h
 
 - [ ] **S3.3** Cross-pair comparison UI
   - Pair selector dropdown in UI
@@ -171,7 +165,7 @@
 
 ---
 
-## Sprint 4: Docker + CI/CD ⬜ NOT STARTED
+## Sprint 4: Docker + CI/CD ✅ PARTIAL (RAM optimization done)
 
 > **Goal**: One-click deploy, automated testing pipeline.
 > **Maps to**: Phase 7.1 + 7.2
@@ -192,6 +186,10 @@
   - Auto-deploy to Streamlit Cloud on main merge
   - **Files**: new `.github/workflows/ci.yml`
   - **Est**: 1.5h
+
+- [x] **S4.3** RAM optimization ✅ DONE (commit `0ffd725`)
+  - float32 everywhere, clear caches, eliminate redundant copies
+  - **Files**: `pipeline/backtester/*.py`
 
 ---
 
@@ -264,47 +262,42 @@
 
 ---
 
-## Sprint 7: FastAPI Backend ⬜ NOT STARTED
+## Sprint 7: FastAPI Backend ✅ COMPLETE
 
 > **Goal**: Decouple pipeline engine from Streamlit into a proper REST API.
 > **Est**: 8-10h
 
-- [ ] **S7.1** FastAPI project scaffold
+- [x] **S7.1** FastAPI project scaffold ✅ DONE (commits `b15a7eb`, `1fd4615`)
   - `api/` package with `main.py`, routers, middleware
   - CORS config for local React frontend
   - Lifecycle management (startup/shutdown events)
   - **Files**: `api/__init__.py`, `api/main.py`
-  - **Est**: 1h
 
-- [ ] **S7.2** Core API endpoints
+- [x] **S7.2** Core API endpoints ✅ DONE
   - `POST /api/v1/backtest` — run backtest with config payload
   - `GET /api/v1/backtest/{id}/status` — poll progress
   - `GET /api/v1/backtest/{id}/results` — fetch results + metrics
   - `GET /api/v1/models` — list available models + registry
   - `GET /api/v1/config` — get/set pipeline configuration
-  - **Files**: `api/routers/backtest.py`, `api/routers/models.py`, `api/routers/config.py`
-  - **Est**: 3h
+  - **Files**: `api/routers/backtest.py`, `api/routers/models.py`, `api/routers/pairs.py`
 
-- [ ] **S7.3** WebSocket progress streaming
-  - `WS /api/v1/backtest/{id}/ws` — real-time progress events
+- [x] **S7.3** WebSocket progress streaming ✅ DONE
+  - `WS /api/v1/ws/{job_id}` — real-time progress events
   - Events: model training start/complete, epoch progress, fold complete, final metrics
   - **Files**: `api/routers/ws.py`
-  - **Est**: 2h
 
-- [ ] **S7.4** Data & results management
-  - `GET /api/v1/data/pairs` — list available currency pairs + timeframes
-  - `POST /api/v1/data/download` — trigger data download (OANDA)
-  - `GET /api/v1/results` — list past backtest results
-  - `GET /api/v1/export/{id}` — export results as CSV/JSON
-  - **Files**: `api/routers/data.py`, `api/routers/results.py`
-  - **Est**: 2h
+- [x] **S7.4** Data & results management ✅ DONE
+  - `GET /api/v1/pairs` — list available currency pairs + timeframes
+  - `GET /api/v1/data/` — data management endpoints
+  - SQLite data layer with WAL mode, batched inserts
+  - CSV→SQLite migration tool
+  - **Files**: `api/routers/data.py`, `api/routers/pairs.py`, `pipeline/data_sqlite.py`, `pipeline/data_migrator.py`
 
-- [ ] **S7.5** Background task queue
-  - Long-running backtests in background threads (not blocking API)
-  - Task ID tracking, cancellation support
-  - Concurrent backtest limit (resource protection)
-  - **Files**: `api/tasks.py`
-  - **Est**: 2h
+- [x] **S7.5** Background task queue ✅ DONE
+  - Celery tasks for long-running backtests
+  - JobManager with SQLite-backed job tracking
+  - Redis pub/sub for WebSocket progress
+  - **Files**: `api/tasks.py`, `api/services/__init__.py`
 
 ---
 
@@ -665,12 +658,12 @@ wsl -d Ubuntu-22.04 -- bash /mnt/c/Users/rafa/ML_Trading/thesisproj/run_wsl.sh \
 | Sprint | Topic | Est | Status |
 |--------|-------|-----|--------|
 | **S1** | Model Comparison & Leaderboard | 3-4h | DONE |
-| **S2** | Advanced Execution Models | 6-8h | IN PROGRESS |
-| **S3** | Multi-Currency Expansion | 4-5h | TODO |
-| **S4** | Docker + CI/CD | 3-4h | TODO |
+| **S2** | Advanced Execution Models | 6-8h | DONE |
+| **S3** | Multi-Currency Expansion | 4-5h | DONE |
+| **S4** | Docker + CI/CD | 3-4h | PARTIAL (RAM opt done) |
 | **S5** | Comprehensive Tests + Benchmarks | 4-6h | TODO |
 | **S6** | News & Sentiment Features | 6-8h | TODO |
-| **S7** | FastAPI Backend | 8-10h | TODO |
+| **S7** | FastAPI Backend | 8-10h | DONE |
 | **S8** | React Frontend | 20-25h | TODO |
 | **S9** | Electron Desktop Shell | 10-12h | TODO |
 | **S10** | Security & Licensing (Paddle) | 12-15h | TODO |
