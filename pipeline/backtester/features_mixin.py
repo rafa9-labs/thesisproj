@@ -710,6 +710,27 @@ class FeaturesMixin:
                         if col.startswith(mtf_col + "_"):
                             df_out[col] = df_out[col].ffill()
 
+        # ---------- 8b) News & Sentiment features (optional) ----------
+        use_news = bool(cfg.get("use_news", False))
+        if use_news and not base_only:
+            try:
+                from news.features import merge_news_features, get_news_feature_columns
+                news_agg = getattr(self, "_news_aggregated", None)
+                econ_events = getattr(self, "_news_economic_events", None)
+                if news_agg is not None:
+                    df_out = merge_news_features(
+                        df_out, news_agg,
+                        events=econ_events,
+                        config=cfg,
+                    )
+                    news_feat_cols = get_news_feature_columns(cfg)
+                    event_cols = [c for c in df_out.columns if c.startswith("event_flag_")]
+                    for c in news_feat_cols + event_cols:
+                        if c in df_out.columns and c not in features:
+                            features.append(c)
+            except Exception as _news_exc:
+                _debug_once("news_features", _news_exc)
+
         dropna_subset = [f for f in features if f in df_out.columns]
         if dropna_subset:
             df_out.dropna(subset=dropna_subset, inplace=True)

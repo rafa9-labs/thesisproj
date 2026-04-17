@@ -101,8 +101,93 @@ def monthly_returns_chart(monthly_df: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         template="plotly_dark", height=300,
-        title="📅 Monthly Strategy Returns",
+        title="Monthly Strategy Returns",
         xaxis_title="Month #", yaxis_title="Return",
         margin=dict(l=60, r=30, t=50, b=30),
     )
+    return fig
+
+
+def equity_curve_with_events(
+    equity_curve: pd.Series,
+    events: list | None = None,
+    bh_curve: Optional[pd.Series] = None,
+    show_events: bool = True,
+) -> go.Figure:
+    """Equity curve with optional economic event markers.
+
+    Parameters
+    ----------
+    equity_curve : pd.Series
+        Strategy equity curve.
+    events : list[dict] or None
+        Economic events: ``[{"date": datetime|str, "event": str, "impact": int}, ...]``.
+    bh_curve : pd.Series or None
+        Buy-and-hold benchmark.
+    show_events : bool
+        Whether to overlay event markers.
+
+    Returns
+    -------
+    go.Figure
+    """
+    fig = equity_curve_chart(equity_curve, bh_curve)
+
+    if not show_events or not events:
+        return fig
+
+    if not isinstance(equity_curve.index, pd.DatetimeIndex):
+        try:
+            equity_index = pd.to_datetime(equity_curve.index)
+        except Exception:
+            return fig
+    else:
+        equity_index = equity_curve.index
+
+    impact_colors = {3: "#ff4444", 2: "#ffaa00", 1: "#44aaff"}
+    event_shown = set()
+
+    for ev in events:
+        ev_date = ev.get("date")
+        ev_name = ev.get("event", "Event")
+        ev_impact = ev.get("impact", 1)
+        if ev_date is None:
+            continue
+        try:
+            ts = pd.Timestamp(ev_date)
+        except Exception:
+            continue
+
+        if ts not in equity_index:
+            idx_near = equity_index.get_indexer([ts], method="nearest")
+            if idx_near[0] < 0:
+                continue
+            ts = equity_index[idx_near[0]]
+
+        if ts in event_shown:
+            continue
+        event_shown.add(ts)
+
+        color = impact_colors.get(ev_impact, "#888888")
+
+        fig.add_vline(
+            x=ts,
+            line_width=1,
+            line_dash="dot",
+            line_color=color,
+            opacity=0.7,
+        )
+
+    if event_shown:
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode="markers",
+            marker=dict(size=8, color="#ff4444", symbol="diamond"),
+            name="High-impact event",
+        ))
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode="markers",
+            marker=dict(size=8, color="#ffaa00", symbol="diamond"),
+            name="Medium-impact event",
+        ))
+
     return fig

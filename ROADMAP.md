@@ -225,40 +225,37 @@
 
 ---
 
-## Sprint 6: News & Sentiment Features ⬜ NOT STARTED
+## Sprint 6: News & Sentiment Features ✅ COMPLETE
 
 > **Goal**: News-derived features for smarter backtesting. Unique differentiator.
 > **Maps to**: Phase 10
 > **Est**: 6-8h
 
-- [ ] **S6.1** News scraper
-  - RSS feeds (Reuters, Bloomberg, FX-specific)
-  - NewsAPI integration
-  - Economic calendar (NFP, FOMC, CPI)
-  - Rate-limited, cached, deduplicated
-  - **Files**: new `news/scraper.py`
-  - **Est**: 2h
+- [x] **S6.1** News scraper ✅ DONE
+  - RSS feeds (Reuters, Bloomberg, ForexLive, Investing.com) via feedparser
+  - NewsAPI integration (optional, key from .env NEWSAPI_KEY)
+  - Economic calendar (NFP, FOMC, CPI, GDP, Retail_Sales, PMI, ECB_Rate, BOE_Rate)
+  - Rate-limited, cached to Parquet (news_cache/), deduplicated by title hash
+  - **Files**: `news/scraper.py`
 
-- [ ] **S6.2** Sentiment analysis
-  - finBERT integration for financial sentiment
-  - VADER for quick scoring
-  - Per-article sentiment score → daily/hourly aggregation
-  - **Files**: new `news/sentiment.py`
-  - **Est**: 2h
+- [x] **S6.2** Sentiment analysis ✅ DONE
+  - VADER (default, zero-dep): fast rule-based scoring, compound [-1, 1]
+  - finBERT (opt-in, via HuggingFace transformers): financial-domain BERT
+  - Per-article scoring → hourly/daily aggregation
+  - **Files**: `news/sentiment.py`
 
-- [ ] **S6.3** News-derived features in pipeline
-  - Sentiment score as input feature
-  - News volume as volatility proxy
-  - Event flags (pre-NFP, post-FOMC)
-  - Walk-forward safe (only past news used)
-  - **Files**: `pipeline/backtester/features_mixin.py`, `news/`
-  - **Est**: 2h
+- [x] **S6.3** News-derived features in pipeline ✅ DONE
+  - Sentiment score + magnitude as input features (float32)
+  - News volume rolling windows (configurable, default 6 and 24 bars)
+  - Event flags (NFP, FOMC, CPI proximity markers)
+  - Walk-forward safe (forward-fill only, no future data)
+  - Controlled by features_config toggles: use_news, news_event_flags, news_sentiment_backend
+  - **Files**: `news/features.py`, `pipeline/backtester/features_mixin.py`
 
-- [ ] **S6.4** News overlay on charts
-  - Mark major events on equity curve
-  - Event impact analysis
+- [x] **S6.4** News overlay on charts ✅ DONE
+  - Vertical event markers on equity curves (color-coded by impact level)
+  - Legend entries for high/medium impact events
   - **Files**: `ui/charts.py`
-  - **Est**: 1h
 
 ---
 

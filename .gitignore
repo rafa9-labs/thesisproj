@@ -41,3 +41,6 @@ test_gpu_wsl.sh
 # OS/IDE
 .vscode/
 .DS_Store
+
+# News article disk cache
+news_cache/
