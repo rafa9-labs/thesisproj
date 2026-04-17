@@ -40,14 +40,3 @@ echo "   CUDA libs: $(echo $CUDA_LIBS | tr ':' '\n' | wc -l) paths"
 echo "   XGBoost:   $GPU_STATUS"
 echo "   Project:   $PROJ"
 echo ""
-
-# ── Run command or drop into shell ──
-if [ $# -gt 0 ]; then
-    exec "$@"
-else
-    echo "Interactive shell with GPU support. Type 'exit' to leave."
-    echo "Quick tests:"
-    echo "  python test_gpu_wsl.py          # Verify GPU"
-    echo "  python -m streamlit run app.py  # Launch UI"
-    exec bash
-fi
