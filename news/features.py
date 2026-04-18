@@ -133,6 +133,8 @@ def _add_event_flags(
     if not isinstance(df.index, pd.DatetimeIndex):
         return df
 
+    df_tz = df.index.tz
+
     freq = pd.infer_freq(df.index)
     if freq is None:
         try:
@@ -170,6 +172,11 @@ def _add_event_flags(
                     continue
             elif isinstance(ev_date, datetime):
                 ev_date = pd.Timestamp(ev_date)
+
+            if df_tz is not None and ev_date.tz is None:
+                ev_date = ev_date.tz_localize(df_tz)
+            elif df_tz is None and ev_date.tz is not None:
+                ev_date = ev_date.tz_localize(None)
 
             start = ev_date - proximity_td
             end = ev_date + proximity_td

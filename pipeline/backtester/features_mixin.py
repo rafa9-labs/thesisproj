@@ -256,6 +256,7 @@ class FeaturesMixin:
         lag_depth = int(cfg.get("lag_depth", lag_depth if lag_depth is not None else 1))
 
         # ---------- 2) Base indicators ----------
+        price_col = cfg.get("price_col", "price")
         df = df.copy()
         for col in df.columns:
             if pd.api.types.is_float_dtype(df[col]):
@@ -689,11 +690,12 @@ class FeaturesMixin:
 
         for name, series in new_cols.items():
             df[name] = series
+        new_col_names = list(new_cols.keys())
         del new_cols
         df_out = df
 
         # ---------- 8) Finalize feature list, fill, dropna ----------
-        features: list[str] = [f for f in (list(new_cols.keys()) + base_features) if f in df_out.columns]
+        features: list[str] = [f for f in (new_col_names + base_features) if f in df_out.columns]
 
         if bool(cfg.get("use_regime_features", True)):
             for c in regime_cols:  # CLEANUP: single list
