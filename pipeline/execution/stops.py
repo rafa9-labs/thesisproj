@@ -146,6 +146,14 @@ def compute_stop_levels(
     levels = StopLevels()
     pv = config.pip_value
 
+    if pv <= 0 and m in (StopMethod.FIXED_PIPS,):
+        import logging
+        logging.getLogger(__name__).warning(
+            "pip_value=%.6f is non-positive — stop computation skipped to avoid "
+            "immediate stop-out at entry price", pv
+        )
+        return levels
+
     if m == StopMethod.NONE:
         return levels
 

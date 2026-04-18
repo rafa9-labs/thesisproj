@@ -254,6 +254,11 @@ def run_execution_loop(
     Bit-for-bit identical outputs are guaranteed.
     """
     n = len(df)
+    if n != len(pred) or n != len(rets) or n != len(bar_vol):
+        raise ValueError(
+            f"Array length mismatch: df={n}, pred={len(pred)}, "
+            f"rets={len(rets)}, bar_vol={len(bar_vol)}"
+        )
     _ctx = f" | ctx={cfg.eval_context}" if cfg.eval_context else ""
 
     # --- Output arrays ---
@@ -522,7 +527,7 @@ def run_execution_loop(
         if new_day:
             reset_daily_state()
             if risk_any_active:
-                _risk_reset_daily(risk_state)
+                _risk_reset_daily(risk_state, risk_cfg)
         # Also reset if we prefer to end cool-off / kill at new session boundary
         if kill_until_session_end and gap_from_prev_bool[i]:
             reset_daily_state()
@@ -595,7 +600,8 @@ def run_execution_loop(
                         active_stop_levels = None
                     if trailing_method != "none":
                         active_trailing_state = TrailingState()
-                        active_trailing_state.reset(trailing_cfg.chandelier_lookback)
+                        _entry_px = float(df["close"].iloc[i]) if "close" in df.columns else 0.0
+                        active_trailing_state.reset(trailing_cfg.chandelier_lookback, entry_price=_entry_px)
                     else:
                         active_trailing_state = None
                     pos_target = dirn * size_entry
@@ -732,15 +738,15 @@ def run_execution_loop(
                             _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
                             trade_pnl_accum = 0.0
                         in_pos = False
-                    dirn = 0.0
-                    size_entry = 0.0
-                    scaled_out = False
-                    pos_target = 0.0
-                    if use_twap:
-                        start_ramp(i, pos_target, prev_pos_actual)
-                    else:
-                        ramp_active = False
-                        ramp_dst = pos_target
+                        dirn = 0.0
+                        size_entry = 0.0
+                        scaled_out = False
+                        pos_target = 0.0
+                        if use_twap:
+                            start_ramp(i, pos_target, prev_pos_actual)
+                        else:
+                            ramp_active = False
+                            ramp_dst = pos_target
         else:
             # ---- Patch #1 / original path (no trailing) ----
             prev_sig = np.sign(pred[i-1]) if i > 0 else 0.0

@@ -98,10 +98,14 @@ class TrailingState:
     recent_highs: deque = field(default_factory=lambda: deque(maxlen=22))
     recent_lows: deque = field(default_factory=lambda: deque(maxlen=22))
 
-    def reset(self, lookback: int = 22) -> None:
+    def reset(self, lookback: int = 22, entry_price: float = 0.0) -> None:
         self.activated = False
-        self.high_water_mark = 0.0
-        self.low_water_mark = float("inf")
+        if entry_price > 0:
+            self.high_water_mark = entry_price
+            self.low_water_mark = entry_price
+        else:
+            self.high_water_mark = 0.0
+            self.low_water_mark = float("inf")
         self.recent_highs = deque(maxlen=lookback)
         self.recent_lows = deque(maxlen=lookback)
 

@@ -230,7 +230,9 @@ def check_daily_loss(
     if state.daily_paused:
         return False
 
-    if config.risk_daily_loss_mode == "sigma" and bar_vol > 0:
+    if config.risk_daily_loss_mode == "sigma":
+        if bar_vol <= 0:
+            return False
         day_sigma_est = bar_vol * (bars_per_day ** 0.5)
         loss_limit = config.risk_max_daily_loss_sigma * day_sigma_est
     else:
@@ -327,21 +329,35 @@ def tick_cooloffs(config: RiskConfig, state: RiskState) -> None:
         state.bars_paused += 1
 
 
-def reset_daily(state: RiskState) -> None:
+def reset_daily(state: RiskState, config: RiskConfig | None = None) -> None:
     """Reset daily PnL and session-based pauses for a new trading day.
 
     Called on each new calendar day or session gap.
     Only resets safeguards with ``"session_end"`` resume mode —
-    cooloff-based safeguards continue counting down.
+    cooloff-based safeguards continue counting down via :meth:`tick_cooloffs`.
 
     Parameters
     ----------
     state : RiskState
         Mutable risk state.
+    config : RiskConfig or None
+        If provided, used to check resume mode for each safeguard.
+        If None, all pauses are cleared (backward-compatible).
     """
     state.daily_pnl = 0.0
     state.daily_paused = False
-    state.dd_paused = False
-    state.consec_paused = False
-    state.dd_cooloff_remaining = 0
-    state.consec_cooloff_remaining = 0
+
+    if config is None:
+        state.dd_paused = False
+        state.consec_paused = False
+        state.dd_cooloff_remaining = 0
+        state.consec_cooloff_remaining = 0
+        return
+
+    if config.risk_dd_resume == "session_end":
+        state.dd_paused = False
+        state.dd_cooloff_remaining = 0
+
+    if config.risk_consec_resume == "session_end":
+        state.consec_paused = False
+        state.consec_cooloff_remaining = 0
