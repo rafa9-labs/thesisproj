@@ -1,0 +1,47 @@
+export function formatMetric(value: number | null | undefined, decimals = 2): string {
+  if (value == null) return "—";
+  return value.toFixed(decimals);
+}
+
+export function formatPercent(value: number | null | undefined, decimals = 1): string {
+  if (value == null) return "—";
+  const pct = value * 100;
+  const sign = pct >= 0 ? "+" : "";
+  return `${sign}${pct.toFixed(decimals)}%`;
+}
+
+export function formatPrice(value: number | null | undefined, decimals = 5): string {
+  if (value == null) return "—";
+  return value.toFixed(decimals);
+}
+
+export function formatPips(value: number | null | undefined): string {
+  if (value == null) return "—";
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)} pips`;
+}
+
+export function formatInt(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return value.toLocaleString();
+}
+
+export function formatRelativeTime(isoDate: string | null | undefined): string {
+  if (!isoDate) return "—";
+  const date = new Date(isoDate);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
+export function colorForReturn(value: number | null | undefined): string {
+  if (value == null) return "var(--color-text-muted)";
+  return value >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)";
+}
