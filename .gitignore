@@ -5,6 +5,7 @@ __pycache__/
 
 # Secrets
 .env
+oanda.cfg
 *.key
 
 # Temp
@@ -16,7 +17,30 @@ joblib_tmp/
 results/
 optuna_runs/
 artifacts/
+.feature_cache/
+
+# Database
+data/*.db
+
+# Smoke test outputs
+smoke_output*.txt
+test_results/
+
+# Archived/deprecated scripts (audit/surgery tools)
+_archive/
+*.py._archived
+
+# Virtual environments
+.venv/
+.venv-wsl/
+
+# GPU test helpers (not needed in repo)
+test_gpu_wsl.py
+test_gpu_wsl.sh
 
 # OS/IDE
 .vscode/
 .DS_Store
+
+# News article disk cache
+news_cache/

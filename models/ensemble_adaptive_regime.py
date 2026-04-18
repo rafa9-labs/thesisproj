@@ -648,7 +648,15 @@ class AdaptiveRegimeStrategy:
                 if CalibratedClassifierCV is not None:
                     # Keep your original heuristic: isotonic only if big enough
                     method = "isotonic" if len(idx_val) > 5000 else "sigmoid"
-                    rf_cal = CalibratedClassifierCV(self.rf, cv="prefit", method=method)
+                    try:
+                        # scikit-learn >= 1.6: use FrozenEstimator instead of cv="prefit"
+                        from sklearn.frozen import FrozenEstimator
+                        rf_cal = CalibratedClassifierCV(
+                            FrozenEstimator(self.rf), cv=5, method=method
+                        )
+                    except ImportError:
+                        # scikit-learn < 1.6: cv="prefit" still works
+                        rf_cal = CalibratedClassifierCV(self.rf, cv="prefit", method=method)
                     rf_cal.fit(X_scaled[idx_val], y_arr[idx_val])
                     self.rf = rf_cal
                 else:

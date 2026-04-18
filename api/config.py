@@ -1,0 +1,40 @@
+"""FastAPI application configuration."""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    model_config = {"env_file": ".env", "env_prefix": "API_", "extra": "ignore"}
+
+    app_name: str = "FX ML Pipeline API"
+    version: str = "1.0.0"
+    debug: bool = False
+
+    host: str = "127.0.0.1"
+    port: int = 8000
+
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_result_backend: str = "redis://localhost:6379/1"
+
+    db_path: str = "data/forex.db"
+    csv_data_dir: str = "csv_data"
+    results_dir: str = "results"
+
+    project_root: str = str(Path(__file__).resolve().parent.parent)
+
+    model_check_interval: float = 2.0
+    max_concurrent_backtests: int = 2
+
+    @property
+    def db_full_path(self) -> str:
+        if os.path.isabs(self.db_path):
+            return self.db_path
+        return os.path.join(self.project_root, self.db_path)
+
+
+settings = Settings()
