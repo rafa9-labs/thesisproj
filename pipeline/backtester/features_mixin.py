@@ -674,7 +674,10 @@ class FeaturesMixin:
 
         # ---------- 7) Hour ----------
         if cfg.get("include_hour", True):
-            new_cols["hour"] = df.index.hour
+            try:
+                new_cols["hour"] = df.index.hour
+            except AttributeError:
+                pass
 
         if cfg.get("include_hour_cyclic", True):
             try:
@@ -740,6 +743,15 @@ class FeaturesMixin:
             if debug:
                 print("⚠️ No valid features for dropna_subset, running full dropna().")
             df_out.dropna(inplace=True)
+
+        if len(df_out) == 0:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "prepare_features: DataFrame empty after dropna — "
+                "returning early with no features (possible data issue)"
+            )
+            self._last_used_features = []
+            return df_out, []
 
         # Deduplicate columns if any
         if df_out.columns.duplicated().any():

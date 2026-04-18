@@ -374,7 +374,7 @@ class NewsScraper:
             logger.debug("Loaded %d cached articles from %s", len(articles), path)
             return articles
         except Exception as exc:
-            logger.debug("Cache load failed: %s", exc)
+            logger.warning("Cache load failed for %s: %s", path, exc)
             return []
 
     def fetch_all(

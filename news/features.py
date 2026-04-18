@@ -176,7 +176,7 @@ def _add_event_flags(
             if df_tz is not None and ev_date.tz is None:
                 ev_date = ev_date.tz_localize(df_tz)
             elif df_tz is None and ev_date.tz is not None:
-                ev_date = ev_date.tz_localize(None)
+                ev_date = ev_date.tz_convert("UTC").tz_localize(None)
 
             start = ev_date - proximity_td
             end = ev_date + proximity_td
