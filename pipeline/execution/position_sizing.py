@@ -135,6 +135,9 @@ def compute_size(
     """
     m = config.method
 
+    if state.equity <= 0:
+        return 0.0
+
     if m == SizingMethod.FIXED:
         return 1.0
 
@@ -169,7 +172,6 @@ def update_state(
     is_win : bool
         ``True`` if the trade was profitable.
     """
-    state.equity += trade_pnl
     state.trade_count += 1
     if is_win:
         state.win_count += 1
@@ -189,6 +191,8 @@ def _fixed_fractional(state: SizingState, config: SizingConfig) -> float:
 
 
 def _kelly(state: SizingState, config: SizingConfig) -> float:
+    if state.equity <= 0:
+        return 0.0
     if state.trade_count < config.kelly_min_trades:
         return _fixed_fractional(state, config)
 
@@ -206,8 +210,8 @@ def _kelly(state: SizingState, config: SizingConfig) -> float:
 
     kelly_f = (p * b - q) / max(b, 1e-8)
     kelly_f = max(0.0, kelly_f)
-
-    return config.kelly_fraction * kelly_f
+    equity_ratio = state.equity / max(config.initial_equity, 1e-8)
+    return config.kelly_fraction * kelly_f * min(equity_ratio, 1.0)
 
 
 def _atr_sizing(state: SizingState, atr: float, config: SizingConfig) -> float:
