@@ -113,3 +113,45 @@ export function useDeleteJob() {
     },
   });
 }
+
+export function useConfig() {
+  return useQuery({
+    queryKey: ["config"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ settings: Record<string, unknown> }>("/config");
+      return data.settings;
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function useSaveConfig() {
+  return useMutation({
+    mutationFn: async (settings: Record<string, unknown>) => {
+      await apiClient.put("/config", { settings });
+    },
+  });
+}
+
+export interface NewsStatus {
+  sentiment_backend: string;
+  cached_articles: number;
+  event_types: string[];
+  features: {
+    vader_compound: boolean;
+    event_flags: boolean;
+    news_volume_windows: number[];
+  };
+  finbert_available: boolean;
+}
+
+export function useNewsStatus() {
+  return useQuery({
+    queryKey: ["news-status"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<NewsStatus>("/news/status");
+      return data;
+    },
+    staleTime: 60_000,
+  });
+}

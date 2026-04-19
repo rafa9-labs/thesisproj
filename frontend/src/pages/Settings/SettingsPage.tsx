@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Settings as SettingsIcon,
   Cpu,
@@ -10,6 +10,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
+import { useConfig, useSaveConfig } from "@/api/queries";
 
 interface SectionProps {
   icon: React.ReactNode;
@@ -87,6 +88,23 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 export function SettingsPage() {
   const store = useSettingsStore();
+  const { data: remoteConfig } = useConfig();
+  const saveConfig = useSaveConfig();
+  const synced = useRef(false);
+
+  useEffect(() => {
+    if (remoteConfig && !synced.current) {
+      synced.current = true;
+      if (remoteConfig.threadBudget != null) store.setField("threadBudget", remoteConfig.threadBudget as number);
+      if (remoteConfig.mixedPrecision != null) store.setField("mixedPrecision", remoteConfig.mixedPrecision as boolean);
+      if (remoteConfig.verboseMode != null) store.setField("verboseMode", remoteConfig.verboseMode as boolean);
+      if (remoteConfig.apiUrl != null) store.setField("apiUrl", remoteConfig.apiUrl as string);
+    }
+  }, [remoteConfig]);
+
+  const syncToBackend = (key: string, value: unknown) => {
+    saveConfig.mutate({ [key]: value, ...store });
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -226,6 +244,7 @@ export function SettingsPage() {
               store.setField("threadBudget", 4);
               store.setField("mixedPrecision", true);
               store.setField("apiUrl", "http://localhost:8000");
+              syncToBackend("reset", true);
             }}
             className="mt-2 self-start rounded-md border px-3 py-1.5 text-xs font-bold uppercase"
             style={{

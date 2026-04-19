@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import { createChart, type IChartApi, ColorType, LineSeries, HistogramSeries } from "lightweight-charts";
 
 interface EquityCurveChartProps {
@@ -8,14 +8,31 @@ interface EquityCurveChartProps {
   height?: number;
 }
 
-export function EquityCurveChart({
-  data,
-  buyHoldData,
-  drawdownData,
-  height = 480,
-}: EquityCurveChartProps) {
+export interface EquityCurveChartHandle {
+  takeScreenshot: () => void;
+}
+
+export const EquityCurveChart = forwardRef<EquityCurveChartHandle, EquityCurveChartProps>(function EquityCurveChart(
+  { data, buyHoldData, drawdownData, height = 480 },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    takeScreenshot: () => {
+      if (containerRef.current) {
+        const canvas = containerRef.current.querySelector("canvas");
+        if (canvas) {
+          const url = canvas.toDataURL("image/png");
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "equity_curve.png";
+          a.click();
+        }
+      }
+    },
+  }));
 
   useEffect(() => {
     if (!containerRef.current || data.length === 0) return;
@@ -117,4 +134,4 @@ export function EquityCurveChart({
       <div ref={containerRef} />
     </div>
   );
-}
+});

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.config import settings
-from api.routers import backtest, data, health, models, pairs, ws
+from api.routers import backtest, config, data, health, models, news, pairs, ws
 
 
 @asynccontextmanager
@@ -41,6 +41,8 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(pairs.router, prefix="/api/v1")
 app.include_router(models.router, prefix="/api/v1")
+app.include_router(news.router, prefix="/api/v1")
 app.include_router(backtest.router, prefix="/api/v1")
+app.include_router(config.router, prefix="/api/v1")
 app.include_router(data.router, prefix="/api/v1")
 app.include_router(ws.router, prefix="/api/v1")

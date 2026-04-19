@@ -10,6 +10,8 @@ import {
 import { useState } from "react";
 import { layout } from "@/lib/tokens";
 import { TerminalPanel } from "./TerminalPanel";
+import { useHealth } from "@/api/queries";
+import { wsManager } from "@/api/websocket";
 
 const navItems = [
   { icon: LayoutDashboard, label: "DASHBOARD", path: "/" },
@@ -24,7 +26,16 @@ export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(true);
+  const [wsConnected, setWsConnected] = useState(false);
+  const { data: health } = useHealth();
   const sidebarWidth = collapsed ? layout.sidebarCollapsed : layout.sidebarExpanded;
+
+  useState(() => {
+    const interval = setInterval(() => {
+      setWsConnected(wsManager.connected);
+    }, 3000);
+    return () => clearInterval(interval);
+  });
 
   return (
     <div className="flex h-full w-full flex-col" style={{ backgroundColor: "var(--color-app)" }}>
@@ -85,8 +96,8 @@ export function AppShell() {
               </h1>
             </div>
             <div className="flex items-center gap-4">
-              <StatusDot color="var(--color-accent-success)" label="Backend" />
-              <StatusDot color="var(--color-text-muted)" label="WS" />
+              <StatusDot color={health?.status === "ok" ? "var(--color-accent-success)" : "var(--color-accent-danger)}"} label="Backend" pulse={health?.status === "ok"} />
+              <StatusDot color={wsConnected ? "var(--color-accent-success)" : "var(--color-text-muted)"} label="WS" />
             </div>
           </header>
 
@@ -116,13 +127,21 @@ export function AppShell() {
   );
 }
 
-function StatusDot({ color, label }: { color: string; label: string }) {
+function StatusDot({ color, label, pulse }: { color: string; label: string; pulse?: boolean }) {
   return (
     <div className="flex items-center gap-1.5">
-      <div
-        className="h-2 w-2 rounded-full"
-        style={{ backgroundColor: color }}
-      />
+      <div className="relative">
+        <div
+          className="h-2 w-2 rounded-full"
+          style={{ backgroundColor: color }}
+        />
+        {pulse && (
+          <div
+            className="absolute inset-0 animate-ping rounded-full"
+            style={{ backgroundColor: color, opacity: 0.3 }}
+          />
+        )}
+      </div>
       <span className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
         {label}
       </span>
