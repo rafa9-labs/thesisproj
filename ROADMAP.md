@@ -1,7 +1,7 @@
 # FX ML Backtester — Product Roadmap
 
-> **Last Updated**: 2026-04-17
-> **Branch**: `feature/sprint2-execution-models`
+> **Last Updated**: 2026-04-19
+> **Branch**: `main`
 > **Revenue Target**: £500–2K/month within 3 months of launch
 > **Philosophy**: Optimize → Feature Parity → Polish → Secure → Deploy → Scale → Enrich → Automate
 
@@ -298,13 +298,13 @@
 
 ---
 
-## Sprint 8: React Frontend ⬜ NOT STARTED
+## Sprint 8: React Frontend 🔄 IN PROGRESS (~M4 scaffold done)
 
 > **Goal**: Professional desktop-grade React UI that replaces Streamlit as the user-facing product.
 > **Architecture**: Vite + TypeScript + React 18 + TailwindCSS + shadcn/ui
 > **Est**: 20-25h
 
-- [ ] **S8.1** React project scaffold
+- [x] **S8.1** React project scaffold ✅ DONE (commit `42a1629`, `8d46875`)
   - Vite + TypeScript + React 18
   - TailwindCSS + shadcn/ui component library
   - React Router for multi-page navigation
@@ -312,19 +312,19 @@
   - **Files**: `frontend/` package
   - **Est**: 2h
 
-- [ ] **S8.2** Layout shell & navigation
+- [x] **S8.2** Layout shell & navigation ✅ DONE (commit `8d46875`)
   - Sidebar nav (dashboard, backtest, results, compare, settings)
   - Dark/light mode toggle with system preference detection
   - Responsive layout (works in Electron window 1280x800+)
   - System tray integration stub
-  - **Files**: `frontend/src/layout/`
+  - **Files**: `frontend/src/layout/`, `frontend/src/components/layout/AppShell.tsx`, `TerminalPanel.tsx`
   - **Est**: 2h
 
-- [ ] **S8.3** Dashboard page
+- [x] **S8.3** Dashboard page ✅ DONE (commit `8d46875`)
   - KPI cards (total backtests, best Sharpe, avg win rate, equity curve thumbnail)
   - Recent backtests table with quick actions
   - Model performance heatmap (model x pair Sharpe grid)
-  - **Files**: `frontend/src/pages/Dashboard/`
+  - **Files**: `frontend/src/pages/Dashboard/` (DashboardPage, DashboardKPIs, RecentJobsTable)
   - **Est**: 3h
 
 - [ ] **S8.4** Backtest configuration page
@@ -346,12 +346,12 @@
   - **Files**: `frontend/src/pages/Results/`
   - **Est**: 5h
 
-- [ ] **S8.6** Model comparison page
+- [x] **S8.6** Model comparison page ✅ DONE (commit `8d46875`)
   - Side-by-side equity curve overlay
   - Leaderboard table (sortable by any metric)
   - Paired t-test significance indicators
   - Parameter sensitivity chart
-  - **Files**: `frontend/src/pages/Compare/`
+  - **Files**: `frontend/src/pages/Compare/` (ComparePage, EquityOverlayChart, LeaderboardTable, SignificanceMatrix)
   - **Est**: 3h
 
 - [ ] **S8.7** Settings page
@@ -362,39 +362,39 @@
   - **Files**: `frontend/src/pages/Settings/`
   - **Est**: 2h
 
-- [ ] **S8.8** Error handling & loading states
+- [x] **S8.8** Error handling & loading states ✅ DONE (commit `8d46875`)
   - Global error boundary with user-friendly messages
   - Loading skeletons for all data-fetching components
   - Toast notifications for success/error/warning
   - Retry logic for failed API calls
-  - **Files**: `frontend/src/components/ErrorBoundary/`, `frontend/src/hooks/`
+  - **Files**: `frontend/src/components/shared/ErrorBoundary.tsx`, `frontend/src/hooks/`
   - **Est**: 2h
 
 ---
 
-## Sprint 9: Electron Desktop Shell ⬜ NOT STARTED
+## Sprint 9: Electron Desktop Shell 🔄 SCAFFOLDED (core files created, not integrated)
 
 > **Goal**: Wrap React + FastAPI into a native-feeling desktop application.
 > **Architecture**: Electron main process + Python subprocess + React BrowserWindow
 > **Est**: 10-12h
 
-- [ ] **S9.1** Electron scaffold
+- [x] **S9.1** Electron scaffold ✅ DONE (commit `8d46875`)
   - `electron/` directory with main process
   - BrowserWindow config (min size 1280x800, frameless option)
   - Dev vs production mode detection
-  - **Files**: `electron/main.ts`, `electron/preload.ts`
+  - **Files**: `electron/main.ts`, `electron/preload.ts`, `electron/tsconfig.json`
   - **Est**: 2h
 
-- [ ] **S9.2** Python backend lifecycle management
+- [x] **S9.2** Python backend lifecycle management ✅ DONE (commit `8d46875`)
   - Spawn FastAPI subprocess from Electron main process
   - Port discovery (find available localhost port)
   - Health check polling until backend is ready
   - Graceful shutdown (SIGTERM → wait → SIGKILL)
   - Log forwarding from Python to Electron console
-  - **Files**: `electron/python.ts`
+  - **Files**: `electron/python.ts`, `electron/health.ts`
   - **Est**: 3h
 
-- [ ] **S9.3** Native menus & system tray
+- [x] **S9.3** Native menus & system tray ✅ DONE (commit `8d46875`)
   - Application menu (File, Edit, View, Backtest, Help)
   - System tray icon with status (running, backtesting, error)
   - Tray context menu (show window, run backtest, quit)
@@ -661,8 +661,8 @@ wsl -d Ubuntu-22.04 -- bash /mnt/c/Users/rafa/ML_Trading/thesisproj/run_wsl.sh \
 | **S5** | Comprehensive Tests + Benchmarks | 4-6h | TODO |
 | **S6** | News & Sentiment Features | 6-8h | TODO |
 | **S7** | FastAPI Backend | 8-10h | DONE |
-| **S8** | React Frontend | 20-25h | TODO |
-| **S9** | Electron Desktop Shell | 10-12h | TODO |
+| **S8** | React Frontend | 20-25h | IN PROGRESS (S8.1-3, 8.6, 8.8 done; S8.4-5, 8.7 remaining) |
+| **S9** | Electron Desktop Shell | 10-12h | SCAFFOLDED (S9.1-3 done; S9.4-5 remaining) |
 | **S10** | Security & Licensing (Paddle) | 12-15h | TODO |
 | **S11** | Installer & Auto-Update | 6-8h | TODO |
 | **S12** | Commercial Infrastructure | 8-10h | TODO |
@@ -674,10 +674,10 @@ wsl -d Ubuntu-22.04 -- bash /mnt/c/Users/rafa/ML_Trading/thesisproj/run_wsl.sh \
 |--------|---------------|
 | S1-S2 | Execution models complete, all sizing/stop/risk models work |
 | S3-S4 | Multi-currency supported, Docker builds pass, CI green |
-| S5-S6 | 200+ tests, >80% coverage, news features integrated |
-| S7 | FastAPI serves all pipeline operations via REST + WebSocket |
-| S8 | React UI replaces Streamlit for all user interactions |
-| S9 | Electron wraps React + Python into desktop app |
+| S5-S6 | 200+ tests, >80% coverage, news features integrated | ✅ S6 done; S5 deferred — 436 tests via Sprint A/B
+| S7 | FastAPI serves all pipeline operations via REST + WebSocket | ✅ DONE
+| S8 | React UI replaces Streamlit for all user interactions | 🔄 S8.1-3, 8.6, 8.8 done; S8.4-5, 8.7 remaining |
+| S9 | Electron wraps React + Python into desktop app | 🔄 S9.1-3 scaffolded; S9.4-5 remaining |
 | S10 | Code protected, Paddle licensing active, feature gating works |
 | S11 | Windows installer + auto-update functional |
 | S12 | Product listed on Paddle, landing page live, docs published |

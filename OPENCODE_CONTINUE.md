@@ -1,9 +1,9 @@
 # OpenCode Continuation Prompt
 
 > **Context for**: Starting a new opencode session to continue implementation
-> **Date**: 2026-04-17
-> **Branch**: `feature/sprint2-execution-models`
-> **Last commit**: `9dfd10e` — housekeeping: API tests + run_wsl.sh cleanup
+> **Date**: 2026-04-19
+> **Branch**: `main`
+> **Last commit**: `8d46875` — feat(S8/S9): React frontend pages + components + Electron shell scaffold
 
 ---
 
@@ -22,8 +22,12 @@ A **Forex ML Backtesting Pipeline** — a commercial-grade walk-forward FX backt
   - S2.2: Stop-loss/take-profit — `pipeline/execution/stops.py`
   - S2.3: Trailing stops (fixed, ATR, Chandelier) — `pipeline/execution/trailing.py`
   - S2.4: Risk management framework — `pipeline/execution/risk_manager.py`
+  - S2.5: Integration into execution_patches — **REMAINING**
+- **Sprint A**: 9 execution engine bug fixes + 24 regression tests (commit `c4be08a`)
+- **Sprint B**: Data/feature robustness — tz crash, empty df guard, hour guard, cache logging + 8 tests (commit `a998756`)
 - **Sprint 3**: Multi-Currency Expansion — 6 pairs, data downloader, pair config, pipeline wiring
 - **Sprint 4**: RAM optimization — float32 everywhere, clear caches, eliminate redundant copies
+- **Sprint 6**: News & Sentiment Features — RSS scraper, VADER/finBERT, event flags, 44 tests
 - **Sprint 7**: FastAPI Backend — COMPLETE
   - `api/` package: FastAPI app with CORS, lifespan, health check
   - 5 routers: health, pairs, models, backtest, data, WebSocket
@@ -33,7 +37,20 @@ A **Forex ML Backtesting Pipeline** — a commercial-grade walk-forward FX backt
   - WebSocket progress via Redis pub/sub
   - `pipeline/data_sqlite.py`: DataStore with WAL mode, batched inserts
   - `pipeline/data_migrator.py`: CSV→SQLite migration
-  - 26 API tests, 320 total tests passing
+- **Sprint 8**: React Frontend — IN PROGRESS (M4 scaffold)
+  - S8.1: Vite + TS + React 18 + TailwindCSS + shadcn/ui + React Router ✅
+  - S8.2: Layout shell (AppShell, TerminalPanel, dark/light mode) ✅
+  - S8.3: Dashboard page (KPIs, recent jobs table) ✅
+  - S8.6: Compare page (equity overlay, leaderboard, significance matrix) ✅
+  - S8.8: ErrorBoundary + shared components ✅
+  - 5 frontend tests (dashboard-kpis, formatters, job-store, schemas, settings-store)
+  - **Remaining**: S8.4 (Backtest config page), S8.5 (Results & charts), S8.7 (Settings page)
+- **Sprint 9**: Electron Desktop Shell — SCAFFOLDED
+  - S9.1: Electron scaffold (main.ts, preload.ts, tsconfig) ✅
+  - S9.2: Python backend lifecycle (python.ts, health.ts) ✅
+  - S9.3: Native menus & tray (menu.ts, tray.ts) ✅
+  - **Remaining**: S9.4 (PyInstaller integration), S9.5 (Electron build pipeline)
+- **Test suite**: 436 tests all green (441 with frontend tests)
 
 ## What's Next
 
@@ -48,8 +65,8 @@ Remaining sprints in order of priority:
 | **S5** | Comprehensive Tests + Benchmarks | 4-6h | ⬜ TODO |
 | **S6** | News & Sentiment Features | 6-8h | ⬜ TODO |
 | **S7** | FastAPI Backend | 8-10h | ✅ DONE |
-| **S8** | React Frontend | 20-25h | ⬜ TODO |
-| **S9** | Electron Desktop Shell | 10-12h | ⬜ TODO |
+| **S8** | React Frontend | 20-25h | 🔄 IN PROGRESS (S8.1-3, 8.6, 8.8 done) |
+| **S9** | Electron Desktop Shell | 10-12h | 🔄 SCAFFOLDED (S9.1-3 done) |
 | **S10** | Security & Licensing (Paddle) | 12-15h | ⬜ TODO |
 | **S11** | Installer & Auto-Update | 6-8h | ⬜ TODO |
 | **S12** | Commercial Infrastructure | 8-10h | ⬜ TODO |
@@ -70,6 +87,8 @@ Read these first to understand the codebase:
 6. **`api/services/`** — JobManager with SQLite-backed job tracking
 7. **`pipeline/execution/`** — Execution models (position_sizing, stops, trailing, risk_manager)
 8. **`config.py`** — Global config with `ExecutionConfig`
+9. **`frontend/src/`** — React frontend (pages, components, hooks, stores, api client)
+10. **`electron/`** — Electron shell (main, preload, python, tray, menu, health)
 
 ## Important Rules
 
