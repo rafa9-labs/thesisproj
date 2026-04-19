@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { layout } from "@/lib/tokens";
+import { TerminalPanel } from "./TerminalPanel";
 
 const navItems = [
   { icon: LayoutDashboard, label: "DASHBOARD", path: "/" },
@@ -92,6 +93,8 @@ export function AppShell() {
           <div className="flex-1 overflow-y-auto p-6" style={{ backgroundColor: "var(--color-app)" }}>
             <Outlet />
           </div>
+
+          <TerminalPanel />
 
           <footer
             className="flex items-center justify-between border-t px-4"

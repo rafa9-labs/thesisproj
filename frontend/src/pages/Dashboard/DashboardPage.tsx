@@ -1,10 +1,78 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { BarChart3, TrendingUp, Activity, Trophy } from "lucide-react";
 import { MetricCard } from "@/components/shared/MetricCard";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { BarChart3, TrendingUp, Activity, Trophy } from "lucide-react";
+import { useJobHistory } from "@/api/queries";
+import apiClient from "@/api/client";
+import type { JobResults } from "@/api/schemas";
+import { formatMetric, formatPercent } from "@/lib/formatters";
+import { useDashboardKPIs } from "./DashboardKPIs";
+import { RecentJobsTable } from "./RecentJobsTable";
+
+function DashboardSkeleton() {
+  return (
+    <div className="flex flex-col gap-6 animate-pulse">
+      <div className="grid grid-cols-4 gap-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="h-24 rounded-lg" style={{ backgroundColor: "var(--color-surface)" }} />
+        ))}
+      </div>
+      <div className="h-[300px] rounded-lg" style={{ backgroundColor: "var(--color-surface)" }} />
+    </div>
+  );
+}
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { data: jobs, isLoading: jobsLoading } = useJobHistory(50);
+
+  const completedJobs = useMemo(
+    () => (jobs ?? []).filter((j) => j.status === "completed").slice(0, 10),
+    [jobs],
+  );
+
+  const completedIds = useMemo(
+    () => completedJobs.map((j) => j.job_id),
+    [completedJobs],
+  );
+
+  const allResults = useQuery({
+    queryKey: ["dashboard-aggregate", completedIds],
+    queryFn: async (): Promise<JobResults[]> => {
+      const results = await Promise.allSettled(
+        completedIds.map((id) =>
+          apiClient.get<JobResults>(`/backtest/${id}/results`).then((r) => r.data),
+        ),
+      );
+      const successful: JobResults[] = [];
+      for (const r of results) {
+        if (r.status === "fulfilled") successful.push(r.value);
+      }
+      return successful;
+    },
+    enabled: completedIds.length > 0,
+    staleTime: 60_000,
+  });
+
+  const kpis = useDashboardKPIs(allResults.data ?? []);
+
+  if (jobsLoading) {
+    return (
+      <div className="flex flex-col gap-6">
+        <h2
+          className="text-base font-semibold uppercase tracking-[0.1em]"
+          style={{ color: "var(--color-text-secondary)" }}
+        >
+          Dashboard
+        </h2>
+        <DashboardSkeleton />
+      </div>
+    );
+  }
+
+  const hasCompleted = completedJobs.length > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -16,18 +84,37 @@ export function DashboardPage() {
       </h2>
 
       <div className="grid grid-cols-4 gap-4">
-        <MetricCard label="Total Runs" value="—" icon={<BarChart3 size={16} />} />
-        <MetricCard label="Best Sharpe" value="—" icon={<Trophy size={16} />} />
-        <MetricCard label="Avg Win Rate" value="—" icon={<Activity size={16} />} />
-        <MetricCard label="Best Return" value="—" icon={<TrendingUp size={16} />} />
+        <MetricCard label="Total Runs" value={kpis.totalRuns} icon={<BarChart3 size={16} />} />
+        <MetricCard
+          label="Best Sharpe"
+          value={formatMetric(kpis.bestSharpe)}
+          icon={<Trophy size={16} />}
+          delta={kpis.bestSharpe !== null ? (kpis.bestSharpe >= 1 ? "Excellent" : kpis.bestSharpe >= 0.5 ? "Good" : "Weak") : null}
+          deltaType={(kpis.bestSharpe ?? 0) >= 1 ? "positive" : "neutral"}
+        />
+        <MetricCard
+          label="Avg Win Rate"
+          value={formatPercent(kpis.avgWinRate, 1)}
+          icon={<Activity size={16} />}
+        />
+        <MetricCard
+          label="Best Return"
+          value={formatPercent(kpis.bestReturn)}
+          icon={<TrendingUp size={16} />}
+          deltaType={(kpis.bestReturn ?? 0) >= 0 ? "positive" : "negative"}
+        />
       </div>
 
-      <EmptyState
-        title="No backtests yet"
-        description="Run your first backtest to see performance data, model comparisons, and historical results here."
-        actionLabel="Run First Backtest"
-        onAction={() => navigate("/backtest")}
-      />
+      <RecentJobsTable jobs={completedJobs.slice(0, 10)} />
+
+      {!hasCompleted && (
+        <EmptyState
+          title="No backtests yet"
+          description="Run your first backtest to see performance data, model comparisons, and historical results here."
+          actionLabel="Run First Backtest"
+          onAction={() => navigate("/backtest")}
+        />
+      )}
     </div>
   );
 }

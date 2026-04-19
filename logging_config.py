@@ -46,6 +46,27 @@ def _resolve_level() -> int:
 # ---------------------------------------------------------------------------
 # Custom formatter
 # ---------------------------------------------------------------------------
+class _SafeStreamHandler(logging.StreamHandler):
+    """StreamHandler that survives Unicode encoding errors on Windows cp1252."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            super().emit(record)
+        except UnicodeEncodeError:
+            msg = self.format(record)
+            try:
+                msg = msg.encode(self.stream.encoding or "utf-8", errors="replace").decode(
+                    self.stream.encoding or "utf-8", errors="replace"
+                )
+            except Exception:
+                msg = msg.encode("ascii", errors="replace").decode("ascii")
+            try:
+                self.stream.write(msg + self.terminator)
+                self.flush()
+            except Exception:
+                pass
+
+
 class _CompactFormatter(logging.Formatter):
     """
     Compact format:  [LEVEL] message
@@ -83,7 +104,7 @@ def _ensure_root_configured() -> None:
 
     # Only add handler if none exist (prevents duplicate handlers in notebooks)
     if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
+        handler = _SafeStreamHandler(sys.stdout)
         handler.setLevel(level)
         handler.setFormatter(_CompactFormatter())
         logger.addHandler(handler)
@@ -135,7 +156,11 @@ def log_print(msg: str, level: str = "COMPACT") -> None:
     _ensure_root_configured()
     logger = logging.getLogger("mlbacktester")
     py_level = _level_map.get(level.upper().strip(), logging.INFO)
-    logger.log(py_level, msg)
+    try:
+        logger.log(py_level, msg)
+    except UnicodeEncodeError:
+        safe_msg = msg.encode("ascii", errors="replace").decode("ascii")
+        logger.log(py_level, safe_msg)
 
 
 # ---------------------------------------------------------------------------

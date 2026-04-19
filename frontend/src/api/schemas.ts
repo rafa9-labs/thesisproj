@@ -136,7 +136,7 @@ export type WsEvent =
   | { event: "job_started"; job_id: string; pair: string; models: string[] }
   | { event: "model_training"; job_id: string; model: string; status: "starting" }
   | { event: "model_training"; job_id: string; model: string; status: "complete"; metrics: Partial<Metrics> }
-  | { event: "job_complete"; job_id: string; metrics: Metrics[] }
+  | { event: "job_complete"; job_id: string; metrics: Partial<Metrics>[] }
   | { event: "job_failed"; job_id: string; error: string }
   | { event: "download_started"; job_id: string; pair: string }
   | { event: "download_complete"; job_id: string; pair: string }

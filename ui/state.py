@@ -16,12 +16,22 @@ from copy import deepcopy
 from pathlib import Path
 
 from config import Settings, get_settings, apply_global_env
-from models.registry import MODEL_REGISTRY
 
 logger = logging.getLogger(__name__)
 
-# Available models for UI (from registry)
-AVAILABLE_MODELS = sorted(MODEL_REGISTRY.keys())
+AVAILABLE_MODELS = [
+    "cnn",
+    "decision_tree",
+    "dqn",
+    "ensemble_adaptive_regime",
+    "ensemble_cnn_lstm_xgboost",
+    "logistic",
+    "lstm",
+    "random_forest",
+    "svm",
+    "transformer",
+    "xgboost",
+]
 
 # CSV data files available
 DATA_FILES = {

@@ -1,11 +1,40 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { DashboardPage } from "./pages/Dashboard/DashboardPage";
 import { BacktestPage } from "./pages/Backtest/BacktestPage";
-import { ResultsPage } from "./pages/Results/ResultsPage";
-import { ComparePage } from "./pages/Compare/ComparePage";
-import { NewsPage } from "./pages/News/NewsPage";
-import { SettingsPage } from "./pages/Settings/SettingsPage";
+
+const ResultsPage = lazy(() =>
+  import("./pages/Results/ResultsPage").then((m) => ({ default: m.ResultsPage })),
+);
+const ComparePage = lazy(() =>
+  import("./pages/Compare/ComparePage").then((m) => ({ default: m.ComparePage })),
+);
+const NewsPage = lazy(() =>
+  import("./pages/News/NewsPage").then((m) => ({ default: m.NewsPage })),
+);
+const SettingsPage = lazy(() =>
+  import("./pages/Settings/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
+
+function PageSpinner() {
+  return (
+    <div
+      className="flex h-full items-center justify-center"
+      style={{ backgroundColor: "var(--color-app)" }}
+    >
+      <div className="flex flex-col items-center gap-3">
+        <div
+          className="h-6 w-6 animate-spin rounded-full border-2"
+          style={{ borderColor: "var(--color-border)", borderTopColor: "var(--color-accent)" }}
+        />
+        <span className="text-xs" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+          Loading…
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   return (
@@ -13,11 +42,26 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route index element={<DashboardPage />} />
         <Route path="backtest" element={<BacktestPage />} />
-        <Route path="results" element={<ResultsPage />} />
-        <Route path="results/:jobId" element={<ResultsPage />} />
-        <Route path="compare" element={<ComparePage />} />
-        <Route path="news" element={<NewsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route
+          path="results"
+          element={<Suspense fallback={<PageSpinner />}><ResultsPage /></Suspense>}
+        />
+        <Route
+          path="results/:jobId"
+          element={<Suspense fallback={<PageSpinner />}><ResultsPage /></Suspense>}
+        />
+        <Route
+          path="compare"
+          element={<Suspense fallback={<PageSpinner />}><ComparePage /></Suspense>}
+        />
+        <Route
+          path="news"
+          element={<Suspense fallback={<PageSpinner />}><NewsPage /></Suspense>}
+        />
+        <Route
+          path="settings"
+          element={<Suspense fallback={<PageSpinner />}><SettingsPage /></Suspense>}
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
