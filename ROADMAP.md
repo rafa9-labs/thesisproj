@@ -327,14 +327,17 @@
   - **Files**: `frontend/src/pages/Dashboard/` (DashboardPage, DashboardKPIs, RecentJobsTable)
   - **Est**: 3h
 
-- [ ] **S8.4** Backtest configuration page
+- [x] **S8.4** Backtest configuration page ✅ DONE (commits `8d46875`, `96f4ab1`)
   - Model selector (multi-select for comparison)
   - Currency pair + timeframe dropdowns
-  - Execution model config (position sizing, stops, risk manager)
-  - Feature toggles panel
-  - HPO settings
+  - Date range pickers (start/end)
+  - Execution model config (position sizing, stops, risk manager, equity, leverage)
+  - Feature toggles panel (core indicators, advanced, news/sentiment)
+  - Labels & triple barrier controls
+  - HPO settings + logistic hyperparameters (conditional)
   - "Run Backtest" button with progress bar via WebSocket
-  - **Files**: `frontend/src/pages/Backtest/`
+  - Pre-flight summary modal with validation
+  - **Files**: `frontend/src/pages/Backtest/` (9 files)
   - **Est**: 4h
 
 - [ ] **S8.5** Results & charts page
@@ -661,7 +664,7 @@ wsl -d Ubuntu-22.04 -- bash /mnt/c/Users/rafa/ML_Trading/thesisproj/run_wsl.sh \
 | **S5** | Comprehensive Tests + Benchmarks | 4-6h | TODO |
 | **S6** | News & Sentiment Features | 6-8h | TODO |
 | **S7** | FastAPI Backend | 8-10h | DONE |
-| **S8** | React Frontend | 20-25h | IN PROGRESS (S8.1-3, 8.6, 8.8 done; S8.4-5, 8.7 remaining) |
+| **S8** | React Frontend | 20-25h | IN PROGRESS (S8.1-4, 8.6, 8.8 done; S8.5, 8.7 remaining) |
 | **S9** | Electron Desktop Shell | 10-12h | SCAFFOLDED (S9.1-3 done; S9.4-5 remaining) |
 | **S10** | Security & Licensing (Paddle) | 12-15h | TODO |
 | **S11** | Installer & Auto-Update | 6-8h | TODO |
@@ -676,7 +679,7 @@ wsl -d Ubuntu-22.04 -- bash /mnt/c/Users/rafa/ML_Trading/thesisproj/run_wsl.sh \
 | S3-S4 | Multi-currency supported, Docker builds pass, CI green |
 | S5-S6 | 200+ tests, >80% coverage, news features integrated | ✅ S6 done; S5 deferred — 436 tests via Sprint A/B
 | S7 | FastAPI serves all pipeline operations via REST + WebSocket | ✅ DONE
-| S8 | React UI replaces Streamlit for all user interactions | 🔄 S8.1-3, 8.6, 8.8 done; S8.4-5, 8.7 remaining |
+| S8 | React UI replaces Streamlit for all user interactions | 🔄 S8.1-4, 8.6, 8.8 done; S8.5 (Results), S8.7 (Settings) remaining |
 | S9 | Electron wraps React + Python into desktop app | 🔄 S9.1-3 scaffolded; S9.4-5 remaining |
 | S10 | Code protected, Paddle licensing active, feature gating works |
 | S11 | Windows installer + auto-update functional |

@@ -3,7 +3,7 @@
 > **Context for**: Starting a new opencode session to continue implementation
 > **Date**: 2026-04-19
 > **Branch**: `main`
-> **Last commit**: `8d46875` — feat(S8/S9): React frontend pages + components + Electron shell scaffold
+> **Last commit**: `96f4ab1` — feat(S8.4): polish backtest config page
 
 ---
 
@@ -41,10 +41,12 @@ A **Forex ML Backtesting Pipeline** — a commercial-grade walk-forward FX backt
   - S8.1: Vite + TS + React 18 + TailwindCSS + shadcn/ui + React Router ✅
   - S8.2: Layout shell (AppShell, TerminalPanel, dark/light mode) ✅
   - S8.3: Dashboard page (KPIs, recent jobs table) ✅
+  - S8.4: Backtest config page (model selector, asset selector, features, labels, HPO, execution, progress, run summary) ✅ POLISHED
+    - News/sentiment toggles, date pickers, logistic hyperparams, equity/leverage controls, atrSlMult, kellyMinTrades
   - S8.6: Compare page (equity overlay, leaderboard, significance matrix) ✅
   - S8.8: ErrorBoundary + shared components ✅
   - 5 frontend tests (dashboard-kpis, formatters, job-store, schemas, settings-store)
-  - **Remaining**: S8.4 (Backtest config page), S8.5 (Results & charts), S8.7 (Settings page)
+  - **Remaining**: S8.5 (Results & charts), S8.7 (Settings page)
 - **Sprint 9**: Electron Desktop Shell — SCAFFOLDED
   - S9.1: Electron scaffold (main.ts, preload.ts, tsconfig) ✅
   - S9.2: Python backend lifecycle (python.ts, health.ts) ✅
@@ -65,7 +67,7 @@ Remaining sprints in order of priority:
 | **S5** | Comprehensive Tests + Benchmarks | 4-6h | ⬜ TODO |
 | **S6** | News & Sentiment Features | 6-8h | ⬜ TODO |
 | **S7** | FastAPI Backend | 8-10h | ✅ DONE |
-| **S8** | React Frontend | 20-25h | 🔄 IN PROGRESS (S8.1-3, 8.6, 8.8 done) |
+| **S8** | React Frontend | 20-25h | 🔄 IN PROGRESS (S8.1-4, 8.6, 8.8 done) |
 | **S9** | Electron Desktop Shell | 10-12h | 🔄 SCAFFOLDED (S9.1-3 done) |
 | **S10** | Security & Licensing (Paddle) | 12-15h | ⬜ TODO |
 | **S11** | Installer & Auto-Update | 6-8h | ⬜ TODO |
