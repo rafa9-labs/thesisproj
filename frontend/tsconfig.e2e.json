@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "types": ["jest", "node"],
+    "outDir": "./e2e-dist",
+    "resolveJsonModule": true
+  },
+  "include": ["e2e"]
+}

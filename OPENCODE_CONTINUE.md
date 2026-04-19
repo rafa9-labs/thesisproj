@@ -3,7 +3,7 @@
 > **Context for**: Starting a new opencode session to continue implementation
 > **Date**: 2026-04-19
 > **Branch**: `main`
-> **Last commit**: `96f4ab1` — feat(S8.4): polish backtest config page
+> **Last commit**: `1d5557c` — feat(S8 polish): health check dots, multi-model tabs, PNG export, settings sync, news live data, chunk splitting
 
 ---
 

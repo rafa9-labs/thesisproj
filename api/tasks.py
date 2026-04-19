@@ -92,7 +92,11 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
                 features_config=feat_cfg,
             )
 
-            base_cfg = deepcopy(CLASS_DEFAULTS["backtest"])
+            base_cfg = deepcopy(CLASS_DEFAULTS["features"])
+            base_cfg.update(deepcopy(CLASS_DEFAULTS["cv"]))
+            base_cfg["model_type"] = model_type
+            base_cfg["rep"] = 1
+            base_cfg["trading_costs"] = trading_costs
             base_cfg.update(config.get("config_overrides", {}))
 
             df_sim = bt.real_trading_simulation(
