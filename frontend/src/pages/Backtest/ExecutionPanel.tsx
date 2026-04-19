@@ -27,6 +27,33 @@ export function ExecutionPanel() {
       {open && (
         <div className="mt-4 flex flex-col gap-4">
 
+          {/* General */}
+          <section className="rounded-md border p-3" style={{ borderColor: "var(--color-border-subtle)" }}>
+            <h4 className="mb-2 text-xs font-semibold uppercase" style={{ color: "var(--color-text-secondary)" }}>
+              General
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+              <ParamSlider
+                label="Initial Equity"
+                paramKey="initial_equity"
+                value={s.initialEquity}
+                min={RANGES.initialEquity.min}
+                max={RANGES.initialEquity.max}
+                step={RANGES.initialEquity.step}
+                onChange={(v) => setField("initialEquity", v)}
+              />
+              <ParamSlider
+                label="Max Leverage"
+                paramKey="max_leverage"
+                value={s.maxLeverage}
+                min={RANGES.maxLeverage.min}
+                max={RANGES.maxLeverage.max}
+                step={RANGES.maxLeverage.step}
+                onChange={(v) => setField("maxLeverage", v)}
+              />
+            </div>
+          </section>
+
           {/* Position Sizing */}
           <section className="rounded-md border p-3" style={{ borderColor: "var(--color-border-subtle)" }}>
             <h4 className="mb-2 text-xs font-semibold uppercase" style={{ color: "var(--color-accent-classical)" }}>
@@ -42,16 +69,28 @@ export function ExecutionPanel() {
               />
             </div>
             {s.sizingMethod === "kelly" && (
-              <ParamSlider
-                label="Kelly Fraction"
-                paramKey="kelly_fraction"
-                value={s.kellyFraction}
-                min={RANGES.kellyFraction.min}
-                max={RANGES.kellyFraction.max}
-                step={RANGES.kellyFraction.step}
-                description="Mathematical aggression. Dynamically sizes based on win rate and risk/reward."
-                onChange={(v) => setField("kellyFraction", v)}
-              />
+              <div className="flex flex-col gap-3">
+                <ParamSlider
+                  label="Kelly Fraction"
+                  paramKey="kelly_fraction"
+                  value={s.kellyFraction}
+                  min={RANGES.kellyFraction.min}
+                  max={RANGES.kellyFraction.max}
+                  step={RANGES.kellyFraction.step}
+                  description="Mathematical aggression. Dynamically sizes based on win rate and risk/reward."
+                  onChange={(v) => setField("kellyFraction", v)}
+                />
+                <ParamSlider
+                  label="Min Trades"
+                  paramKey="kelly_min_trades"
+                  value={s.kellyMinTrades}
+                  min={RANGES.kellyMinTrades.min}
+                  max={RANGES.kellyMinTrades.max}
+                  step={RANGES.kellyMinTrades.step}
+                  description="Minimum trade history before Kelly sizing activates"
+                  onChange={(v) => setField("kellyMinTrades", v)}
+                />
+              </div>
             )}
             {s.sizingMethod === "fixed_fractional" && (
               <ParamSlider
@@ -66,15 +105,27 @@ export function ExecutionPanel() {
               />
             )}
             {s.sizingMethod === "atr" && (
-              <ParamSlider
-                label="ATR Risk %"
-                paramKey="atr_risk_pct"
-                value={s.atrRiskPct}
-                min={0.01}
-                max={0.05}
-                step={0.005}
-                onChange={(v) => setField("atrRiskPct", v)}
-              />
+              <div className="flex flex-col gap-3">
+                <ParamSlider
+                  label="ATR Risk %"
+                  paramKey="atr_risk_pct"
+                  value={s.atrRiskPct}
+                  min={RANGES.atrRiskPct.min}
+                  max={RANGES.atrRiskPct.max}
+                  step={RANGES.atrRiskPct.step}
+                  onChange={(v) => setField("atrRiskPct", v)}
+                />
+                <ParamSlider
+                  label="ATR SL Mult"
+                  paramKey="atr_sl_mult"
+                  value={s.atrSlMult}
+                  min={RANGES.atrSlMult.min}
+                  max={RANGES.atrSlMult.max}
+                  step={RANGES.atrSlMult.step}
+                  description="Stop-loss distance as ATR multiplier"
+                  onChange={(v) => setField("atrSlMult", v)}
+                />
+              </div>
             )}
           </section>
 

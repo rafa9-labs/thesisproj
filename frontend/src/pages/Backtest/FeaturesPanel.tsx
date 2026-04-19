@@ -2,8 +2,10 @@ import { useBacktestStore } from "@/stores/useBacktestStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { ParamToggle } from "@/components/shared/ParamToggle";
 import { ParamSlider } from "@/components/shared/ParamSlider";
+import { ParamSelect } from "@/components/shared/ParamSelect";
+import { SELECT_OPTIONS } from "@/lib/constants";
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Newspaper } from "lucide-react";
 
 const CORE_INDICATORS = [
   { key: "useAdx" as const, label: "ADX" },
@@ -151,6 +153,46 @@ export function FeaturesPanel() {
           ))}
         </div>
       )}
+
+      {/* News & Sentiment */}
+      <div className="mt-4 rounded-md border p-3" style={{ borderColor: "var(--color-border-subtle)" }}>
+        <div className="mb-2 flex items-center gap-2">
+          <Newspaper size={14} style={{ color: "var(--color-accent-info)" }} />
+          <h4 className="text-xs font-semibold uppercase" style={{ color: "var(--color-accent-info)" }}>
+            News &amp; Sentiment
+          </h4>
+        </div>
+        <div className="flex flex-col gap-3">
+          <ParamToggle
+            label="News Features"
+            paramKey="use_news"
+            checked={useBacktestStore.getState().useNews}
+            description={verbose ? "RSS + economic calendar features: sentiment scores, event flags, news volume" : undefined}
+            onChange={(v) => setField("useNews", v)}
+          />
+          {useBacktestStore.getState().useNews && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <ParamToggle
+                  label="Event Flags"
+                  paramKey="news_event_flags"
+                  checked={useBacktestStore.getState().newsEventFlags}
+                  description="NFP, FOMC, CPI proximity markers"
+                  onChange={(v) => setField("newsEventFlags", v)}
+                />
+                <ParamSelect
+                  label="Sentiment Engine"
+                  paramKey="news_sentiment_backend"
+                  value={useBacktestStore.getState().newsSentimentBackend}
+                  options={[...SELECT_OPTIONS.newsSentimentBackend]}
+                  description={useBacktestStore.getState().newsSentimentBackend === "finbert" ? "Requires HuggingFace transformers" : undefined}
+                  onChange={(v) => setField("newsSentimentBackend", v as "vader" | "finbert")}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

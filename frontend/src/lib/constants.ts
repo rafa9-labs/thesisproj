@@ -55,6 +55,13 @@ export const DEFAULTS = {
   useSlopeDiff: false,
   useRvFeatures: true,
 
+  useNews: false,
+  newsEventFlags: true,
+  newsSentimentBackend: "vader" as const,
+
+  startDate: "" as string,
+  endDate: "" as string,
+
   logitC: 1.0,
   logitSolver: "lbfgs" as const,
   logitPenalty: "l2" as const,
@@ -104,6 +111,11 @@ export const RANGES = {
   testMonths: { min: 1, max: 6, step: 1 },
   riskFraction: { min: 0.005, max: 0.1, step: 0.005 },
   kellyFraction: { min: 0.1, max: 1.0, step: 0.1 },
+  kellyMinTrades: { min: 5, max: 100, step: 5 },
+  atrRiskPct: { min: 0.005, max: 0.05, step: 0.005 },
+  atrSlMult: { min: 0.5, max: 5, step: 0.25 },
+  initialEquity: { min: 1000, max: 100000, step: 1000 },
+  maxLeverage: { min: 1, max: 50, step: 1 },
   maxDrawdownPct: { min: 0.05, max: 0.5, step: 0.05 },
   maxConsecutiveLosses: { min: 2, max: 20, step: 1 },
   dailyLossLimitPct: { min: 0.01, max: 0.1, step: 0.01 },
@@ -143,5 +155,9 @@ export const SELECT_OPTIONS = {
     { value: "standard", label: "Standard (Fixed Pips)" },
     { value: "atr", label: "ATR Trailing" },
     { value: "chandelier", label: "Chandelier Exit" },
+  ],
+  newsSentimentBackend: [
+    { value: "vader", label: "VADER (Rule-based)" },
+    { value: "finbert", label: "finBERT (Neural)" },
   ],
 } as const;

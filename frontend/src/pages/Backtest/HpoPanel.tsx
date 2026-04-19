@@ -7,6 +7,8 @@ import { RANGES, SELECT_OPTIONS } from "@/lib/constants";
 export function HpoPanel() {
   const setField = useBacktestStore((s) => s.setField);
   const s = useBacktestStore.getState();
+  const selectedModels = useBacktestStore((s) => s.selectedModels);
+  const showLogistic = selectedModels.includes("logistic");
 
   return (
     <div
@@ -124,6 +126,61 @@ export function HpoPanel() {
           </div>
         )}
       </div>
+
+      {/* Logistic Hyperparameters */}
+      {showLogistic && (
+        <div className="mt-4 rounded-md border p-3" style={{ borderColor: "var(--color-border-subtle)" }}>
+          <h4 className="mb-2 text-xs font-semibold uppercase" style={{ color: "var(--color-accent-classical)" }}>
+            Logistic Regression — Hyperparameters
+          </h4>
+          <div className="mb-3 grid grid-cols-2 gap-4">
+            <ParamSelect
+              label="Solver"
+              paramKey="logit_solver"
+              value={s.logitSolver}
+              options={[...SELECT_OPTIONS.logitSolver]}
+              onChange={(v) => setField("logitSolver", v as typeof s.logitSolver)}
+            />
+            <ParamSelect
+              label="Penalty"
+              paramKey="logit_penalty"
+              value={s.logitPenalty}
+              options={[...SELECT_OPTIONS.logitPenalty]}
+              onChange={(v) => setField("logitPenalty", v as typeof s.logitPenalty)}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <ParamSlider
+              label="C (Regularization)"
+              paramKey="logit_C"
+              value={s.logitC}
+              min={0.001}
+              max={10000}
+              step={s.logitC < 1 ? 0.01 : s.logitC < 100 ? 1 : 100}
+              description="Inverse regularization strength"
+              onChange={(v) => setField("logitC", v)}
+            />
+            <ParamSlider
+              label="Max Iterations"
+              paramKey="logit_max_iter"
+              value={s.logitMaxIter}
+              min={100}
+              max={5000}
+              step={100}
+              onChange={(v) => setField("logitMaxIter", v)}
+            />
+            <ParamSlider
+              label="Tolerance"
+              paramKey="logit_tol"
+              value={s.logitTol}
+              min={0.00001}
+              max={0.01}
+              step={0.00001}
+              onChange={(v) => setField("logitTol", v)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

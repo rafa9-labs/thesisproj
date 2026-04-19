@@ -43,6 +43,9 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors }: RunSum
         <Section title="Asset">
           <Row label="Pair" value={store.pair} />
           <Row label="Timeframe" value={store.timeframe} />
+          {(store.startDate || store.endDate) && (
+            <Row label="Date Range" value={`${store.startDate || "..."} → ${store.endDate || "..."}`} />
+          )}
         </Section>
 
         {/* Models */}
@@ -76,8 +79,17 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors }: RunSum
         <Section title="Execution">
           <Row label="Sizing" value={store.sizingMethod} />
           <Row label="Trailing" value={store.trailingMethod} />
+          <Row label="Equity" value={`$${store.initialEquity.toLocaleString()}`} />
+          <Row label="Leverage" value={`${store.maxLeverage}x`} />
           <Row label="Max DD" value={formatPercent(store.maxDrawdownPct)} />
           <Row label="Trading Costs" value={store.evalUseTradingCosts ? "Yes" : "No"} />
+        </Section>
+
+        {/* Features */}
+        <Section title="Features">
+          <Row label="Lags" value={`${store.lags} × ${store.lagDepth}`} />
+          <Row label="FracDiff" value={store.useFracdiff ? `d=${store.fracdiffD}` : "Off"} />
+          <Row label="News" value={store.useNews ? `${store.newsSentimentBackend}${store.newsEventFlags ? " + events" : ""}` : "Off"} />
         </Section>
 
         {/* Validation summary */}
