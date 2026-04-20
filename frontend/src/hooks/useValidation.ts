@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useBacktestStore } from "@/stores/useBacktestStore";
+import { usePairs } from "@/api/queries";
 
 interface ValidationResult {
   warnings: string[];
@@ -9,6 +10,12 @@ interface ValidationResult {
 
 export function useValidation(): ValidationResult {
   const s = useBacktestStore();
+  const { data: pairs } = usePairs();
+
+  const selected = pairs?.find((p) => p.pair.symbol === s.pair);
+  const tfData = selected?.timeframes.find((t) => t.timeframe === s.timeframe);
+  const dataMin = tfData?.start_date?.slice(0, 10);
+  const dataMax = tfData?.end_date?.slice(0, 10);
 
   return useMemo(() => {
     const warnings: string[] = [];
@@ -89,6 +96,27 @@ export function useValidation(): ValidationResult {
       if (s.logitC > 10000) warnings.push("C > 10000 — very weak regularization");
     }
 
+    // Date range
+    if (s.startDate && dataMin && s.startDate < dataMin) {
+      errors.push(`Start date (${s.startDate}) is before available data (${dataMin})`);
+    }
+    if (s.endDate && dataMax && s.endDate > dataMax) {
+      errors.push(`End date (${s.endDate}) is after available data (max: ${dataMax})`);
+    }
+    if (s.startDate && s.endDate && s.startDate > s.endDate) {
+      errors.push("Start date must be before end date");
+    }
+    if (s.startDate && s.endDate && dataMin && dataMax) {
+      const rangeDays = (new Date(s.endDate).getTime() - new Date(s.startDate).getTime()) / 86400000;
+      const trainDays = s.trainMonths * 30;
+      const testDays = s.testMonths * 30;
+      if (rangeDays < trainDays + testDays) {
+        warnings.push(
+          `Selected range (${Math.round(rangeDays / 30)}mo) may be too short for ${s.trainMonths}mo train + ${s.testMonths}mo test`,
+        );
+      }
+    }
+
     // Models
     if (s.selectedModels.length === 0) {
       errors.push("Select at least one model");
@@ -107,5 +135,7 @@ export function useValidation(): ValidationResult {
     s.useMtfAlignment, s.useMtfMa, s.fracdiffD,
     s.targetActiveRate, s.targetCoverage,
     s.selectedModels, s.logitSolver, s.logitPenalty, s.logitC,
+    s.startDate, s.endDate, s.trainMonths, s.testMonths,
+    dataMin, dataMax,
   ]);
 }

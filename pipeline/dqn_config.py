@@ -125,6 +125,6 @@ def _coerce_dqn_cfg(cfg: dict, *, strict: bool = False) -> dict:
 # Use the same default as utilsNoWFO (repo-root /hpo) to avoid CWD-dependent bugs.
 HPO_CONFIG_DIR = os.environ.get(
     "MLB_HPO_DIR",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "hpo"),
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hpo"),
 )
 

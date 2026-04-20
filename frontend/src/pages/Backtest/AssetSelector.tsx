@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { usePairs } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 
@@ -11,6 +12,27 @@ export function AssetSelector() {
 
   const selected = pairs?.find((p) => p.pair.symbol === pair);
   const tfData = selected?.timeframes.find((t) => t.timeframe === timeframe);
+
+  const dataMin = tfData?.start_date?.slice(0, 10) ?? "";
+  const dataMax = tfData?.end_date?.slice(0, 10) ?? "";
+
+  useEffect(() => {
+    if (!dataMin && !dataMax) return;
+    if (startDate && dataMin && startDate < dataMin) setField("startDate", "");
+    if (endDate && dataMax && endDate > dataMax) setField("endDate", "");
+  }, [dataMin, dataMax, startDate, endDate, setField]);
+
+  const handleStartChange = (val: string) => {
+    if (dataMin && val < dataMin) return;
+    if (dataMax && val > dataMax) return;
+    setField("startDate", val);
+  };
+
+  const handleEndChange = (val: string) => {
+    if (dataMin && val < dataMin) return;
+    if (dataMax && val > dataMax) return;
+    setField("endDate", val);
+  };
 
   const inputStyle: React.CSSProperties = {
     backgroundColor: "var(--color-elevated)",
@@ -79,7 +101,9 @@ export function AssetSelector() {
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) => setField("startDate", e.target.value)}
+                min={dataMin}
+                max={endDate || dataMax}
+                onChange={(e) => handleStartChange(e.target.value)}
                 className="rounded border px-3 py-2 text-sm"
                 style={inputStyle}
               />
@@ -92,7 +116,9 @@ export function AssetSelector() {
               <input
                 type="date"
                 value={endDate}
-                onChange={(e) => setField("endDate", e.target.value)}
+                min={startDate || dataMin}
+                max={dataMax}
+                onChange={(e) => handleEndChange(e.target.value)}
                 className="rounded border px-3 py-2 text-sm"
                 style={inputStyle}
               />
@@ -105,8 +131,7 @@ export function AssetSelector() {
                 className="text-xs"
                 style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
               >
-                {tfData.rows.toLocaleString()} rows | {tfData.start_date?.slice(0, 10)} →{" "}
-                {tfData.end_date?.slice(0, 10)} | OANDA
+                {tfData.rows.toLocaleString()} rows | {dataMin} → {dataMax} | OANDA
               </p>
             )}
             <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>

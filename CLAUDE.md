@@ -27,13 +27,14 @@
 - **ALWAYS** push all work to GitHub before ending a session.
 - Before completing a task, check for uncommitted changes.
 - Commit with descriptive messages. Push to `origin <current-branch>`.
-- Current branch: `feature/phase4-streamlit-ui`
+- Current branch: `feature/phase2-api-bridge`
 - Remote: `https://github.com/rafa9-labs/thesisproj.git`
 
 ## Architecture Overview
 
 ### Entry Points
-- `app.py` — Streamlit web UI entry point
+- `api/main.py` — FastAPI backend entry point (uvicorn)
+- `frontend/` — React + Vite frontend (the product UI)
 - `pipeline/main_cli.py` — CLI runner (headless backtesting)
 - `pipeline/model_comparison.py` — Model comparison & leaderboard (CLI)
 
@@ -57,13 +58,15 @@
 - `models/ensemble_cnn_lstm_xgboost.py`, `models/ensemble_adaptive_regime.py`
 - **All 8 model types verified working end-to-end** (2026-04-15)
 
-### UI (`ui/`)
-- `ui/controls.py` — Sidebar nav + 6-tab layout + GPU warnings
-- `ui/state.py` — AppState + backtest adapter
-- `ui/results.py` — Results display + export
-- `ui/dashboard.py` — Dashboard renderer
-- `ui/charts.py` — Plotly chart builders
-- `ui/validators.py` — Input validation
+### Frontend (`frontend/`)
+- React + Vite + TypeScript + TailwindCSS
+- Pages: Dashboard, Backtest, Results, Compare, News, Settings
+- API client: `frontend/src/api/` (REST + WebSocket)
+- State: Zustand stores + React Query cache
+
+### Streamlit UI — REMOVED (2026-04-20)
+- All Streamlit code deleted: `app.py`, `ui/` directory, `launch_ui.bat`
+- React frontend is the product UI
 
 ### Config & Schemas
 - `config.py` — Global config (`PIPELINE_CONSTANTS`, `SEARCH_SPACE`)
@@ -186,14 +189,15 @@ Tools: fetch_html, fetch_markdown, fetch_txt, fetch_json, fetch_readable, fetch_
 | Sprint | Topic | Status | Est |
 |--------|-------|--------|-----|
 | **Sprint 1** | Model Comparison + Leaderboard | ✅ DONE | 3-4h |
-| **Sprint 2** | Advanced Execution Models | 🔄 IN PROGRESS | 6-8h |
-| **Sprint 3** | Multi-Currency Expansion | ⬜ TODO | 4-5h |
-| **Sprint 4** | Docker + CI/CD | ⬜ TODO | 3-4h |
+| **Sprint 2** | Advanced Execution Models | ✅ DONE | 6-8h |
+| **Sprint 3** | Multi-Currency Expansion | ✅ DONE | 4-5h |
+| **Sprint 4** | Docker + CI/CD | 🔄 PARTIAL | 3-4h |
 | **Sprint 5** | Comprehensive Tests + Benchmarks | ⬜ TODO | 4-6h |
-| **Sprint 6** | News & Sentiment Features | ⬜ TODO | 6-8h |
-| **Sprint 7** | FastAPI Backend | ⬜ TODO | 8-10h |
-| **Sprint 8** | React Frontend | ⬜ TODO | 20-25h |
-| **Sprint 9** | Electron Desktop Shell | ⬜ TODO | 10-12h |
+| **Sprint 6** | News & Sentiment Features | ✅ DONE | 6-8h |
+| **Sprint 7** | FastAPI Backend | ✅ DONE | 8-10h |
+| **Sprint 8** | React Frontend | ✅ DONE | 20-25h |
+| **Sprint 8B** | Frontend ↔ API Integration | ✅ DONE | 6-8h |
+| **Sprint 9** | Electron Desktop Shell | 🔄 SCAFFOLDED | 10-12h |
 | **Sprint 10** | Security & Licensing (Paddle) | ⬜ TODO | 12-15h |
 | **Sprint 11** | Installer & Auto-Update | ⬜ TODO | 6-8h |
 | **Sprint 12** | Commercial Infrastructure | ⬜ TODO | 8-10h |
@@ -202,20 +206,24 @@ Tools: fetch_html, fetch_markdown, fetch_txt, fetch_json, fetch_readable, fetch_
 **Product target**: Commercial Electron desktop app (React + FastAPI + Python), sold via Paddle.
 **Pricing**: Hybrid — one-time purchase + annual updates subscription.
 
-**Next task**: Sprint 2 — Advanced Execution Models (S2.1 done, S2.2 next)
-- ~~Position sizing (Kelly, fixed fractional, ATR-based)~~ ✅ S2.1 DONE
-- Stop-loss / take-profit management ← CURRENT
-- Trailing stops (standard, ATR, Chandelier exit)
-- Risk management framework (DD circuit breaker, loss limits)
-- Integration into pipeline + UI
+**Next task**: Sprint 9 — Electron Desktop Shell (S9.4 PyInstaller + S9.5 build pipeline)
 
 See `ROADMAP.md` for full sprint details with sub-tasks and file references.
 
 ## How to Run
 
 ```powershell
-# Launch Streamlit UI
-.\launch_ui.bat
+# Start Redis
+redis-server
+
+# Start FastAPI backend
+uvicorn api.main:app --host 127.0.0.1 --port 8001 --reload
+
+# Start Celery worker (separate terminal)
+celery -A api.tasks.celery_app worker --loglevel=info --pool=solo -Q celery
+
+# Start React frontend (separate terminal)
+cd frontend; npm run dev
 
 # Run smoke test (all 8 models, 1 trial)
 .\run_smoke.bat
@@ -225,24 +233,22 @@ See `ROADMAP.md` for full sprint details with sub-tasks and file references.
 
 # Run all tests
 .\run_all_tests.bat
-
-# GPU smoke test (Windows → WSL)
-.\run_smoke_gpu.bat
 ```
 
 ## Key Files Quick Reference
 
 | File | Role |
 |------|------|
-| `app.py` | Streamlit entry point (interim dev UI) |
+| `api/main.py` | FastAPI entry point (uvicorn) |
+| `api/tasks.py` | Celery backtest tasks |
 | `config.py` | Global configuration + constants + ExecutionConfig |
 | `pipeline/backtester/composed.py` | MLBacktester engine |
 | `pipeline/backtester/execution_patches.py` | Execution loop + PatchConfig + LoopResult |
-| `pipeline/execution/position_sizing.py` | Position sizing models (S2.1) |
+| `pipeline/execution/position_sizing.py` | Position sizing models |
+| `pipeline/backtester/data_mixin.py` | Data loading + date range handling |
 | `pipeline/main_cli.py` | CLI runner |
 | `pipeline/runtime.py` | GPU detection, CUDA config |
 | `pipeline/model_comparison.py` | Model comparison & leaderboard |
 | `models/registry.py` | Model registry |
 | `ROADMAP.md` | Full product roadmap (13 sprints) |
-| `OPENCODE_CONTINUE.md` | Continuation context for AI sessions |
 | `CLAUDE.md` | This file — AI assistant context |

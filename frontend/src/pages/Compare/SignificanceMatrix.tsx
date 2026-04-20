@@ -20,7 +20,7 @@ function formatP(p: number | null, isDiag: boolean): string {
   return p.toFixed(3);
 }
 
-export function SignificanceMatrix({ models, pValues }: SignificanceMatrixProps) {
+export function SignificanceMatrix({ models = [], pValues }: SignificanceMatrixProps) {
   if (pValues === null) {
     return (
       <div className="flex flex-col gap-2">

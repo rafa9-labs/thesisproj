@@ -120,10 +120,17 @@ def get_backtest_results(job_id: str):
             sortino=m.get("sortino"),
             max_drawdown=m.get("max_drawdown"),
             total_return=m.get("total_return"),
+            total_return_pct=m.get("total_return_pct"),
             win_rate=m.get("win_rate"),
             total_trades=m.get("total_trades"),
             profit_factor=m.get("profit_factor"),
             avg_trade=m.get("avg_trade"),
+            active_rate=m.get("active_rate"),
+            directional_accuracy=m.get("directional_accuracy"),
+            precision_macro=m.get("precision_macro"),
+            f1_macro=m.get("f1_macro"),
+            equity_curve=m.get("equity_curve"),
+            monthly_df=m.get("monthly_df"),
         ))
 
     return BacktestResultsResponse(

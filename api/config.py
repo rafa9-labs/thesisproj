@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     host: str = "127.0.0.1"
-    port: int = 8000
+    port: int = 8001
 
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/0"

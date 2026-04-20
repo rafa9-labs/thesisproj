@@ -117,7 +117,8 @@ export function ResultsPage() {
     );
   }
 
-  const activeMetric = results.metrics.length > 0 ? results.metrics[Math.min(activeModelIdx, results.metrics.length - 1)] : null;
+  const metrics = results.metrics ?? [];
+  const activeMetric = metrics.length > 0 ? metrics[Math.min(activeModelIdx, metrics.length - 1)] : null;
 
   const handleExportCsv = () => {
     if (!results.trades) return;
@@ -183,9 +184,9 @@ export function ResultsPage() {
         <MetricsGrid metrics={activeMetric} modelName={activeMetric.model} />
       )}
 
-      {results.metrics.length > 1 && (
+      {metrics.length > 1 && (
         <div className="flex flex-wrap gap-2">
-          {results.metrics.map((m, i) => (
+          {metrics.map((m, i) => (
             <button
               key={m.model}
               onClick={() => setActiveModelIdx(i)}

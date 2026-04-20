@@ -71,7 +71,7 @@ function DrawdownRenderer({ value }: { value: number | null }) {
 
 const MONO = { fontFamily: "var(--font-mono)", fontSize: 12 };
 
-export function LeaderboardTable({ metrics, sortMetric = "sharpe" }: LeaderboardTableProps) {
+export function LeaderboardTable({ metrics = [], sortMetric = "sharpe" }: LeaderboardTableProps) {
   const sortedMetrics = useMemo(() => {
     const arr = [...metrics];
     arr.sort((a, b) => {

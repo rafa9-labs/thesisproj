@@ -35,7 +35,15 @@ class DataMixin:
 
         # ensure tz-aware index before slicing
         raw.index = pd.to_datetime(raw.index, utc=True, errors="coerce")
-        self.data = raw.loc[self.start:self.end].dropna()
+        if self.start is not None or self.end is not None:
+            self.data = raw.loc[self.start:self.end].dropna()
+        else:
+            self.data = raw.dropna()
+
+        if self.start is None and not self.data.empty:
+            self.start = str(self.data.index[0])
+        if self.end is None and not self.data.empty:
+            self.end = str(self.data.index[-1])
 
         # Optionally attach macro features (daily / lower-frequency) to bar-level data
         cfg = self.features_config or {}

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { useJobStore } from "@/stores/useJobStore";
 import { useValidation } from "@/hooks/useValidation";
@@ -15,6 +16,7 @@ import { BacktestProgress } from "./BacktestProgress";
 import { ValidationAlert } from "@/components/shared/ValidationAlert";
 
 export function BacktestPage() {
+  const navigate = useNavigate();
   const selectedModels = useBacktestStore((s) => s.selectedModels);
   const toPayload = useBacktestStore((s) => s.toRequestPayload);
   const startJob = useJobStore((s) => s.startJob);
@@ -25,6 +27,15 @@ export function BacktestPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
   useBacktestWebSocket(activeJobId);
+
+  const activeJob = useJobStore((s) => (activeJobId ? s.activeJobs.get(activeJobId) : undefined));
+
+  useEffect(() => {
+    if (activeJob?.status === "completed" && activeJobId) {
+      const timer = setTimeout(() => navigate(`/results/${activeJobId}`), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [activeJob?.status, activeJobId, navigate]);
 
   const handleDeploy = async () => {
     try {

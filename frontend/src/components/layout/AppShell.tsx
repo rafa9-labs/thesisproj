@@ -7,7 +7,7 @@ import {
   Newspaper,
   Settings,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { layout } from "@/lib/tokens";
 import { TerminalPanel } from "./TerminalPanel";
 import { useHealth } from "@/api/queries";
@@ -30,12 +30,12 @@ export function AppShell() {
   const { data: health } = useHealth();
   const sidebarWidth = collapsed ? layout.sidebarCollapsed : layout.sidebarExpanded;
 
-  useState(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
       setWsConnected(wsManager.connected);
     }, 3000);
     return () => clearInterval(interval);
-  });
+  }, []);
 
   return (
     <div className="flex h-full w-full flex-col" style={{ backgroundColor: "var(--color-app)" }}>
@@ -96,7 +96,7 @@ export function AppShell() {
               </h1>
             </div>
             <div className="flex items-center gap-4">
-              <StatusDot color={health?.status === "ok" ? "var(--color-accent-success)" : "var(--color-accent-danger)}"} label="Backend" pulse={health?.status === "ok"} />
+              <StatusDot color={health?.status === "ok" ? "var(--color-accent-success)" : "var(--color-accent-danger)"} label="Backend" pulse={health?.status === "ok"} />
               <StatusDot color={wsConnected ? "var(--color-accent-success)" : "var(--color-text-muted)"} label="WS" />
             </div>
           </header>

@@ -1,6 +1,7 @@
 """Auto-extracted mixin — see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
+from pipeline.dqn_config import HPO_CONFIG_DIR  # noqa: F811
 
 
 class RealTradingMixin:
@@ -514,17 +515,21 @@ class RealTradingMixin:
                 except Exception:
                     global_hpo_best, global_hpo_topN = None, None
                     
-            # If we explicitly forced cached HPO (n_trials <= 0), missing cache is a hard error.
+            # If we explicitly forced cached HPO (n_trials <= 0), missing cache falls back to defaults.
             if _force_cached_hpo:
                 if (not isinstance(global_hpo_best, dict)) or (not global_hpo_best):
-                    raise RuntimeError(
-                        f"[HPO] n_trials=0 but no cached HPO config found for {model_type}. "
-                        f"Expected under: {HPO_CONFIG_DIR} (set MLB_HPO_DIR to override)."
+                    log_print(
+                        f"[HPO] n_trials=0 and no cached HPO config found for {model_type}. "
+                        f"Searched: {HPO_CONFIG_DIR} (set MLB_HPO_DIR to override). "
+                        f"Falling back to default parameters.",
+                        level="COMPACT",
                     )
-                log_print(
-                    f"[HPO] Using cached global HPO for {model_type} (n_trials=0).",
-                    level="COMPACT",
-                )
+                    global_hpo_best = None
+                else:
+                    log_print(
+                        f"[HPO] Using cached global HPO for {model_type} (n_trials=0).",
+                        level="COMPACT",
+                    )
 
             # 2) If cache is disabled or missing/invalid, run a single Optuna study now
             if (not _force_cached_hpo) and ((not use_cached_global_hpo) or (not isinstance(global_hpo_best, dict) or not global_hpo_best)):
@@ -753,7 +758,8 @@ class RealTradingMixin:
             except Exception:
                 pass
             try:
-                test_start_naive  = pd.to_datetime(self.start) + pd.DateOffset(months=37 + i)
+                _start_dt = pd.to_datetime(self.start) if self.start is not None else self.data.index[0]
+                test_start_naive  = _start_dt + pd.DateOffset(months=37 + i)
                 test_end_naive    = test_start_naive + pd.DateOffset(months=test_months)
                 train_start_naive = test_start_naive - pd.DateOffset(months=train_months)
                 train_end_naive   = test_start_naive - pd.Timedelta(minutes=30)

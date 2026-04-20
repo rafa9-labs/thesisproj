@@ -1,7 +1,23 @@
+import { useEffect } from "react";
 import { useJobStore } from "@/stores/useJobStore";
+import { useJobStatus } from "@/api/queries";
 
 export function BacktestProgress({ jobId }: { jobId: string | null }) {
-  const job = jobId ? useJobStore((s) => s.activeJobs.get(jobId)) : null;
+  const job = useJobStore((s) => (jobId ? s.activeJobs.get(jobId) : undefined));
+  const handleWsEvent = useJobStore((s) => s.handleWsEvent);
+
+  const jobStatus = job?.status;
+  const shouldPoll = jobId != null && (jobStatus === "pending" || jobStatus === "running");
+  const { data: restStatus } = useJobStatus(shouldPoll ? jobId : null);
+
+  useEffect(() => {
+    if (!restStatus || !jobId) return;
+    if (restStatus.status === "completed") {
+      handleWsEvent({ event: "job_complete", job_id: jobId });
+    } else if (restStatus.status === "failed") {
+      handleWsEvent({ event: "job_failed", job_id: jobId, error: restStatus.error ?? "Unknown error" });
+    }
+  }, [restStatus?.status, jobId, handleWsEvent]);
 
   if (!job) return null;
 
@@ -52,8 +68,8 @@ export function BacktestProgress({ jobId }: { jobId: string | null }) {
 
       {/* Model status pills */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {job.models.map((m) => {
-          const done = job.completedModels.includes(m);
+        {(job.models ?? []).map((m) => {
+          const done = (job.completedModels ?? []).includes(m);
           const current = job.currentModel === m;
           return (
             <div

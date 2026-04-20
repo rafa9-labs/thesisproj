@@ -10,8 +10,8 @@ from pydantic import BaseModel, Field
 class BacktestRequest(BaseModel):
     pair: str = "EURUSD"
     models: List[str] = ["logistic"]
-    start_date: str = "2024-01-01"
-    end_date: str = "2024-12-01"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
     trading_costs: bool = True
     months: int = 3
     repeats: int = 1
@@ -41,10 +41,17 @@ class BacktestResultMetrics(BaseModel):
     sortino: Optional[float] = None
     max_drawdown: Optional[float] = None
     total_return: Optional[float] = None
+    total_return_pct: Optional[float] = None
     win_rate: Optional[float] = None
     total_trades: Optional[int] = None
     profit_factor: Optional[float] = None
     avg_trade: Optional[float] = None
+    active_rate: Optional[float] = None
+    directional_accuracy: Optional[float] = None
+    precision_macro: Optional[float] = None
+    f1_macro: Optional[float] = None
+    equity_curve: Optional[List[float]] = None
+    monthly_df: Optional[List[Dict[str, Any]]] = None
 
 
 class BacktestResultsResponse(BaseModel):

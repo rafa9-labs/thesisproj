@@ -32,16 +32,17 @@ export function ComparePage() {
 
   const { data: results, isLoading: resultsLoading } = useJobResults(selectedJobId);
 
+  const metrics = results?.metrics ?? [];
   const modelCurves = useMemo(() => {
-    if (!results?.equity_curve || !results.metrics.length) return [];
-    if (results.metrics.length === 1) {
-      return [{ model: results.metrics[0].model, data: results.equity_curve }];
+    if (!results?.equity_curve || !metrics.length) return [];
+    if (metrics.length === 1) {
+      return [{ model: metrics[0].model, data: results.equity_curve }];
     }
-    return results.metrics.map((m) => ({
+    return metrics.map((m) => ({
       model: m.model,
       data: results.equity_curve ?? [],
     }));
-  }, [results]);
+  }, [results, metrics]);
 
   if (jobsLoading) {
     return (
@@ -118,12 +119,12 @@ export function ComparePage() {
 
       {selectedJobId && !resultsLoading && results && (
         <>
-          <LeaderboardTable metrics={results.metrics} sortMetric="sharpe" />
+          <LeaderboardTable metrics={metrics} sortMetric="sharpe" />
 
           <EquityOverlayChart curves={modelCurves} />
 
           <SignificanceMatrix
-            models={results.metrics.map((m) => m.model)}
+            models={metrics.map((m) => m.model)}
             pValues={null}
           />
         </>

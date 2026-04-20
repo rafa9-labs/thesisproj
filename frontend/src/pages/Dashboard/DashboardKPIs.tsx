@@ -20,7 +20,7 @@ export function computeDashboardKPIs(allResults: JobResults[]): DashboardKPIValu
   let bestReturn: number | null = null;
 
   for (const result of allResults) {
-    for (const m of result.metrics) {
+    for (const m of result.metrics ?? []) {
       totalRuns++;
       if (m.sharpe != null) {
         if (bestSharpe === null || m.sharpe > bestSharpe) bestSharpe = m.sharpe;

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Metrics, WsEvent } from "@/api/schemas";
 
 interface JobState {
@@ -77,11 +78,12 @@ export const useJobStore = create<JobStore>()((set, get) => ({
           const nextMetrics = new Map(updated.metrics);
           nextMetrics.set(event.model, event.metrics ?? {});
           updated.metrics = nextMetrics;
+          const totalModels = updated.models?.length || 1;
           const progress = Math.round(
-            (updated.completedModels.length / updated.models.length) * 100,
+            (updated.completedModels.length / totalModels) * 100,
           );
           updated.progress = progress;
-          updated.progressText = `${event.model} complete (${updated.completedModels.length}/${updated.models.length})`;
+          updated.progressText = `${event.model} complete (${updated.completedModels.length}/${totalModels})`;
         }
       }
 
@@ -90,12 +92,22 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         updated.progress = 100;
         updated.progressText = "Complete";
         updated.completedAt = new Date();
+        try {
+          const qc = useQueryClient();
+          qc.invalidateQueries({ queryKey: ["jobs"] });
+          qc.invalidateQueries({ queryKey: ["job-results", jobId] });
+        } catch {}
       }
 
       if (event.event === "job_failed") {
         updated.status = "failed";
         updated.error = event.error;
         updated.progressText = `Failed: ${event.error}`;
+        try {
+          const qc = useQueryClient();
+          qc.invalidateQueries({ queryKey: ["jobs"] });
+          qc.invalidateQueries({ queryKey: ["job", jobId] });
+        } catch {}
       }
 
       next.set(jobId, updated);

@@ -38,6 +38,22 @@ const ADVANCED_TOGGLES = [
   { key: "useIndicatorStates" as const, label: "Indicator States", param: "use_indicator_states" },
 ];
 
+const sectionStyle: React.CSSProperties = {
+  padding: "12px 16px",
+  borderRadius: "6px",
+  backgroundColor: "var(--color-elevated)",
+  border: "1px solid var(--color-border-subtle)",
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  color: "var(--color-text-muted)",
+  fontSize: "10px",
+  fontWeight: 600,
+  textTransform: "uppercase" as const,
+  letterSpacing: "0.08em",
+  marginBottom: "10px",
+};
+
 export function FeaturesPanel() {
   const setField = useBacktestStore((s) => s.setField);
   const verbose = useSettingsStore((s) => s.verboseMode);
@@ -45,69 +61,73 @@ export function FeaturesPanel() {
 
   return (
     <div
-      className="rounded-lg border p-4"
+      className="flex flex-col gap-4 rounded-lg border p-5"
       style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
     >
       <h3
-        className="mb-3 text-xs font-semibold uppercase tracking-[0.1em]"
+        className="text-xs font-semibold uppercase tracking-[0.1em]"
         style={{ color: "var(--color-text-secondary)" }}
       >
         Feature Engineering
       </h3>
 
-      {/* Core indicators */}
-      <div className="mb-4 grid grid-cols-5 gap-x-4 gap-y-2">
-        {CORE_INDICATORS.map(({ key, label }) => (
-          <ParamToggle
-            key={key}
-            label={label}
-            paramKey={key}
-            checked={useBacktestStore.getState()[key] as boolean}
-            onChange={(v) => setField(key, v)}
-          />
-        ))}
+      {/* Core indicators — stacked vertically */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Core Indicators</div>
+        <div className="flex flex-col gap-2">
+          {CORE_INDICATORS.map(({ key, label }) => (
+            <ParamToggle
+              key={key}
+              label={label}
+              paramKey={key}
+              checked={useBacktestStore.getState()[key] as boolean}
+              onChange={(v) => setField(key, v)}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* FracDiff + crossover */}
-      <div className="mb-4 flex gap-6">
-        <ParamToggle
-          label="FracDiff"
-          paramKey="use_fracdiff"
-          checked={useBacktestStore.getState().useFracdiff}
-          description={verbose ? "Fractional differentiation preserves memory while achieving stationarity" : undefined}
-          onChange={(v) => setField("useFracdiff", v)}
-        />
-        <div className="flex-1">
-          <ParamSlider
-            label="fracdiff d"
-            paramKey="fracdiff_d"
-            value={useBacktestStore.getState().fracdiffD}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(v) => setField("fracdiffD", v)}
+      {/* FracDiff + Crossover/Price-MA */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Transformations</div>
+        <div className="flex flex-col gap-3">
+          <ParamToggle
+            label="FracDiff"
+            paramKey="use_fracdiff"
+            checked={useBacktestStore.getState().useFracdiff}
+            description={verbose ? "Fractional differentiation preserves memory while achieving stationarity" : undefined}
+            onChange={(v) => setField("useFracdiff", v)}
+          />
+          {useBacktestStore.getState().useFracdiff && (
+            <ParamSlider
+              label="fracdiff d"
+              paramKey="fracdiff_d"
+              value={useBacktestStore.getState().fracdiffD}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => setField("fracdiffD", v)}
+            />
+          )}
+          <ParamToggle
+            label="Crossover Bins"
+            paramKey="use_crossover_bins"
+            checked={useBacktestStore.getState().useCrossoverBins}
+            onChange={(v) => setField("useCrossoverBins", v)}
+          />
+          <ParamToggle
+            label="Price-MA Z-Score"
+            paramKey="use_price_ma_z"
+            checked={useBacktestStore.getState().usePriceMaZ}
+            onChange={(v) => setField("usePriceMaZ", v)}
           />
         </div>
       </div>
 
-      <div className="mb-4 flex gap-4">
-        <ParamToggle
-          label="Crossover Bins"
-          paramKey="use_crossover_bins"
-          checked={useBacktestStore.getState().useCrossoverBins}
-          onChange={(v) => setField("useCrossoverBins", v)}
-        />
-        <ParamToggle
-          label="Price-MA Z-Score"
-          paramKey="use_price_ma_z"
-          checked={useBacktestStore.getState().usePriceMaZ}
-          onChange={(v) => setField("usePriceMaZ", v)}
-        />
-      </div>
-
       {/* Lag features */}
-      <div className="mb-4 flex gap-6">
-        <div className="flex-1">
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Lag Features</div>
+        <div className="flex flex-col gap-3">
           <ParamSlider
             label="Lags"
             paramKey="lags"
@@ -117,8 +137,6 @@ export function FeaturesPanel() {
             step={1}
             onChange={(v) => setField("lags", v)}
           />
-        </div>
-        <div className="flex-1">
           <ParamSlider
             label="Lag Depth"
             paramKey="lag_depth"
@@ -132,31 +150,36 @@ export function FeaturesPanel() {
       </div>
 
       {/* Advanced toggles */}
-      <button
-        className="flex w-full items-center gap-2 border-t pt-3 text-xs font-semibold uppercase tracking-[0.1em]"
-        style={{ borderColor: "var(--color-border-subtle)", color: "var(--color-text-muted)" }}
-        onClick={() => setAdvancedOpen(!advancedOpen)}
-      >
-        {advancedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        Advanced Toggles ({ADVANCED_TOGGLES.length} features)
-      </button>
-      {advancedOpen && (
-        <div className="mt-3 grid grid-cols-3 gap-x-4 gap-y-2">
-          {ADVANCED_TOGGLES.map(({ key, label, param }) => (
-            <ParamToggle
-              key={key}
-              label={label}
-              paramKey={param}
-              checked={useBacktestStore.getState()[key] as boolean}
-              onChange={(v) => setField(key, v)}
-            />
-          ))}
-        </div>
-      )}
+      <div style={sectionStyle}>
+        <button
+          className="flex w-full items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em]"
+          style={{ color: "var(--color-text-muted)" }}
+          onClick={() => setAdvancedOpen(!advancedOpen)}
+        >
+          {advancedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          Advanced Toggles ({ADVANCED_TOGGLES.length} features)
+        </button>
+        {advancedOpen && (
+          <div className="mt-3 flex flex-col gap-2">
+            {ADVANCED_TOGGLES.map(({ key, label, param }) => (
+              <ParamToggle
+                key={key}
+                label={label}
+                paramKey={param}
+                checked={useBacktestStore.getState()[key] as boolean}
+                onChange={(v) => setField(key, v)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* News & Sentiment */}
-      <div className="mt-4 rounded-md border p-3" style={{ borderColor: "var(--color-border-subtle)" }}>
-        <div className="mb-2 flex items-center gap-2">
+      <div
+        className="rounded-md border p-4"
+        style={{ borderColor: "var(--color-border-subtle)", backgroundColor: "var(--color-elevated)" }}
+      >
+        <div className="mb-3 flex items-center gap-2">
           <Newspaper size={14} style={{ color: "var(--color-accent-info)" }} />
           <h4 className="text-xs font-semibold uppercase" style={{ color: "var(--color-accent-info)" }}>
             News &amp; Sentiment
@@ -171,25 +194,23 @@ export function FeaturesPanel() {
             onChange={(v) => setField("useNews", v)}
           />
           {useBacktestStore.getState().useNews && (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <ParamToggle
-                  label="Event Flags"
-                  paramKey="news_event_flags"
-                  checked={useBacktestStore.getState().newsEventFlags}
-                  description="NFP, FOMC, CPI proximity markers"
-                  onChange={(v) => setField("newsEventFlags", v)}
-                />
-                <ParamSelect
-                  label="Sentiment Engine"
-                  paramKey="news_sentiment_backend"
-                  value={useBacktestStore.getState().newsSentimentBackend}
-                  options={[...SELECT_OPTIONS.newsSentimentBackend]}
-                  description={useBacktestStore.getState().newsSentimentBackend === "finbert" ? "Requires HuggingFace transformers" : undefined}
-                  onChange={(v) => setField("newsSentimentBackend", v as "vader" | "finbert")}
-                />
-              </div>
-            </>
+            <div className="flex flex-col gap-3 pl-2">
+              <ParamToggle
+                label="Event Flags"
+                paramKey="news_event_flags"
+                checked={useBacktestStore.getState().newsEventFlags}
+                description="NFP, FOMC, CPI proximity markers"
+                onChange={(v) => setField("newsEventFlags", v)}
+              />
+              <ParamSelect
+                label="Sentiment Engine"
+                paramKey="news_sentiment_backend"
+                value={useBacktestStore.getState().newsSentimentBackend}
+                options={[...SELECT_OPTIONS.newsSentimentBackend]}
+                description={useBacktestStore.getState().newsSentimentBackend === "finbert" ? "Requires HuggingFace transformers" : undefined}
+                onChange={(v) => setField("newsSentimentBackend", v as "vader" | "finbert")}
+              />
+            </div>
           )}
         </div>
       </div>

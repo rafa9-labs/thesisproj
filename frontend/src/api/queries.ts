@@ -74,13 +74,17 @@ export function useJobStatus(jobId: string | null) {
 }
 
 export function useJobResults(jobId: string | null) {
+  const { data: statusData } = useJobStatus(jobId);
+  const isDone = statusData?.status === "completed" || statusData?.status === "failed";
+
   return useQuery({
     queryKey: ["job-results", jobId],
     queryFn: async () => {
       const { data } = await apiClient.get<JobResults>(`/backtest/${jobId}/results`);
       return data;
     },
-    enabled: !!jobId,
+    enabled: !!jobId && isDone,
+    refetchInterval: isDone ? false : 3_000,
   });
 }
 

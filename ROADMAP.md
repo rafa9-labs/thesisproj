@@ -1,7 +1,7 @@
 # FX ML Backtester — Product Roadmap
 
-> **Last Updated**: 2026-04-19
-> **Branch**: `main`
+> **Last Updated**: 2026-04-20
+> **Branch**: `feature/phase2-api-bridge`
 > **Revenue Target**: £500–2K/month within 3 months of launch
 > **Philosophy**: Optimize → Feature Parity → Polish → Secure → Deploy → Scale → Enrich → Automate
 
@@ -127,12 +127,11 @@
   - Correlation-aware position limits
   - **Files**: `pipeline/execution/risk_manager.py`
 
-- [ ] **S2.5** Execution model integration
-  - Wire execution models into `execution_patches.py`
-  - Add execution config to UI sidebar
-  - Execution model selection dropdown in backtest config
-  - Metrics breakdown: gross vs net, impact of each cost component
-  - **Files**: `pipeline/backtester/execution_patches.py`, `ui/controls.py`
+- [x] **S2.5** Execution model integration ✅ DONE (2026-04-20, branch `feature/phase2-api-bridge`)
+  - Wired execution models into API task pipeline
+  - Execution config passed through `config_overrides` from React frontend
+  - Metrics breakdown: gross vs net, all KPI metrics extracted
+  - **Files**: `api/tasks.py`, `frontend/src/stores/useBacktestStore.ts`
   - **Est**: 1h
 
 ---
@@ -362,15 +361,6 @@
   - **Est**: 3h
 
 - [x] **S8.7** Settings page ✅ DONE (commit `8d46875`)
-  - General settings (verbose mode, API URL)
-  - GPU & Compute (thread budget, mixed precision)
-  - Data Sources (OANDA API key)
-  - License placeholder (S10 integration)
-  - Pipeline configuration section
-  - Backend sync via GET/PUT /api/v1/config (commit `1d5557c`)
-  - About section + Reset to Defaults
-  - **Files**: `frontend/src/pages/Settings/`
-  - **Est**: 2h
 
 - [x] **S8.8** Error handling & loading states ✅ DONE (commit `8d46875`)
   - Global error boundary with user-friendly messages
@@ -382,7 +372,106 @@
 
 ---
 
-## Sprint 9: Electron Desktop Shell 🔄 SCAFFOLDED (core files created, not integrated)
+## Sprint 8B: Frontend ↔ API Integration & Bug Fixes ✅ COMPLETE (2026-04-20)
+
+> **Goal**: Fix all React ↔ FastAPI communication bugs, remove Streamlit, add data validation.
+> **Branch**: `feature/phase2-api-bridge`
+> **Est**: 6-8h
+
+- [x] **S8B.1** WebSocket port fix ✅ DONE
+  - WebSocket was connecting to port 8000, REST API on 8001 — silently failing
+  - Fixed: `frontend/src/api/websocket.ts` — default URL port 8000 → 8001
+  - **Files**: `frontend/src/api/websocket.ts`
+
+- [x] **S8B.2** React Query cache invalidation on WS events ✅ DONE
+  - Job completion events now invalidate `["jobs"]` and `["job-results"]` query keys
+  - Results page auto-updates when Celery job finishes
+  - **Files**: `frontend/src/stores/useJobStore.ts`
+
+- [x] **S8B.3** REST polling fallback for progress ✅ DONE
+  - `BacktestProgress` now uses `useJobStatus` as polling fallback when WebSocket fails
+  - Polls every 2s until job completes, then fires completion event
+  - **Files**: `frontend/src/pages/Backtest/BacktestProgress.tsx`
+
+- [x] **S8B.4** Auto-navigate to results after completion ✅ DONE
+  - When backtest completes, auto-navigates to `/results/:jobId` after 800ms
+  - **Files**: `frontend/src/pages/Backtest/BacktestPage.tsx`
+
+- [x] **S8B.5** AppShell memory leak + StatusDot syntax fix ✅ DONE
+  - `useState` used as effect (interval never cleaned up) → fixed to `useEffect`
+  - Stray `}` in StatusDot color prop causing render crash
+  - **Files**: `frontend/src/components/layout/AppShell.tsx`
+
+- [x] **S8B.6** Timestamp + NaN serialization in Celery tasks ✅ DONE
+  - `df_sim.to_dict()` produced `pd.Timestamp` objects → `json.dumps` crash
+  - Fixed: reset_index, convert datetime cols to ISO strings, replace NaN with None
+  - Added `_sanitize_metrics()` helper for numpy type → JSON conversion
+  - **Files**: `api/tasks.py`
+
+- [x] **S8B.7** Frontend null guards for metrics ✅ DONE
+  - `results.metrics.length` crashed when API returned null metrics
+  - Fixed in: ResultsPage, ComparePage, DashboardKPIs, useJobStore, LeaderboardTable, SignificanceMatrix
+  - Pattern: `const metrics = results.metrics ?? []` before all accesses
+  - **Files**: `frontend/src/pages/Results/ResultsPage.tsx`, `frontend/src/pages/Compare/ComparePage.tsx`, `frontend/src/pages/Compare/LeaderboardTable.tsx`, `frontend/src/pages/Compare/SignificanceMatrix.tsx`, `frontend/src/pages/Dashboard/DashboardKPIs.tsx`, `frontend/src/stores/useJobStore.ts`
+
+- [x] **S8B.8** React hooks violation fix ✅ DONE
+  - `useJobStore()` called inside ternary expressions — violated React hooks rules
+  - When `activeJobId` changed from null to string, hook count changed between renders
+  - Fixed: always call `useJobStore`, selector handles null internally
+  - **Files**: `frontend/src/pages/Backtest/BacktestPage.tsx`, `frontend/src/pages/Backtest/BacktestProgress.tsx`
+
+- [x] **S8B.9** Remove all Streamlit code ✅ DONE
+  - Deleted: `app.py`, `ui/` directory (8 files + cache), `launch_ui.bat`, `test_ui_imports.py`
+  - Streamlit was only a dev tool; React is the product frontend
+  - **Files**: removed
+
+- [x] **S8B.10** HPO_CONFIG_DIR bug fixes ✅ DONE
+  - Missing import in `real_trading_mixin.py` → SVM crashed with NameError
+  - Wrong default path in `dqn_config.py` (`pipeline/hpo/` → `hpo/`)
+  - Graceful fallback when no cached HPO config (warns + uses defaults instead of crashing)
+  - **Files**: `pipeline/backtester/real_trading_mixin.py`, `pipeline/dqn_config.py`
+
+- [x] **S8B.11** Date range constraints ✅ DONE
+  - Date pickers now use `min={dataMin}` / `max={dataMax}` from API (browser-level enforcement)
+  - JS-level validation rejects out-of-range dates
+  - Auto-clears stored dates when timeframe changes
+  - Backend clamps `end` to actual data max date
+  - Validation rules: start before data, end after data, start > end, range too short
+  - Default: full data range, end clamped to last complete month
+  - **Files**: `frontend/src/pages/Backtest/AssetSelector.tsx`, `frontend/src/hooks/useValidation.ts`, `api/tasks.py`, `api/schemas/backtest.py`
+
+- [x] **S8B.12** FeaturesPanel redesign ✅ DONE
+  - Vertical stacking with padded sections instead of grid layout
+  - Section titles: Core Indicators, Transformations, Lag Features, Advanced Toggles, News & Sentiment
+  - **Files**: `frontend/src/pages/Backtest/FeaturesPanel.tsx`
+
+- [x] **S8B.13** MLBacktester None date handling ✅ DONE
+  - `data_mixin.py`: explicit None handling (skip `.loc[]` slice, use full range)
+  - Auto-fills `self.start`/`self.end` from actual data bounds after loading
+  - `real_trading_mixin.py`: guards `pd.to_datetime(self.start)` with fallback to `self.data.index[0]`
+  - **Files**: `pipeline/backtester/data_mixin.py`, `pipeline/backtester/real_trading_mixin.py`
+
+---
+
+## Future Investigation: Daily/Weekly Walk-Forward Periods
+
+> **Status**: Not currently supported. Pipeline is hardcoded to monthly periods.
+> **Effort**: Medium refactor (3-5 hours core + 2-3 hours tests)
+
+The walk-forward engine uses `pd.DateOffset(months=...)` in 7 call sites across 3 files:
+- `pipeline/backtester/real_trading_mixin.py` (lines 762-765, 777, 793, 1022)
+- `pipeline/backtester/evaluation_mixin.py` (lines 41, 45, 49, 52)
+- `pipeline/backtester/run_mixin.py` (lines 113, 540, 3791-3792)
+
+**What would be needed:**
+1. Add `period_unit: Literal["months", "weeks", "days"]` to config/schemas
+2. Create `_make_offset(count, unit)` helper replacing all `DateOffset(months=...)`
+3. Generalize `months_between()` in `evaluation_mixin.py` to handle days/weeks
+4. Convert 37-month warm-up offset proportionally (≈160 weeks or 1120 days)
+5. Generalize `pd.to_period("M")` in CV fold builder
+6. Update frontend schemas + UI controls
+
+**Candidate for**: Sprint 14 or post-launch enhancement.
 
 > **Goal**: Wrap React + FastAPI into a native-feeling desktop application.
 > **Architecture**: Electron main process + Python subprocess + React BrowserWindow
@@ -612,7 +701,8 @@ The following phases from the original roadmap are **superseded** by the desktop
 
 | Old Phase | Status | Replaced By |
 |-----------|--------|-------------|
-| Phase 5 (Streamlit Cloud) | Partial — Streamlit stays as dev tool | Not deployed to cloud; React desktop app is the product |
+| Phase 4 (Streamlit UI) | Removed (2026-04-20) | React frontend (Sprint 8) is the product |
+| Phase 5 (Streamlit Cloud) | Cancelled | React desktop app is the product |
 | Phase 6 (Auth & User DB) | Cancelled | S10 (licensing) — no multi-user DB needed |
 | Phase 8 (Multi-User + Stripe) | Cancelled | S12 (Paddle) — desktop billing model |
 | Phase 9 (Python SDK) | Deferred | Post-launch consideration |
@@ -627,38 +717,39 @@ Phase 11 (Testing) is now Sprint 5.
 ## Quick Reference: How to Run
 
 ```bash
-# Option 1: Double-click launch_ui.bat (Windows)
+# Start Redis (required for Celery + WebSocket progress)
+redis-server
 
-# Option 2: PowerShell
-launch_ui.bat
+# Start FastAPI backend (port 8001)
+cd api && uvicorn main:app --host 127.0.0.1 --port 8001 --reload
 
-# Option 3: Manual WSL
-wsl -d Ubuntu-22.04 -- bash /mnt/c/Users/rafa/ML_Trading/thesisproj/run_wsl.sh \
-    python -m streamlit run app.py --server.headless true
+# Start Celery worker (separate terminal)
+celery -A api.tasks.celery_app worker --loglevel=info --pool=solo -Q celery
 
-# Then open: http://localhost:8501
+# Start React frontend (port 5173)
+cd frontend && npm run dev
+
+# Then open: http://localhost:5173
 ```
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `app.py` | Streamlit entry point (dev UI, interim) |
-| `ui/controls.py` | Nav bar + 6-tab layout + GPU warnings |
-| `ui/state.py` | AppState + backtest adapter |
-| `ui/results.py` | Results display + export |
-| `ui/dashboard.py` | Dashboard renderer |
-| `ui/charts.py` | Plotly chart builders |
+| `api/main.py` | FastAPI entry point (uvicorn) |
+| `api/tasks.py` | Celery backtest tasks + result serialization |
+| `frontend/src/pages/Backtest/` | Backtest config UI (9 components) |
+| `frontend/src/pages/Results/` | Results display + charts (7 components) |
+| `frontend/src/api/websocket.ts` | WebSocket manager for real-time progress |
+| `frontend/src/api/queries.ts` | React Query hooks for all API endpoints |
 | `pipeline/backtester/composed.py` | MLBacktester engine |
+| `pipeline/backtester/data_mixin.py` | Data loading + date range handling |
+| `pipeline/backtester/real_trading_mixin.py` | Real trading simulation + walk-forward |
 | `pipeline/runtime.py` | GPU detection, thread budgets, CUDA config |
 | `config.py` | Global configuration |
 | `models/registry.py` | Model registry |
-| `pipeline/execution/position_sizing.py` | Position sizing models (S2.1) |
-| `pipeline/backtester/execution_patches.py` | Execution loop + patches |
-| `run_smoke_gpu.bat` | GPU smoke test launcher (Windows → WSL) |
-| `run_smoke_gpu.sh` | GPU smoke test script (WSL + CUDA) |
-| `pipeline/model_comparison.py` | Model comparison & leaderboard module |
-| `run_comparison.bat` | One-command multi-model comparison runner |
+| `pipeline/execution/position_sizing.py` | Position sizing models |
+| `pipeline/model_comparison.py` | Model comparison & leaderboard |
 
 ## Full Sprint Sequence
 
@@ -669,10 +760,11 @@ wsl -d Ubuntu-22.04 -- bash /mnt/c/Users/rafa/ML_Trading/thesisproj/run_wsl.sh \
 | **S3** | Multi-Currency Expansion | 4-5h | DONE |
 | **S4** | Docker + CI/CD | 3-4h | PARTIAL (RAM opt done) |
 | **S5** | Comprehensive Tests + Benchmarks | 4-6h | TODO |
-| **S6** | News & Sentiment Features | 6-8h | TODO |
+| **S6** | News & Sentiment Features | 6-8h | DONE |
 | **S7** | FastAPI Backend | 8-10h | DONE |
-| **S8** | React Frontend | 20-25h | ✅ COMPLETE (all 8 sub-tasks done, polished, vite build zero errors) |
-| **S9** | Electron Desktop Shell | 10-12h | SCAFFOLDED (S9.1-3 done; S9.4-5 remaining) |
+| **S8** | React Frontend | 20-25h | DONE |
+| **S8B** | Frontend ↔ API Integration & Bug Fixes | 6-8h | ✅ DONE (2026-04-20) |
+| **S9** | Electron Desktop Shell | 10-12h | SCAFFOLDED (S9.1-3 done) |
 | **S10** | Security & Licensing (Paddle) | 12-15h | TODO |
 | **S11** | Installer & Auto-Update | 6-8h | TODO |
 | **S12** | Commercial Infrastructure | 8-10h | TODO |
