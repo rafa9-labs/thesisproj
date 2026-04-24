@@ -147,7 +147,7 @@ Tools: create_or_update_file, push_files, create_issue, create_pull_request, sea
 
 ### 3. postgres
 ```
-npx -y @modelcontextprotocol/server-postgres postgresql://forex_admin:changeme_secure_password@localhost:5432/forex_ml
+npx -y @modelcontextprotocol/server-postgres "$DATABASE_URL"
 ```
 Tools: query (read-only SQL)
 
