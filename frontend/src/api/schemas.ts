@@ -133,9 +133,12 @@ export interface JobResults {
 }
 
 export type WsEvent =
-  | { event: "job_started"; job_id: string; pair: string; models: string[] }
+  | { event: "job_started"; job_id: string; pair: string; models: string[]; total_work: number }
   | { event: "model_training"; job_id: string; model: string; status: "starting" }
   | { event: "model_training"; job_id: string; model: string; status: "complete"; metrics: Partial<Metrics> }
+  | { event: "model_phase"; job_id: string; model: string; phase: "hpo" | "simulation"; total_work?: number }
+  | { event: "hpo_progress"; job_id: string; model: string; trial: number; total_trials: number; cv_blocks: number; completed_work: number; total_work: number; progress_pct: number }
+  | { event: "month_progress"; job_id: string; model: string; month: number; total_months: number; sharpe?: number; trades?: number; completed_work: number; total_work: number; progress_pct: number }
   | { event: "job_complete"; job_id: string; metrics: Partial<Metrics>[] }
   | { event: "job_failed"; job_id: string; error: string }
   | { event: "download_started"; job_id: string; pair: string }

@@ -7,13 +7,41 @@ import sys
 import traceback
 import uuid
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 import numpy as np
 import pandas as pd
 from celery import Celery
 
 from api.config import settings
+
+TRIAL_COUNTS = {
+    "logistic":       {"random": 3, "bayes": 3},
+    "svm":            {"random": 3, "bayes": 3},
+    "decision_tree":  {"random": 3, "bayes": 3},
+    "random_forest":  {"random": 3, "bayes": 3},
+    "xgboost":        {"random": 3, "bayes": 3},
+    "lstm":           {"random": 3, "bayes": 3},
+    "cnn":            {"random": 3, "bayes": 3},
+    "transformer":    {"random": 3, "bayes": 3},
+    "ensemble_adaptive_regime":     {"random": 3, "bayes": 3},
+    "ensemble_cnn_lstm_xgboost":   {"random": 3, "bayes": 3},
+    "dqn":            {"random": 3, "bayes": 3},
+}
+
+CV_BLOCKS_DEFAULT = 5
+
+
+def _compute_total_work(models: list[str], months: int, cv_blocks: int = CV_BLOCKS_DEFAULT) -> int:
+    total = 0
+    for m in models:
+        tc = TRIAL_COUNTS.get(m, {"random": 3, "bayes": 3})
+        n_trials = tc.get("random", 3) + tc.get("bayes", 3)
+        n_trials = max(n_trials, 10)
+        hpo_work = n_trials * cv_blocks
+        sim_work = months
+        total += hpo_work + sim_work
+    return max(total, 1)
 
 celery_app = Celery(
     "fx_pipeline",
@@ -109,14 +137,35 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
     except Exception:
         pass
 
+    total_work = _compute_total_work(models, months)
     jm.update_status(job_id, "running")
-    _pub("job_started", job_id, {"pair": pair, "models": models})
+    _pub("job_started", job_id, {"pair": pair, "models": models, "total_work": total_work})
+
+    completed_work = 0
+
+    def _progress_cb(phase: str, model: str, detail: dict | None = None):
+        nonlocal completed_work
+        data = {"model": model, "phase": phase}
+        if detail:
+            data.update(detail)
+        if phase == "hpo_trial":
+            cv_b = detail.get("cv_blocks", CV_BLOCKS_DEFAULT) if detail else CV_BLOCKS_DEFAULT
+            completed_work += cv_b
+        elif phase == "month":
+            completed_work += 1
+        pct = min(round((completed_work / total_work) * 100, 1), 100) if total_work > 0 else 0
+        data["completed_work"] = completed_work
+        data["total_work"] = total_work
+        data["progress_pct"] = pct
+        evt_name = f"{phase}_progress" if phase in ("hpo", "month") else "model_phase"
+        _pub(evt_name, job_id, data)
 
     all_metrics = []
 
     try:
         for model_type in models:
             _pub("model_training", job_id, {"model": model_type, "status": "starting"})
+            _pub("model_phase", job_id, {"model": model_type, "phase": "hpo", "total_work": total_work})
 
             from copy import deepcopy
             from pipeline.metrics_tuples import CLASS_DEFAULTS
@@ -124,6 +173,9 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
 
             feat_cfg = deepcopy(CLASS_DEFAULTS["features"])
             feat_cfg.update(config.get("config_overrides", {}))
+
+            tc = TRIAL_COUNTS.get(model_type, {"random": 3, "bayes": 3})
+            n_trials_hdr = max(tc.get("random", 3) + tc.get("bayes", 3), 10)
 
             bt = MLBacktester(
                 symbol=pair,
@@ -133,12 +185,15 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
                 model_type=model_type,
                 features_config=feat_cfg,
             )
+            bt._progress_callback = _progress_cb
 
             base_cfg = deepcopy(CLASS_DEFAULTS["features"])
             base_cfg.update(deepcopy(CLASS_DEFAULTS["cv"]))
             base_cfg["model_type"] = model_type
             base_cfg["rep"] = 1
             base_cfg["trading_costs"] = trading_costs
+            base_cfg["n_trials"] = n_trials_hdr
+            base_cfg["n_startup_trials"] = tc.get("random", 3)
             base_cfg.update(config.get("config_overrides", {}))
 
             df_sim = bt.real_trading_simulation(

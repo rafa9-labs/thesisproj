@@ -540,6 +540,10 @@ class RealTradingMixin:
                 )
                 hpo_cfg = dict(config)  # shallow copy is enough
 
+                _progress_cb = getattr(self, "_progress_callback", None)
+                if _progress_cb and isinstance(hpo_cfg, dict):
+                    hpo_cfg["_progress_callback"] = _progress_cb
+
                 # Ensure HPO-only flags
                 hpo_cfg["hpo_only"] = True
                 hpo_cfg.setdefault("hpo_save_to_disk", True)
@@ -618,6 +622,14 @@ class RealTradingMixin:
         results = []
         all_dfs = []
         trade_dfs = []   # per-month trade DataFrames (aligned with all_dfs / results)
+
+        _progress_cb = getattr(self, "_progress_callback", None)
+
+        if _progress_cb and model_type != "dqn":
+            _progress_cb("hpo", model_type, {"n_trials": int(config.get("n_trials", 6)), "cv_blocks": 5})
+
+        if _progress_cb:
+            _progress_cb("model_phase", model_type, {"phase": "simulation"})
 
         # Reset per-run PBO/MCS accumulator
         self._wfo_monthly_records = []
@@ -2587,6 +2599,10 @@ class RealTradingMixin:
                 )
 
                 results.append(result)
+
+                _progress_cb = getattr(self, "_progress_callback", None)
+                if _progress_cb:
+                    _progress_cb("month", model_type, {"month": i + 1, "total_months": months, "sharpe": result.get("sharpe", None), "trades": result.get("trades", None)})
                 
                 # PBO/MCS monthly bookkeeping (does not affect trading logic)
                 try:

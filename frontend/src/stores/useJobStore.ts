@@ -2,6 +2,14 @@ import { create } from "zustand";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Metrics, WsEvent } from "@/api/schemas";
 
+interface ModelProgress {
+  phase: "pending" | "hpo" | "simulation" | "complete" | "failed";
+  hpoTrial: number;
+  hpoTotalTrials: number;
+  simMonth: number;
+  simTotalMonths: number;
+}
+
 interface JobState {
   jobId: string;
   pair: string;
@@ -15,6 +23,9 @@ interface JobState {
   error: string | null;
   createdAt: Date;
   completedAt: Date | null;
+  totalWork: number;
+  completedWork: number;
+  modelPhases: Map<string, ModelProgress>;
 }
 
 interface JobStore {
@@ -48,6 +59,9 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         error: null,
         createdAt: new Date(),
         completedAt: null,
+        totalWork: 0,
+        completedWork: 0,
+        modelPhases: new Map(),
       });
       return { activeJobs: next, selectedJobId: jobId };
     }),
@@ -66,6 +80,7 @@ export const useJobStore = create<JobStore>()((set, get) => ({
       if (event.event === "job_started") {
         updated.status = "running";
         updated.progressText = "Backtest running...";
+        updated.totalWork = event.total_work ?? 0;
       }
 
       if (event.event === "model_training") {
@@ -78,13 +93,54 @@ export const useJobStore = create<JobStore>()((set, get) => ({
           const nextMetrics = new Map(updated.metrics);
           nextMetrics.set(event.model, event.metrics ?? {});
           updated.metrics = nextMetrics;
+          const phaseMap = new Map(updated.modelPhases);
+          const mp = phaseMap.get(event.model) || { phase: "complete" as const, hpoTrial: 0, hpoTotalTrials: 0, simMonth: 0, simTotalMonths: 0 };
+          phaseMap.set(event.model, { ...mp, phase: "complete" });
+          updated.modelPhases = phaseMap;
           const totalModels = updated.models?.length || 1;
-          const progress = Math.round(
-            (updated.completedModels.length / totalModels) * 100,
-          );
-          updated.progress = progress;
           updated.progressText = `${event.model} complete (${updated.completedModels.length}/${totalModels})`;
         }
+      }
+
+      if (event.event === "model_phase") {
+        const m = event.model;
+        const phaseMap = new Map(updated.modelPhases);
+        const mp = phaseMap.get(m) || { phase: "pending" as const, hpoTrial: 0, hpoTotalTrials: 0, simMonth: 0, simTotalMonths: 0 };
+        phaseMap.set(m, { ...mp, phase: event.phase as "hpo" | "simulation" });
+        updated.modelPhases = phaseMap;
+        updated.currentModel = m;
+        if (event.phase === "hpo") {
+          updated.progressText = `HPO: tuning ${m}...`;
+        } else if (event.phase === "simulation") {
+          updated.progressText = `Simulating ${m}...`;
+        }
+        if (event.total_work !== undefined) {
+          updated.totalWork = event.total_work;
+        }
+      }
+
+      if (event.event === "hpo_progress") {
+        const m = event.model;
+        const phaseMap = new Map(updated.modelPhases);
+        const mp = phaseMap.get(m) || { phase: "hpo" as const, hpoTrial: 0, hpoTotalTrials: 0, simMonth: 0, simTotalMonths: 0 };
+        phaseMap.set(m, { ...mp, phase: "hpo", hpoTrial: event.trial, hpoTotalTrials: event.total_trials });
+        updated.modelPhases = phaseMap;
+        updated.completedWork = event.completed_work ?? updated.completedWork;
+        updated.totalWork = event.total_work ?? updated.totalWork;
+        updated.progress = event.progress_pct ?? updated.progress;
+        updated.progressText = `HPO: trial ${event.trial}/${event.total_trials} (${m})`;
+      }
+
+      if (event.event === "month_progress") {
+        const m = event.model;
+        const phaseMap = new Map(updated.modelPhases);
+        const mp = phaseMap.get(m) || { phase: "simulation" as const, hpoTrial: 0, hpoTotalTrials: 0, simMonth: 0, simTotalMonths: 0 };
+        phaseMap.set(m, { ...mp, phase: "simulation", simMonth: event.month, simTotalMonths: event.total_months });
+        updated.modelPhases = phaseMap;
+        updated.completedWork = event.completed_work ?? updated.completedWork;
+        updated.totalWork = event.total_work ?? updated.totalWork;
+        updated.progress = event.progress_pct ?? updated.progress;
+        updated.progressText = `${m}: month ${event.month}/${event.total_months}`;
       }
 
       if (event.event === "job_complete") {
@@ -96,7 +152,7 @@ export const useJobStore = create<JobStore>()((set, get) => ({
           const qc = useQueryClient();
           qc.invalidateQueries({ queryKey: ["jobs"] });
           qc.invalidateQueries({ queryKey: ["job-results", jobId] });
-        } catch {}
+        } catch (_e) { void _e }
       }
 
       if (event.event === "job_failed") {
@@ -107,7 +163,7 @@ export const useJobStore = create<JobStore>()((set, get) => ({
           const qc = useQueryClient();
           qc.invalidateQueries({ queryKey: ["jobs"] });
           qc.invalidateQueries({ queryKey: ["job", jobId] });
-        } catch {}
+        } catch (_e) { void _e }
       }
 
       next.set(jobId, updated);

@@ -276,6 +276,13 @@ def run_optuna_tuning(
 
         study = optuna.create_study(direction="maximize", sampler=sampler, pruner=pruner)
 
+    _progress_cb = cv_config.get("_progress_callback", None) if isinstance(cv_config, dict) else None
+    _model_name_for_cb = str(models_to_test[0]) if isinstance(models_to_test, (list, tuple)) and models_to_test else str(models_to_test)
+    _n_trials_for_cb = int(n_trials) if n_trials is not None else 0
+    _cv_blocks_for_cb = int(cv_config.get("cv_blocks", 5)) if isinstance(cv_config, dict) else 5
+
+    _trial_counter = [0]
+
     func = lambda trial: optuna_objective(
         trial,
         train_data,
@@ -285,6 +292,21 @@ def run_optuna_tuning(
         models_to_test,
         vol_stats=vol_stats,
     )
+
+    def _func_with_progress(trial):
+        result = func(trial)
+        _trial_counter[0] += 1
+        if _progress_cb:
+            try:
+                _progress_cb("hpo_trial", _model_name_for_cb, {
+                    "trial": _trial_counter[0],
+                    "total_trials": _n_trials_for_cb,
+                    "cv_blocks": _cv_blocks_for_cb,
+                    "score": result,
+                })
+            except Exception:
+                pass
+        return result
 
 
     # --- CPU/BLAS parallelism controls (single wide trial) ---
@@ -318,7 +340,7 @@ def run_optuna_tuning(
 
         if plateau_patience <= 0:
             # Backwards-compatible default behavior
-            study.optimize(func, n_trials=n_trials, n_jobs=n_jobs, gc_after_trial=True)
+            study.optimize(_func_with_progress, n_trials=n_trials, n_jobs=n_jobs, gc_after_trial=True)
         else:
             print(f"[Optuna] Plateau stop enabled: patience={plateau_patience} "
                   f"delta={plateau_delta} min_trials={plateau_min_trials}")
@@ -334,7 +356,7 @@ def run_optuna_tuning(
             _no_improve = 0
 
             for _i in range(_target_trials):
-                study.optimize(func, n_trials=1, n_jobs=n_jobs, gc_after_trial=True)
+                study.optimize(_func_with_progress, n_trials=1, n_jobs=n_jobs, gc_after_trial=True)
 
                 _after = getattr(study, "best_value", None)
                 if _after is None:
