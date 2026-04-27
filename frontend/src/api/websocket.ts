@@ -10,8 +10,11 @@ export class WebSocketManager {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    const apiBase = import.meta.env.VITE_API_URL ?? "http://localhost:8001/api/v1";
+    const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
     this.baseUrl = apiBase.replace(/^http/, "ws").replace(/\/api\/v1\/?$/, "");
+    if (!this.baseUrl.startsWith("ws")) {
+      this.baseUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
+    }
   }
 
   connect(jobId: string) {
