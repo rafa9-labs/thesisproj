@@ -25,7 +25,7 @@ export function CumulativePnlChart({ trades }: CumulativePnlChartProps) {
   const finalPnl = data[data.length - 1].cumPnl;
 
   return (
-    <ChartCard title="Cumulative P&L" subtitle={`${data.length} trades · Final: ${finalPnl >= 0 ? "+" : ""}${finalPnl.toFixed(1)}%`}>
+    <ChartCard title="Cumulative P&L" subtitle={`${data.length} trades · Final: ${finalPnl >= 0 ? "+" : ""}${finalPnl?.toFixed?.(1) ?? "0"}%`}>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#2A2E39" />
@@ -36,7 +36,7 @@ export function CumulativePnlChart({ trades }: CumulativePnlChartProps) {
           />
           <YAxis
             tick={{ fill: "#787B86", fontSize: 10, fontFamily: "JetBrains Mono" }}
-            tickFormatter={(v: number) => `${v.toFixed(0)}%`}
+            tickFormatter={(v: number) => v == null ? "" : `${v.toFixed(0)}%`}
           />
           <Tooltip
             contentStyle={{
@@ -47,7 +47,7 @@ export function CumulativePnlChart({ trades }: CumulativePnlChartProps) {
               fontFamily: "JetBrains Mono",
             }}
             labelStyle={{ color: "#80899F" }}
-            formatter={(value: number) => [`${value.toFixed(2)}%`, "Cum. P&L"]}
+            formatter={(value: number) => [value == null ? "—" : `${value.toFixed(2)}%`, "Cum. P&L"]}
             labelFormatter={(label: number) => `Trade #${label}`}
           />
           <ReferenceLine y={0} stroke="#363A45" strokeDasharray="3 3" />

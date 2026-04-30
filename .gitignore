@@ -14,7 +14,7 @@ joblib_tmp/
 *.log
 
 # Outputs (generated)
-results/
+/results/
 optuna_runs/
 artifacts/
 .feature_cache/

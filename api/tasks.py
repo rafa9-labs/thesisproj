@@ -85,20 +85,29 @@ def _pub(event: str, job_id: str, data: Dict[str, Any]):
 
 def _sanitize_metrics(metrics_list: list) -> list:
     """Ensure all metric values are JSON-safe (no NaN, no Timestamp, no numpy types)."""
+
+    def _coerce(v):
+        if isinstance(v, float) and (np.isnan(v) or np.isinf(v)):
+            return None
+        if isinstance(v, (np.integer,)):
+            return int(v)
+        if isinstance(v, (np.floating,)):
+            return float(v)
+        if isinstance(v, (np.bool_,)):
+            return bool(v)
+        if isinstance(v, dict):
+            return {k2: _coerce(v2) for k2, v2 in v.items()}
+        if isinstance(v, list):
+            return [_coerce(item) for item in v]
+        if isinstance(v, (np.datetime64, pd.Timestamp)):
+            return str(v)
+        return v
+
     safe = []
     for row in metrics_list:
         out = {}
         for k, v in row.items():
-            if isinstance(v, float) and (np.isnan(v) or np.isinf(v)):
-                out[k] = None
-            elif isinstance(v, (np.integer,)):
-                out[k] = int(v)
-            elif isinstance(v, (np.floating,)):
-                out[k] = float(v)
-            elif isinstance(v, (np.bool_,)):
-                out[k] = bool(v)
-            else:
-                out[k] = v
+            out[k] = _coerce(v)
         safe.append(out)
     return safe
 
@@ -280,6 +289,14 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
                         t = int(ts.timestamp()) if hasattr(ts, 'timestamp') else i
                         dd_points.append({"time": t, "value": round(float(val), 6)})
                     metrics_row["drawdown_curve"] = dd_points
+                else:
+                    metrics_row.setdefault("equity_curve", [])
+                    metrics_row.setdefault("buy_hold_curve", [])
+                    metrics_row.setdefault("drawdown_curve", [])
+                    metrics_row.setdefault("total_return_pct", 0.0)
+                    metrics_row.setdefault("max_drawdown", 0.0)
+                    metrics_row.setdefault("cagr", 0.0)
+                    metrics_row.setdefault("calmar_ratio", 0.0)
 
                 if "strategy_return" in df_sim.columns:
                     rets = df_sim["strategy_return"].dropna().values

@@ -1,5 +1,17 @@
 import type { EquityPoint, TradeRecord, MonthlyResult } from "@/api/schemas";
 
+export function normalizeEquityCurve(raw: EquityPoint[] | null | undefined): EquityPoint[] | null {
+  if (!raw || !Array.isArray(raw) || raw.length === 0) return raw ?? null;
+  const first = raw[0];
+  if (typeof first === "number") {
+    return (raw as number[]).map((v, i) => ({ time: i, value: v }));
+  }
+  if (typeof first === "object" && first !== null && "time" in first && "value" in first) {
+    return raw as EquityPoint[];
+  }
+  return raw as EquityPoint[];
+}
+
 export function computeRollingSharpe(
   curve: EquityPoint[],
   windowSize: number = 30,
@@ -8,8 +20,8 @@ export function computeRollingSharpe(
 
   const returns: number[] = [];
   for (let i = 1; i < curve.length; i++) {
-    const prev = curve[i - 1].value;
-    const curr = curve[i].value;
+    const prev = curve[i - 1].value ?? 0;
+    const curr = curve[i].value ?? 0;
     returns.push(prev !== 0 ? (curr - prev) / prev : 0);
   }
 
@@ -32,8 +44,8 @@ export function computeRollingReturn(
 
   const result: { time: number; returnPct: number }[] = [];
   for (let i = windowSize - 1; i < curve.length; i++) {
-    const start = curve[i - windowSize + 1].value;
-    const end = curve[i].value;
+    const start = curve[i - windowSize + 1].value ?? 0;
+    const end = curve[i].value ?? 0;
     const ret = start !== 0 ? (end - start) / start : 0;
     result.push({ time: curve[i].time, returnPct: ret * 100 });
   }

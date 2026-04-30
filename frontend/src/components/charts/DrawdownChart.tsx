@@ -25,7 +25,7 @@ export function DrawdownChart({ drawdownCurve }: DrawdownChartProps) {
     if (!drawdownCurve || drawdownCurve.length === 0) return [];
     return drawdownCurve.map((p) => ({
       date: formatDate(p.time),
-      drawdown: +(p.value * 100).toFixed(2),
+      drawdown: +((p.value ?? 0) * 100).toFixed(2),
     }));
   }, [drawdownCurve]);
 
@@ -57,7 +57,7 @@ export function DrawdownChart({ drawdownCurve }: DrawdownChartProps) {
             }}
             labelStyle={{ color: "#80899F" }}
             itemStyle={{ color: "#F23645" }}
-            formatter={(value: number) => [`${value.toFixed(2)}%`, "Drawdown"]}
+            formatter={(value: number) => [value == null ? "—" : `${value.toFixed(2)}%`, "Drawdown"]}
           />
           <Area
             type="monotone"

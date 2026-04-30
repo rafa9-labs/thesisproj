@@ -16,6 +16,7 @@ import { TradeDistributionChart } from "@/components/charts/TradeDistributionCha
 import { RollingMetricsChart } from "@/components/charts/RollingMetricsChart";
 import { CumulativePnlChart } from "@/components/charts/CumulativePnlChart";
 import { ParameterSensitivityChart } from "@/components/charts/ParameterSensitivityChart";
+import { normalizeEquityCurve } from "@/lib/chartUtils";
 import type { TradeRecord } from "@/api/schemas";
 import type { EquityCurveChartHandle } from "@/components/charts/EquityCurveChart";
 
@@ -211,18 +212,18 @@ export function ResultsPage() {
 
       <EquitySection
         ref={equityChartRef}
-        equityCurve={activeMetric?.equity_curve ?? null}
-        buyHoldCurve={activeMetric?.buy_hold_curve ?? null}
-        drawdownCurve={activeMetric?.drawdown_curve ?? null}
+        equityCurve={normalizeEquityCurve(activeMetric?.equity_curve ?? null)}
+        buyHoldCurve={normalizeEquityCurve(activeMetric?.buy_hold_curve ?? null)}
+        drawdownCurve={normalizeEquityCurve(activeMetric?.drawdown_curve ?? null)}
       />
 
-      <DrawdownChart drawdownCurve={activeMetric?.drawdown_curve ?? null} />
+      <DrawdownChart drawdownCurve={normalizeEquityCurve(activeMetric?.drawdown_curve ?? null)} />
 
       <CumulativePnlChart trades={activeMetric?.trades ? (activeMetric.trades as TradeRecord[]) : null} />
 
       <MonthlySection monthlyResults={activeMetric?.monthly_results ?? null} />
 
-      <RollingMetricsChart equityCurve={activeMetric?.equity_curve ?? null} />
+      <RollingMetricsChart equityCurve={normalizeEquityCurve(activeMetric?.equity_curve ?? null)} />
 
       <TradeDistributionChart trades={activeMetric?.trades ? (activeMetric.trades as TradeRecord[]) : null} />
 
@@ -264,9 +265,9 @@ export function ResultsPage() {
             >
               {selectedTrade.direction}
             </span>
-            <span style={{ color: selectedTrade.return_pct >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)" }}>
-              {selectedTrade.return_pct >= 0 ? "+" : ""}
-              {selectedTrade.return_pct.toFixed(2)}%
+            <span style={{ color: (selectedTrade.return_pct ?? 0) >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)" }}>
+              {(selectedTrade.return_pct ?? 0) >= 0 ? "+" : ""}
+              {(selectedTrade.return_pct ?? 0).toFixed(2)}%
             </span>
             <button
               onClick={() => setSelectedTrade(null)}

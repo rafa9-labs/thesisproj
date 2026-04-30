@@ -22,12 +22,12 @@ export function MonthlyReturnsChart({ monthlyResults, height = 280 }: MonthlyRet
   const data = useMemo(() => {
     if (!monthlyResults || monthlyResults.length === 0) return [];
     return monthlyResults.map((m) => ({
-      month: m.month.slice(0, 7),
-      returnPct: +(m.return_pct * 100).toFixed(2),
+      month: (m.month ?? "").slice(0, 7),
+      returnPct: +((m.return_pct ?? 0) * 100).toFixed(2),
       winRate: m.win_rate != null ? +(m.win_rate * 100).toFixed(1) : null,
       sharpe: m.sharpe != null ? +m.sharpe.toFixed(2) : null,
       trades: m.trades,
-      positive: m.return_pct >= 0,
+      positive: (m.return_pct ?? 0) >= 0,
     }));
   }, [monthlyResults]);
 
@@ -59,6 +59,7 @@ export function MonthlyReturnsChart({ monthlyResults, height = 280 }: MonthlyRet
             }}
             labelStyle={{ color: "#80899F" }}
             formatter={(value: number, name: string) => {
+              if (value == null) return ["—", name];
               if (name === "returnPct") return [`${value.toFixed(2)}%`, "Return"];
               return [value, name];
             }}

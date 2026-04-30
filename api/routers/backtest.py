@@ -233,6 +233,19 @@ def get_backtest_status(job_id: str):
     )
 
 
+def _coerce_curve(raw):
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or len(raw) == 0:
+        return raw if isinstance(raw, list) else None
+    first = raw[0]
+    if isinstance(first, dict):
+        return raw
+    if isinstance(first, (int, float)):
+        return [{"time": i, "value": float(v)} for i, v in enumerate(raw)]
+    return raw
+
+
 @router.get("/{job_id}/results", response_model=BacktestResultsResponse)
 def get_backtest_results(job_id: str):
     store = get_data_store()
@@ -265,9 +278,9 @@ def get_backtest_results(job_id: str):
             directional_accuracy=m.get("directional_accuracy"),
             precision_macro=m.get("precision_macro"),
             f1_macro=m.get("f1_macro"),
-            equity_curve=m.get("equity_curve"),
-            buy_hold_curve=m.get("buy_hold_curve"),
-            drawdown_curve=m.get("drawdown_curve"),
+            equity_curve=_coerce_curve(m.get("equity_curve")),
+            buy_hold_curve=_coerce_curve(m.get("buy_hold_curve")),
+            drawdown_curve=_coerce_curve(m.get("drawdown_curve")),
             monthly_results=m.get("monthly_results"),
             trades=m.get("trades"),
             hpo_param_importance=m.get("hpo_param_importance"),

@@ -77,6 +77,7 @@ export function RollingMetricsChart({ equityCurve, windowSize = 30 }: RollingMet
             }}
             labelStyle={{ color: "#80899F" }}
             formatter={(value: number, name: string) => {
+              if (value == null) return ["—", name === "sharpe" ? "Sharpe" : "Return"];
               if (name === "sharpe") return [value.toFixed(3), "Sharpe"];
               return [`${value.toFixed(2)}%`, "Return"];
             }}

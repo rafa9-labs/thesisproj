@@ -24,8 +24,8 @@ const METRIC_LABELS: Record<string, string> = {
   max_drawdown: "Max DD",
 };
 
-function cellColor(val: number | null, metric: string): string {
-  if (val === null) return "var(--color-elevated)";
+function cellColor(val: number | null | undefined, metric: string): string {
+  if (val == null) return "var(--color-elevated)";
 
   if (metric === "max_drawdown") {
     if (val > -5) return "rgba(8,153,129,0.85)";
@@ -47,8 +47,8 @@ function cellColor(val: number | null, metric: string): string {
   return "rgba(242,54,69,0.55)";
 }
 
-function formatCellVal(val: number | null, metric: string): string {
-  if (val === null) return "—";
+function formatCellVal(val: number | null | undefined, metric: string): string {
+  if (val == null) return "—";
   if (metric === "win_rate") return `${(val * 100).toFixed(1)}%`;
   if (metric === "max_drawdown") return `${val.toFixed(1)}%`;
   if (metric === "total_return_pct") return `${val.toFixed(1)}%`;
