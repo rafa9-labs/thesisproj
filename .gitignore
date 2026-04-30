@@ -44,3 +44,18 @@ test_gpu_wsl.sh
 
 # News article disk cache
 news_cache/
+
+# Electron / PyInstaller build artifacts
+electron-dist/
+release/
+build/
+dist/
+static/
+dump.rdb
+
+# Frontend build cache
+frontend/.vite/
+frontend/dist/
+
+# UI test screenshots
+tests/ui_screenshots/
