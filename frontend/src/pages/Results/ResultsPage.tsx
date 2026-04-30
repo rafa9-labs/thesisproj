@@ -15,6 +15,7 @@ import { DrawdownChart } from "@/components/charts/DrawdownChart";
 import { TradeDistributionChart } from "@/components/charts/TradeDistributionChart";
 import { RollingMetricsChart } from "@/components/charts/RollingMetricsChart";
 import { CumulativePnlChart } from "@/components/charts/CumulativePnlChart";
+import { ParameterSensitivityChart } from "@/components/charts/ParameterSensitivityChart";
 import type { TradeRecord } from "@/api/schemas";
 import type { EquityCurveChartHandle } from "@/components/charts/EquityCurveChart";
 
@@ -229,6 +230,8 @@ export function ResultsPage() {
         paramImportance={activeMetric?.hpo_param_importance ?? null}
         trials={activeMetric?.hpo_trials ?? null}
       />
+
+      <ParameterSensitivityChart trials={activeMetric?.hpo_trials ?? null} />
 
       <TradeLogTable
         trades={activeMetric?.trades ? (activeMetric.trades as import("@/api/schemas").TradeRecord[]) : null}
