@@ -261,7 +261,7 @@ class EnsembleMixin:
 
         # 1) Drop run artifacts (safe in CV)
         for _attr in (
-            "results", "results_full", "bar_concat",
+            "results", "results_full", "bar_concat", "trade_log",
             "_cv_last_eval_df", "_cv_fold_eval_frames",
             "_ensemble_win_cache", "_seq_cache",
             "_optuna_best_for_wfo", "_optuna_top5_for_wfo", "_optuna_consensus_pool_for_wfo",

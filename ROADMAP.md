@@ -155,11 +155,11 @@
   - Pair-specific HPO configs
   - **Files**: `pipeline/main_cli.py`, `pipeline/model_comparison.py`
 
-- [ ] **S3.3** Cross-pair comparison UI
+- [x] **S3.3** Cross-pair comparison UI ✅ DONE
   - Pair selector dropdown in UI
   - Cross-pair equity curve overlay
   - Heatmap: model × pair Sharpe ratio grid
-  - **Files**: `ui/controls.py`, `ui/charts.py`
+  - **Files**: `frontend/src/pages/Compare/CrossPairSection.tsx`, `frontend/src/components/charts/CrossPairOverlayChart.tsx`, `frontend/src/components/charts/SharpeHeatmap.tsx`, `frontend/src/pages/Dashboard/PerformanceHeatmapSection.tsx`, `api/routers/backtest.py` (heatmap + cross-pair-curves endpoints)
   - **Est**: 1h
 
 ---
@@ -254,7 +254,9 @@
 - [x] **S6.4** News overlay on charts ✅ DONE
   - Vertical event markers on equity curves (color-coded by impact level)
   - Legend entries for high/medium impact events
-  - **Files**: `ui/charts.py`
+  - Toggle button (Events ON/OFF) on EquitySection
+  - API: `GET /news/events?start=&end=&impact=high,medium`
+  - **Files**: `api/routers/news.py`, `api/schemas/news.py`, `frontend/src/pages/Results/EquitySection.tsx`, `frontend/src/components/charts/EquityCurveChart.tsx`
 
 ---
 
@@ -319,11 +321,11 @@
   - **Files**: `frontend/src/layout/`, `frontend/src/components/layout/AppShell.tsx`, `TerminalPanel.tsx`
   - **Est**: 2h
 
-- [x] **S8.3** Dashboard page ✅ DONE (commit `8d46875`)
+- [x] **S8.3** Dashboard page ✅ DONE
   - KPI cards (total backtests, best Sharpe, avg win rate, equity curve thumbnail)
-  - Recent backtests table with quick actions
-  - Model performance heatmap (model x pair Sharpe grid)
-  - **Files**: `frontend/src/pages/Dashboard/` (DashboardPage, DashboardKPIs, RecentJobsTable)
+  - Recent backtests table with equity thumbnails
+  - Model performance heatmap (model x pair Sharpe grid) with metric selector
+  - **Files**: `frontend/src/pages/Dashboard/` (DashboardPage, DashboardKPIs, RecentJobsTable, PerformanceHeatmapSection), `frontend/src/components/charts/SharpeHeatmap.tsx`, `frontend/src/components/charts/EquityThumbnail.tsx`
   - **Est**: 3h
 
 - [x] **S8.4** Backtest configuration page ✅ DONE (commits `8d46875`, `96f4ab1`)
@@ -356,8 +358,9 @@
   - Side-by-side equity curve overlay
   - Leaderboard table (sortable by any metric)
   - Paired t-test significance indicators
-  - Parameter sensitivity chart
-  - **Files**: `frontend/src/pages/Compare/` (ComparePage, EquityOverlayChart, LeaderboardTable, SignificanceMatrix)
+  - Parameter sensitivity chart (Recharts ScatterChart with param selector)
+  - Cross-pair comparison section (overlay equity curves across pairs)
+  - **Files**: `frontend/src/pages/Compare/` (ComparePage, EquityOverlayChart, LeaderboardTable, SignificanceMatrix, CrossPairSection), `frontend/src/components/charts/ParameterSensitivityChart.tsx`, `frontend/src/components/charts/CrossPairOverlayChart.tsx`
   - **Est**: 3h
 
 - [x] **S8.7** Settings page ✅ DONE (commit `8d46875`)
@@ -738,8 +741,14 @@ cd frontend && npm run dev
 |------|------|
 | `api/main.py` | FastAPI entry point (uvicorn) |
 | `api/tasks.py` | Celery backtest tasks + result serialization |
+| `api/routers/backtest.py` | Backtest + heatmap + cross-pair API endpoints |
+| `api/routers/news.py` | News status + economic events API |
+| `api/schemas/news.py` | News event schemas |
 | `frontend/src/pages/Backtest/` | Backtest config UI (9 components) |
 | `frontend/src/pages/Results/` | Results display + charts (7 components) |
+| `frontend/src/pages/Compare/` | Model comparison + cross-pair (5 components) |
+| `frontend/src/pages/Dashboard/` | Dashboard + KPIs + heatmap + thumbnails |
+| `frontend/src/components/charts/` | All chart components (10 files) |
 | `frontend/src/api/websocket.ts` | WebSocket manager for real-time progress |
 | `frontend/src/api/queries.ts` | React Query hooks for all API endpoints |
 | `pipeline/backtester/composed.py` | MLBacktester engine |

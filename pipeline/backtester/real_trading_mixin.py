@@ -28,6 +28,7 @@ class RealTradingMixin:
 
         self.bar_concat = pd.DataFrame()
         self.eq_concat  = pd.DataFrame()
+        self.trade_log  = pd.DataFrame()
         self._in_real_sim = True
         self._in_optuna_cv = False
 
@@ -2924,6 +2925,15 @@ class RealTradingMixin:
                 bar_concat = pd.concat(all_dfs).sort_index()
                 bar_concat.columns = ["cstrategy_cont", "creturns_cont"]
                 self.bar_concat = bar_concat
+
+                try:
+                    valid_trade_dfs = [tdf for tdf in trade_dfs if tdf is not None and not tdf.empty]
+                    if valid_trade_dfs:
+                        self.trade_log = pd.concat(valid_trade_dfs, ignore_index=True)
+                    else:
+                        self.trade_log = pd.DataFrame()
+                except Exception:
+                    self.trade_log = pd.DataFrame()
 
                 bt_dict = {
                     "BH": bar_concat["creturns_cont"],

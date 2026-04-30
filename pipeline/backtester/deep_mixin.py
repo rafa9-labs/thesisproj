@@ -361,7 +361,7 @@ class DeepMixin:
 
         try:
             import os
-            _threads = int(os.getenv("BLAS_THREADS_PER_TRIAL", os.getenv("MLB_THREADS", "16")))
+            _threads = int(os.getenv("BLAS_THREADS_PER_TRIAL", os.getenv("MLB_THREADS", str(max(1, (os.cpu_count() or 8) - 2)))))
             os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
             os.environ.setdefault("TF_NUM_INTRAOP_THREADS", str(_threads))
             os.environ.setdefault("TF_NUM_INTEROP_THREADS", str(max(2, min(4, _threads // 4))))
@@ -381,12 +381,15 @@ class DeepMixin:
             except Exception:
                 pass
             try:
-                tf.config.threading.set_intra_op_parallelism_threads(1)
-                tf.config.threading.set_inter_op_parallelism_threads(1)
+                tf.config.set_soft_device_placement(True)
             except Exception:
                 pass
             try:
-                tf.config.set_soft_device_placement(True)
+                gpus = tf.config.list_physical_devices("GPU")
+                if gpus:
+                    print(f"[deep_mixin] GPU detected: {len(gpus)} device(s) — {gpus[0].name}")
+                else:
+                    print("[deep_mixin] No GPU detected — using CPU")
             except Exception:
                 pass
         except Exception:

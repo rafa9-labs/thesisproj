@@ -13,7 +13,9 @@ import { HpoPanel } from "./HpoPanel";
 import { ExecutionPanel } from "./ExecutionPanel";
 import { RunSummary } from "./RunSummary";
 import { BacktestProgress } from "./BacktestProgress";
+import { QuickTestBar } from "./QuickTestBar";
 import { ValidationAlert } from "@/components/shared/ValidationAlert";
+import { RuntimeEstimate } from "@/components/shared/RuntimeEstimate";
 
 export function BacktestPage() {
   const navigate = useNavigate();
@@ -25,6 +27,7 @@ export function BacktestPage() {
 
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [advancedMode, setAdvancedMode] = useState(false);
 
   useBacktestWebSocket(activeJobId);
 
@@ -61,24 +64,58 @@ export function BacktestPage() {
         >
           New Backtest
         </h2>
+        <div className="flex items-center gap-4">
+          <RuntimeEstimate />
+          <button
+            onClick={() => hasModels && ok && setSummaryOpen(true)}
+            disabled={!hasModels || submit.isPending}
+            className="rounded-md px-6 py-2 text-xs font-bold uppercase transition-colors duration-150"
+            style={{
+              backgroundColor: hasModels ? "var(--color-accent)" : "var(--color-border)",
+              color: hasModels ? "var(--color-text-inverse)" : "var(--color-text-muted)",
+              letterSpacing: "0.05em",
+              cursor: hasModels ? "pointer" : "not-allowed",
+              opacity: submit.isPending ? 0.6 : 1,
+            }}
+          >
+            {submit.isPending ? "Submitting..." : "Deploy Backtest"}
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Start */}
+
+      <QuickTestBar />
+
+      {/* Mode toggle */}
+      <div className="flex items-center gap-3">
         <button
-          onClick={() => hasModels && ok && setSummaryOpen(true)}
-          disabled={!hasModels || submit.isPending}
-          className="rounded-md px-6 py-2 text-xs font-bold uppercase transition-colors duration-150"
+          onClick={() => setAdvancedMode(false)}
+          className="rounded px-3 py-1 text-xs font-semibold uppercase transition-colors"
           style={{
-            backgroundColor: hasModels ? "var(--color-accent)" : "var(--color-border)",
-            color: hasModels ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-            letterSpacing: "0.05em",
-            cursor: hasModels ? "pointer" : "not-allowed",
-            opacity: submit.isPending ? 0.6 : 1,
+            backgroundColor: !advancedMode ? "var(--color-accent)" : "transparent",
+            color: !advancedMode ? "var(--color-text-inverse)" : "var(--color-text-muted)",
+            border: "1px solid var(--color-border)",
           }}
         >
-          {submit.isPending ? "Submitting..." : "Deploy Backtest"}
+          Simple
+        </button>
+        <button
+          onClick={() => setAdvancedMode(true)}
+          className="rounded px-3 py-1 text-xs font-semibold uppercase transition-colors"
+          style={{
+            backgroundColor: advancedMode ? "var(--color-accent)" : "transparent",
+            color: advancedMode ? "var(--color-text-inverse)" : "var(--color-text-muted)",
+            border: "1px solid var(--color-border)",
+          }}
+        >
+          Advanced
         </button>
       </div>
 
       {/* Active progress */}
       {activeJobId && (
+
         <BacktestProgress jobId={activeJobId} />
       )}
 
@@ -87,13 +124,20 @@ export function BacktestPage() {
         <ValidationAlert warnings={warnings} errors={errors} />
       )}
 
-      {/* Config sections */}
+      {/* Config sections — Simple mode shows essential panels only */}
       <AssetSelector />
       <ModelSelector />
-      <FeaturesPanel />
-      <LabelsPanel />
-      <HpoPanel />
-      <ExecutionPanel />
+
+      {advancedMode ? (
+        <>
+          <FeaturesPanel />
+          <LabelsPanel />
+          <HpoPanel />
+          <ExecutionPanel />
+        </>
+      ) : (
+        <HpoPanel />
+      )}
 
       {/* Run summary modal */}
       <RunSummary

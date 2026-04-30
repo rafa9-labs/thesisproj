@@ -63,24 +63,19 @@ class StrategyMixin:
          
             # 🛡️ Set TF runtime knobs *before* importing tensorflow
             # Mirror global intra-trial knob
-            _threads = int(os.getenv("BLAS_THREADS_PER_TRIAL", os.getenv("MLB_THREADS", "16")))
+            _threads = int(os.getenv("BLAS_THREADS_PER_TRIAL", os.getenv("MLB_THREADS", str(max(1, (os.cpu_count() or 8) - 2)))))
             os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
             os.environ.setdefault("TF_NUM_INTRAOP_THREADS", str(_threads))
             os.environ.setdefault("TF_NUM_INTEROP_THREADS", str(max(2, min(4, _threads // 4))))
-            # Keep OpenMP stacks aligned (no down-clamp)
             for k in ("OMP_NUM_THREADS","MKL_NUM_THREADS"):
                 os.environ.setdefault(k, str(_threads))
 
             try:
-                # Safe memory growth (no pre-grab of full VRAM)
                 for _gpu in tf.config.list_physical_devices("GPU"):
                     try:
                         tf.config.experimental.set_memory_growth(_gpu, True)
                     except Exception:
                         pass
-                # Keep TF single-threaded under Optuna/Joblib
-                tf.config.threading.set_intra_op_parallelism_threads(1)
-                tf.config.threading.set_inter_op_parallelism_threads(1)
                 tf.config.set_soft_device_placement(True)
             except Exception:
                 pass

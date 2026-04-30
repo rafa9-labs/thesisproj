@@ -11,18 +11,19 @@ def _seed_everything(seed: int):
     random.seed(seed)
     np.random.seed(seed)
     try:
+        import os
         import tensorflow as tf
         tf.random.set_seed(seed)
-        # Don't let TF pre-allocate all VRAM
         gpus = tf.config.list_physical_devices("GPU")
         for gpu in gpus:
             try:
                 tf.config.experimental.set_memory_growth(gpu, True)
             except Exception:
                 pass
+        _threads = int(os.getenv("MLB_THREADS", str(max(1, (os.cpu_count() or 8) - 2))))
         try:
-            tf.config.threading.set_intra_op_parallelism_threads(1)
-            tf.config.threading.set_inter_op_parallelism_threads(1)
+            tf.config.threading.set_intra_op_parallelism_threads(_threads)
+            tf.config.threading.set_inter_op_parallelism_threads(max(2, _threads // 4))
         except Exception:
             pass
     except Exception:

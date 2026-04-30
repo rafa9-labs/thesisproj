@@ -3,7 +3,8 @@ import { Eye, Trash2 } from "lucide-react";
 import { StatusDot } from "@/components/shared/StatusDot";
 import { formatRelativeTime } from "@/lib/formatters";
 import { useDeleteJob } from "@/api/queries";
-import type { JobSummary } from "@/api/schemas";
+import { EquityThumbnail } from "@/components/charts/EquityThumbnail";
+import type { JobSummary, EquityPoint } from "@/api/schemas";
 
 const STATUS_COLORS: Record<string, string> = {
   completed: "var(--color-accent-success)",
@@ -14,9 +15,10 @@ const STATUS_COLORS: Record<string, string> = {
 
 interface RecentJobsTableProps {
   jobs: JobSummary[];
+  equityData?: Record<string, EquityPoint[] | null>;
 }
 
-export function RecentJobsTable({ jobs }: RecentJobsTableProps) {
+export function RecentJobsTable({ jobs, equityData }: RecentJobsTableProps) {
   const navigate = useNavigate();
   const deleteJob = useDeleteJob();
 
@@ -43,6 +45,7 @@ export function RecentJobsTable({ jobs }: RecentJobsTableProps) {
               }}
             >
               <th className="px-3 py-2 text-left font-semibold uppercase tracking-wide">Job</th>
+              <th className="px-3 py-2 text-left font-semibold uppercase tracking-wide">Equity</th>
               <th className="px-3 py-2 text-left font-semibold uppercase tracking-wide">Pair</th>
               <th className="px-3 py-2 text-left font-semibold uppercase tracking-wide">Models</th>
               <th className="px-3 py-2 text-left font-semibold uppercase tracking-wide">Status</th>
@@ -67,6 +70,20 @@ export function RecentJobsTable({ jobs }: RecentJobsTableProps) {
                     style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}
                   >
                     {job.job_id.slice(0, 8)}…
+                  </td>
+                  <td className="px-3 py-2">
+                    {equityData?.[job.job_id] ? (
+                      <EquityThumbnail data={equityData[job.job_id]} />
+                    ) : (
+                      <div
+                        style={{
+                          width: 120,
+                          height: 36,
+                          borderRadius: 4,
+                          backgroundColor: "var(--color-elevated)",
+                        }}
+                      />
+                    )}
                   </td>
                   <td
                     className="px-3 py-2"

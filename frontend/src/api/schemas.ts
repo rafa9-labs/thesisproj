@@ -1,3 +1,5 @@
+export type HpoIntensity = "light" | "quick" | "standard" | "deep";
+
 export interface PairInfo {
   pair: {
     symbol: string;
@@ -28,11 +30,24 @@ export interface Metrics {
   sharpe: number | null;
   sortino: number | null;
   max_drawdown: number | null;
-  total_return: number | null;
+  total_return_pct: number | null;
+  cagr: number | null;
+  calmar_ratio: number | null;
   win_rate: number | null;
   total_trades: number | null;
   profit_factor: number | null;
   avg_trade: number | null;
+  active_rate: number | null;
+  directional_accuracy: number | null;
+  precision_macro: number | null;
+  f1_macro: number | null;
+  equity_curve: EquityPoint[] | null;
+  buy_hold_curve: EquityPoint[] | null;
+  drawdown_curve: EquityPoint[] | null;
+  monthly_results: MonthlyResult[] | null;
+  trades: TradeRecord[] | null;
+  hpo_param_importance: HpoParamImportance[] | null;
+  hpo_trials: HpoTrial[] | null;
 }
 
 export interface BacktestRequest {
@@ -43,7 +58,53 @@ export interface BacktestRequest {
   trading_costs?: boolean;
   months?: number;
   repeats?: number;
+  seed?: number;
+  hpo_intensity?: HpoIntensity;
   config_overrides: Record<string, unknown>;
+}
+
+export interface QuickTestPreset {
+  name: string;
+  label: string;
+  description: string;
+  pair: string;
+  timeframe: string;
+  models: string[];
+  months: number;
+  hpo_intensity: HpoIntensity;
+  seed: number;
+  repeats: number;
+  trading_costs: boolean;
+}
+
+export interface DateRangePreset {
+  key: string;
+  label: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface DateRangeResponse {
+  symbol: string;
+  timeframe: string;
+  data_start: string;
+  data_end: string;
+  presets: DateRangePreset[];
+}
+
+export interface RuntimeEstimateRequest {
+  models: string[];
+  months: number;
+  hpo_intensity: HpoIntensity;
+}
+
+export interface RuntimeEstimateResponse {
+  models: string[];
+  months: number;
+  hpo_intensity: HpoIntensity;
+  total_trials: number;
+  estimated_minutes_low: number;
+  estimated_minutes_high: number;
 }
 
 export interface JobSummary {
@@ -121,15 +182,8 @@ export interface JobResults {
   job_id: string;
   pair: string;
   models: string[];
-  metrics: Metrics[];
-  monthly_results: MonthlyResult[] | null;
-  trades: TradeRecord[] | null;
-  equity_curve: EquityPoint[] | null;
-  buy_hold_curve: EquityPoint[] | null;
-  drawdown_curve: EquityPoint[] | null;
   config: Record<string, unknown> | null;
-  hpo_param_importance: HpoParamImportance[] | null;
-  hpo_trials: HpoTrial[] | null;
+  metrics: Metrics[];
 }
 
 export type WsEvent =
@@ -150,4 +204,28 @@ export interface HealthResponse {
   version: string;
   redis: string;
   db_rows: number;
+}
+
+export interface HeatmapCell {
+  model: string;
+  pair: string;
+  sharpe: number | null;
+  total_return_pct: number | null;
+  win_rate: number | null;
+  max_drawdown: number | null;
+  total_trades: number | null;
+  job_id: string | null;
+}
+
+export interface HeatmapResponse {
+  models: string[];
+  pairs: string[];
+  cells: HeatmapCell[];
+}
+
+export interface NewsEvent {
+  time: number;
+  event: string;
+  currency: string;
+  impact: "high" | "medium" | "low";
 }

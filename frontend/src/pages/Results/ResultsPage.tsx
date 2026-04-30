@@ -11,6 +11,10 @@ import { TradeLogTable } from "./TradeLogTable";
 import { MonthlySection } from "./MonthlySection";
 import { HpoDiagnostics } from "./HpoDiagnostics";
 import { ConfigViewer } from "./ConfigViewer";
+import { DrawdownChart } from "@/components/charts/DrawdownChart";
+import { TradeDistributionChart } from "@/components/charts/TradeDistributionChart";
+import { RollingMetricsChart } from "@/components/charts/RollingMetricsChart";
+import { CumulativePnlChart } from "@/components/charts/CumulativePnlChart";
 import type { TradeRecord } from "@/api/schemas";
 import type { EquityCurveChartHandle } from "@/components/charts/EquityCurveChart";
 
@@ -121,18 +125,18 @@ export function ResultsPage() {
   const activeMetric = metrics.length > 0 ? metrics[Math.min(activeModelIdx, metrics.length - 1)] : null;
 
   const handleExportCsv = () => {
-    if (!results.trades) return;
-    const header = "trade_id,entry_date,exit_date,direction,entry_price,exit_price,pips,return_pct,duration_bars,barrier_hit";
-    const rows = results.trades.map(
-      (t) =>
-        `${t.trade_id},${t.entry_date},${t.exit_date},${t.direction},${t.entry_price},${t.exit_price},${t.pips},${t.return_pct},${t.duration_bars},${t.barrier_hit ?? ""}`,
+    if (!activeMetric?.trades?.length) return;
+    const trades = activeMetric.trades;
+    const header = Object.keys(trades[0]).join(",");
+    const rows = trades.map((t: Record<string, unknown>) =>
+      Object.values(t).map((v) => String(v ?? "")).join(",")
     );
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `trades_${results.job_id}.csv`;
+    a.download = `trades_${results.job_id}_${activeMetric?.model ?? "unknown"}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -181,7 +185,7 @@ export function ResultsPage() {
       </div>
 
       {activeMetric && (
-        <MetricsGrid metrics={activeMetric} modelName={activeMetric.model} />
+        <MetricsGrid metrics={activeMetric} modelName={activeMetric.model} monthlyResults={activeMetric.monthly_results} />
       )}
 
       {metrics.length > 1 && (
@@ -206,20 +210,28 @@ export function ResultsPage() {
 
       <EquitySection
         ref={equityChartRef}
-        equityCurve={results.equity_curve ?? null}
-        buyHoldCurve={results.buy_hold_curve ?? null}
-        drawdownCurve={results.drawdown_curve ?? null}
+        equityCurve={activeMetric?.equity_curve ?? null}
+        buyHoldCurve={activeMetric?.buy_hold_curve ?? null}
+        drawdownCurve={activeMetric?.drawdown_curve ?? null}
       />
 
-      <MonthlySection monthlyResults={results.monthly_results ?? null} />
+      <DrawdownChart drawdownCurve={activeMetric?.drawdown_curve ?? null} />
+
+      <CumulativePnlChart trades={activeMetric?.trades ? (activeMetric.trades as TradeRecord[]) : null} />
+
+      <MonthlySection monthlyResults={activeMetric?.monthly_results ?? null} />
+
+      <RollingMetricsChart equityCurve={activeMetric?.equity_curve ?? null} />
+
+      <TradeDistributionChart trades={activeMetric?.trades ? (activeMetric.trades as TradeRecord[]) : null} />
 
       <HpoDiagnostics
-        paramImportance={results.hpo_param_importance ?? null}
-        trials={results.hpo_trials ?? null}
+        paramImportance={activeMetric?.hpo_param_importance ?? null}
+        trials={activeMetric?.hpo_trials ?? null}
       />
 
       <TradeLogTable
-        trades={results.trades ?? null}
+        trades={activeMetric?.trades ? (activeMetric.trades as import("@/api/schemas").TradeRecord[]) : null}
         onTradeSelect={setSelectedTrade}
       />
 

@@ -8,6 +8,13 @@ import type {
   JobResults,
   BacktestRequest,
   HealthResponse,
+  QuickTestPreset,
+  DateRangeResponse,
+  RuntimeEstimateRequest,
+  RuntimeEstimateResponse,
+  HpoIntensity,
+  HeatmapResponse,
+  NewsEvent,
 } from "./schemas";
 
 export function useHealth() {
@@ -157,5 +164,70 @@ export function useNewsStatus() {
       return data;
     },
     staleTime: 60_000,
+  });
+}
+
+export function useQuickTestPresets() {
+  return useQuery({
+    queryKey: ["quick-test-presets"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<QuickTestPreset[]>("/backtest/presets");
+      return data;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useDateRanges(pair: string, timeframe: string) {
+  return useQuery({
+    queryKey: ["date-ranges", pair, timeframe],
+    queryFn: async () => {
+      const { data } = await apiClient.get<DateRangeResponse>("/backtest/date-ranges", {
+        params: { pair, timeframe },
+      });
+      return data;
+    },
+    enabled: !!pair && !!timeframe,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useRuntimeEstimate(models: string[], months: number, hpoIntensity: HpoIntensity) {
+  return useQuery({
+    queryKey: ["runtime-estimate", models, months, hpoIntensity],
+    queryFn: async () => {
+      const { data } = await apiClient.post<RuntimeEstimateResponse>(
+        "/backtest/estimate-runtime",
+        { models, months, hpo_intensity: hpoIntensity } as RuntimeEstimateRequest,
+      );
+      return data;
+    },
+    enabled: models.length > 0 && months > 0,
+    staleTime: 30_000,
+  });
+}
+
+export function useHeatmap() {
+  return useQuery({
+    queryKey: ["heatmap"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<HeatmapResponse>("/backtest/heatmap");
+      return data;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useNewsEvents(start: number | null, end: number | null, impact?: string) {
+  return useQuery({
+    queryKey: ["news-events", start, end, impact],
+    queryFn: async () => {
+      const { data } = await apiClient.get<NewsEvent[]>("/news/events", {
+        params: { start, end, impact },
+      });
+      return data;
+    },
+    enabled: start !== null && end !== null,
+    staleTime: 5 * 60_000,
   });
 }

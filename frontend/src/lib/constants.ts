@@ -160,4 +160,10 @@ export const SELECT_OPTIONS = {
     { value: "vader", label: "VADER (Rule-based)" },
     { value: "finbert", label: "finBERT (Neural)" },
   ],
+  hpoIntensity: [
+    { value: "light", label: "Light (1+1 trials)" },
+    { value: "quick", label: "Quick (2+2 trials)" },
+    { value: "standard", label: "Standard (per-model tuned)" },
+    { value: "deep", label: "Deep (max trials)" },
+  ],
 } as const;

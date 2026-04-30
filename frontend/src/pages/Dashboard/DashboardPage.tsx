@@ -4,12 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { BarChart3, TrendingUp, Activity, Trophy } from "lucide-react";
 import { MetricCard } from "@/components/shared/MetricCard";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { useJobHistory } from "@/api/queries";
+import { useJobHistory, useHeatmap } from "@/api/queries";
 import apiClient from "@/api/client";
 import type { JobResults } from "@/api/schemas";
 import { formatMetric, formatPercent } from "@/lib/formatters";
 import { useDashboardKPIs } from "./DashboardKPIs";
 import { RecentJobsTable } from "./RecentJobsTable";
+import { PerformanceHeatmapSection } from "./PerformanceHeatmapSection";
 
 function DashboardSkeleton() {
   return (
@@ -56,7 +57,20 @@ export function DashboardPage() {
     staleTime: 60_000,
   });
 
+  const { data: heatmapData, isLoading: heatmapLoading } = useHeatmap();
+
   const kpis = useDashboardKPIs(allResults.data ?? []);
+
+  const equityDataMap = useMemo(() => {
+    const map: Record<string, import("@/api/schemas").EquityPoint[] | null> = {};
+    if (allResults.data) {
+      for (const r of allResults.data) {
+        const curves = r.metrics?.flatMap((m) => m.equity_curve ? [m.equity_curve] : []) ?? [];
+        map[r.job_id] = curves.length > 0 ? curves[0] : null;
+      }
+    }
+    return map;
+  }, [allResults.data]);
 
   if (jobsLoading) {
     return (
@@ -105,7 +119,9 @@ export function DashboardPage() {
         />
       </div>
 
-      <RecentJobsTable jobs={completedJobs.slice(0, 10)} />
+      <RecentJobsTable jobs={completedJobs.slice(0, 10)} equityData={equityDataMap} />
+
+      <PerformanceHeatmapSection data={heatmapData} isLoading={heatmapLoading} />
 
       {!hasCompleted && (
         <EmptyState

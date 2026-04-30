@@ -5,6 +5,8 @@ import { useJobHistory, useJobResults } from "@/api/queries";
 import { LeaderboardTable } from "./LeaderboardTable";
 import { EquityOverlayChart } from "./EquityOverlayChart";
 import { SignificanceMatrix } from "./SignificanceMatrix";
+import { ParameterSensitivityChart } from "@/components/charts/ParameterSensitivityChart";
+import { CrossPairSection } from "./CrossPairSection";
 
 function CompareSkeleton() {
   return (
@@ -34,15 +36,14 @@ export function ComparePage() {
 
   const metrics = results?.metrics ?? [];
   const modelCurves = useMemo(() => {
-    if (!results?.equity_curve || !metrics.length) return [];
-    if (metrics.length === 1) {
-      return [{ model: metrics[0].model, data: results.equity_curve }];
-    }
-    return metrics.map((m) => ({
-      model: m.model,
-      data: results.equity_curve ?? [],
-    }));
-  }, [results, metrics]);
+    if (!metrics.length) return [];
+    return metrics
+      .filter((m) => m.equity_curve && m.equity_curve.length > 0)
+      .map((m) => ({
+        model: m.model,
+        data: m.equity_curve!,
+      }));
+  }, [metrics]);
 
   if (jobsLoading) {
     return (
@@ -127,8 +128,14 @@ export function ComparePage() {
             models={metrics.map((m) => m.model)}
             pValues={null}
           />
+
+          {metrics.length > 0 && metrics[0].hpo_trials && (
+            <ParameterSensitivityChart trials={metrics[0].hpo_trials} />
+          )}
         </>
       )}
+
+      <CrossPairSection />
 
       {selectedJobId && !resultsLoading && !results && (
         <div

@@ -1,18 +1,24 @@
 import { create } from "zustand";
 import { DEFAULTS } from "@/lib/constants";
-import type { BacktestRequest } from "@/api/schemas";
+import type { BacktestRequest, HpoIntensity } from "@/api/schemas";
 
 type Widen<T> = T extends boolean ? boolean : T extends string ? string : T extends number ? number : T;
-type BacktestState = { [K in keyof typeof DEFAULTS]: Widen<(typeof DEFAULTS)[K]> };
+type BacktestState = { [K in keyof typeof DEFAULTS]: Widen<(typeof DEFAULTS)[K]> } & {
+  hpoIntensity: HpoIntensity;
+};
 type BacktestActions = {
   setField: <K extends keyof BacktestState>(key: K, value: BacktestState[K]) => void;
   toggleModel: (model: string) => void;
   resetToDefaults: () => void;
+  applyPreset: (preset: { pair?: string; timeframe?: string; models?: string[]; months?: number; hpo_intensity?: HpoIntensity; seed?: number; start_date?: string; end_date?: string }) => void;
   toRequestPayload: () => BacktestRequest;
 };
 
+const DEFAULT_HPO_INTENSITY: HpoIntensity = "quick";
+
 export const useBacktestStore = create<BacktestState & BacktestActions>()((set, get) => ({
   ...structuredClone(DEFAULTS) as BacktestState,
+  hpoIntensity: DEFAULT_HPO_INTENSITY,
 
   setField: (key, value) => set({ [key]: value } as Partial<BacktestState>),
 
@@ -27,7 +33,21 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       return { selectedModels: next };
     }),
 
-  resetToDefaults: () => set(structuredClone(DEFAULTS)),
+  resetToDefaults: () => set({ ...structuredClone(DEFAULTS), hpoIntensity: DEFAULT_HPO_INTENSITY } as Partial<BacktestState>),
+
+  applyPreset: (preset) =>
+    set((state) => {
+      const updates: Partial<BacktestState> = {};
+      if (preset.pair !== undefined) updates.pair = preset.pair;
+      if (preset.timeframe !== undefined) updates.timeframe = preset.timeframe;
+      if (preset.models !== undefined) updates.selectedModels = preset.models as string[];
+      if (preset.months !== undefined) updates.testMonths = preset.months;
+      if (preset.hpo_intensity !== undefined) updates.hpoIntensity = preset.hpo_intensity;
+      if (preset.seed !== undefined) updates.seed = preset.seed;
+      if (preset.start_date !== undefined) updates.startDate = preset.start_date;
+      if (preset.end_date !== undefined) updates.endDate = preset.end_date;
+      return updates;
+    }),
 
   toRequestPayload: () => {
     const s = get();
@@ -38,6 +58,9 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       end_date: s.endDate || undefined,
       trading_costs: s.evalUseTradingCosts,
       months: s.testMonths,
+      repeats: 1,
+      seed: s.seed,
+      hpo_intensity: s.hpoIntensity,
       config_overrides: {
         confidence_threshold: s.confidenceThreshold,
         target_active_rate: s.targetActiveRate,

@@ -24,17 +24,20 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 
 def _configure_tf():
-    """Configure TF for minimal memory footprint."""
+    """Configure TF for GPU-accelerated training."""
     try:
+        import os
         import tensorflow as tf
-        for gpu in tf.config.list_physical_devices("GPU"):
+        gpus = tf.config.list_physical_devices("GPU")
+        for gpu in gpus:
             try:
                 tf.config.experimental.set_memory_growth(gpu, True)
             except Exception:
                 pass
+        _threads = int(os.getenv("MLB_THREADS", str(max(1, (os.cpu_count() or 8) - 2))))
         try:
-            tf.config.threading.set_intra_op_parallelism_threads(1)
-            tf.config.threading.set_inter_op_parallelism_threads(1)
+            tf.config.threading.set_intra_op_parallelism_threads(_threads)
+            tf.config.threading.set_inter_op_parallelism_threads(max(2, _threads // 4))
         except Exception:
             pass
     except Exception:

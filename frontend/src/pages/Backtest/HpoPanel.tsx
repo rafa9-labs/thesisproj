@@ -8,6 +8,7 @@ export function HpoPanel() {
   const setField = useBacktestStore((s) => s.setField);
   const s = useBacktestStore.getState();
   const selectedModels = useBacktestStore((s) => s.selectedModels);
+  const hpoIntensity = useBacktestStore((s) => s.hpoIntensity);
   const showLogistic = selectedModels.includes("logistic");
 
   return (
@@ -21,6 +22,17 @@ export function HpoPanel() {
       >
         Walk-Forward &amp; HPO
       </h3>
+
+      {/* HPO Intensity */}
+      <div className="mb-4">
+        <ParamSelect
+          label="HPO Intensity"
+          paramKey="hpo_intensity"
+          value={hpoIntensity}
+          options={[...SELECT_OPTIONS.hpoIntensity]}
+          onChange={(v) => setField("hpoIntensity", v as "light" | "quick" | "standard" | "deep")}
+        />
+      </div>
 
       {/* HPO settings */}
       <div className="mb-4 grid grid-cols-3 gap-4">

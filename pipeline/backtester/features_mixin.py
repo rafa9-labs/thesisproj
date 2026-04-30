@@ -624,11 +624,12 @@ class FeaturesMixin:
                 for name, series in base_cols.items():
                     if hasattr(series, 'astype') and series.dtype != np.float32:
                         try:
-                            series = series.astype("float32")
+                            base_cols[name] = series.astype("float32")
                         except (ValueError, TypeError):
                             pass
-                    df[name] = series
-                del base_cols
+                base_cols_df = pd.DataFrame(base_cols, index=df.index)
+                df = pd.concat([df, base_cols_df], axis=1)
+                del base_cols, base_cols_df
                 df = df.loc[:, ~df.columns.duplicated(keep="last")]
 
             # ---- Regime features (trend_score, vol_score, regime_id/one-hot) ----
@@ -691,8 +692,10 @@ class FeaturesMixin:
                 new_cols["hour_sin"] = np.sin(hour_rad)
                 new_cols["hour_cos"] = np.cos(hour_rad)
 
-        for name, series in new_cols.items():
-            df[name] = series
+        if new_cols:
+            new_cols_df = pd.DataFrame(new_cols, index=df.index)
+            df = pd.concat([df, new_cols_df], axis=1)
+            del new_cols_df
         new_col_names = list(new_cols.keys())
         del new_cols
         df_out = df

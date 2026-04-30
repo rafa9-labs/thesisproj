@@ -5,6 +5,7 @@ interface EquityCurveChartProps {
   data: { time: number; value: number }[];
   buyHoldData?: { time: number; value: number }[];
   drawdownData?: { time: number; value: number }[];
+  eventMarkers?: { time: number; event: string; impact: string }[];
   height?: number;
 }
 
@@ -13,7 +14,7 @@ export interface EquityCurveChartHandle {
 }
 
 export const EquityCurveChart = forwardRef<EquityCurveChartHandle, EquityCurveChartProps>(function EquityCurveChart(
-  { data, buyHoldData, drawdownData, height = 480 },
+  { data, buyHoldData, drawdownData, eventMarkers, height = 480 },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -92,6 +93,24 @@ export const EquityCurveChart = forwardRef<EquityCurveChartHandle, EquityCurveCh
       ddSeries.setData(drawdownData as never[]);
     }
 
+    if (eventMarkers && eventMarkers.length > 0) {
+      const IMPACT_COLORS: Record<string, string> = {
+        high: "#EF4444",
+        medium: "#F59E0B",
+        low: "#787B86",
+      };
+      const markers = eventMarkers
+        .filter((m) => data.some((d) => d.time === m.time) || data.some((d) => Math.abs(d.time - m.time) < 86400))
+        .map((m) => ({
+          time: m.time as unknown as import("lightweight-charts").UTCTimestamp,
+          position: "belowBar" as const,
+          color: IMPACT_COLORS[m.impact] ?? "#787B86",
+          shape: "arrowUp" as const,
+          text: m.event,
+        }));
+      equitySeries.setMarkers(markers);
+    }
+
     chart.timeScale().fitContent();
 
     const handleResize = () => {
@@ -108,7 +127,7 @@ export const EquityCurveChart = forwardRef<EquityCurveChartHandle, EquityCurveCh
         chartRef.current = null;
       }
     };
-  }, [data, buyHoldData, drawdownData, height]);
+  }, [data, buyHoldData, drawdownData, eventMarkers, height]);
 
   if (data.length === 0) {
     return (

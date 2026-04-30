@@ -14,8 +14,9 @@ import pandas as pd
 from celery import Celery
 
 from api.config import settings
+from api.schemas.backtest import HPO_TRIAL_MAPS
 
-TRIAL_COUNTS = {
+_TRIAL_COUNTS_FALLBACK = {
     "logistic":       {"random": 3, "bayes": 3},
     "svm":            {"random": 3, "bayes": 3},
     "decision_tree":  {"random": 3, "bayes": 3},
@@ -29,13 +30,21 @@ TRIAL_COUNTS = {
     "dqn":            {"random": 3, "bayes": 3},
 }
 
+
+def _get_trial_counts(hpo_intensity: str | None, model: str) -> Dict[str, int]:
+    if hpo_intensity and hpo_intensity in HPO_TRIAL_MAPS:
+        model_map = HPO_TRIAL_MAPS[hpo_intensity]
+        if model in model_map:
+            return model_map[model]
+    return _TRIAL_COUNTS_FALLBACK.get(model, {"random": 3, "bayes": 3})
+
 CV_BLOCKS_DEFAULT = 5
 
 
-def _compute_total_work(models: list[str], months: int, cv_blocks: int = CV_BLOCKS_DEFAULT) -> int:
+def _compute_total_work(models: list[str], months: int, hpo_intensity: str | None = None, cv_blocks: int = CV_BLOCKS_DEFAULT) -> int:
     total = 0
     for m in models:
-        tc = TRIAL_COUNTS.get(m, {"random": 3, "bayes": 3})
+        tc = _get_trial_counts(hpo_intensity, m)
         n_trials = tc.get("random", 3) + tc.get("bayes", 3)
         n_trials = max(n_trials, 10)
         hpo_work = n_trials * cv_blocks
@@ -115,6 +124,8 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
     end = config.get("end_date") or None
     months = config.get("months", 3)
     repeats = config.get("repeats", 1)
+    seed = config.get("seed", 42)
+    hpo_intensity = config.get("hpo_intensity", "quick")
     trading_costs = config.get("trading_costs", True)
 
     if end is None:
@@ -137,7 +148,7 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
     except Exception:
         pass
 
-    total_work = _compute_total_work(models, months)
+    total_work = _compute_total_work(models, months, hpo_intensity)
     jm.update_status(job_id, "running")
     _pub("job_started", job_id, {"pair": pair, "models": models, "total_work": total_work})
 
@@ -157,7 +168,12 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
         data["completed_work"] = completed_work
         data["total_work"] = total_work
         data["progress_pct"] = pct
-        evt_name = f"{phase}_progress" if phase in ("hpo", "month") else "model_phase"
+        if phase in ("hpo", "hpo_trial"):
+            evt_name = "hpo_progress"
+        elif phase == "month":
+            evt_name = "month_progress"
+        else:
+            evt_name = "model_phase"
         _pub(evt_name, job_id, data)
 
     all_metrics = []
@@ -174,7 +190,7 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
             feat_cfg = deepcopy(CLASS_DEFAULTS["features"])
             feat_cfg.update(config.get("config_overrides", {}))
 
-            tc = TRIAL_COUNTS.get(model_type, {"random": 3, "bayes": 3})
+            tc = _get_trial_counts(hpo_intensity, model_type)
             n_trials_hdr = max(tc.get("random", 3) + tc.get("bayes", 3), 10)
 
             bt = MLBacktester(
@@ -194,6 +210,7 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
             base_cfg["trading_costs"] = trading_costs
             base_cfg["n_trials"] = n_trials_hdr
             base_cfg["n_startup_trials"] = tc.get("random", 3)
+            base_cfg["seed"] = seed
             base_cfg.update(config.get("config_overrides", {}))
 
             df_sim = bt.real_trading_simulation(
@@ -204,43 +221,155 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
 
             metrics_row = {"model": model_type}
             equity_series = pd.Series(dtype=np.float64)
+            buyhold_series = pd.Series(dtype=np.float64)
             bar_concat = getattr(bt, "bar_concat", None)
             if bar_concat is not None and not bar_concat.empty and "cstrategy_cont" in bar_concat.columns:
                 equity_series = bar_concat["cstrategy_cont"].astype(np.float64)
+                if "creturns_cont" in bar_concat.columns:
+                    buyhold_series = bar_concat["creturns_cont"].astype(np.float64)
+
+            trade_log = getattr(bt, "trade_log", None)
 
             if df_sim is not None and not df_sim.empty:
                 metrics_row["total_trades"] = int(df_sim["trades"].sum()) if "trades" in df_sim else 0
                 if not equity_series.empty and len(equity_series) > 1:
                     final_eq = float(equity_series.iloc[-1])
-                    metrics_row["total_return"] = final_eq
-                    metrics_row["total_return_pct"] = (final_eq - 1.0) * 100.0
+                    metrics_row["total_return_pct"] = float(final_eq - 1.0)
                     cum_max = np.maximum.accumulate(equity_series.values)
                     dd_arr = (equity_series.values - cum_max) / np.where(cum_max > 0, cum_max, 1.0)
-                    metrics_row["max_drawdown"] = float(np.min(dd_arr))
+                    max_dd = float(np.min(dd_arr))
+                    metrics_row["max_drawdown"] = max_dd
+
+                    n_bars = len(equity_series)
+                    if n_bars > 1 and hasattr(equity_series.index, '__len__'):
+                        try:
+                            t0 = equity_series.index[0]
+                            t1 = equity_series.index[-1]
+                            if hasattr(t0, 'timestamp') and hasattr(t1, 'timestamp'):
+                                years_span = max((t1.timestamp() - t0.timestamp()) / (365.25 * 86400), 1e-6)
+                            else:
+                                years_span = max(n_bars / 12096.0, 1e-6)
+                        except Exception:
+                            years_span = max(n_bars / 12096.0, 1e-6)
+                    else:
+                        years_span = max(n_bars / 12096.0, 1e-6)
+
+                    cagr = (float(final_eq) ** (1.0 / years_span) - 1.0) if final_eq > 0 else 0.0
+                    metrics_row["cagr"] = cagr
+                    calmar = cagr / abs(max_dd) if abs(max_dd) > 1e-9 else 0.0
+                    metrics_row["calmar_ratio"] = calmar
+
+                    equity_points = []
+                    for i, (ts, val) in enumerate(zip(equity_series.index, equity_series.values)):
+                        t = int(ts.timestamp()) if hasattr(ts, 'timestamp') else i
+                        equity_points.append({"time": t, "value": round(float(val), 6)})
+                    metrics_row["equity_curve"] = equity_points
+
+                    if not buyhold_series.empty and len(buyhold_series) == len(equity_series):
+                        bh_points = []
+                        for i, (ts, val) in enumerate(zip(buyhold_series.index, buyhold_series.values)):
+                            t = int(ts.timestamp()) if hasattr(ts, 'timestamp') else i
+                            bh_points.append({"time": t, "value": round(float(val), 6)})
+                        metrics_row["buy_hold_curve"] = bh_points
+                    else:
+                        metrics_row["buy_hold_curve"] = []
+
+                    dd_series = pd.Series(dd_arr, index=equity_series.index)
+                    dd_points = []
+                    for i, (ts, val) in enumerate(zip(dd_series.index, dd_series.values)):
+                        t = int(ts.timestamp()) if hasattr(ts, 'timestamp') else i
+                        dd_points.append({"time": t, "value": round(float(val), 6)})
+                    metrics_row["drawdown_curve"] = dd_points
+
                 if "strategy_return" in df_sim.columns:
                     rets = df_sim["strategy_return"].dropna().values
                     if len(rets) > 2:
                         ann_ret = np.mean(rets) * 12
                         ann_vol = np.std(rets, ddof=1) * np.sqrt(12)
                         metrics_row["sharpe"] = float(ann_ret / ann_vol) if ann_vol > 0 else 0.0
+                        downside = rets[rets < 0]
+                        if len(downside) > 1:
+                            downside_vol = np.std(downside, ddof=1) * np.sqrt(12)
+                            metrics_row["sortino"] = float(ann_ret / downside_vol) if downside_vol > 0 else 0.0
+                        elif len(downside) == 1:
+                            metrics_row["sortino"] = float(ann_ret / abs(downside[0])) if abs(downside[0]) > 1e-9 else 0.0
                     metrics_row["win_rate"] = float((rets > 0).mean()) if len(rets) > 0 else 0.0
+                    gross_wins = float(np.sum(rets[rets > 0])) if np.any(rets > 0) else 0.0
+                    gross_losses = abs(float(np.sum(rets[rets < 0]))) if np.any(rets < 0) else 0.0
+                    metrics_row["profit_factor"] = gross_wins / gross_losses if gross_losses > 1e-9 else (float('inf') if gross_wins > 0 else 0.0)
+                    total_trades = metrics_row.get("total_trades", 0)
+                    if total_trades > 0:
+                        metrics_row["avg_trade"] = float(np.sum(rets) / total_trades)
                 for col, key in [("active_rate", "active_rate"), ("directional_accuracy", "directional_accuracy"),
                                  ("precision_macro", "precision_macro"), ("f1_macro", "f1_macro")]:
                     if col in df_sim.columns:
                         vals = df_sim[col].dropna()
                         metrics_row[key] = float(vals.mean()) if not vals.empty else 0.0
 
-            metrics_row["equity_curve"] = equity_series.tolist() if not equity_series.empty else []
-
-            if df_sim is not None and not df_sim.empty:
-                safe_df = df_sim.reset_index()
-                for col in safe_df.columns:
-                    if pd.api.types.is_datetime64_any_dtype(safe_df[col]):
-                        safe_df[col] = safe_df[col].astype(str)
-                safe_df = safe_df.where(pd.notnull(safe_df), None)
-                metrics_row["monthly_df"] = json.loads(safe_df.to_json(orient="records", date_format="iso"))
+                months_out = []
+                for _, row in df_sim.iterrows():
+                    month_label = str(row.get("test_start", ""))[:7] if pd.notna(row.get("test_start")) else ""
+                    months_out.append({
+                        "month": month_label,
+                        "return_pct": float(row.get("strategy_return", 0)) if pd.notna(row.get("strategy_return")) else None,
+                        "win_rate": float(row.get("win_rate", 0)) if pd.notna(row.get("win_rate")) else None,
+                        "trades": int(row.get("trades", 0)) if pd.notna(row.get("trades")) else 0,
+                        "sharpe": float(row.get("sharpe", 0)) if pd.notna(row.get("sharpe")) else None,
+                        "max_drawdown": float(row.get("drawdown", 0)) if pd.notna(row.get("drawdown")) else None,
+                        "active_rate": float(row.get("active_rate", 0)) if pd.notna(row.get("active_rate")) else None,
+                    })
+                metrics_row["monthly_results"] = months_out
             else:
-                metrics_row["monthly_df"] = []
+                metrics_row["equity_curve"] = []
+                metrics_row["buy_hold_curve"] = []
+                metrics_row["drawdown_curve"] = []
+                metrics_row["monthly_results"] = []
+
+            if trade_log is not None and not trade_log.empty:
+                safe_trades = trade_log.reset_index(drop=True)
+                for col in safe_trades.columns:
+                    if pd.api.types.is_datetime64_any_dtype(safe_trades[col]):
+                        safe_trades[col] = safe_trades[col].astype(str)
+                safe_trades = safe_trades.where(pd.notnull(safe_trades), None)
+                metrics_row["trades"] = json.loads(safe_trades.to_json(orient="records", date_format="iso"))
+            else:
+                metrics_row["trades"] = []
+
+            metrics_row["hpo_param_importance"] = None
+            metrics_row["hpo_trials"] = None
+
+            try:
+                import glob as _glob
+                results_base = os.path.join(project_root, "results")
+                pattern = os.path.join(results_base, "**", "param_importances.json")
+                found = _glob.glob(pattern, recursive=True)
+                if found:
+                    latest = max(found, key=os.path.getmtime)
+                    with open(latest, "r") as _f:
+                        imps = json.load(_f)
+                    if isinstance(imps, dict):
+                        metrics_row["hpo_param_importance"] = [
+                            {"param": k, "importance": v} for k, v in imps.items()
+                        ]
+            except Exception:
+                pass
+
+            try:
+                if hasattr(bt, "_optuna_study"):
+                    study = bt._optuna_study
+                    if study is not None:
+                        trials_data = []
+                        for t in study.trials:
+                            trials_data.append({
+                                "trial_number": t.number,
+                                "value": t.value if t.value is not None else float("nan"),
+                                "params": dict(t.params) if t.params else {},
+                            })
+                        if trials_data:
+                            metrics_row["hpo_trials"] = _sanitize_metrics([trials_data])[0] if trials_data else None
+                            metrics_row["hpo_trials"] = trials_data
+            except Exception:
+                pass
 
             all_metrics.append(metrics_row)
             _pub("model_training", job_id, {"model": model_type, "status": "complete", "metrics": metrics_row})
@@ -251,6 +380,7 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
         result = {
             "pair": pair,
             "models": models,
+            "config": config,
             "metrics": _sanitize_metrics(all_metrics),
         }
 

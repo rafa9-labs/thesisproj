@@ -27,9 +27,10 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 
 def _configure_tf_in_worker():
-    """Configure TF for minimal memory footprint in a worker process."""
+    """Configure TF for GPU-accelerated training in a worker process."""
     try:
         import tensorflow as tf
+        import os
         gpus = tf.config.list_physical_devices("GPU")
         for gpu in gpus:
             try:
@@ -37,14 +38,17 @@ def _configure_tf_in_worker():
             except Exception:
                 pass
         try:
-            tf.config.threading.set_intra_op_parallelism_threads(1)
-            tf.config.threading.set_inter_op_parallelism_threads(1)
-        except Exception:
-            pass
-        try:
             tf.config.set_soft_device_placement(True)
         except Exception:
             pass
+        _threads = int(os.getenv("MLB_THREADS", str(max(1, (os.cpu_count() or 8) - 2))))
+        try:
+            tf.config.threading.set_intra_op_parallelism_threads(_threads)
+            tf.config.threading.set_inter_op_parallelism_threads(max(2, _threads // 4))
+        except Exception:
+            pass
+        if gpus:
+            print(f"[worker] GPU: {len(gpus)} device(s) — {gpus[0].name}, threads={_threads}")
     except Exception:
         pass
 
