@@ -1,8 +1,12 @@
 /**
- * Port discovery utilities for FX ML Backtester Electron shell.
+ * Utility functions for the FX ML Backtester Electron shell.
+ *
+ * Port discovery, path resolution, and data directory management.
  */
 
 import net from "net";
+import path from "path";
+import fs from "fs";
 
 const PORT_RANGE_START = 9000;
 const PORT_RANGE_END = 9999;
@@ -37,43 +41,79 @@ function isPortAvailable(port: number): Promise<boolean> {
 
 /**
  * Resolve the project root path.
- * In dev: parent of the electron-dist directory.
- * In prod: process.resourcesPath/app.
+ * In dev: the project repository root.
+ * In prod: directory containing the app executable.
  */
 export function getProjectRoot(isDev: boolean): string {
   if (isDev) {
-    // In dev, __dirname points to electron-dist/ (compiled output)
-    // Project root is the parent directory
     const { app } = require("electron");
     return app.getAppPath();
   }
-  return require("path").resolve(process.resourcesPath, "app");
+  // In production, the app is inside the asar or resources directory
+  const { app } = require("electron");
+  return path.dirname(app.getPath("exe"));
 }
 
 /**
  * Get the path to the Python backend executable.
  */
 export function getBackendExePath(isDev: boolean, projectRoot: string): string {
-  const path = require("path");
   if (isDev) {
-    return "python"; // Use system Python in dev
+    return "python";
   }
   const exeName = process.platform === "win32" ? "fx_backend.exe" : "fx_backend";
   return path.resolve(process.resourcesPath, "backend", exeName);
 }
 
 /**
- * Get the data directory path.
- * In dev: project root.
- * In prod: next to the app executable.
+ * Get the user data directory for persistent storage.
+ *
+ * In dev: project root (same as source data)
+ * In prod: %APPDATA%/FX ML Backtester/ (Windows) or equivalent
+ *
+ * This is where the database, results, and cache are stored.
  */
-export function getDataDir(isDev: boolean, projectRoot: string): string {
+export function getUserDataDir(isDev: boolean): string {
+  if (isDev) {
+    return process.cwd();
+  }
+  const { app } = require("electron");
+  const dataDir = path.join(app.getPath("userData"), "data");
+  ensureDir(dataDir);
+  return dataDir;
+}
+
+/**
+ * Get the reference data directory (CSV files, HPO configs).
+ *
+ * In dev: project root (csv_data/, hpo/)
+ * In prod: resources directory (bundled with app)
+ */
+export function getReferenceDataDir(isDev: boolean, projectRoot: string): string {
   if (isDev) {
     return projectRoot;
   }
-  // In production, data lives next to the app
-  const { app } = require("electron");
-  return path.join(path.dirname(app.getPath("exe")), "data");
+  return path.resolve(process.resourcesPath, "app.asar.unpacked") || projectRoot;
 }
 
-const path = require("path");
+/**
+ * Ensure a directory exists, creating it recursively if needed.
+ */
+function ensureDir(dirPath: string): void {
+  try {
+    fs.mkdirSync(dirPath, { recursive: true });
+  } catch {
+    // Directory may already exist or may be created by another process
+  }
+}
+
+/**
+ * Set up the data directory structure in production mode.
+ * Creates subdirectories for database, results, and cache.
+ */
+export function ensureDataDirs(dataDir: string): void {
+  const subdirs = ["", "results", "cache", "logs"];
+  for (const subdir of subdirs) {
+    ensureDir(path.join(dataDir, subdir));
+  }
+}

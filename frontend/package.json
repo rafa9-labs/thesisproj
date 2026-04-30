@@ -2,7 +2,9 @@
   "name": "fx-ml-backtester",
   "private": true,
   "version": "1.0.0",
-  "description": "FX ML Backtester — React + Electron Desktop App",
+  "description": "FX ML Backtester — Professional Forex Walk-Forward Backtesting Platform",
+  "author": "rafa9-labs",
+  "license": "UNLICENSED",
   "type": "module",
   "main": "../electron-dist/main.js",
   "scripts": {
@@ -14,8 +16,8 @@
     "build:electron": "npm run build && npm run electron:compile",
     "electron:compile": "tsc -p ../electron/tsconfig.json",
     "electron:run": "electron ../electron-dist/main.js",
-    "electron:pack": "npm run build:electron && electron-builder --dir",
-    "electron:dist": "npm run build:electron && electron-builder",
+    "electron:pack": "npm run build:electron && electron-builder --dir --config ../electron-builder.yml",
+    "electron:dist": "npm run build:electron && electron-builder --config ../electron-builder.yml",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npx jest --config jest.config.e2e.cjs --forceExit --detectOpenHandles",
@@ -80,39 +82,12 @@
     "postcss": "^8.5.10",
     "prettier": "^3.8.3",
     "puppeteer": "^24.41.0",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.2.2",
     "ts-jest": "^29.4.9",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.0",
     "vite": "^8.0.4",
     "vitest": "^4.1.4"
-  },
-  "build": {
-    "appId": "com.fxbacktester.app",
-    "productName": "FX ML Backtester",
-    "directories": {
-      "output": "../release"
-    },
-    "files": [
-      "dist/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "../electron-dist",
-        "to": "app/electron-dist"
-      }
-    ],
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "public/favicon.svg"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
   }
 }

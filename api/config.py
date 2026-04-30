@@ -32,9 +32,26 @@ class Settings(BaseSettings):
 
     @property
     def db_full_path(self) -> str:
+        fx_data_dir = os.environ.get("FX_DATA_DIR")
+        if fx_data_dir:
+            return os.path.join(fx_data_dir, "forex.db")
         if os.path.isabs(self.db_path):
             return self.db_path
         return os.path.join(self.project_root, self.db_path)
+
+    @property
+    def csv_data_full_path(self) -> str:
+        csv_dir = os.environ.get("CSV_DATA_DIR")
+        if csv_dir:
+            return csv_dir
+        return os.path.join(self.project_root, self.csv_data_dir)
+
+    @property
+    def results_full_path(self) -> str:
+        fx_data_dir = os.environ.get("FX_DATA_DIR")
+        if fx_data_dir:
+            return os.path.join(fx_data_dir, "results")
+        return os.path.join(self.project_root, self.results_dir)
 
 
 settings = Settings()

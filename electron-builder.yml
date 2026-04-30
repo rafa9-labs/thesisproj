@@ -1,0 +1,81 @@
+# FX ML Backtester — Electron Builder Configuration
+# Docs: https://www.electron.build/configuration.yml
+
+appId: com.fxbacktester.app
+productName: "FX ML Backtester"
+copyright: "Copyright © 2026 rafa9-labs"
+
+# Directories
+directories:
+  output: ../release
+  buildResources: build
+
+# Files to include in the asar archive
+files:
+  - dist/**/*
+  - ../electron-dist/**/*
+
+# Unpack from asar (these need to be accessed by the Python process)
+asar: true
+asarUnpack:
+  - "**/*.node"
+
+# Extra resources (bundled alongside the app, not in asar)
+extraResources:
+  - from: ../dist/fx_backend
+    to: backend
+    filter:
+      - "**/*"
+  - from: ../csv_data
+    to: csv_data
+    filter:
+      - "**/*.csv"
+
+# Windows-specific config
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: "${productName}-Setup-${version}.${ext}"
+
+# NSIS installer config
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "FX ML Backtester"
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  installerLanguages:
+    - en_US
+  language: 1033
+
+# File type associations
+fileAssociations:
+  - ext: fxbacktest
+    name: FX Backtest Config
+    description: "FX ML Backtester Configuration"
+    icon: build/icon.ico
+
+# Linux (for future)
+linux:
+  icon: build/icon.png
+  target:
+    - AppImage
+  category: Finance
+
+# macOS (for future, if needed)
+mac:
+  icon: build/icon.png
+  target:
+    - dmg
+
+# Publishing (GitHub Releases)
+publish:
+  provider: github
+  owner: rafa9-labs
+  repo: thesisproj

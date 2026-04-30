@@ -2,12 +2,13 @@
  * Electron main process — FX ML Backtester desktop shell.
  *
  * Responsibilities:
- * 1. Spawn FastAPI Python backend (with auto-restart)
- * 2. Wait for backend health check to pass
- * 3. Open BrowserWindow loading the React frontend
- * 4. Graceful shutdown with SIGTERM → wait → SIGKILL
- * 5. System tray + native menus
- * 6. Dynamic port discovery (9000-9999)
+ * 1. Show splash screen while backend starts
+ * 2. Spawn FastAPI Python backend (with auto-restart)
+ * 3. Wait for backend health check to pass
+ * 4. Open BrowserWindow loading the React frontend
+ * 5. Graceful shutdown with SIGTERM → wait → SIGKILL
+ * 6. System tray + native menus
+ * 7. Dynamic port discovery (9000-9999)
  */
 
 import { app, BrowserWindow, Menu, Tray, shell } from "electron";
@@ -16,6 +17,8 @@ import { PythonManager } from "./python";
 import { waitForBackend } from "./health";
 import { buildMenu } from "./menu";
 import { createTray } from "./tray";
+import { createSplashWindow, updateSplashStatus, destroySplash } from "./splash";
+import { getProjectRoot, getUserDataDir } from "./utils";
 
 const isDev = !app.isPackaged;
 const isWin = process.platform === "win32";
@@ -23,11 +26,10 @@ const isWin = process.platform === "win32";
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let pythonManager: PythonManager | null = null;
+let splashWindow: BrowserWindow | null = null;
 let backendPort = 8001;
 
-const PROJECT_ROOT = isDev
-  ? app.getAppPath()
-  : path.resolve(process.resourcesPath, "app");
+const PROJECT_ROOT = getProjectRoot(isDev);
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -36,7 +38,7 @@ function createWindow() {
     minWidth: 1280,
     minHeight: 800,
     title: "FX ML Backtester",
-    backgroundColor: "#0a0e17",
+    backgroundColor: "#131722",
     show: false,
     webPreferences: {
       preload: path.resolve(__dirname, "preload.js"),
@@ -76,15 +78,21 @@ async function loadFrontend() {
 async function startBackend() {
   pythonManager = new PythonManager(PROJECT_ROOT, isDev, (status, message) => {
     console.log(`[Electron] Backend status: ${status} - ${message}`);
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      updateSplashStatus(splashWindow, message);
+    }
     mainWindow?.webContents.send("backend-status", { status, message });
   });
 
+  updateSplashStatus(splashWindow!, "Finding available port...");
   backendPort = await pythonManager.start();
   console.log(`[Electron] Backend starting on port ${backendPort}`);
 
+  updateSplashStatus(splashWindow!, "Waiting for backend...");
   const ok = await waitForBackend(backendPort, 30_000);
   if (!ok) {
     console.error("[Electron] Backend failed to start within 30s");
+    updateSplashStatus(splashWindow!, "Backend failed to start. Check logs.");
     mainWindow?.webContents.send("backend-status", {
       status: "error",
       message: "Backend failed to start",
@@ -112,10 +120,16 @@ async function cleanup() {
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(buildMenu(isDev));
 
+  splashWindow = createSplashWindow();
+
   createWindow();
   tray = createTray(mainWindow!);
 
   await startBackend();
+
+  destroySplash(splashWindow!);
+  splashWindow = null;
+
   await loadFrontend();
 
   app.on("activate", () => {

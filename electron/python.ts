@@ -8,12 +8,12 @@
  * - Dynamic port discovery (9000-9999)
  * - Auto-restart on crash (max 3 retries)
  * - Graceful shutdown (SIGTERM → wait → SIGKILL)
- * - Environment variable setup
+ * - Environment variable setup (FX_APP_MODE, FX_DATA_DIR, API_DB_PATH)
  */
 
 import { spawn, ChildProcess } from "child_process";
 import path from "path";
-import { findAvailablePort, getBackendExePath } from "./utils";
+import { findAvailablePort, getBackendExePath, getUserDataDir, ensureDataDirs } from "./utils";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
@@ -67,6 +67,9 @@ export class PythonManager {
 
     console.log(`[Python] Spawning: ${cmd} ${args.join(" ")}`);
 
+    const dataDir = getUserDataDir(this.isDev);
+    ensureDataDirs(dataDir);
+
     const env: Record<string, string> = {
       ...process.env as Record<string, string>,
       PYTHONIOENCODING: "utf-8",
@@ -77,11 +80,13 @@ export class PythonManager {
     };
 
     if (!this.isDev) {
-      env.API_DB_PATH = path.join(this.projectRoot, "data", "forex.db");
+      env.API_DB_PATH = path.join(dataDir, "forex.db");
+      env.FX_DATA_DIR = dataDir;
+      env.CSV_DATA_DIR = path.join(process.resourcesPath, "csv_data");
     }
 
     this.proc = spawn(cmd, args, {
-      cwd: this.projectRoot,
+      cwd: this.isDev ? this.projectRoot : path.dirname(cmd),
       env,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -139,7 +144,7 @@ export class PythonManager {
 }
 
 /**
- * Legacy function for backward compatibility with main.ts.
+ * Legacy function for backward compatibility.
  */
 export function spawnPythonBackend(
   projectRoot: string,
@@ -148,6 +153,5 @@ export function spawnPythonBackend(
 ): ChildProcess {
   const manager = new PythonManager(projectRoot, isDev);
   manager.start();
-  // Return the raw child process for compatibility
   return manager.getProcess()!;
 }
