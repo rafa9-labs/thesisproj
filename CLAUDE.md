@@ -89,7 +89,11 @@
 - `rl/wrappers.py` — Reward processing, cost-aware wrappers
 
 ### Tests (`tests/`)
-- 16+ test files covering pipeline, metrics, models, schemas, walk-forward integrity
+- 496+ tests covering pipeline, metrics, models, schemas, walk-forward integrity, build validation
+- `tests/test_models_train_predict.py` — Build/train/predict for all 10 models + ensemble (40 tests)
+- `tests/test_build_validation.py` — PyInstaller spec + hidden imports validation (46 tests)
+- `tests/benchmarks/` — Model timing + memory benchmarks (11 tests, 4 slow)
+- `tests/golden/` — Deterministic output regression tests (7 tests + golden data files)
 - `tests/smoke_all_models.py` — Smoke test for all 8 model types
 - `tests/conftest.py` — Shared fixtures
 

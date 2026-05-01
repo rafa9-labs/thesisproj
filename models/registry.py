@@ -393,7 +393,8 @@ def _build_transformer(*, use_proba=True, **params):
 def _build_dqn(*, use_proba=True, **params):
     """Dueling DQN agent. Requires input_shape in params."""
     from rl.dqn_agent import DQNAgent
-    from pipeline.dqn_config import _coerce_dqn_cfg, filter_dqn_config
+    from pipeline.dqn_config import _coerce_dqn_cfg
+    from rl.dqn_agent import filter_dqn_config
 
     _configure_tf_threads()
     seed = _extract_seed(params)

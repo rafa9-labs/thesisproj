@@ -4,7 +4,8 @@ DQN configuration loading and coercion.
 Extracted from MLBacktesterNoWFO.py lines 541-662.
 """
 
-from pipeline._imports import *  # noqa: F401,F403
+import os
+import json
 
 def _load_default_dqn_cfg(path: str) -> dict:
     """
