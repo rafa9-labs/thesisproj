@@ -133,6 +133,12 @@ class BacktestParams(BaseModel):
         le=500,
         description="Number of Optuna HPO trials. 0 = use cached/default config.",
     )
+    max_hpo_duration_minutes: float = Field(
+        default=0,
+        ge=0,
+        le=1440,
+        description="Max HPO duration in minutes. 0 = no limit.",
+    )
     seed: int = Field(
         default=42,
         ge=0,

@@ -34,7 +34,8 @@ from pipeline.tuning.objective import optuna_objective
 def run_optuna_tuning(
         train_data, base_features, evaluate_cv_func, cv_config, models_to_test,
         n_trials=1, n_startup_trials=10, return_top_n=3, study=None, sampler_seed=None,
-        month_out_dir: str | None = None, month_ix: int | None = None):
+        month_out_dir: str | None = None, month_ix: int | None = None,
+        max_hpo_duration_minutes: float = 0):
 
     """
     Runs Optuna tuning for a given model configuration, evaluates via CV,
@@ -327,6 +328,17 @@ def run_optuna_tuning(
 
     print(f"[Optuna] sequential n_jobs={n_jobs} | BLAS_THREADS_PER_TRIAL={blas_threads} | CV_JOBS={os.getenv('CV_JOBS', '?')}")
 
+    _hpo_deadline = None
+    if max_hpo_duration_minutes and max_hpo_duration_minutes > 0:
+        _hpo_deadline = time.time() + max_hpo_duration_minutes * 60
+        print(f"[Optuna] Time budget: {max_hpo_duration_minutes:.1f} min (deadline {_hpo_deadline:.0f})")
+
+    def _hpo_timeout_callback(study, trial):
+        if _hpo_deadline is not None and time.time() >= _hpo_deadline:
+            study.stop()
+
+    study.set_user_attr("max_hpo_duration_minutes", max_hpo_duration_minutes)
+
     # Cap NumPy/SciPy/Sklearn/XGB BLAS threads inside the trial
     with threadpool_limits(limits=blas_threads):
         # ------------------------------------------------------------
@@ -340,7 +352,8 @@ def run_optuna_tuning(
 
         if plateau_patience <= 0:
             # Backwards-compatible default behavior
-            study.optimize(_func_with_progress, n_trials=n_trials, n_jobs=n_jobs, gc_after_trial=True)
+            study.optimize(_func_with_progress, n_trials=n_trials, n_jobs=n_jobs, gc_after_trial=True,
+                           callbacks=[_hpo_timeout_callback] if _hpo_deadline else None)
         else:
             print(f"[Optuna] Plateau stop enabled: patience={plateau_patience} "
                   f"delta={plateau_delta} min_trials={plateau_min_trials}")

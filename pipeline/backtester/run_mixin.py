@@ -3697,6 +3697,7 @@ class RunMixin:
             return_top_n=rt_n,
             study=None,  # one study here
             sampler_seed=int(self.features_config.get("run_seed", 0)) or None,
+            max_hpo_duration_minutes=float(config.get("max_hpo_duration_minutes", 0)),
         )
 
         if {"month_out_dir", "month_ix"} <= _sig_params:
@@ -3943,6 +3944,7 @@ class RunMixin:
                         return_top_n=rt_n,
                         study=None,   # NEW study, but only here, after Top-5 fully failed
                         sampler_seed=int(self.features_config.get("run_seed", 0)) or None,
+                        max_hpo_duration_minutes=float(config.get("max_hpo_duration_minutes", 0)),
                     )
                     if top5_2:
                         best2["__top5_params"] = top5_2

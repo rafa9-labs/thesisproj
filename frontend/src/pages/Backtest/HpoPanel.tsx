@@ -97,6 +97,20 @@ export function HpoPanel() {
         </div>
       </div>
 
+      {/* HPO Duration */}
+      <div className="mb-4">
+        <ParamSlider
+          label="Max HPO Duration (min)"
+          paramKey="max_hpo_duration_minutes"
+          value={s.maxHpoDurationMinutes ?? 0}
+          min={0}
+          max={120}
+          step={5}
+          onChange={(v) => setField("maxHpoDurationMinutes", v)}
+        />
+        <p className="mt-1 text-xs text-gray-500">0 = no limit. Stops HPO early if budget exceeded.</p>
+      </div>
+
       {/* Coverage & confidence */}
       <div className="mb-4 grid grid-cols-3 gap-4">
         <ParamSlider
