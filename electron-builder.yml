@@ -8,12 +8,12 @@ copyright: "Copyright © 2026 rafa9-labs"
 # Directories
 directories:
   output: ../release
-  buildResources: build
+  buildResources: ../build
 
 # Files to include in the asar archive
 files:
   - dist/**/*
-  - ../electron-dist/**/*
+  - electron-dist/**/*
 
 # Unpack from asar (these need to be accessed by the Python process)
 asar: true
@@ -37,8 +37,12 @@ win:
     - target: nsis
       arch:
         - x64
-  icon: build/icon.ico
+  icon: icon.ico
   artifactName: "${productName}-Setup-${version}.${ext}"
+  signAndEditExecutable: false
+
+# Skip code signing for dev builds (requires Admin/symlink privilege otherwise).
+# Set signAndEditExecutable: true and run from Admin terminal for production signed builds.
 
 # NSIS installer config
 nsis:
@@ -47,9 +51,9 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: "FX ML Backtester"
-  installerIcon: build/icon.ico
-  uninstallerIcon: build/icon.ico
-  installerHeaderIcon: build/icon.ico
+  installerIcon: icon.ico
+  uninstallerIcon: icon.ico
+  installerHeaderIcon: icon.ico
   installerLanguages:
     - en_US
   language: 1033
@@ -59,18 +63,18 @@ fileAssociations:
   - ext: fxbacktest
     name: FX Backtest Config
     description: "FX ML Backtester Configuration"
-    icon: build/icon.ico
+    icon: icon.ico
 
 # Linux (for future)
 linux:
-  icon: build/icon.png
+  icon: icon.png
   target:
     - AppImage
   category: Finance
 
 # macOS (for future, if needed)
 mac:
-  icon: build/icon.png
+  icon: icon.png
   target:
     - dmg
 

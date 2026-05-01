@@ -70,7 +70,7 @@ async function loadFrontend() {
     const devUrl = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5173";
     await mainWindow?.loadURL(devUrl);
   } else {
-    const indexPath = path.join(PROJECT_ROOT, "frontend", "dist", "index.html");
+    const indexPath = path.join(PROJECT_ROOT, "dist", "index.html");
     await mainWindow?.loadFile(indexPath);
   }
 }

@@ -4,7 +4,7 @@
     "module": "commonjs",
     "moduleResolution": "node10",
     "esModuleInterop": true,
-    "outDir": "../electron-dist",
+    "outDir": "../frontend/electron-dist",
     "rootDir": ".",
     "strict": false,
     "noImplicitAny": false,

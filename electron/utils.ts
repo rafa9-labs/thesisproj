@@ -45,13 +45,8 @@ function isPortAvailable(port: number): Promise<boolean> {
  * In prod: directory containing the app executable.
  */
 export function getProjectRoot(isDev: boolean): string {
-  if (isDev) {
-    const { app } = require("electron");
-    return app.getAppPath();
-  }
-  // In production, the app is inside the asar or resources directory
   const { app } = require("electron");
-  return path.dirname(app.getPath("exe"));
+  return app.getAppPath();
 }
 
 /**

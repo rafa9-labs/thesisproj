@@ -6,7 +6,7 @@
   "author": "rafa9-labs",
   "license": "UNLICENSED",
   "type": "module",
-  "main": "../electron-dist/main.js",
+  "main": "electron-dist/main.js",
   "scripts": {
     "dev": "vite",
     "dev:electron": "concurrently -k \"npm run dev\" \"npm run electron:compile && npm run electron:run\"",
@@ -15,7 +15,7 @@
     "build:check": "tsc -b && vite build",
     "build:electron": "npm run build && npm run electron:compile",
     "electron:compile": "tsc -p ../electron/tsconfig.json",
-    "electron:run": "electron ../electron-dist/main.js",
+    "electron:run": "electron electron-dist/main.js",
     "electron:pack": "npm run build:electron && electron-builder --dir --config ../electron-builder.yml",
     "electron:dist": "npm run build:electron && electron-builder --config ../electron-builder.yml",
     "test": "vitest run",
