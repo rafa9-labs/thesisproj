@@ -73,7 +73,7 @@ for /f "tokens=3" %%a in ('dir /s "dist\fx_backend" ^| findstr /c:"File(s)"') do
 echo       Bundle size: !BUILD_SIZE! bytes
 
 echo [6/7] Generating app icons...
-if not exist "frontend\build\icon.ico" (
+if not exist "build\icon.ico" (
     echo [INFO] Generating placeholder icons...
     node scripts\generate_icon.mjs
     if errorlevel 1 (
