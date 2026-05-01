@@ -457,28 +457,26 @@
 
 ---
 
-## Sprint 14: Pipeline Enhancements
+## Sprint 14: Pipeline Enhancements ✅ COMPLETE (2026-05-01)
 
 > **Goal**: Add flexible walk-forward periods and HPO duration control.
 > **Est**: 5-8h
 
-- [ ] **S14.1** Daily/Weekly walk-forward periods
-  - Add `period_unit: Literal["months", "weeks", "days"]` to config/schemas
-  - Create `_make_offset(count, unit)` helper replacing all `DateOffset(months=...)`
-  - Generalize `months_between()` in `evaluation_mixin.py` to handle days/weeks
-  - Convert 37-month warm-up offset proportionally (≈160 weeks or 1120 days)
-  - Generalize `pd.to_period("M")` in CV fold builder
-  - Update frontend schemas + UI controls for period unit selector
-  - **Files**: `config.py`, `schemas/`, `pipeline/backtester/real_trading_mixin.py`, `pipeline/backtester/evaluation_mixin.py`, `pipeline/backtester/run_mixin.py`, `frontend/src/pages/Backtest/`
-  - **Est**: 3-5h + 2-3h tests
+- [x] **S14.1** Daily/Weekly walk-forward periods ✅ DONE
+  - Added `PeriodUnit` type + `period_offset()`, `periods_between()`, `convert_month_count_to_periods()`, `to_period_freq()` helpers to `config.py`
+  - Added `period_unit` field to `BacktestParams` schema (Literal months/weeks/days)
+  - Refactored `evaluation_mixin.py` `get_walk_forward_splits()` — returns 4-tuple, period-unit aware
+  - Replaced all 15 `pd.DateOffset(months=...)` call sites across 3 pipeline files
+  - Frontend HpoPanel: period unit selector dropdown (months/weeks/days)
+  - 13 new `TestPeriodUnit` tests
+  - **Files**: `config.py`, `schemas/backtest.py`, `pipeline/backtester/evaluation_mixin.py`, `pipeline/backtester/real_trading_mixin.py`, `pipeline/backtester/run_mixin.py`, `frontend/src/pages/Backtest/HpoPanel.tsx`, `tests/test_walk_forward_integrity.py`
 
-- [ ] **S14.2** HPO duration control
-  - Add `max_hpo_duration_minutes` config option
-  - Implement early stopping in Optuna when time budget exceeded
-  - API endpoint to set duration limit per job
-  - Frontend control in Backtest config page
-  - **Files**: `config.py`, `pipeline/tuning/runner.py`, `api/routers/backtest.py`, `frontend/src/pages/Backtest/`
-  - **Est**: 2-3h
+- [x] **S14.2** HPO duration control ✅ DONE
+  - Added `max_hpo_duration_minutes` to config and schema
+  - Timeout callback in `run_optuna_tuning()` stops study when time budget exceeded
+  - Threaded through both call sites in `run_mixin.py`
+  - Frontend control in `Backtest/HpoPanel.tsx`
+  - **Files**: `schemas/backtest.py`, `pipeline/tuning/runner.py`, `pipeline/backtester/run_mixin.py`, `frontend/src/pages/Backtest/HpoPanel.tsx`
 
 ---
 
@@ -840,7 +838,7 @@ cd frontend && npm run dev
 | **S11** | Installer & Auto-Update | 6-8h | TODO |
 | **S12** | Commercial Infrastructure | 8-10h | TODO |
 | **S13** | Beta & Launch | 6-8h | TODO |
-| **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | TODO |
+| **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
 | **S15** | KodaQuant Branding | 4-6h | TODO |
 
 ## Completion Criteria Summary
