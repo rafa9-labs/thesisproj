@@ -9,6 +9,13 @@ import numpy as np
 import pandas as pd
 from typing import List, Optional, Sequence
 
+try:
+    from sklearn.feature_selection import mutual_info_classif
+except ImportError:
+    mutual_info_classif = None
+
+from logging_config import log_print
+
 
 def _fracdiff_weights(d: float, size: int, thresh: float = 1e-4) -> np.ndarray:
     """Compute fracdiff weight vector; trim trailing weights below thresh."""

@@ -29,8 +29,8 @@ export function computeDashboardKPIs(allResults: JobResults[]): DashboardKPIValu
         winRateSum += m.win_rate;
         winRateCount++;
       }
-      if (m.total_return != null) {
-        if (bestReturn === null || m.total_return > bestReturn) bestReturn = m.total_return;
+      if (m.total_return_pct != null) {
+        if (bestReturn === null || m.total_return_pct > bestReturn) bestReturn = m.total_return_pct;
       }
     }
   }

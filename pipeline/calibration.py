@@ -7,7 +7,12 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from typing import Optional
+from typing import Optional, Tuple
+
+try:
+    from sklearn.calibration import CalibratedClassifierCV
+except ImportError:
+    CalibratedClassifierCV = None
 
 
 class RollingStandardizer:

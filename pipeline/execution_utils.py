@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from typing import Optional
 
+from pipeline.metrics_extra import compute_rolling_hit_rate
+
 
 def first_tradable_test_bar(index, month_start_ts):
     """

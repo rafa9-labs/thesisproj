@@ -5,6 +5,7 @@ Phase 4.5 — cost-aware and reward-shaping wrappers for gym environments.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 
 
 class CostAwareWrapper:

@@ -82,7 +82,7 @@ def _build_model(model_type: str, input_shape: tuple, params: dict):
         raise ValueError(f"Unknown deep model type: {model_type}")
 
 
-def _reshape_for_model(X_2d: "np.ndarray", mode: str, win: int):
+def _reshape_for_model(X_2d: "np.ndarray", mode: str, win: int):  # noqa: F821
     """Reshape 2D features into the shape expected by the model."""
     import numpy as np
     if mode == "3d":

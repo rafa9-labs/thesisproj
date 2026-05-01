@@ -3,7 +3,7 @@ import { DEFAULTS } from "@/lib/constants";
 import type { BacktestRequest, HpoIntensity } from "@/api/schemas";
 
 type Widen<T> = T extends boolean ? boolean : T extends string ? string : T extends number ? number : T;
-type BacktestState = { [K in keyof typeof DEFAULTS]: Widen<(typeof DEFAULTS)[K]> } & {
+type BacktestState = { -readonly [K in keyof typeof DEFAULTS]: Widen<(typeof DEFAULTS)[K]> } & {
   hpoIntensity: HpoIntensity;
 };
 type BacktestActions = {

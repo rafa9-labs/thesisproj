@@ -4,9 +4,32 @@ Phase 4.4 — PSR, DSR, Brier/NLL, drawdown curves, rolling stats.
 """
 from __future__ import annotations
 
+import math
 import numpy as np
 import pandas as pd
 from typing import Optional
+
+try:
+    from scipy.stats import norm as _norm
+except ImportError:
+    _norm = None
+
+from pipeline.metrics_eval import estimate_frequency_per_year
+
+
+def _norm_cdf(z: float) -> float:
+    if _norm is not None:
+        return float(_norm.cdf(z))
+    return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+
+def _compute_drawdown(equity):
+    if equity is None or len(equity) == 0:
+        return None
+    s = pd.Series(equity) if not isinstance(equity, pd.Series) else equity
+    cummax = s.cummax()
+    dd = (s - cummax) / cummax.replace(0, np.nan)
+    return dd
 
 
 def compute_brier_and_nll(proba, y_true):
@@ -93,26 +116,19 @@ def compute_dsr_scores(scores):
     Returns a list of DSR-like probabilities (higher is better), one per score.
     Approximates multiple-testing via a Šidák-style family correction.
     """
-    x = _np.asarray(scores, dtype=float)
-    n = int(_np.isfinite(x).sum())
-    if n <= 1 or _np.allclose(_np.nanstd(x, ddof=1), 0.0):
-        # degenerate: everyone ties
-        return [0.0 if not _np.isfinite(v) else 0.5 for v in x]
+    x = np.asarray(scores, dtype=float)
+    n = int(np.isfinite(x).sum())
+    if n <= 1 or np.allclose(np.nanstd(x, ddof=1), 0.0):
+        return [0.0 if not np.isfinite(v) else 0.5 for v in x]
 
-    mu = float(_np.nanmean(x))
-    sd = float(_np.nanstd(x, ddof=1))
+    mu = float(np.nanmean(x))
+    sd = float(np.nanstd(x, ddof=1))
     out = []
     for v in x:
-        if not _np.isfinite(v):
+        if not np.isfinite(v):
             out.append(0.0); continue
         z = (float(v) - mu) / sd
-        # single-test p-value (one-sided)
-        if _norm is None:
-            import math as _m
-            p_single = 0.5 * (1.0 - _m.erf(z / _m.sqrt(2.0)))  # 1 - Phi(z)
-        else:
-            p_single = 1.0 - float(_norm.cdf(z))
-        # family-wise correction across n tests (Šidák)
+        p_single = 1.0 - _norm_cdf(z)
         p_family = 1.0 - (1.0 - max(1e-12, min(1.0, p_single))) ** n
         dsr = 1.0 - p_family
         out.append(float(dsr))

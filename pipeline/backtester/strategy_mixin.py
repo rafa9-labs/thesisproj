@@ -3279,11 +3279,11 @@ class StrategyMixin:
             except Exception:
                 pass
             try:
-                del X_seq_test
+                del X_seq_test  # noqa: F821
             except Exception:
                 pass
             try:
-                del y_seq_test
+                del y_seq_test  # noqa: F821
             except Exception:
                 pass
 
