@@ -643,6 +643,7 @@ class RealTradingMixin:
             config.get("test_months"),
             TRAIN_TEST_MONTHS[model_type]["test"][0]
         )
+        period_unit = config.get("period_unit", "months")
 
         # ---- carry continuous state across months ----
         prev_eq_strategy = 1.0
@@ -772,9 +773,15 @@ class RealTradingMixin:
                 pass
             try:
                 _start_dt = pd.to_datetime(self.start) if self.start is not None else self.data.index[0]
-                test_start_naive  = _start_dt + pd.DateOffset(months=37 + i)
-                test_end_naive    = test_start_naive + pd.DateOffset(months=test_months)
-                train_start_naive = test_start_naive - pd.DateOffset(months=train_months)
+                from config import period_offset, convert_month_count_to_periods as _cvt
+                _pu = period_unit
+                _warmup = _cvt(37, _pu)
+                _train_p = _cvt(train_months, _pu)
+                _test_p = _cvt(test_months, _pu)
+                _pad_p = _cvt(1, _pu)
+                test_start_naive  = _start_dt + period_offset(_warmup + i, unit=_pu)
+                test_end_naive    = test_start_naive + period_offset(_test_p, unit=_pu)
+                train_start_naive = test_start_naive - period_offset(_train_p, unit=_pu)
                 train_end_naive   = test_start_naive - pd.Timedelta(minutes=30)
 
                 # make the slices tz-aware (UTC) — uses _ensure_dt defined at method top
@@ -787,7 +794,7 @@ class RealTradingMixin:
                     print(f"❗ Sanity check failed: train_end ({train_end}) is not before test_start ({test_start})")
                     continue
 
-                train_start_nominal = test_start - pd.DateOffset(months=train_months)
+                train_start_nominal = test_start - period_offset(_train_p, unit=_pu)
                 train_start = max(full_data.index[0], train_start_nominal)
                 if train_start > train_start_nominal:
                     log_print(
@@ -803,7 +810,7 @@ class RealTradingMixin:
                 )
 
 
-                data_slice = full_data.loc[train_start - pd.DateOffset(months=1):test_end].copy()
+                data_slice = full_data.loc[train_start - period_offset(_pad_p, unit=_pu):test_end].copy()
                 log_print(
                     f"📊 Data shape for training/testing window: {data_slice.shape}",
                     level="DEBUG",
@@ -1032,7 +1039,7 @@ class RealTradingMixin:
                             )
 
                     # Restore full_data slice before either evaluation or flat-month fallback
-                    self.data = full_data.loc[train_start - pd.DateOffset(months=1):test_end].copy()
+                    self.data = full_data.loc[train_start - period_offset(_pad_p, unit=_pu):test_end].copy()
 
                     # Metrics placeholder for this month/model (filled by consensus / Top-3 / single-best)
                     metrics = None

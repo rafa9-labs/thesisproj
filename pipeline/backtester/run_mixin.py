@@ -96,9 +96,11 @@ class RunMixin:
         test_months_list = ensure_list(
             config.get("test_months", TRAIN_TEST_MONTHS[model_type]["test"][0])
         )
+        period_unit = config.get("period_unit", "months")
 
         tasks = self.get_walk_forward_splits(
-            walk_data, train_months_list, test_months_list, max_end
+            walk_data, train_months_list, test_months_list, max_end,
+            period_unit=period_unit,
         )
         if self._is_debug():
             log_print(f"Number of walk-forward splits: {len(tasks)}", level="DEBUG")
@@ -109,8 +111,9 @@ class RunMixin:
             log_print("❌ No WFO tasks generated.", level="COMPACT")
             return None, None
 
-        first_start, first_train_months, first_test_months = tasks[0]
-        first_train_end = first_start + pd.DateOffset(months=first_train_months)
+        first_start, first_train_months, first_test_months, _first_pu = tasks[0]
+        from config import period_offset
+        first_train_end = first_start + period_offset(first_train_months, unit=_first_pu)
         
         # IMPORTANT: training must end strictly BEFORE the first test month begins
         # to avoid boundary leakage (pandas .loc is inclusive on endpoints).
@@ -137,7 +140,7 @@ class RunMixin:
             train_months_eff = int(first_train_months)
 
             need_months = train_months_eff + (k_blocks * val_months_eff)
-            optuna_start = first_test_start - pd.DateOffset(months=int(need_months))
+            optuna_start = first_test_start - period_offset(int(need_months), unit=_first_pu)
 
             # Clamp to available data start
             if len(idx) > 0:
@@ -519,7 +522,9 @@ class RunMixin:
                         idx = df.index
                         if not hasattr(idx, "to_period"):
                             return []
-                        months = pd.Index(idx.to_period("M")).unique().sort_values()
+                        from config import to_period_freq as _tpf
+                        _freq = _tpf(period_unit)
+                        months = pd.Index(idx.to_period(_freq)).unique().sort_values()
                         if len(months) == 0:
                             return []
                         k_use = min(int(k_blocks), len(months))
@@ -537,7 +542,7 @@ class RunMixin:
                             if tr_end <= 0:
                                 continue
                             tr_end_time = idx[tr_end - 1]
-                            tr_start_time = tr_end_time - pd.DateOffset(months=int(train_months_eff))
+                            tr_start_time = tr_end_time - period_offset(int(train_months_eff), unit=period_unit)
                             ts = int(np.searchsorted(idx_values, np.array(tr_start_time, dtype=idx_values.dtype), side="left"))
                             ts = max(0, min(ts, tr_end))
                             folds.append({
@@ -3786,10 +3791,10 @@ class RunMixin:
             return None, best_params_once
 
 
-        def evaluate_fold(start_date, train_months, test_months):
+        def evaluate_fold(start_date, train_months, test_months, pu="months"):
 
-            train_end = start_date + pd.DateOffset(months=train_months)
-            test_end  = train_end + pd.DateOffset(months=test_months)
+            train_end = start_date + period_offset(train_months, unit=pu)
+            test_end  = train_end + period_offset(test_months, unit=pu)
             if test_end > max_end:
                 return None
 
@@ -4090,7 +4095,7 @@ class RunMixin:
 
 
         all_results = Parallel(n_jobs=n_jobs_actual, backend=backend)(
-            delayed(evaluate_fold)(s, trn, tst) for s, trn, tst in tqdm(tasks, desc="Walk-forward splits")
+            delayed(evaluate_fold)(s, trn, tst, pu) for s, trn, tst, pu in tqdm(tasks, desc="Walk-forward splits")
         )
 
 

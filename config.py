@@ -23,7 +23,59 @@ import sys
 import logging
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
+
+PeriodUnit = Literal["months", "weeks", "days"]
+
+
+def period_offset(count: int, unit: PeriodUnit = "months") -> "pd.DateOffset":
+    """Create a pd.DateOffset for the given count and unit.
+
+    Replaces all hardcoded ``pd.DateOffset(months=...)`` call sites.
+    """
+    import pandas as pd
+    if unit == "months":
+        return pd.DateOffset(months=count)
+    if unit == "weeks":
+        return pd.DateOffset(weeks=count)
+    if unit == "days":
+        return pd.DateOffset(days=count)
+    raise ValueError(f"Unknown period_unit: {unit!r}")
+
+
+def periods_between(a, b, unit: PeriodUnit = "months") -> int:
+    """Number of complete periods between two timestamps (floor).
+
+    Replaces the old ``months_between()`` which only handled months.
+    """
+    delta = b - a
+    total_days = delta.days
+    if unit == "months":
+        return (b.year - a.year) * 12 + (b.month - a.month)
+    if unit == "weeks":
+        return total_days // 7
+    if unit == "days":
+        return total_days
+    raise ValueError(f"Unknown period_unit: {unit!r}")
+
+
+def to_period_freq(unit: PeriodUnit) -> str:
+    """Map PeriodUnit to pandas period frequency string."""
+    return {"months": "M", "weeks": "W", "days": "D"}[unit]
+
+
+def convert_month_count_to_periods(months: int, unit: PeriodUnit) -> int:
+    """Convert a month count to the equivalent count in the target unit.
+
+    Approximate: 1 month ≈ 4 weeks ≈ 30 days.
+    """
+    if unit == "months":
+        return months
+    if unit == "weeks":
+        return max(1, months * 4)
+    if unit == "days":
+        return max(1, months * 30)
+    raise ValueError(f"Unknown period_unit: {unit!r}")
 
 # ---------------------------------------------------------------------------
 # Project root (one level up from this file)

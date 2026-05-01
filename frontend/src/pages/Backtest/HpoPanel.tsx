@@ -64,7 +64,7 @@ export function HpoPanel() {
       </div>
 
       {/* Walk-forward windows */}
-      <div className="mb-4 grid grid-cols-2 gap-4">
+      <div className="mb-4 grid grid-cols-3 gap-4">
         <ParamSlider
           label="Train Months"
           paramKey="train_months"
@@ -83,6 +83,18 @@ export function HpoPanel() {
           step={RANGES.testMonths.step}
           onChange={(v) => setField("testMonths", v)}
         />
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Period Unit</label>
+          <select
+            className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-sm"
+            value={s.periodUnit ?? "months"}
+            onChange={(e) => setField("periodUnit", e.target.value)}
+          >
+            <option value="months">Months</option>
+            <option value="weeks">Weeks</option>
+            <option value="days">Days</option>
+          </select>
+        </div>
       </div>
 
       {/* Coverage & confidence */}

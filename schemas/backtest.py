@@ -120,6 +120,11 @@ class BacktestParams(BaseModel):
         le=12,
         description="Number of months for each test fold.",
     )
+    period_unit: Literal["months", "weeks", "days"] = Field(
+        default="months",
+        description="Walk-forward period granularity. 'months' is the default; "
+                    "'weeks' and 'days' enable finer-grained walk-forward splits.",
+    )
     
     # ── HPO (Hyperparameter Optimization) ──
     n_trials: int = Field(

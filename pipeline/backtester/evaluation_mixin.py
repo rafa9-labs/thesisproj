@@ -8,52 +8,49 @@ class EvaluationMixin:
 
     Auto-extracted from MLBacktesterNoWFO.py lines 10708-11190.
     """
-    def get_walk_forward_splits(self, walk_data, train_months_list, test_months_list, max_end):
+    def get_walk_forward_splits(self, walk_data, train_months_list, test_months_list, max_end,
+                                   period_unit="months"):
         """
         Generate WFO splits, shrinking train_months if necessary so that at least
         one split is produced (when data is limited).
-        """
 
-        def months_between(a, b):
-            # calendar months between two timestamps (floor)
-            return (b.year - a.year) * 12 + (b.month - a.month)
+        period_unit: "months" (default), "weeks", or "days" — controls walk-forward granularity.
+        """
+        from config import period_offset, periods_between, convert_month_count_to_periods
 
         tasks = []
         first = walk_data.index[0]
-        avail_months = months_between(first, max_end)
+        avail_periods = periods_between(first, max_end, unit=period_unit)
 
         for train_months in train_months_list:
             for test_months in test_months_list:
-                req = train_months + test_months
-                if req > avail_months:
-                    # Try to salvage: shrink train to the largest feasible (>=6 months)
-                    best_train = max(6, avail_months - test_months)
-                    if best_train < 6:
-                        print(f"[WFO] No feasible split: need {req} months, have {avail_months}. Skipping ({train_months}/{test_months}).")
+                train_periods = convert_month_count_to_periods(train_months, period_unit)
+                test_periods = convert_month_count_to_periods(test_months, period_unit)
+                req = train_periods + test_periods
+                if req > avail_periods:
+                    min_train = convert_month_count_to_periods(6, period_unit)
+                    best_train = max(min_train, avail_periods - test_periods)
+                    if best_train < min_train:
+                        print(f"[WFO] No feasible split: need {req} {period_unit}, have {avail_periods}. Skipping ({train_periods}/{test_periods}).")
                         continue
-                    print(f"[WFO] Shrinking train_months {train_months}→{best_train} due to limited history ({avail_months} months).")
-                    train_months_eff = int(best_train)
+                    print(f"[WFO] Shrinking train {train_periods}→{best_train} {period_unit} due to limited history ({avail_periods} {period_unit}).")
+                    train_periods_eff = int(best_train)
                 else:
-                    train_months_eff = int(train_months)
+                    train_periods_eff = int(train_periods)
 
-                # Earliest feasible start that still accommodates train+test
                 start_date = first
-                end_needed = start_date + pd.DateOffset(months=train_months_eff + test_months)
+                end_needed = start_date + period_offset(train_periods_eff + test_periods, unit=period_unit)
                 if end_needed > max_end:
-                    # anchor as late as possible
-                    # (this guarantees at least one split when feasible)
-                    start_date = max_end - pd.DateOffset(months=train_months_eff + test_months)
+                    start_date = max_end - period_offset(train_periods_eff + test_periods, unit=period_unit)
 
-                # Build the rolling test steps
                 while True:
-                    if start_date + pd.DateOffset(months=train_months_eff + test_months) > max_end:
+                    if start_date + period_offset(train_periods_eff + test_periods, unit=period_unit) > max_end:
                         break
-                    tasks.append((start_date, train_months_eff, test_months))
-                    start_date += pd.DateOffset(months=test_months)
+                    tasks.append((start_date, train_periods_eff, test_periods, period_unit))
+                    start_date += period_offset(test_periods, unit=period_unit)
 
-        # Debug
         try:
-            print(f"[WFO] available_months={avail_months} | requested train/test={train_months_list}/{test_months_list} | splits={len(tasks)}")
+            print(f"[WFO] available_{period_unit}={avail_periods} | requested train/test={train_months_list}/{test_months_list} | splits={len(tasks)}")
         except Exception:
             pass
         return tasks

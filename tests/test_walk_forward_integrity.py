@@ -81,7 +81,8 @@ class TestWalkForwardSplits:
 
         assert len(tasks) > 0, "Expected at least one WFO split"
 
-        for start, train_m, test_m in tasks:
+        for task in tasks:
+            start, train_m, test_m, pu = task if len(task) == 4 else (*task, "months")
             train_end = start + pd.DateOffset(months=train_m)
             test_start = train_end
             # Train must end at or before test starts
@@ -112,7 +113,8 @@ class TestWalkForwardSplits:
             max_end=walk_data.index[-1],
         )
 
-        for start, train_m, test_m in tasks:
+        for task in tasks:
+            start, train_m, test_m, pu = task if len(task) == 4 else (*task, "months")
             assert train_m >= 1, f"Train months = {train_m}, expected >= 1"
             assert test_m >= 1, f"Test months = {test_m}, expected >= 1"
 
@@ -126,7 +128,8 @@ class TestWalkForwardSplits:
             max_end=walk_data.index[-1],
         )
 
-        for start, train_m, test_m in tasks:
+        for task in tasks:
+            start, train_m, test_m, pu = task if len(task) == 4 else (*task, "months")
             train_end = start + pd.DateOffset(months=train_m)
             test_end = start + pd.DateOffset(months=train_m + test_m)
             # Train window must end before test window ends
@@ -362,3 +365,96 @@ class TestLabelIntegrity:
         labels1 = bt.label_with_neutral(returns, threshold)
         labels2 = bt.label_with_neutral(returns, threshold)
         np.testing.assert_array_equal(labels1, labels2)
+
+
+class TestPeriodUnit:
+    """Tests for the period_unit parameter in walk-forward splits."""
+
+    def test_period_offset_months(self):
+        from config import period_offset
+        off = period_offset(3, "months")
+        assert off == pd.DateOffset(months=3)
+
+    def test_period_offset_weeks(self):
+        from config import period_offset
+        off = period_offset(4, "weeks")
+        assert off == pd.DateOffset(weeks=4)
+
+    def test_period_offset_days(self):
+        from config import period_offset
+        off = period_offset(10, "days")
+        assert off == pd.DateOffset(days=10)
+
+    def test_periods_between_months(self):
+        from config import periods_between
+        a = pd.Timestamp("2020-01-01")
+        b = pd.Timestamp("2020-06-01")
+        assert periods_between(a, b, "months") == 5
+
+    def test_periods_between_weeks(self):
+        from config import periods_between
+        a = pd.Timestamp("2020-01-01")
+        b = pd.Timestamp("2020-02-12")
+        assert periods_between(a, b, "weeks") == 6
+
+    def test_periods_between_days(self):
+        from config import periods_between
+        a = pd.Timestamp("2020-01-01")
+        b = pd.Timestamp("2020-01-15")
+        assert periods_between(a, b, "days") == 14
+
+    def test_convert_month_count(self):
+        from config import convert_month_count_to_periods
+        assert convert_month_count_to_periods(6, "months") == 6
+        assert convert_month_count_to_periods(6, "weeks") == 24
+        assert convert_month_count_to_periods(6, "days") == 180
+
+    def test_to_period_freq(self):
+        from config import to_period_freq
+        assert to_period_freq("months") == "M"
+        assert to_period_freq("weeks") == "W"
+        assert to_period_freq("days") == "D"
+
+    def test_wfo_splits_weeks_unit(self):
+        bt = _instantiate_backtester()
+        walk_data = bt.data
+        tasks = bt.get_walk_forward_splits(
+            walk_data, train_months_list=[24], test_months_list=[4],
+            max_end=walk_data.index[-1], period_unit="weeks",
+        )
+        assert len(tasks) > 0
+        for task in tasks:
+            start, train_p, test_p, pu = task
+            assert pu == "weeks"
+            assert train_p >= 1
+            assert test_p >= 1
+
+    def test_wfo_splits_days_unit(self):
+        bt = _instantiate_backtester()
+        walk_data = bt.data
+        tasks = bt.get_walk_forward_splits(
+            walk_data, train_months_list=[12], test_months_list=[1],
+            max_end=walk_data.index[-1], period_unit="days",
+        )
+        assert len(tasks) > 0
+        for task in tasks:
+            start, train_p, test_p, pu = task
+            assert pu == "days"
+            assert train_p >= 1
+            assert test_p >= 1
+
+    def test_schema_period_unit_default(self):
+        from schemas.backtest import BacktestParams
+        bp = BacktestParams()
+        assert bp.period_unit == "months"
+
+    def test_schema_period_unit_weeks(self):
+        from schemas.backtest import BacktestParams
+        bp = BacktestParams(period_unit="weeks")
+        assert bp.period_unit == "weeks"
+
+    def test_schema_period_unit_invalid(self):
+        from schemas.backtest import BacktestParams
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            BacktestParams(period_unit="hours")
