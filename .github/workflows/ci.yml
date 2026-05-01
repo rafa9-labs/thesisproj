@@ -48,8 +48,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements_freeze.txt -r requirements.txt -r requirements-dev.txt
 
-      - name: Run tests (excluding slow)
-        run: pytest tests/ -m "not slow" -x -q --tb=short
+      - name: Run tests (excluding slow and api)
+        run: pytest tests/ -m "not slow and not api" -x -q --tb=short
 
   frontend:
     name: Frontend

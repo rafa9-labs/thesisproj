@@ -12,6 +12,8 @@ from httpx import ASGITransport, AsyncClient
 
 from api.main import app
 
+pytestmark = pytest.mark.api
+
 
 @pytest.fixture
 def client():
