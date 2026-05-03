@@ -1,33 +1,39 @@
 export const colors = {
-  app: "#131722",
-  surface: "#1E222D",
-  elevated: "#2A2E39",
-  border: "#363A45",
-  borderSubtle: "#2A2E39",
-  borderActive: "#2962FF",
+  app: "#0B0E14",
+  surface: "#11151C",
+  elevated: "#181D27",
+  border: "#1E2430",
+  borderSubtle: "#151926",
+  borderActive: "#2A3244",
 
-  textPrimary: "#EDEFF5",
-  textSecondary: "#80899F",
-  textMuted: "#787B86",
-  textInverse: "#131722",
+  textPrimary: "#F0F2F5",
+  textSecondary: "#8B95A5",
+  textMuted: "#5A6578",
+  textInverse: "#0B0E14",
 
-  accent: "#2962FF",
-  accentSuccess: "#089981",
-  accentDanger: "#F23645",
-  accentWarning: "#FF9800",
-  accentInfo: "#2196F3",
+  primary: "#5B8DEF",
+  primaryGlow: "rgba(91,141,239,0.15)",
+
+  brand: "#D4AF37",
+  brandGlow: "rgba(212,175,55,0.15)",
+
+  accent: "#5B8DEF",
+  accentSuccess: "#22C55E",
+  accentDanger: "#EF4444",
+  accentWarning: "#F59E0B",
+  accentInfo: "#5B8DEF",
   accentClassical: "#06B6D4",
-  accentDeep: "#7C3AED",
+  accentDeep: "#8B5CF6",
   accentRl: "#F59E0B",
   accentEnsemble: "#EC4899",
 
   chartLine: "#00D4AA",
   chartBuyhold: "#555555",
-  chartDrawdown: "rgba(255,80,80,0.4)",
+  chartDrawdown: "rgba(239,68,68,0.35)",
 
-  eventHigh: "#ff4444",
-  eventMedium: "#ffaa00",
-  eventLow: "#44aaff",
+  eventHigh: "#EF4444",
+  eventMedium: "#F59E0B",
+  eventLow: "#5B8DEF",
 } as const;
 
 export const spacing = {
@@ -42,9 +48,10 @@ export const spacing = {
 } as const;
 
 export const layout = {
-  sidebarCollapsed: 56,
-  sidebarExpanded: 200,
+  sidebarCollapsed: 64,
+  sidebarExpanded: 220,
   headerHeight: 48,
+  breadcrumbHeight: 32,
   statusBarHeight: 24,
   terminalHeight: 200,
   minWidth: 1280,

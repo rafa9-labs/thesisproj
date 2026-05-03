@@ -1,8 +1,8 @@
 {
-  "name": "fx-ml-backtester",
+  "name": "kodaquant",
   "private": true,
   "version": "1.0.0",
-  "description": "FX ML Backtester — Professional Forex Walk-Forward Backtesting Platform",
+  "description": "KodaQuant — Professional FX Quantitative Research Terminal",
   "author": "rafa9-labs",
   "license": "UNLICENSED",
   "type": "module",
