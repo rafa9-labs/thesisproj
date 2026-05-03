@@ -1,4 +1,4 @@
-"""Model package — BaseModel ABC + model registry."""
+"""Model package -- BaseModel ABC + model registry."""
 from models.base_model import BaseModel
 
 # Lazy-load registry only when needed (avoids heavy sklearn/TF imports at top level)

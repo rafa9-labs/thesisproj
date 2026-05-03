@@ -47,11 +47,11 @@ def _sanitize_for_json(obj):
     """
     import math
 
-    # Dict → sanitize values
+    # Dict -> sanitize values
     if isinstance(obj, dict):
         return {k: _sanitize_for_json(v) for k, v in obj.items()}
 
-    # List / tuple → sanitize each element
+    # List / tuple -> sanitize each element
     if isinstance(obj, (list, tuple)):
         return [_sanitize_for_json(v) for v in obj]
 
@@ -73,7 +73,7 @@ def _sanitize_for_json(obj):
     except Exception:
         pass
 
-    # Everything else (str, bool, None, etc.) → keep as is
+    # Everything else (str, bool, None, etc.) -> keep as is
     return obj
 
 def load_hpo_config_from_disk(model_type: str):

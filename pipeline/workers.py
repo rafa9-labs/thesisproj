@@ -48,7 +48,7 @@ def _configure_tf_in_worker():
         except Exception:
             pass
         if gpus:
-            print(f"[worker] GPU: {len(gpus)} device(s) — {gpus[0].name}, threads={_threads}")
+            print(f"[worker] GPU: {len(gpus)} device(s) -- {gpus[0].name}, threads={_threads}")
     except Exception:
         pass
 
@@ -201,7 +201,7 @@ def deep_fit_predict_worker(job_json_path: str) -> dict:
         proba_out = job["proba_test_out"]
         np.save(proba_out, proba.astype(np.float32))
 
-        # Coverage threshold (simplified — full calibration stays in main process)
+        # Coverage threshold (simplified -- full calibration stays in main process)
         coverage_thr = float("nan")
         try:
             cfg_fc = features_config

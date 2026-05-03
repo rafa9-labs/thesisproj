@@ -1,6 +1,6 @@
 """Coverage policy, confidence threshold, and target-rate helpers.
 
-Thin re-export shim — canonical source is utilsNoWFO.py.
+Thin re-export shim -- canonical source is utilsNoWFO.py.
 Gradual migration: move function bodies here when convenient.
 """
 from __future__ import annotations

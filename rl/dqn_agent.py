@@ -26,7 +26,7 @@ Adam         = keras.optimizers.Adam
 regularizers = keras.regularizers
 
 
-# ✅ Optional: Enable dynamic memory allocation
+# [OK] Optional: Enable dynamic memory allocation
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
     try:
@@ -34,9 +34,9 @@ if gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
         if os.environ.get("LOG_MODE", "COMPACT").upper() == "DEBUG":
             if _dqn_is_debug():
-               print("✅ Enabled dynamic GPU memory allocation.")
+               print("[OK] Enabled dynamic GPU memory allocation.")
     except RuntimeError as e:
-        print("❌ Could not enable memory growth:", e)
+        print("[ERR] Could not enable memory growth:", e)
 
 
 def filter_dqn_config(config):
@@ -47,7 +47,7 @@ def filter_dqn_config(config):
         "replay_freq", "episodes", "window", "warmup_steps", "max_steps_per_episode",
         "log_every", "epsilon_decay_steps", "use_prioritized_replay", "per_alpha", "per_beta_start", "per_beta_steps",
         "env_reward_clip", "env_reward_tanh_k", "env_reward_clip_range",
-        "env_reward_norm", "env_reward_norm_beta" # <— keep linear ε on load()
+        "env_reward_norm", "env_reward_norm_beta" # <-- keep linear epsilon on load()
     ]
     mapping = {"memory_size": "buffer_size"}  # Rename in config
     filtered = {}
@@ -291,7 +291,7 @@ class DQNAgent:
 
     # ----------------------------- Core methods ----------------------------
     def act(self, state):
-        """ε-greedy action from a single state of shape (window, features)."""
+        """epsilon-greedy action from a single state of shape (window, features)."""
         if np.random.rand() < self.epsilon:
             return np.random.randint(self.action_size)
         # Direct call avoids the extra overhead of model.predict()
@@ -318,7 +318,7 @@ class DQNAgent:
         self.update_target_network(tau=0.005)
         self.train_step = 0
 
-        # Reset ε schedule at the start of training
+        # Reset epsilon schedule at the start of training
         self._eps_step = 0
         self._eps_start = float(self.epsilon)
 
@@ -334,7 +334,7 @@ class DQNAgent:
             )
 
         if _dqn_is_debug():
-            print(f"🚦 [DQN] Starting training for {episodes} episodes...")
+            print(f"[START] [DQN] Starting training for {episodes} episodes...")
  
         print(f"    window={self.window} | state_size={self.state_size} | "
               f"batch={self.batch_size} | replay_freq={self.replay_freq} | "
@@ -369,7 +369,7 @@ class DQNAgent:
                         loss, _ = self._train_step_fn(S, A, R, S2, D, None)
                         last_loss = float(loss)
                         
-                # Update ε once per env step (correct schedule)
+                # Update epsilon once per env step (correct schedule)
                 self._update_epsilon()
 
 
@@ -385,17 +385,17 @@ class DQNAgent:
                 if self.train_step % self.target_update_freq == 0:
                     self.update_target_network(tau=0.005)
 
-                # 🔊 heartbeat
+                # [HEARTBEAT] heartbeat
                 if step % self.log_every == 0:
                     lim = self.max_steps_per_episode or env.n_steps
                     if _dqn_is_debug():
                         print(f"[DQN] ep {ep+1}/{episodes} | step {step}/{lim} | "
-                            f"ε={self.epsilon:.3f} | r={total_reward:.4f}"
-                            f"loss={('%.6f' % last_loss) if last_loss is not None else '—'} | "
+                            f"epsilon={self.epsilon:.3f} | r={total_reward:.4f}"
+                            f"loss={('%.6f' % last_loss) if last_loss is not None else '--'} | "
                             f"actions={action_counts.tolist()}")
 
             if _dqn_is_debug():
-                print(f"✅ [DQN] Ep {ep+1}/{episodes} reward={total_reward:.4f} ε={self.epsilon:.3f}")
+                print(f"[OK] [DQN] Ep {ep+1}/{episodes} reward={total_reward:.4f} epsilon={self.epsilon:.3f}")
 
 
     def update_target_network(self, tau=None):
@@ -424,7 +424,7 @@ class DQNAgent:
             dones.astype(np.float32),
             None,  # weights
         )
-        # keep the same ε schedule here too (for callers that still use replay())
+        # keep the same epsilon schedule here too (for callers that still use replay())
         self._update_epsilon()
         return float(loss.numpy())
 
@@ -470,7 +470,7 @@ class DQNAgent:
             json.dump(self.config, f)
             
         if _dqn_is_debug():
-            print(f"✅ DQNAgent saved to: {model_path} and {config_path}")
+            print(f"[OK] DQNAgent saved to: {model_path} and {config_path}")
 
     def _build_train_step(self):
         # Per-sample Huber for PER; scalar Huber if not using PER
@@ -519,7 +519,7 @@ class DQNAgent:
             self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
             return loss, tf.abs(td_errors)
 
-        # 🔧 Bind the compiled function to the instance so callers can use it
+        # [FIX] Bind the compiled function to the instance so callers can use it
         self._train_step_fn = train_step_fn
         return train_step_fn
 

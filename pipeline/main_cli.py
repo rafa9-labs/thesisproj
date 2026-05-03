@@ -1,5 +1,5 @@
 """
-CLI entry point — main() function.
+CLI entry point -- main() function.
 
 Extracted from MLBacktesterNoWFO.py lines 18441-end.
 """
@@ -9,7 +9,7 @@ from pipeline.metrics_tuples import CLASS_DEFAULTS, _safe_metrics_return, _empty
 from pipeline.backtester.composed import MLBacktester  # noqa: F811
 from pipeline.memory_utils import _apply_low_ram_overrides  # noqa: F811
 
-# ── CLI-level constants (from original MLBacktesterNoWFO.py) ──
+# -- CLI-level constants (from original MLBacktesterNoWFO.py) --
 SAVE_METRICS = {
     "per_month_metrics_csv": True,
     "monthly_results_all_csv": True,
@@ -57,14 +57,14 @@ def main() ->  None:
     # SEEDS = [11111, 22222, 33333]
     # SEEDS = [22222, 33333]
     
-    # ── Configurable via environment variables ──
+    # -- Configurable via environment variables --
     # SEEDS: comma-separated list, e.g. "11111,22222,33333"
     _env_seeds = os.environ.get("SEEDS", "")
     SEEDS = [int(s.strip()) for s in _env_seeds.split(",") if s.strip()] if _env_seeds else [33333]
     REPEATS = int(os.environ.get("REPEATS", "1"))
     PAIR = os.environ.get("PAIR", "EURUSD").upper()
 
-    # ── Smoke-test mode: override config for fast validation ──
+    # -- Smoke-test mode: override config for fast validation --
     _SMOKE = os.environ.get("SMOKE_TEST", "0") == "1"
 
     if _SMOKE:
@@ -78,7 +78,7 @@ def main() ->  None:
     with open("configs/feature_config.json", "r") as f:
         features_config = json.load(f)
         
-    # 🔒 Research-grade defaults for fairness:
+    # [LOCK] Research-grade defaults for fairness:
     # - All models share the same strict day-1 calendar anchor.
     # - All models share the same NY session filtering rule.
     #   (Change "both" to "test_only" here if you want, but KEEP IT GLOBAL.)
@@ -101,7 +101,7 @@ def main() ->  None:
         os.environ["OPTUNA_MIN_FREE_GB"] = "0.35"
 
     # IMPORTANT: disable the percent-of-total rule by default.
-    # This used to force need_gb ~= 3% of total RAM (≈0.76GB on your machine),
+    # This used to force need_gb ~= 3% of total RAM (~=0.76GB on your machine),
     # which caused "low RAM prune" even when ~0.75GB was free.
     os.environ.setdefault("OPTUNA_MIN_FREE_GB_PERCENT", "0.0")
 
@@ -138,15 +138,15 @@ def main() ->  None:
     os.makedirs(JOBLIB_ROOT, exist_ok=True)
     os.environ["JOBLIB_TEMP_FOLDER"] = JOBLIB_ROOT
     
-    log_print(f"🗂️ JOBLIB_TEMP_FOLDER={JOBLIB_ROOT}", level="COMPACT")
-    log_print(f"\n📁 Study folder: {RUN_DIR}", level="COMPACT")
+    log_print(f"[DIR] JOBLIB_TEMP_FOLDER={JOBLIB_ROOT}", level="COMPACT")
+    log_print(f"\n[DIR] Study folder: {RUN_DIR}", level="COMPACT")
 
 
-    # 2) Choose models — configurable via MODEL_LIST env var
+    # 2) Choose models -- configurable via MODEL_LIST env var
     # Examples:
     #   MODEL_LIST=logistic             (single model)
     #   MODEL_LIST=logistic,xgboost,cnn (multi-model)
-    #   unset → uses hardcoded defaults below
+    #   unset -> uses hardcoded defaults below
     _env_models = os.environ.get("MODEL_LIST", "")
     if _env_models:
         MODEL_LIST = [m.strip() for m in _env_models.split(",") if m.strip()]
@@ -176,7 +176,7 @@ def main() ->  None:
         # "ensemble_adaptive_regime", 
     ]
     
-    print(f"\n🧪 Models for real trading simulation: {MODEL_LIST}")
+    print(f"\n[TEST] Models for real trading simulation: {MODEL_LIST}")
 
     all_reps = []  # collect combined monthly results across all repeats
     eq_by_model: dict[str, list[pd.DataFrame]] = {}  # collect per-rep equity paths
@@ -207,7 +207,7 @@ def main() ->  None:
         except Exception:
             pass
 
-        # ✅ Fresh, isolated config for THIS repeat (no cross-repeat bleed)
+        # [OK] Fresh, isolated config for THIS repeat (no cross-repeat bleed)
         features_config_rep = deepcopy(features_config)
         features_config_rep["run_seed"] = int(run_seed)
         # Drop any sticky derived fields that prior runs may have injected
@@ -215,8 +215,8 @@ def main() ->  None:
         features_config_rep.pop("test_warmup_bars", None)
 
         log_print(
-            f"\n========== 🔁 REPEAT {rep}/{REPEATS} — seed={run_seed} =========="
-            f"\n📁 repetition_run_dir = {rep_run_dir}",
+            f"\n========== [REPEAT] REPEAT {rep}/{REPEATS} -- seed={run_seed} =========="
+            f"\n[DIR] repetition_run_dir = {rep_run_dir}",
             level="COMPACT",
         )
 
@@ -226,7 +226,7 @@ def main() ->  None:
         # 3) Simulate N walk-forward months per model
         for model_type in MODEL_LIST:
             log_print(
-                f"\n🚦 Running real trading simulation for model: {model_type}",
+                f"\n[START] Running real trading simulation for model: {model_type}",
                 level="COMPACT",
             )
             
@@ -259,7 +259,7 @@ def main() ->  None:
             for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
                 os.environ[k] = os.environ["BLAS_THREADS_PER_TRIAL"]
 
-            print(f"⚙️ Perf [{cat}] → BLAS_THREADS_PER_TRIAL={os.environ['BLAS_THREADS_PER_TRIAL']} "
+            print(f"[CONF] Perf [{cat}] -> BLAS_THREADS_PER_TRIAL={os.environ['BLAS_THREADS_PER_TRIAL']} "
                 f"| OPTUNA_N_JOBS={os.environ['OPTUNA_N_JOBS']}")
 
             
@@ -334,12 +334,12 @@ def main() ->  None:
                                     # Append to accumulator
                                     eq_by_model.setdefault(model_type, []).append(tmp)
                         except Exception as _e:
-                            print(f"⚠️ Could not collect equity path for model {model_type}, rep {rep}: {_e}")
+                            print(f"[WARN] Could not collect equity path for model {model_type}, rep {rep}: {_e}")
                     else:
-                        print(f"⚠️ No rows returned for model {model_type}.")
+                        print(f"[WARN] No rows returned for model {model_type}.")
 
                 except Exception as e:
-                    print(f"❌ Simulation failed for {model_type}: {e}")
+                    print(f"[ERR] Simulation failed for {model_type}: {e}")
                     traceback.print_exc()
                 finally:
                     # Release model resources ASAP
@@ -375,7 +375,7 @@ def main() ->  None:
         if rep_results:
             dfs = [df for df in rep_results.values() if not df.empty]
             combined_rep = pd.concat(dfs, ignore_index=True)
-            # print("\n📊 Combined monthly results (this repeat):")
+            # print("\n[DATA] Combined monthly results (this repeat):")
             # print(combined_rep.to_string(index=False))
 
             # === Write this-repeat combined monthly table into the repetition-local 'ALL/csv' ===
@@ -386,7 +386,7 @@ def main() ->  None:
                 f"combined_monthly_rep{rep}.csv",
             )
             combined_rep.to_csv(combined_rep_path, index=False)
-            print(f"✅ Saved per-repeat monthly CSV → {combined_rep_path}")
+            print(f"[OK] Saved per-repeat monthly CSV -> {combined_rep_path}")
 
             # --- Per-repeat ranking across models (this repeat only) ---
             try:
@@ -397,7 +397,7 @@ def main() ->  None:
                         rep_buckets["All"]["csv"],
                         filename=f"csv_ranking_rep{rep}.csv",
                     )
-                    print(f"✅ Saved per-repeat ranking → {rep_rank_path}")
+                    print(f"[OK] Saved per-repeat ranking -> {rep_rank_path}")
             except Exception as _e:
                 print(f"[tables] ranking for repeat {rep} skipped: {_e}")
 
@@ -407,7 +407,7 @@ def main() ->  None:
                     bt_dict_for_compare = _build_bar_compare_dict(bt_by_model)
                 except Exception as e:
                     log_print(
-                        f"⚠️ Failed to build bar comparison dict: {e}",
+                        f"[WARN] Failed to build bar comparison dict: {e}",
                         level="DEBUG",
                     )
                     bt_dict_for_compare = {}
@@ -537,23 +537,23 @@ def main() ->  None:
                                     os.replace(src, dst)
 
                             print(
-                                f"✅ Saved bar & risk comparison for rep {rep} → "
+                                f"[OK] Saved bar & risk comparison for rep {rep} -> "
                                 f"{rep_csv}, {rep_png}"
                             )
                         except Exception as _e:
                             print(
-                                f"⚠️ Could not rename comparison outputs for rep {rep}: {_e}"
+                                f"[WARN] Could not rename comparison outputs for rep {rep}: {_e}"
                             )
                     else:
-                        print("⚠️ No models available for 'All' comparison.")
+                        print("[WARN] No models available for 'All' comparison.")
                 else:
-                    print("⚠️ No bt_dict_for_compare to plot.")
+                    print("[WARN] No bt_dict_for_compare to plot.")
             else:
-                print("ℹ️ Single-model (or no per-bar) in this repeat: skipping cross-model plots.")
+                print("[INFO] Single-model (or no per-bar) in this repeat: skipping cross-model plots.")
 
             all_reps.append(combined_rep)
         else:
-            print("\n❌ No valid simulation results produced in this repeat.")
+            print("\n[ERR] No valid simulation results produced in this repeat.")
 
         # --- end-of-repeat cleanup (keep RSS stable across repetitions) ---
         try:
@@ -571,7 +571,7 @@ def main() ->  None:
 
 
     if not all_reps:
-        print("\n❌ No results in any repeat — nothing to rank.")
+        print("\n[ERR] No results in any repeat -- nothing to rank.")
         return
 
     # -------------------------------------------------------------
@@ -588,11 +588,11 @@ def main() ->  None:
             index=False,
             float_format="%.10f",
         )
-        print(f"✅ Saved combined monthly (all repeats) → {combined_all_path}")
+        print(f"[OK] Saved combined monthly (all repeats) -> {combined_all_path}")
     except Exception as e:
         print(f"[tables] combined_monthly_all.csv skipped: {e}")
         
-    # Global equity curves by model (all months × repeats), consistent
+    # Global equity curves by model (all months x repeats), consistent
     # with the ranking table. For each (month, model) we aggregate the
     # monthly 'cstrategy' factors across repeats via a geometric mean,
     # then compound those factors in chronological order starting from 1.0.
@@ -615,19 +615,19 @@ def main() ->  None:
                 equity_pivot,
                 bh_equity,
                 out_png=out_png,
-                title="Equity by Model (all months × repeats)",
+                title="Equity by Model (all months x repeats)",
                 include_bh=True,
             )
-            print(f"✅ Saved global equity curves (all months × repeats) → {out_png}")
+            print(f"[OK] Saved global equity curves (all months x repeats) -> {out_png}")
         else:
-            print("⚠️ Global equity curves skipped: empty equity_pivot.")
+            print("[WARN] Global equity curves skipped: empty equity_pivot.")
     except Exception as e:
-        print(f"⚠️ Global equity curve plot skipped: {e}")
+        print(f"[WARN] Global equity curve plot skipped: {e}")
 
     # -------------------------------------------------------------
     # Per-model monthly results
-    #   • monthly_results_all_<model>.csv      → <RUN_DIR>/model_stats/
-    #   • monthly_results_rep<k>_<model>.csv  → <RUN_DIR>/repetition_k/<Model>/csv/
+    #   * monthly_results_all_<model>.csv      -> <RUN_DIR>/model_stats/
+    #   * monthly_results_rep<k>_<model>.csv  -> <RUN_DIR>/repetition_k/<Model>/csv/
     # -------------------------------------------------------------
     if not (
         SAVE_METRICS.get("monthly_results_all_csv", True)
@@ -662,7 +662,7 @@ def main() ->  None:
                     if model_df.empty:
                         continue
 
-                    # (a) All repeats, this model → <RUN_DIR>/model_stats/
+                    # (a) All repeats, this model -> <RUN_DIR>/model_stats/
                     if SAVE_METRICS.get("monthly_results_all_csv", True):
                         all_path = _os.path.join(
                             model_stats_dir,
@@ -674,9 +674,9 @@ def main() ->  None:
                             float_format="%.10f",
                         )
                         if SAVE_METRICS.get("verbose", False):
-                            print(f"    ↳ Saved all-reps monthly results for {m} → {all_path}")
+                            print(f"       Saved all-reps monthly results for {m} -> {all_path}")
 
-                    # (b) Per repetition, this model → <RUN_DIR>/repetition_k/<Model>/csv/
+                    # (b) Per repetition, this model -> <RUN_DIR>/repetition_k/<Model>/csv/
                     if SAVE_METRICS.get("monthly_results_per_rep_csv", True) and "rep" in model_df.columns:
                         reps_present = (
                             model_df["rep"]
@@ -710,9 +710,9 @@ def main() ->  None:
                                 float_format="%.10f",
                             )
                             if SAVE_METRICS.get("verbose", False):
-                                print(f"    ↳ Saved rep-{rep_int} monthly results for {m} → {rep_path}")
+                                print(f"       Saved rep-{rep_int} monthly results for {m} -> {rep_path}")
 
-                print("✅ Saved per-model monthly_results_all_* and monthly_results_rep*_*.csv in new layout.")
+                print("[OK] Saved per-model monthly_results_all_* and monthly_results_rep*_*.csv in new layout.")
         except Exception as e:
             print(f"[tables] Per-model monthly results skipped due to error: {e}")
 
@@ -724,8 +724,8 @@ def main() ->  None:
     # -------------------------------------------------------------
 
     # 6) Global feature heatmaps across ALL repetitions
-    #    • one "all models" heatmap
-    #    • one per-model heatmap
+    #    * one "all models" heatmap
+    #    * one per-model heatmap
     #    Location: <RUN_DIR>/heatmaps/
     if not SKIP_PLOTS:
         try:
@@ -755,10 +755,10 @@ def main() ->  None:
                     ),
                 )
                 print(
-                    f"✅ Saved global feature heatmap (all models, all reps) → {global_heat_dir}"
+                    f"[OK] Saved global feature heatmap (all models, all reps) -> {global_heat_dir}"
                 )
             except Exception as _e:
-                print(f"⚠️ Global all-model heatmap skipped: {_e}")
+                print(f"[WARN] Global all-model heatmap skipped: {_e}")
 
             # (b) Per-model heatmaps
             model_col = combined_all.get("model_type")
@@ -798,19 +798,19 @@ def main() ->  None:
                             ),
                         )
                         print(
-                            f"✅ Saved global feature heatmap for model={m} → {global_heat_dir}"
+                            f"[OK] Saved global feature heatmap for model={m} -> {global_heat_dir}"
                         )
                     except Exception as _e:
                         print(
-                            f"⚠️ Global per-model heatmap for {m} skipped: {_e}"
+                            f"[WARN] Global per-model heatmap for {m} skipped: {_e}"
                         )
             else:
                 print(
-                    "ℹ️ No model_type/model column; skipping global per-model heatmaps."
+                    "[INFO] No model_type/model column; skipping global per-model heatmaps."
                 )
 
         except Exception as e:
-            print(f"⚠️ Global heatmap generation skipped: {e}")
+            print(f"[WARN] Global heatmap generation skipped: {e}")
 
 
     # Build & save definitive model ranking across X months (and repeats)
@@ -825,7 +825,7 @@ def main() ->  None:
                 index=False,
                 float_format="%.10f",
             )
-            print(f"✅ Saved global ranking across repeats → {global_rank_path}")
+            print(f"[OK] Saved global ranking across repeats -> {global_rank_path}")
         except Exception as _e:
             print(f"[tables] ranking CSV skipped: {_e}")
 
@@ -840,27 +840,27 @@ def main() ->  None:
                 rows.append([
                     int(r.get("rank", 0)),
                     str(r.get("model", "")),
-                    int(r.get("months", 0)) if pd.notna(r.get("months", None)) else "—",
-                    int(r.get("trades", 0)) if pd.notna(r.get("trades", None)) else "—",
-                    (f"{float(r.get('active', float('nan'))):.5f}"     if pd.notna(r.get("active", None)) else "—"),
-                    (f"{float(r.get('SR', float('nan'))):.3f}"         if pd.notna(r.get("SR", None)) else "—"),
-                    (f"{float(r.get('PSR', float('nan'))):.3f}"        if pd.notna(r.get("PSR", None)) else "—"),
-                    (f"{float(r.get('DSR', float('nan'))):.3f}"        if pd.notna(r.get("DSR", None)) else "—"),
-                    (f"{float(r.get('Calmar', float('nan'))):.3f}"     if pd.notna(r.get("Calmar", None)) else "—"),
-                    (f"{float(r.get('AnnRet', float('nan'))):.5f}"     if pd.notna(r.get("AnnRet", None)) else "—"),
-                    (f"{float(r.get('FinalEq', float('nan'))):.5f}"    if pd.notna(r.get("FinalEq", None)) else "—"),
-                    (f"{float(r.get('DA', float('nan'))):.5f}"         if pd.notna(r.get("DA", None)) else "—"),
-                    (f"{float(r.get('Prec', float('nan'))):.5f}"       if pd.notna(r.get("Prec", None)) else "—"),
-                    (f"{float(r.get('F1', float('nan'))):.5f}"         if pd.notna(r.get("F1", None)) else "—"),
-                    (f"{float(r.get('Profit/Hit', float('nan'))):.6f}" if pd.notna(r.get("Profit/Hit", None)) else "—"),
-                    (f"{float(r.get('LabelThr', float('nan'))):.6f}"   if pd.notna(r.get("LabelThr", None)) else "—"),
-                    (f"{float(r.get('EffConf', float('nan'))):.3f}"    if pd.notna(r.get("EffConf", None)) else "—"),
-                    (int(r.get("lags", 0)) if pd.notna(r.get("lags", None)) else "—"),
+                    int(r.get("months", 0)) if pd.notna(r.get("months", None)) else "--",
+                    int(r.get("trades", 0)) if pd.notna(r.get("trades", None)) else "--",
+                    (f"{float(r.get('active', float('nan'))):.5f}"     if pd.notna(r.get("active", None)) else "--"),
+                    (f"{float(r.get('SR', float('nan'))):.3f}"         if pd.notna(r.get("SR", None)) else "--"),
+                    (f"{float(r.get('PSR', float('nan'))):.3f}"        if pd.notna(r.get("PSR", None)) else "--"),
+                    (f"{float(r.get('DSR', float('nan'))):.3f}"        if pd.notna(r.get("DSR", None)) else "--"),
+                    (f"{float(r.get('Calmar', float('nan'))):.3f}"     if pd.notna(r.get("Calmar", None)) else "--"),
+                    (f"{float(r.get('AnnRet', float('nan'))):.5f}"     if pd.notna(r.get("AnnRet", None)) else "--"),
+                    (f"{float(r.get('FinalEq', float('nan'))):.5f}"    if pd.notna(r.get("FinalEq", None)) else "--"),
+                    (f"{float(r.get('DA', float('nan'))):.5f}"         if pd.notna(r.get("DA", None)) else "--"),
+                    (f"{float(r.get('Prec', float('nan'))):.5f}"       if pd.notna(r.get("Prec", None)) else "--"),
+                    (f"{float(r.get('F1', float('nan'))):.5f}"         if pd.notna(r.get("F1", None)) else "--"),
+                    (f"{float(r.get('Profit/Hit', float('nan'))):.6f}" if pd.notna(r.get("Profit/Hit", None)) else "--"),
+                    (f"{float(r.get('LabelThr', float('nan'))):.6f}"   if pd.notna(r.get("LabelThr", None)) else "--"),
+                    (f"{float(r.get('EffConf', float('nan'))):.3f}"    if pd.notna(r.get("EffConf", None)) else "--"),
+                    (int(r.get("lags", 0)) if pd.notna(r.get("lags", None)) else "--"),
                 ])
         _fmt_table_ascii(
             cols,
             rows,
-            title="🏁 Model Ranking (all months × repeats; equity compounded monthly)",
+            title="[DONE] Model Ranking (all months x repeats; equity compounded monthly)",
         )
 
     except Exception as e:
@@ -962,7 +962,7 @@ def main() ->  None:
             # Build a rich, one-row-per-(model,rep,seed) table
             gcols = [c for c in ["model_type","rep","run_seed"] if c in combined_all.columns]
             if not gcols:
-                print("⚠️ Cannot render per-run table: missing model/rep/seed columns.")
+                print("[WARN] Cannot render per-run table: missing model/rep/seed columns.")
             else:
                 rows = []
                 # stable order: sort by sharpe desc then model
@@ -1030,19 +1030,19 @@ def main() ->  None:
                         str(test_start).split("+")[0] if test_start is not None else "",
                         str(test_end).split("+")[0]   if test_end   is not None else "",
                         months,
-                        (f"{trades:.0f}"  if pd.notna(trades)   else "—"),
-                        (f"{active:.5f}"  if pd.notna(active)   else "—"),
-                        (f"{sharpe:.3f}"  if pd.notna(sharpe)   else "—"),
-                        (f"{calmar:.3f}"  if pd.notna(calmar)   else "—"),
-                        (f"{ann_ret:.5f}" if pd.notna(ann_ret)  else "—"),
-                        (f"{final_eq:.5f}"if pd.notna(final_eq) else "—"),
-                        (f"{da:.5f}"      if pd.notna(da)       else "—"),
-                        (f"{prec:.5f}"    if pd.notna(prec)     else "—"),
-                        (f"{f1_:.5f}"     if pd.notna(f1_)      else "—"),
-                        (f"{pph:.6f}"     if pd.notna(pph)      else "—"),
-                        (f"{float(label_thr):.6f}" if pd.notna(label_thr) else "—"),
-                        (f"{float(eff_conf):.3f}"  if pd.notna(eff_conf)  else "—"),
-                        (int(lags_used) if pd.notna(lags_used) else "—"),
+                        (f"{trades:.0f}"  if pd.notna(trades)   else "--"),
+                        (f"{active:.5f}"  if pd.notna(active)   else "--"),
+                        (f"{sharpe:.3f}"  if pd.notna(sharpe)   else "--"),
+                        (f"{calmar:.3f}"  if pd.notna(calmar)   else "--"),
+                        (f"{ann_ret:.5f}" if pd.notna(ann_ret)  else "--"),
+                        (f"{final_eq:.5f}"if pd.notna(final_eq) else "--"),
+                        (f"{da:.5f}"      if pd.notna(da)       else "--"),
+                        (f"{prec:.5f}"    if pd.notna(prec)     else "--"),
+                        (f"{f1_:.5f}"     if pd.notna(f1_)      else "--"),
+                        (f"{pph:.6f}"     if pd.notna(pph)      else "--"),
+                        (f"{float(label_thr):.6f}" if pd.notna(label_thr) else "--"),
+                        (f"{float(eff_conf):.3f}"  if pd.notna(eff_conf)  else "--"),
+                        (int(lags_used) if pd.notna(lags_used) else "--"),
                     ])
                     if len(rows) >= EVAL_TABLE_MAX_ROWS:
                         break
@@ -1052,7 +1052,7 @@ def main() ->  None:
                      "SR","Calmar","AnnRet","FinalEq","DA","Prec","F1",
                      "Profit/Hit","LabelThr","EffConf","lags"],
                     rows,
-                    title="📈 Real-trading per-run summary (detailed, precise, top by Sharpe)"
+                    title="[CHART] Real-trading per-run summary (detailed, precise, top by Sharpe)"
                 )
         except Exception as _e:
             print(f"[tables] detailed per-run table skipped: {_e}")

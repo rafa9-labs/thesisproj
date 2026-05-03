@@ -1,4 +1,4 @@
-"""FX ML Pipeline — FastAPI application."""
+"""FX ML Pipeline -- FastAPI application."""
 from contextlib import asynccontextmanager
 import os
 
@@ -55,9 +55,16 @@ app.include_router(ws.router, prefix="/api/v1")
 
 
 if IS_DESKTOP:
-    _frontend_dist = os.path.join(settings.project_root, "frontend", "dist")
-    if not os.path.isdir(_frontend_dist):
-        _frontend_dist = os.path.join(os.path.dirname(settings.project_root), "frontend", "dist")
+    _frontend_dist = None
+    for _candidate in [
+        os.path.join(settings.project_root, "_internal", "frontend", "dist"),
+        os.path.join(settings.project_root, "frontend", "dist"),
+        os.path.join(settings.project_root, "dist"),
+        os.path.join(os.path.dirname(settings.project_root), "frontend", "dist"),
+    ]:
+        if os.path.isdir(_candidate):
+            _frontend_dist = _candidate
+            break
 
     if os.path.isdir(_frontend_dist):
         app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dist, "assets")), name="static-assets")

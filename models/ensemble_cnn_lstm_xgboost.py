@@ -64,7 +64,7 @@ def _apply_temp(probs: _np.ndarray, T: float) -> _np.ndarray:
     return (e / (e.sum(axis=1, keepdims=True) + 1e-12)).astype(_np.float32)
 
 def _learn_temperature(probs: _np.ndarray, y: _np.ndarray, iters: int = 200) -> float:
-    """Guo et al. (ICML’17) temperature scaling: optimize T on val NLL."""
+    """Guo et al. (ICML'17) temperature scaling: optimize T on val NLL."""
     y = y.astype(int)
     T = _np.array([1.0], dtype=_np.float32)
     lr = 0.05
@@ -243,9 +243,9 @@ class EnsembleCNNLSTMXGBoost:
 
         # Basic safety checks
         if X_seq.shape[0] != len(y):
-            raise ValueError(f"[❌] X_seq rows ({X_seq.shape[0]}) != y length ({len(y)})")
+            raise ValueError(f"[[ERR]] X_seq rows ({X_seq.shape[0]}) != y length ({len(y)})")
         if X_flat is None or X_flat.shape[0] != len(y):
-            raise ValueError(f"[❌] X_flat rows must match y length ({len(y)}). Got {None if X_flat is None else X_flat.shape[0]}")
+            raise ValueError(f"[[ERR]] X_flat rows must match y length ({len(y)}). Got {None if X_flat is None else X_flat.shape[0]}")
 
         # Optional cap on number of training windows (safety)
         if self.deep_max_train_windows > 0 and X_seq.shape[0] > self.deep_max_train_windows:
@@ -297,7 +297,7 @@ class EnsembleCNNLSTMXGBoost:
 
 
         if has_gpu:
-            # ← GPU present: train sequentially to avoid VRAM contention/OOM
+            # <- GPU present: train sequentially to avoid VRAM contention/OOM
             self.cnn.fit(
                 X_seq, y,
                 epochs=int(self.cnn_config.get("cnn_epochs", 10)),
@@ -313,7 +313,7 @@ class EnsembleCNNLSTMXGBoost:
                 callbacks=lstm_callbacks,
             )
         else:
-            # ← CPU only: keep your original parallelism for speed
+            # <- CPU only: keep your original parallelism for speed
             with ThreadPoolExecutor(max_workers=2) as executor:
                 f1 = executor.submit(
                     self.cnn.fit, X_seq, y,
@@ -339,7 +339,7 @@ class EnsembleCNNLSTMXGBoost:
         cnn_probs  = self.cnn.predict(X_seq, verbose=0, batch_size=cnn_bs).astype(np.float32, copy=False)
         lstm_probs = self.lstm.predict(X_seq, verbose=0, batch_size=lstm_bs).astype(np.float32, copy=False)
 
-        # Learn per-head temperatures on the *same* split we’ll use for XGB
+        # Learn per-head temperatures on the *same* split we'll use for XGB
         eval_frac = float(self.xgb_config.get("xgb_eval_fraction", self.xgb_config.get("eval_fraction", 0.10)))
 
         idx = np.arange(len(y))
@@ -841,7 +841,7 @@ class EnsembleCNNLSTMXGBoost:
 
         if meta_X_scaled.shape[1] != self.expected_dim:
             raise ValueError(
-                f"[❌] Input shape {meta_X_scaled.shape[1]} does not match trained XGBoost shape {self.expected_dim}"
+                f"[[ERR]] Input shape {meta_X_scaled.shape[1]} does not match trained XGBoost shape {self.expected_dim}"
             )
         return meta_X_scaled
 

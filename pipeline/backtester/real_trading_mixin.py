@@ -1,4 +1,4 @@
-"""Auto-extracted mixin — see composed.py for the full MLBacktester."""
+"""Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 from pipeline.dqn_config import HPO_CONFIG_DIR  # noqa: F811
@@ -33,7 +33,7 @@ class RealTradingMixin:
         self._in_optuna_cv = False
 
         # ------------------------------------------------------------------
-        # SAVE_* toggle dicts — control which per-month artifacts are written.
+        # SAVE_* toggle dicts -- control which per-month artifacts are written.
         # These were referenced but never defined (caused NameError at line 2604).
         # Defaults: enable trade CSVs, disable heavy per-month PNGs/CSVs.
         # Override via config["save_trades"] / config["save_metrics"] / etc.
@@ -75,7 +75,7 @@ class RealTradingMixin:
                 self.trading_costs = bool(config.get("trading_costs"))
         else:
             # Optional: leave a breadcrumb in debug logs if you want
-            # if debug(): print(f"[Costs] Constructor lock active → ignoring config trading_costs override.")
+            # if debug(): print(f"[Costs] Constructor lock active -> ignoring config trading_costs override.")
             pass
 
             
@@ -114,13 +114,13 @@ class RealTradingMixin:
                     try:
                         full_idx  = pd.to_datetime(full_data.index, utc=True, errors="coerce")
                         _ny_times = full_idx.tz_convert("America/New_York")
-                        # 02:00–13:00 NY
+                        # 02:00-13:00 NY
                         self._ny_mask = pd.Series(
                             (_ny_times.hour >= 2) & (_ny_times.hour <= 13),
                             index=full_idx,
                         )
                     except Exception as _e:
-                        print(f"⚠️ Lazy NY mask build failed in flat-month fallback: {_e}")
+                        print(f"[WARN] Lazy NY mask build failed in flat-month fallback: {_e}")
                         self._ny_mask = pd.Series(True, index=full_data.index)
                 test_bars = test_bars.loc[self._ny_mask.reindex(test_bars.index, fill_value=False)]
                 
@@ -142,7 +142,7 @@ class RealTradingMixin:
                 try:
                     first_tradable = first_tradable_test_bar(test_bars.index, month_start_dt)
                 except Exception as _e:
-                    print(f"⚠️ first_tradable_test_bar failed in flat-month fallback: {_e}")
+                    print(f"[WARN] first_tradable_test_bar failed in flat-month fallback: {_e}")
                     first_tradable = None
 
                 try:
@@ -207,7 +207,7 @@ class RealTradingMixin:
 
                 # Strategy is flat all month
                 # Real-sim continuity: if we come in holding a position, keep it unless a model says otherwise.
-                # This prevents “teleporting to flat” just because WFO returned nothing.
+                # This prevents "teleporting to flat" just because WFO returned nothing.
                 df_flat["pred"] = float(prev_position)
 
                 # Minimal spread; full cost model will read more columns if present
@@ -291,7 +291,7 @@ class RealTradingMixin:
                             df_flat, cfg_cost
                         )
                     except Exception as _e:
-                        print(f"⚠️ _ensure_cost_columns failed in flat-month fallback: {_e}")
+                        print(f"[WARN] _ensure_cost_columns failed in flat-month fallback: {_e}")
 
                 cont_metrics = compute_full_evaluation_metrics(
                     df_flat,
@@ -400,7 +400,7 @@ class RealTradingMixin:
                 trade_dfs.append(pd.DataFrame())
 
             print(
-                f"🟨 Month {month_idx}: logged FLAT month "
+                f"[FLAT] Month {month_idx}: logged FLAT month "
                 f"(no usable config / no valid metrics)."
             )
 
@@ -466,9 +466,9 @@ class RealTradingMixin:
             return True
 
         model_type = config.get("model_type", "svm")
-        log_print(f"\n📣 Starting Real Trading Simulation for {months} month(s)", level="COMPACT")
+        log_print(f"\n[ANNOUNCE] Starting Real Trading Simulation for {months} month(s)", level="COMPACT")
         log_print(
-            f"🧠 Strategy: {model_type.upper()} | Logging results per month...",
+            f"[STRATEGY] Strategy: {model_type.upper()} | Logging results per month...",
             level="COMPACT",
         )
 
@@ -581,7 +581,7 @@ class RealTradingMixin:
                     _hpo_msg = str(_hpo_err)
                     if "No completed Optuna trials" in _hpo_msg:
                         log_print(
-                            f"⚠️ Global HPO failed: {_hpo_msg[:200]}... "
+                            f"[WARN] Global HPO failed: {_hpo_msg[:200]}... "
                             f"Falling back to per-month WFO tuning.",
                             level="COMPACT",
                         )
@@ -650,10 +650,10 @@ class RealTradingMixin:
         prev_eq_bh = 1.0
         prev_position = 0.0
         
-        # --- Build model output tree (Months/Final) — do NOT rely on a global RUN_DIR ---
+        # --- Build model output tree (Months/Final) -- do NOT rely on a global RUN_DIR ---
         disp_name = friendly_model_name(model_type)
         
-        # --- helper: map model_type → family folder name
+        # --- helper: map model_type -> family folder name
         def _infer_family(m: str) -> str:
             m = (m or "").lower()
             classical = {"logistic", "svm", "decision_tree", "random_forest", "xgboost"}
@@ -784,35 +784,35 @@ class RealTradingMixin:
                 train_start_naive = test_start_naive - period_offset(_train_p, unit=_pu)
                 train_end_naive   = test_start_naive - pd.Timedelta(minutes=30)
 
-                # make the slices tz-aware (UTC) — uses _ensure_dt defined at method top
+                # make the slices tz-aware (UTC) -- uses _ensure_dt defined at method top
                 test_start  = _ensure_dt(test_start_naive)
                 test_end    = _ensure_dt(test_end_naive)
                 train_start = _ensure_dt(train_start_naive)
                 train_end   = _ensure_dt(train_end_naive)
 
                 if train_end >= test_start:
-                    print(f"❗ Sanity check failed: train_end ({train_end}) is not before test_start ({test_start})")
+                    print(f"[ERR] Sanity check failed: train_end ({train_end}) is not before test_start ({test_start})")
                     continue
 
                 train_start_nominal = test_start - period_offset(_train_p, unit=_pu)
                 train_start = max(full_data.index[0], train_start_nominal)
                 if train_start > train_start_nominal:
                     log_print(
-                        f"ℹ️ Train window truncated to data start: "
-                        f"{train_start_nominal.date()} → {train_start.date()}",
+                        f"[INFO] Train window truncated to data start: "
+                        f"{train_start_nominal.date()} -> {train_start.date()}",
                         level="COMPACT",
                     )
                 log_print(
-                    f"📆 Month {i+1}/{months}: "
-                    f"Tuning on {train_start.date()} → {train_end.date()} | "
-                    f"Testing on {test_start.date()} → {test_end.date()}",
+                    f"[DATE] Month {i+1}/{months}: "
+                    f"Tuning on {train_start.date()} -> {train_end.date()} | "
+                    f"Testing on {test_start.date()} -> {test_end.date()}",
                     level="COMPACT",
                 )
 
 
                 data_slice = full_data.loc[train_start - period_offset(_pad_p, unit=_pu):test_end].copy()
                 log_print(
-                    f"📊 Data shape for training/testing window: {data_slice.shape}",
+                    f"[DATA] Data shape for training/testing window: {data_slice.shape}",
                     level="DEBUG",
                 )
                 
@@ -876,7 +876,7 @@ class RealTradingMixin:
                         pass
 
                     
-                # ── DQN short-circuit: evaluate directly (no Optuna) ──
+                # -- DQN short-circuit: evaluate directly (no Optuna) --
                 if model_type == "dqn":
                     self.data = data_slice
 
@@ -894,8 +894,8 @@ class RealTradingMixin:
 
                     # ---- DQN periodic retrain logic ----
                     # We always run with use_pretrained=True so that:
-                    # - If no model files exist for this month → train + save new policy.
-                    # - If files exist → load and reuse the saved policy (no retrain).
+                    # - If no model files exist for this month -> train + save new policy.
+                    # - If files exist -> load and reuse the saved policy (no retrain).
                     if dqn_retrain_period:
                         # At the START of each retrain block (every N months),
                         # delete only the *model* so the next evaluation will train a new one.
@@ -913,7 +913,7 @@ class RealTradingMixin:
                                 )
                             except Exception as e:
                                 log_print(
-                                    f"⚠️ Could not remove old DQN model file: {e}",
+                                    f"[WARN] Could not remove old DQN model file: {e}",
                                     level="COMPACT",
                                 )
 
@@ -946,7 +946,7 @@ class RealTradingMixin:
                         if dqn_retrain_period:
                             dqn_month_counter += 1
                     except Exception as e:
-                        print(f"❌ DQN evaluation failed for month {i + 1}: {e}")
+                        print(f"[ERR] DQN evaluation failed for month {i + 1}: {e}")
                         metrics = None
 
                 else:
@@ -992,7 +992,7 @@ class RealTradingMixin:
                             config["month_ix"] = int(i + 1)
                             config["month_graphs_dir"] = month_dirs["graphs"]
 
-                            # ⚠️ run_strategy may return None (e.g. ensembles with no valid trials)
+                            # [WARN] run_strategy may return None (e.g. ensembles with no valid trials)
                             res = self.run_strategy(
                                 config,
                                 models_to_test=models_to_test,
@@ -1024,7 +1024,7 @@ class RealTradingMixin:
                         except Exception as e:
                             # Hard fail: do NOT try to restart Optuna here.
                             # We want to see the real error and stop the study.
-                            print(f"❌ run_strategy failed in primary WFO: {e}")
+                            print(f"[ERR] run_strategy failed in primary WFO: {e}")
                             raise
 
                         # --- WFO result can be empty if every fold is 0-trade or pruned ---
@@ -1033,7 +1033,7 @@ class RealTradingMixin:
                             # Do NOT crash: this just means no usable config was found.
                             # We let the downstream flat-month fallback handle it.
                             print(
-                                f"⚠️ WFO returned no usable result for month {i + 1} "
+                                f"[WARN] WFO returned no usable result for month {i + 1} "
                                 f"(df_wfo={type(df_wfo)}, best_combo={type(best_combo)}). "
                                 "Skipping model evaluation and logging a flat no-trades month."
                             )
@@ -1056,7 +1056,7 @@ class RealTradingMixin:
                             - Start from a pool of tuned candidates (Optuna Top-N trials per model type).
                             - Filter for (optionally) style coherence + local similarity (geometry ball) + perf floor.
                             - Form a small committee: base + (N_target-1) best neighbours (by CV objective value).
-                            - Evaluate each candidate on the SAME month, align on common index, majority-vote preds ∈ {-1,0,+1}.
+                            - Evaluate each candidate on the SAME month, align on common index, majority-vote preds in {-1,0,+1}.
                             - Compute metrics for the consensus pred using compute_full_evaluation_metrics.
 
                             Return:
@@ -1302,12 +1302,12 @@ class RealTradingMixin:
                                         if d > max_d:
                                             max_d = d
 
-                                    # If no comparable dims, don’t block by geometry.
+                                    # If no comparable dims, don't block by geometry.
                                     return True if (not any_finite) else (max_d <= r)
                                 except Exception:
                                     return True
 
-                            # ---------- 4) filter pool → eligible neighbours ----------
+                            # ---------- 4) filter pool -> eligible neighbours ----------
                             base_style = base_params.get("strategy_type", None)
 
                             eligible_alts = []
@@ -1488,14 +1488,14 @@ class RealTradingMixin:
                                     def _fmt(v, nd=4):
                                         try:
                                             if v is None:
-                                                return "—"
+                                                return "--"
                                             if isinstance(v, bool):
                                                 return str(v)
                                             if isinstance(v, int):
                                                 return str(v)
                                             fv = float(v)
                                             if not _np.isfinite(fv):
-                                                return "—"
+                                                return "--"
                                             return f"{fv:.{nd}g}"
                                         except Exception:
                                             return str(v)
@@ -1539,7 +1539,7 @@ class RealTradingMixin:
                                             "alpha":     _fmt(cand.get("alpha_vol_z"), nd=3),
                                             "beta":      _fmt(cand.get("beta_spread_norm"), nd=3),
                                             "gamma":     _fmt(cand.get("gamma_slip_norm"), nd=3),
-                                            "extra":     ", ".join(extra) if extra else "—",
+                                            "extra":     ", ".join(extra) if extra else "--",
                                         })
 
                                     colw = {h: len(h) for h in headers}
@@ -1564,7 +1564,7 @@ class RealTradingMixin:
                                         print(f"[TopN][Audit] rejected(trial,value,why)={rej}")
 
                                 except Exception as _e:
-                                    print(f"[TopN] (debug: failed committee print → {_e})")
+                                    print(f"[TopN] (debug: failed committee print -> {_e})")
                             else:
                                 # optional single-line info (non-debug)
                                 if bool(cfg_local.get("topN_deploy", False)):
@@ -1614,7 +1614,7 @@ class RealTradingMixin:
 
                             if len(bar_dfs) < 2:
                                 if debug_topn:
-                                    print("[TopN] Need ≥2 valid candidates with pred+returns; skipping.")
+                                    print("[TopN] Need >=2 valid candidates with pred+returns; skipping.")
                                 return None
 
                             # ---------- 10) align on common index ----------
@@ -1875,7 +1875,7 @@ class RealTradingMixin:
                                     )
                                 else:
                                     log_print(
-                                        f"⚠️ [CONFIG-DRIFT] m{month_idx} target_active_rate tuned={_tuned} effective={_eff}",
+                                        f"[WARN] [CONFIG-DRIFT] m{month_idx} target_active_rate tuned={_tuned} effective={_eff}",
                                         level="COMPACT",
                                     )
 
@@ -1890,7 +1890,7 @@ class RealTradingMixin:
                                 best_combo.update(_params_internal)
 
                     except Exception as _e_cfg:
-                        log_print(f"⚠️ [CONFIG-FINGERPRINT] m{month_idx} failed: {type(_e_cfg).__name__}: {_e_cfg}", level="COMPACT")
+                        log_print(f"[WARN] [CONFIG-FINGERPRINT] m{month_idx} failed: {type(_e_cfg).__name__}: {_e_cfg}", level="COMPACT")
                         
                     # ------------------------------------------------------------
                     # Patch 1: Re-fingerprint immediately before each evaluation call
@@ -1948,12 +1948,12 @@ class RealTradingMixin:
                             return _eff
                         except Exception as __e:
                             log_print(
-                                f"⚠️ [CONFIG-FINGERPRINT] m{month_idx} {_tag} failed: {type(__e).__name__}: {__e}",
+                                f"[WARN] [CONFIG-FINGERPRINT] m{month_idx} {_tag} failed: {type(__e).__name__}: {__e}",
                                level="COMPACT",
                             )
                             return _params_in
                     
-                    # ---------- Primary evaluation step (consensus → adaptive Top-3 → single best) ----------
+                    # ---------- Primary evaluation step (consensus -> adaptive Top-3 -> single best) ----------
                     # For all non-DQN / non-TF-XGB-DQN models, force the Top-N consensus path
                     # to run, even if a previous refit already produced metrics.
 
@@ -2031,7 +2031,7 @@ class RealTradingMixin:
                                     test_end,
                                 )
                         except Exception as e:
-                            print(f"⚠️ evaluate_strategy failed (primary): {e}")
+                            print(f"[WARN] evaluate_strategy failed (primary): {e}")
                             metrics = None
 
                     # ---------- Top-N fallbacks if needed ----------
@@ -2063,9 +2063,9 @@ class RealTradingMixin:
                     if (not _is_valid_metrics_tuple(metrics)) and (
                         not bool(self.features_config.get("allow_param_fallback", False))
                     ):
-                        print("🔒 Realism ON: skipping Top-N fallbacks; keeping primary result (may be NaN/0-trade).")
+                        print("[LOCK] Realism ON: skipping Top-N fallbacks; keeping primary result (may be NaN/0-trade).")
                     elif not _is_valid_metrics_tuple(metrics) and isinstance(best_combo, dict):
-                        print("⚠️ Best combo invalid — trying Top-N fallbacks...")
+                        print("[WARN] Best combo invalid -- trying Top-N fallbacks...")
 
                         for idx, params_try in enumerate(_safe_build_topn_candidates(best_combo), start=1):
                             try:
@@ -2080,12 +2080,12 @@ class RealTradingMixin:
                                     _rt_print_config_fingerprint(best_combo, _tag=f"top{idx}-ACCEPT")
                                     best_combo = params_try
                                     metrics = alt_metrics
-                                    print(f"    ✅ Using Top-{idx} candidate (non-degenerate result).")
+                                    print(f"    [OK] Using Top-{idx} candidate (non-degenerate result).")
                                     break
                                 else:
-                                    print(f"    ⚠️ Top-{idx} candidate degenerate (e.g., 0 trades). Trying next...")
+                                    print(f"    [WARN] Top-{idx} candidate degenerate (e.g., 0 trades). Trying next...")
                             except Exception as e:
-                                print(f"    ✖️ Top-{idx} candidate crashed: {e}")
+                                print(f"    [X] Top-{idx} candidate crashed: {e}")
                                 continue
 
                     # If Top-N fallbacks are disabled, keep the primary result even if invalid.
@@ -2093,12 +2093,12 @@ class RealTradingMixin:
                         not bool(self.features_config.get("allow_param_fallback", False))
                     ):
                         print(
-                            "🔒 Realism ON: skipping Top-N fallbacks; keeping primary result "
+                            "[LOCK] Realism ON: skipping Top-N fallbacks; keeping primary result "
                             "(may be NaN/0-trade)."
                         )
 
                     elif not _is_valid_metrics_tuple(metrics):
-                        print("⚠️ Best combo invalid — trying Top-N fallbacks...")
+                        print("[WARN] Best combo invalid -- trying Top-N fallbacks...")
 
                         for idx, params_try in enumerate(_safe_build_topn_candidates(best_combo), start=1):
                             try:
@@ -2111,21 +2111,21 @@ class RealTradingMixin:
                                     best_combo = dict(params_eval) if isinstance(params_eval, dict) else dict(params_try)
                                     best_combo.update(_internal)
                                     _rt_print_config_fingerprint(best_combo, _tag=f"top{idx}-ACCEPT")
-                                    print(f"    ✅ Using Top-{idx} candidate (non-degenerate result).")
+                                    print(f"    [OK] Using Top-{idx} candidate (non-degenerate result).")
                                     break
                                 else:
                                     print(
-                                        f"    ⚠️ Top-{idx} candidate degenerate (e.g., 0 trades). "
+                                        f"    [WARN] Top-{idx} candidate degenerate (e.g., 0 trades). "
                                         "Trying next..."
                                     )
                             except Exception as e:
-                                print(f"    ✖️ Top-{idx} candidate crashed: {e}")
+                                print(f"    [X] Top-{idx} candidate crashed: {e}")
                                 continue
 
                         # If still invalid after trying Top-N, just fall through.
                         if not _is_valid_metrics_tuple(metrics):
                             print(
-                                "⚠️ Top-N fallbacks exhausted; keeping primary/degenerate "
+                                "[WARN] Top-N fallbacks exhausted; keeping primary/degenerate "
                                 "result for this month."
                             )
                             
@@ -2215,13 +2215,13 @@ class RealTradingMixin:
                             try:
                                 full_idx = pd.to_datetime(full_data.index, utc=True, errors="coerce")
                                 _ny_times = full_idx.tz_convert("America/New_York")
-                                # 02:00–13:00 NY
+                                # 02:00-13:00 NY
                                 self._ny_mask = pd.Series(
                                     (_ny_times.hour >= 2) & (_ny_times.hour <= 13),
                                     index=full_idx,
                                 )
                             except Exception as _e:
-                                print(f"⚠️ Lazy NY mask build failed in real-trading eval: {_e}")
+                                print(f"[WARN] Lazy NY mask build failed in real-trading eval: {_e}")
                                 self._ny_mask = pd.Series(True, index=full_data.index)
                         test_bars = test_bars.loc[
                             self._ny_mask.reindex(test_bars.index, fill_value=False)
@@ -2235,7 +2235,7 @@ class RealTradingMixin:
                             first_eval_ts = enforce_day1_eval_anchor(test_bars.index, month_start_dt)
                             eval_index = test_bars.loc[first_eval_ts:].index
                         except Exception as _e:
-                            print(f"⚠️ enforce_day1_eval_anchor failed in real-trading eval: {_e}")
+                            print(f"[WARN] enforce_day1_eval_anchor failed in real-trading eval: {_e}")
                             # fallback: keep full test_bars index
 
                     # 4) Reindex model outputs onto canonical index
@@ -2294,7 +2294,7 @@ class RealTradingMixin:
                                         print("[Costs][Warn] cont_metrics frame missing spread/slippage_bps after _ensure_cost_columns.")
                         except Exception as _e:
                             if self._is_debug():
-                                print(f"⚠️ Cost-column prep failed in real_sim cont_metrics: {_e}")
+                                print(f"[WARN] Cost-column prep failed in real_sim cont_metrics: {_e}")
 
 
 
@@ -2346,7 +2346,7 @@ class RealTradingMixin:
                         try:
                             trade_df_month = build_trade_log_from_df(eval_df_cont)
                         except Exception as _e:
-                            print(f"⚠️ Could not build trade log for month {i + 1}: {_e}")
+                            print(f"[WARN] Could not build trade log for month {i + 1}: {_e}")
                             trade_df_month = None
 
                         # save continuous curves for the cross-month plot
@@ -2354,9 +2354,9 @@ class RealTradingMixin:
                         trade_dfs.append(trade_df_month)
                         
                     else:
-                        print("⚠️ results DataFrame missing required columns — skipping bar concat.")
+                        print("[WARN] results DataFrame missing required columns -- skipping bar concat.")
                 else:
-                    print("⚠️ No self.results to build bar DF from.")
+                    print("[WARN] No self.results to build bar DF from.")
 
 
                 # Carry-over equities are already updated just above (prev_eq_strategy / prev_eq_bh)
@@ -2384,7 +2384,7 @@ class RealTradingMixin:
                 # ------------------------------------------------------------------
                 # Patch C: Compact per-month gating summary (real-sim; no behavior change)
                 # Prints: active_rate, trades, conf_init/used, eligible bars, anchor,
-                # and top 3 “filter” contributors if available.
+                # and top 3 "filter" contributors if available.
                 # ------------------------------------------------------------------
                 try:
                     _diag = getattr(self, "_last_eligibility_diag", {}) or {}
@@ -2431,7 +2431,7 @@ class RealTradingMixin:
                     }
                     _max_part = max(_parts.values()) if _parts else 0
                     if _bars_total > 0 and _max_part > _bars_total:
-                        print(f"⚠️ [GateSummary][WARN] impossible eligibility counts: bars_total={_bars_total} max_part={_max_part} parts={_parts}")
+                        print(f"[WARN] [GateSummary][WARN] impossible eligibility counts: bars_total={_bars_total} max_part={_max_part} parts={_parts}")
                     elif bool(getattr(self, "debug", False)) and _bars_total > 0 and _sum_parts > 0 and _bars_total != _sum_parts:
                         # Overlap is expected; keep this at debug-level only.
                         try:
@@ -2484,7 +2484,7 @@ class RealTradingMixin:
                     )
                 except Exception as _e:
                     # No silent pass: if summary fails, it MUST be visible during audits.
-                    log_print(f"⚠️ [GateSummary][WARN] failed to print gating summary: {_e}", level="COMPACT")
+                    log_print(f"[WARN] [GateSummary][WARN] failed to print gating summary: {_e}", level="COMPACT")
 
 
 
@@ -2633,7 +2633,7 @@ class RealTradingMixin:
         # ---------------------------------------------------------------------
         df_months = pd.DataFrame(results)
         if not df_months.empty:
-            print(f"\n✅ Real Trading Simulation Complete ({months} Months)")
+            print(f"\n[OK] Real Trading Simulation Complete ({months} Months)")
 
             # df_months contains only the valid months; all_dfs has one per-bar DF per valid month in order.
             df_months_reset = df_months.reset_index(drop=True)
@@ -2708,15 +2708,15 @@ class RealTradingMixin:
                             index=False,
                             float_format="%.10f",
                         )
-                        print(f"✅ Saved monthly trade summary for rep {rep_idx} → {monthly_path}")
+                        print(f"[OK] Saved monthly trade summary for rep {rep_idx} -> {monthly_path}")
                     else:
-                        print("ℹ️ No trades recorded; skipping monthly trade summary.")
+                        print("[INFO] No trades recorded; skipping monthly trade summary.")
 
                 except Exception as _e:
-                    print(f"⚠️ Could not build monthly trade summary: {_e}")
+                    print(f"[WARN] Could not build monthly trade summary: {_e}")
             else:
                 if self._is_debug():
-                    print("ℹ️ Monthly trade summary disabled via SAVE_TRADES['monthly_summary_per_rep_csv'].")
+                    print("[INFO] Monthly trade summary disabled via SAVE_TRADES['monthly_summary_per_rep_csv'].")
 
             # -------------------------------------------------------------
             # Per-trade BH vs model comparison at entry/exit
@@ -2818,21 +2818,21 @@ class RealTradingMixin:
                             float_format="%.10f",
                         )
                         print(
-                            f"✅ Saved trade entry/exit BH comparison for rep {rep_idx} → "
+                            f"[OK] Saved trade entry/exit BH comparison for rep {rep_idx} -> "
                             f"{compare_path}"
                         )
                     else:
                         if self._is_debug():
                             print(
-                                "ℹ️ No trades with usable equity curves for trade_entry_exit_compare; skipping CSV."
+                                "[INFO] No trades with usable equity curves for trade_entry_exit_compare; skipping CSV."
                             )
 
                 except Exception as _e:
-                    print(f"⚠️ Could not build trade entry/exit comparison CSV: {_e}")
+                    print(f"[WARN] Could not build trade entry/exit comparison CSV: {_e}")
             else:
                 if self._is_debug():
                     print(
-                        "ℹ️ Trade entry/exit comparison disabled via "
+                        "[INFO] Trade entry/exit comparison disabled via "
                         "SAVE_TRADES['trade_entry_exit_compare_csv']."
                     )
 
@@ -2840,7 +2840,7 @@ class RealTradingMixin:
 
         # 2) Final (model-level) artifacts
         #    - feature_heatmap_final.png over all months of _this_ model
-        #      HEAVY → gated by config + SKIP_PLOTS
+        #      HEAVY -> gated by config + SKIP_PLOTS
         try:
             cfg_local = getattr(self, "features_config", {}) or {}
             do_feat_freq = bool(cfg_local.get("deploy_feature_freq", True))
@@ -2858,7 +2858,7 @@ class RealTradingMixin:
                 )
         except Exception as _e:
             if self._is_debug():
-                print(f"⚠️ Feature-frequency (model-level) heatmap skipped: {_e}")
+                print(f"[WARN] Feature-frequency (model-level) heatmap skipped: {_e}")
 
 
 
@@ -2883,7 +2883,7 @@ class RealTradingMixin:
                     if isinstance(feats, str):
                         f.write(feats + "\n")
                     else:
-                        # Normalize feats: non-iterables (NaN, scalars) → empty list
+                        # Normalize feats: non-iterables (NaN, scalars) -> empty list
                         try:
                             from collections.abc import Iterable
                             if not isinstance(feats, Iterable):
@@ -2900,7 +2900,7 @@ class RealTradingMixin:
                             f.write(f"\n{cfg_key}:\n{row[cfg_key]}\n")
                     f.write("\n")
         except Exception as _e:
-            print(f"⚠️ Could not write aggregated features/config dump: {_e}")
+            print(f"[WARN] Could not write aggregated features/config dump: {_e}")
 
         # Do NOT create a new timestamped folder here; reuse the one from earlier.
         # Just make sure it exists.
@@ -2924,9 +2924,9 @@ class RealTradingMixin:
                 out_csv=os.path.join(buckets["All"]["csv"], f"feature_frequency_monthly_rep{rep}.csv"),
             )
         except Exception as _e:
-            print(f"⚠️ Could not save monthly feature frequency heatmap: {_e}")
+            print(f"[WARN] Could not save monthly feature frequency heatmap: {_e}")
 
-        # Per-bar comparison CSV/PNG — run ONCE (single model vs BH)
+        # Per-bar comparison CSV/PNG -- run ONCE (single model vs BH)
         try:
             if all_dfs:
                 bar_concat = pd.concat(all_dfs).sort_index()
@@ -2963,7 +2963,7 @@ class RealTradingMixin:
                     )
 
         except Exception as e:
-            print(f"⚠️ Per-bar comparison (single model) failed: {e}")
+            print(f"[WARN] Per-bar comparison (single model) failed: {e}")
 
         # --- Now that bar_concat exists, write month PNGs by slicing it ---
         try:
@@ -2985,7 +2985,7 @@ class RealTradingMixin:
             if not (do_csv or do_feat_txt or do_equity or do_heatmap):
                 if self._is_debug():
                     print(
-                        "ℹ️ All SAVE_* per-month artifacts disabled; "
+                        "[INFO] All SAVE_* per-month artifacts disabled; "
                         "skipping month-level file writes."
                     )
             else:
@@ -3022,7 +3022,7 @@ class RealTradingMixin:
                                 if isinstance(feats, str):
                                     f.write(feats + "\n")
                                 else:
-                                    # Normalize feats: non-iterables (NaN, scalars) → empty list
+                                    # Normalize feats: non-iterables (NaN, scalars) -> empty list
                                     try:
                                         from collections.abc import Iterable
                                         if not isinstance(feats, Iterable):
@@ -3039,10 +3039,10 @@ class RealTradingMixin:
                                         f.write(f"\n{cfg_key}:\n{row[cfg_key]}\n")
                         except Exception as _e:
                             print(
-                                f"⚠️ Could not write features/config dump for month {month_ix}: {_e}"
+                                f"[WARN] Could not write features/config dump for month {month_ix}: {_e}"
                             )
 
-                    # (b) slice per-bar equity for that month and plot (HEAVY → gated)
+                    # (b) slice per-bar equity for that month and plot (HEAVY -> gated)
                     if do_equity:
                         ts, te = row.get("test_start"), row.get("test_end")
                         if pd.notna(ts) and pd.notna(te):
@@ -3066,11 +3066,11 @@ class RealTradingMixin:
                                     f"monthly_equity_{month_ix}.png",
                                 ),
                                 label_model=disp_name,
-                                title=f"{disp_name} — Month {month_ix}",
+                                title=f"{disp_name} -- Month {month_ix}",
                                 dpi=300,
                             )
 
-                    # (c) Month-only feature heatmap (HEAVY → gated)
+                    # (c) Month-only feature heatmap (HEAVY -> gated)
                     if do_heatmap:
                         save_feature_heatmap_for_single_month(
                             pd.DataFrame([row]),
@@ -3081,7 +3081,7 @@ class RealTradingMixin:
                         )
 
         except Exception as e:
-            print(f"⚠️ Month artifact export failed: {e}")
+            print(f"[WARN] Month artifact export failed: {e}")
 
         # Persist the monthly stats table for the whole simulation period
         try:
@@ -3091,7 +3091,7 @@ class RealTradingMixin:
                 save_monthly_model_stats(df_months, buckets["All"]["csv"], filename="monthly_model_stats.csv")
 
         except Exception as e:
-            print(f"⚠️ Saving monthly model stats CSV failed: {e}")
+            print(f"[WARN] Saving monthly model stats CSV failed: {e}")
             
         
         # Optional post-hoc PBO/MCS analysis (read-only)

@@ -67,8 +67,8 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
 
         # Log, but keep going. We only abort if RAM is *critically* low.
         print(
-            f"⚠️ [RAM-SoftGuard] Low RAM before trial {getattr(trial, 'number', '?')} start: "
-            f"requested>={need:.2f}GB, avail={avail:.2f}GB — continuing anyway."
+            f"[WARN] [RAM-SoftGuard] Low RAM before trial {getattr(trial, 'number', '?')} start: "
+            f"requested>={need:.2f}GB, avail={avail:.2f}GB -- continuing anyway."
         )
 
         # Optional hard emergency floor to protect your WSL/PC.
@@ -78,7 +78,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
             if DISABLE_OPTUNA_PRUNING:
                 # If pruning is globally disabled, return a sentinel instead of crashing.
                 print(
-                    f"🔥 [RAM-SoftGuard] avail={avail:.2f}GB < hard floor={hard_floor:.2f}GB — "
+                    f"[RAM] [RAM-SoftGuard] avail={avail:.2f}GB < hard floor={hard_floor:.2f}GB -- "
                     "returning sentinel -9999.0 to stop this trial safely."
                 )
                 return _bad_obj(direction)
@@ -299,11 +299,11 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
         _ema_local = price.ewm(span=ema_n, adjust=False).mean()
         _sma_local = price.rolling(sma_n, min_periods=sma_n).mean()
 
-        # 1) EMA–SMA spread
+        # 1) EMA-SMA spread
         if bool(p.get("use_ma_spread", False)) and "ema_sma_spread" not in df:
             df["ema_sma_spread"] = (_ema_local - _sma_local)
 
-        # 2) Price–MA z-scores
+        # 2) Price-MA z-scores
         if bool(p.get("use_price_ma_z", False)):
             if f"price_sma_z_{sma_n}" not in df:
                 sd_sma = price.rolling(sma_n, min_periods=max(5, sma_n//3)).std(ddof=0)
@@ -324,7 +324,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
             if "ma_cross_dn" not in df:
                 df["ma_cross_dn"] = (_trend_proxy < 0).astype(int)
 
-        # 4) Short–long slope differential (slope of spread)
+        # 4) Short-long slope differential (slope of spread)
         if bool(p.get("use_slope_diff", False)):
             w = max(5, min(ema_n, sma_n) // 2)
             _x = df["macd"] if "macd" in df else (_ema_local - _sma_local)
@@ -345,7 +345,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
             try:
                 trend_components = []
 
-                # 1) Trend components: price–MA z-scores, ADX, EMA–SMA spread (if available)
+                # 1) Trend components: price-MA z-scores, ADX, EMA-SMA spread (if available)
                 sma_z_col = f"price_sma_z_{sma_n}"
                 if sma_z_col in df:
                     trend_components.append(df[sma_z_col].abs())
@@ -438,7 +438,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
                     df["regime_volatile"] = (regime_id == 2).astype("int8")
             except Exception as _e:
                 # Fail-safe: never break tuning because of regime feature construction
-                print(f"⚠️ Regime feature construction failed: {_e}")
+                print(f"[WARN] Regime feature construction failed: {_e}")
 
         return df
 
@@ -568,7 +568,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
             )
 
 
-        # --- Dispatch: classical models → thread backend for speed & stability ---
+        # --- Dispatch: classical models -> thread backend for speed & stability ---
         def _dispatch_eval():
             _mt = str(params.get("model_type", "")).lower()
             _cv_jobs = int((cv_config or {}).get("cv_n_jobs", os.cpu_count() or 1))
@@ -599,8 +599,8 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
             
 
         # Allow controlling CV debug and table verbosity via env:
-        #   CV_DEBUG=1        → enable detailed CV debug logs
-        #   CV_TABLE_MODE=off → disable per-block CV tables
+        #   CV_DEBUG=1        -> enable detailed CV debug logs
+        #   CV_TABLE_MODE=off -> disable per-block CV tables
         _cv_debug = os.getenv("CV_DEBUG", "0") == "1"
         _cv_table_mode_env = os.getenv("CV_TABLE_MODE", "").strip().lower()
         if _cv_table_mode_env:
@@ -657,7 +657,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
             # Do NOT retry this trial: mark as failed and move on.
             cause = f"BrokenProcessPool: {e}"
             log_print(
-                f"⚠️ {cause} — marking trial {trial.number} as failed (no retry).",
+                f"[WARN] {cause} -- marking trial {trial.number} as failed (no retry).",
                 level="COMPACT",
             )
             try:
@@ -673,7 +673,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
                 # Again: do NOT retry, just flag and give a terrible score.
                 cause = f"RuntimeError: {msg}"
                 log_print(
-                    f"⚠️ {cause} — marking trial {trial.number} as failed (no retry).",
+                    f"[WARN] {cause} -- marking trial {trial.number} as failed (no retry).",
                     level="COMPACT",
                 )
                 try:
@@ -683,10 +683,10 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
                 mean_score = _bad_obj(direction)
 
             else:
-                # Other RuntimeErrors are still unexpected → bubble up.
+                # Other RuntimeErrors are still unexpected -> bubble up.
                 raise
 
-        # Normalize CV result → one float; prune if not finite (no-valid-blocks / gating)
+        # Normalize CV result -> one float; prune if not finite (no-valid-blocks / gating)
         try:
             score = float(mean_score)
         except Exception:
@@ -710,14 +710,14 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
                 raise optuna.TrialPruned("MiniBlockCV: non-finite CV score (no-trades/gating)")
 
         # ------------------------------------------------------------------
-        # Quality Guard #1: Cap per-trial Sharpe at ±6.0
+        # Quality Guard #1: Cap per-trial Sharpe at +/-6.0
         # Annualized Sharpe > 6 is unrealistic and usually from too few trades.
         # This prevents lucky low-trade folds from dominating the objective.
         # ------------------------------------------------------------------
         _SHARPE_CAP = 6.0
         if abs(score) > _SHARPE_CAP:
             try:
-                trial.set_user_attr("sharpe_capped", f"{score:.3f}→{_SHARPE_CAP if score > 0 else -_SHARPE_CAP:.3f}")
+                trial.set_user_attr("sharpe_capped", f"{score:.3f}->{_SHARPE_CAP if score > 0 else -_SHARPE_CAP:.3f}")
             except Exception:
                 pass
             score = _np.clip(score, -_SHARPE_CAP, _SHARPE_CAP)
@@ -725,7 +725,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
         # ------------------------------------------------------------------
         # Quality Guard #2: Minimum total trades floor across valid folds
         # If the config produces < 40 trades total, it's not trading enough
-        # to be statistically meaningful → heavy penalty.
+        # to be statistically meaningful -> heavy penalty.
         # ------------------------------------------------------------------
         _MIN_TOTAL_TRADES = 40
         _trades_cv = None
@@ -751,7 +751,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
         # ------------------------------------------------------------------
         # Quality Guard #3: Penalize excessive active rate (> 0.30)
         # An active rate >> target (0.15) means the confidence threshold
-        # is miscalibrated → penalty proportional to the overshoot.
+        # is miscalibrated -> penalty proportional to the overshoot.
         # ------------------------------------------------------------------
         _ACTIVE_RATE_CAP = 0.30
         _ar_cv = None
@@ -894,7 +894,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
             score = float(_final)
         except Exception as _sel_e:
             if bool((cv_config or {}).get("print_cv_debug", False)) or os.getenv("HPO_SELECT_DEBUG", "0") == "1":
-                log_print(f"⚠️ [Select] calibration penalty skipped: {_sel_e}", level="DEBUG")
+                log_print(f"[WARN] [Select] calibration penalty skipped: {_sel_e}", level="DEBUG")
                 
         # ------------------------------------------------------------------
         # Store a decomposition in trial.user_attrs for audit:
@@ -1011,7 +1011,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
                     f"ObjectiveGuard: penalty increased score under dir={direction} "
                     f"(base={base_score:.6f} final={final_score:.6f} pen_total={penalty_total:.6f})"
                 )
-                log_print(f"🚨 [{msg}]", level="COMPACT")
+                log_print(f"[ALERT] [{msg}]", level="COMPACT")
                 if trial is not None:
                     try:
                         trial.set_user_attr("objective_guard_violation", msg)
@@ -1042,7 +1042,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
         cause = f"{type(e).__name__}: {str(e)}"
 
         log_print("\n" + "#" * 80, level="COMPACT")
-        log_print(f"⚠️ Error in optuna_objective(): {cause}", level="COMPACT")
+        log_print(f"[WARN] Error in optuna_objective(): {cause}", level="COMPACT")
         if 'params' in locals():
             log_print(f"Trial params were: {params}", level="COMPACT")
 
@@ -1053,7 +1053,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
         if DISABLE_OPTUNA_PRUNING:
             return _bad_obj(direction)
         else:
-            raise optuna.TrialPruned(f"Trial pruned due to error → {cause}")
+            raise optuna.TrialPruned(f"Trial pruned due to error -> {cause}")
 
     # Always run cleanup (success, prune, or error)
     try:

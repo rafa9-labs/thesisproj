@@ -1,6 +1,6 @@
 """Model calibration and uncertainty quantification.
 
-Phase 4.3 — probability calibration, temperature scaling, conformal prediction.
+Phase 4.3 -- probability calibration, temperature scaling, conformal prediction.
 Backported from utilsNoWFO.py.
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ class RollingStandardizer:
     min_periods: int = 50
 
     def fit_transform(self, X_train: pd.DataFrame) -> Tuple[pd.DataFrame, dict]:
-        # Single copy to avoid mutating caller’s DataFrame; operate in-place on it
+        # Single copy to avoid mutating caller's DataFrame; operate in-place on it
         X = X_train.astype(float).copy()
 
         mu_roll = X.rolling(self.window, min_periods=self.min_periods).mean()
@@ -58,7 +58,7 @@ def calibrate_prefit_and_predict_proba(
         return base_estimator.predict_proba(X_pred), None
     try:
         from sklearn.base import clone
-        # Fresh, unfitted copy — we calibrate with k-fold CV on the train window
+        # Fresh, unfitted copy -- we calibrate with k-fold CV on the train window
         est = clone(base_estimator)
         calibrator = CalibratedClassifierCV(estimator=est, method=method, cv=3)
         calibrator.fit(X_train, y_train)

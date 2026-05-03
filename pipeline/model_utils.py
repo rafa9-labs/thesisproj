@@ -1,6 +1,6 @@
 """Model naming, ranking, and comparison utilities.
 
-Thin re-export shim — canonical source is utilsNoWFO.py.
+Thin re-export shim -- canonical source is utilsNoWFO.py.
 """
 from __future__ import annotations
 

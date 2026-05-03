@@ -5,10 +5,10 @@ Provides configurable stop/TP models that integrate into the
 bar-by-bar execution loop in ``execution_patches.py``.
 
 Stop/TP methods:
-  - FIXED_PIPS    — static SL/TP in pip units
-  - ATR           — dynamic SL/TP as multiples of Average True Range
-  - SIGMA         — SL/TP as multiples of rolling bar volatility
-  - NONE          — no explicit SL/TP (signal-only exits)
+  - FIXED_PIPS    -- static SL/TP in pip units
+  - ATR           -- dynamic SL/TP as multiples of Average True Range
+  - SIGMA         -- SL/TP as multiples of rolling bar volatility
+  - NONE          -- no explicit SL/TP (signal-only exits)
 
 Additional features:
   - Breakeven stop management (move SL to entry after threshold)
@@ -149,7 +149,7 @@ def compute_stop_levels(
     if pv <= 0 and m in (StopMethod.FIXED_PIPS,):
         import logging
         logging.getLogger(__name__).warning(
-            "pip_value=%.6f is non-positive — stop computation skipped to avoid "
+            "pip_value=%.6f is non-positive -- stop computation skipped to avoid "
             "immediate stop-out at entry price", pv
         )
         return levels
@@ -260,7 +260,7 @@ def check_breakeven(
     """Check if breakeven stop should be activated, updating SL if so.
 
     Once the unrealised profit exceeds ``be_trigger_pips``, the SL is
-    moved to the entry price (breakeven). This is irreversible — once
+    moved to the entry price (breakeven). This is irreversible -- once
     the SL is at breakeven, it stays there.
 
     Parameters

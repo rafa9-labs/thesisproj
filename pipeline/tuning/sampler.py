@@ -160,17 +160,17 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     params["roll_windows_key"] = roll_key
     params["roll_windows"] = [int(x) for x in roll_key.split(",")]
 
-    # === Volatility-scaled label threshold (k · σ) ===
+    # === Volatility-scaled label threshold (k * sigma) ===
     sigma = None
 
-    # 1) Prefer precomputed σ from run_optuna_tuning (cheap, reused every trial)
+    # 1) Prefer precomputed sigma from run_optuna_tuning (cheap, reused every trial)
     if isinstance(vol_stats, dict) and "sigma48" in vol_stats:
         try:
             sigma = float(vol_stats["sigma48"])
         except (TypeError, ValueError):
             sigma = None
 
-    # 2) Fallback: compute σ from train_data only if not provided
+    # 2) Fallback: compute sigma from train_data only if not provided
     if (
         sigma is None
         and train_data is not None
@@ -182,7 +182,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
             sigma = float(r.rolling(48).std().median())
             sigma = float(np.clip(sigma, 1e-5, 5e-3))
 
-    # 3) Use σ if we have it, otherwise fall back to generic prior
+    # 3) Use sigma if we have it, otherwise fall back to generic prior
     if sigma is not None:
         lo = max(7.5e-5, 0.45 * sigma)
         hi = min(5e-3, 1.10 * sigma)
@@ -231,7 +231,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
         raise ValueError("models_to_test must contain at least one model type!")
 
     # === Global opt-in knobs (feature engineering & evaluation) ===
-    # === Labeling (triple-barrier) — locked ON, practitioner-friendly ranges ===
+    # === Labeling (triple-barrier) -- locked ON, practitioner-friendly ranges ===
     params["use_triple_barrier"] = True
 
     # Tight stops + long holding horizons collapse the neutral class (timeouts),
@@ -240,7 +240,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     tb_pt_low, tb_pt_high = 1.00, 2.00
     tb_sl_low, tb_sl_high = 1.00, 2.00
     tb_hold_low, tb_hold_high = 24, 48
-    # Neutral band: multiplier on local σ; applies only on timeout.
+    # Neutral band: multiplier on local sigma; applies only on timeout.
     tb_nz_low, tb_nz_high = 0.25, 0.75
  
 
@@ -256,7 +256,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     params["tb_neutral_zone"] = trial.suggest_float("tb_neutral_zone", tb_nz_low, tb_nz_high, step=0.25)
     _record_hp_boundary_hit("tb_neutral_zone", params["tb_neutral_zone"], tb_nz_low, tb_nz_high)
 
-    # === Calibration method — probabilistic heads (STABLE CHOICES) ===
+    # === Calibration method -- probabilistic heads (STABLE CHOICES) ===
     # Use "" for "no calibration" to keep Optuna's distribution stable across the study.
     if _hpo_stage == "A_signal":
          params["calibrate_method"] = str(_stage_cfg.get("stageA_calibrate_method", "sigmoid") or "sigmoid")
@@ -299,9 +299,9 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     mt = str(params.get("model_type", model_type)).lower()
 
     if mt == "lstm":
-        # LSTM: most relaxed → highest target coverage, softest α/β/γ,
+        # LSTM: most relaxed -> highest target coverage, softest alpha/beta/gamma,
         # widest band, strongest nudge.
-        # +0.12 shift on the coverage range compared to the base (0.20–0.40 → 0.32–0.52)
+        # +0.12 shift on the coverage range compared to the base (0.20-0.40 -> 0.32-0.52)
         targ_low, targ_high = 0.32, 0.52
 
         alpha_max = 0.040
@@ -315,7 +315,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
         runtime_window_min  = 36
         runtime_window_max  = 84
         runtime_window_step = 12
-        high_vol_bump_max   = 0.03  # do not stack too aggressively with α·vol_z
+        high_vol_bump_max   = 0.03  # do not stack too aggressively with alpha*vol_z
 
     elif mt  == "logistic":
         # Logistic: mid softness.
@@ -384,7 +384,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
     # === Model-specific spaces ===
     if model_type == "svm":
-        # Hsu et al. (2010) grid: C ∈ [1e-2, 1e2], γ ∈ [1e-4, 1e1] (narrowed from [1e-3,1e3]/[1e-5,10]).
+        # Hsu et al. (2010) grid: C in [1e-2, 1e2], gamma in [1e-4, 1e1] (narrowed from [1e-3,1e3]/[1e-5,10]).
         # Fixed: kernel=rbf (standard for FX), class_weight=balanced (imbalanced classes).
         params["svm_C"]            = trial.suggest_float("svm_C", 1e-2, 1e2, log=True)
         params["svm_gamma"]        = trial.suggest_float("svm_gamma", 1e-4, 1e1, log=True)
@@ -403,7 +403,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
 
     elif model_type == "logistic":
-        # Pedregosa et al. (scikit-learn): C ∈ [1e-2, 1e2] (narrowed from [1e-4, 1e4]).
+        # Pedregosa et al. (scikit-learn): C in [1e-2, 1e2] (narrowed from [1e-4, 1e4]).
         # Fixed: solver=lbfgs (most stable multinomial), penalty=l2, tol=1e-4, max_iter=1000.
         params["logit_solver"]       = "lbfgs"
         params["logit_penalty"]      = "l2"
@@ -414,7 +414,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
     elif model_type == "random_forest":
         # Breiman (2001), Biau (2012): fix bootstrap=True, n_jobs=-1.
-        # Reduced from 7 → 4 tunable dims (removed: min_samples_split, bootstrap, class_weight).
+        # Reduced from 7 -> 4 tunable dims (removed: min_samples_split, bootstrap, class_weight).
         params["rf_n_jobs"]            = -1
         params["rf_n_estimators"]      = trial.suggest_int("rf_n_estimators", 300, 1000, step=100)
         params["rf_max_depth"]         = trial.suggest_categorical("rf_max_depth", [None, 8, 12, 16])
@@ -425,7 +425,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     elif model_type == "xgboost":
         # Chen & Guestrin (2016): depth 3-8 (narrowed from 10), est 200-800.
         # Fixed to defaults: gamma=0, min_child_weight=1, lambda=1, alpha=0.
-        # Reduced from 8 → 5 tunable dims.
+        # Reduced from 8 -> 5 tunable dims.
         params["xgb_n_jobs"]           = -1
         params["xgb_n_estimators"]     = trial.suggest_int("xgb_n_estimators", 200, 800, step=100)
         params["xgb_max_depth"]        = trial.suggest_int("xgb_max_depth", 3, 8)
@@ -437,7 +437,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     elif model_type == "lstm":
         # Hochreiter & Schmidhuber (1997): 32-128 units, 1-2 layers, dropout 0.2-0.5.
         # Fixed: dense_units=64, bidirectional=False, clipnorm=1.0, use_seq_windows=False.
-        # Reduced from 8 → 4 tunable dims.
+        # Reduced from 8 -> 4 tunable dims.
         params["lstm_units"]         = trial.suggest_categorical("lstm_units", [32, 64, 128])
         params["lstm_num_layers"]    = trial.suggest_categorical("lstm_num_layers", [1, 2])
         params["lstm_dense_units"]   = 64
@@ -453,7 +453,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     elif model_type == "cnn":
         # 1D-CNN for time series: categorical filters [32,64,96], kernel [3,5].
         # Fixed: dropout=0.3, dense_units=64, batch_size=256, use_seq_windows=False.
-        # Reduced from 7 → 4 tunable dims.
+        # Reduced from 7 -> 4 tunable dims.
         params["cnn_filters1"]      = trial.suggest_categorical("cnn_filters1", [32, 64, 96])
         params["cnn_filters2"]      = trial.suggest_categorical("cnn_filters2", [32, 64, 96])
         params["cnn_kernel_size"]   = trial.suggest_categorical("cnn_kernel_size", [3, 5])
@@ -466,10 +466,10 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
         params["cnn_mixed_precision"] = False
 
     elif model_type == "transformer":
-        # Vaswani et al. (2017): d_model ∈ {32,64,128}, heads ∈ {4,8}, shallow (1 block).
+        # Vaswani et al. (2017): d_model in {32,64,128}, heads in {4,8}, shallow (1 block).
         # Fixed: num_blocks=1, ff_multiple=2, dense_units=128, pooling="cls",
         #        use_time2vec=False, batch_size=256.
-        # Reduced from 8 → 4 tunable dims.
+        # Reduced from 8 -> 4 tunable dims.
         d_model = trial.suggest_categorical("transformer_d_model", [32, 64, 128])
         heads   = trial.suggest_categorical("transformer_num_heads", [4, 8])
 
@@ -577,10 +577,10 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
             else:
                 params["vol_thresh"] = trial.suggest_float("vol_thresh", 1e-4, 5e-3, log=True)
 
-        # 🔹 Always train LSTM expert on trend-only windows (no toggle)
+        # [*] Always train LSTM expert on trend-only windows (no toggle)
         params["train_lstm_on_trend_only"] = True
 
-        # 🔹 LSTM expert (compact, single-layer)
+        # [*] LSTM expert (compact, single-layer)
         params["lstm_units"]         = trial.suggest_int("lstm_units", 32, 64)
         params["lstm_num_layers"]    = 1  # fixed to 1 layer for adaptive expert
         params["lstm_bidirectional"] = trial.suggest_categorical("lstm_bidirectional", [False])  # parity
@@ -591,7 +591,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
         # ES/patience disabled in your adaptive path by design
 
-        # 🔹 RF expert (cheaper: fewer trees, shallower depth)
+        # [*] RF expert (cheaper: fewer trees, shallower depth)
         params["rf_n_estimators"]     = trial.suggest_int("rf_n_estimators", 100, 400, step=50)
         params["rf_max_depth"]        = trial.suggest_int("rf_max_depth", 5, 10)
         params["rf_min_samples_leaf"] = trial.suggest_int("rf_min_samples_leaf", 1, 6)

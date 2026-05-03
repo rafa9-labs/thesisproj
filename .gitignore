@@ -21,6 +21,8 @@ artifacts/
 
 # Database
 data/*.db
+data/*.db-wal
+data/*.db-shm
 
 # Smoke test outputs
 smoke_output*.txt
@@ -59,3 +61,9 @@ frontend/dist/
 
 # UI test screenshots
 tests/ui_screenshots/
+
+# Agent skills (local only)
+.agent_skills/
+
+# Unrelated projects
+Allmighty/

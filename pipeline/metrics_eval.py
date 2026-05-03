@@ -12,7 +12,7 @@ from scipy.stats import kurtosis
 from sklearn.metrics import confusion_matrix
 
 # ---------------------------------------------------------------------------
-# Helper functions – moved here from utilsNoWFO.py (Phase 3.1)
+# Helper functions - moved here from utilsNoWFO.py (Phase 3.1)
 # These live in their final home so that metrics_eval.py is self-contained.
 # ---------------------------------------------------------------------------
 
@@ -197,7 +197,7 @@ def compute_full_evaluation_metrics(
     df,
     trading_costs=False,
     slippage_factor=0.0,
-    prev_position=None,      # carry previous month last position (−1/0/+1)
+    prev_position=None,      # carry previous month last position (-1/0/+1)
     prev_eq_strategy=None,   # running equity to rescale strategy curve
     prev_eq_bh=None,          # running equity to rescale buy&hold curve
     **kwargs,
@@ -398,7 +398,7 @@ def compute_full_evaluation_metrics(
                     pos_col = "zeros"
 
             # Canonical directional trade counting (matches compute_metrics):
-            # trades_dir = Σ |Δ sign(position)|  (a flip +1→-1 counts as 2 fills)
+            # trades_dir = SUM |delta sign(position)|  (a flip +1->-1 counts as 2 fills)
             _pos_arr = _pos.astype(float).to_numpy(copy=False)
             _pos_dir = np.sign(_pos_arr)
 
@@ -456,14 +456,14 @@ def compute_full_evaluation_metrics(
         # We KEEP gap_from_prev_bool for kill-switch/session logic later on,
         # but we do NOT zero df["pred"] here anymore.
         # Previously:
-        #   - last bar before a gap had pred=0 → flip_or_flat → forced exit
-        #   - first bar after gap also pred=0 → forced start flat
+        #   - last bar before a gap had pred=0 -> flip_or_flat -> forced exit
+        #   - first bar after gap also pred=0 -> forced start flat
         # Now:
         #   - decisions at gap edges follow the normal trading logic
         #   - if you keep a position, you effectively "carry across the gap".
 
 
-    # --- Cadence & rolling bar-vol (σ) for several patches ---
+    # --- Cadence & rolling bar-vol (sigma) for several patches ---
     try:
         deltas = df.index.to_series().diff().dropna().dt.total_seconds()
         sec_per_bar = int(np.median(deltas.values)) if len(deltas) else 1800
@@ -546,11 +546,11 @@ def compute_full_evaluation_metrics(
 
     if kill_print and use_kill:
         if kill_mode == "pct" and kill_pct != orig_kill_pct:
-            print(f"[Eval] Kill clamp: pct {orig_kill_pct:.4%} → {kill_pct:.4%}")
+            print(f"[Eval] Kill clamp: pct {orig_kill_pct:.4%} -> {kill_pct:.4%}")
         if kill_mode == "sigma" and kill_sigma_k != orig_sigma:
-            print(f"[Eval] Kill clamp: sigma k {orig_sigma:.2f} → {kill_sigma_k:.2f}")
+            print(f"[Eval] Kill clamp: sigma k {orig_sigma:.2f} -> {kill_sigma_k:.2f}")
         if kill_cooloff_bars != orig_cool:
-            print(f"[Eval] Kill clamp: cool-off {orig_cool} → {kill_cooloff_bars} bars")
+            print(f"[Eval] Kill clamp: cool-off {orig_cool} -> {kill_cooloff_bars} bars")
 
     # Build the regime metric series
     metric_series = None
@@ -570,7 +570,7 @@ def compute_full_evaluation_metrics(
                         np.where(metric_series <= qh, 1, 2))
         if bool(_cfg("eval_print_regime_debug", True)):
             counts = pd.Series(regime_code).value_counts().to_dict()
-            # NOTE: don't try to “pretty-print dict literals” with nested braces in f-strings
+            # NOTE: don't try to "pretty-print dict literals" with nested braces in f-strings
             # (it triggers "Invalid format specifier"). Just print a real dict.
             safe_counts = {0: int(counts.get(0, 0)), 1: int(counts.get(1, 0)), 2: int(counts.get(2, 0))}
             print(f"[Eval] Regime adaptive ON (src={regime_src}, q_low={ql:.4g}, q_high={qh:.4g}) | counts={safe_counts}")
@@ -722,7 +722,7 @@ def compute_full_evaluation_metrics(
     df["trades"] = pd.Series(trades_sig, index=df.index)
 
     # Final series (single source of truth)
-    # IMPORTANT: Always overwrite position_exec so metrics/carry-out can’t consume a stale stream
+    # IMPORTANT: Always overwrite position_exec so metrics/carry-out can't consume a stale stream
     df["position"] = pd.Series(pos_actual, index=df.index)
     df["position_exec"] = df["position"]
     df["strategy"] = pd.Series(strat, index=df.index)
@@ -811,7 +811,7 @@ def compute_full_evaluation_metrics(
     # ------------------------------------------------------------------
     # Spread/session audit (REAL-SIM only; prints even when debug_costs=False)
     # Purpose: make illiquid spread spikes visible in thesis logs and ensure
-    # real-sim results can’t be accused of microstructure distortion.
+    # real-sim results can't be accused of microstructure distortion.
     # No behavior change.
     # ------------------------------------------------------------------
     try:
@@ -861,7 +861,7 @@ def compute_full_evaluation_metrics(
             print(f"[Eval] Regime shares: calm={calm:.1%}, normal={normal:.1%}, volatile={volatile:.1%}")
         except Exception as _e:
             try:
-                print(f"⚠️ [Eval] Regime debug print failed: {type(_e).__name__}: {_e}")
+                print(f"[WARN] [Eval] Regime debug print failed: {type(_e).__name__}: {_e}")
             except Exception:
                 pass
     if bool(_cfg("eval_print_trail_debug", True)) and bool(_cfg("eval_use_scaleout_trail", False)):
@@ -919,10 +919,10 @@ def compute_full_evaluation_metrics(
 
     # --- Reliability guard (MinTRL-style) ---
     # If there are too few trades, Sharpe/PSR/DSR are not statistically reliable
-    # (Bailey & López de Prado, 2012, 2014). We keep the PnL but mark the
+    # (Bailey & Lopez de Prado, 2012, 2014). We keep the PnL but mark the
     # Sharpe as NaN so that higher-level stats don't over-interpret it.:contentReference[oaicite:3]{index=3}
     try:
-        # IMPORTANT: default must not allow "hero Sharpe" from 1–5 trades.
+        # IMPORTANT: default must not allow "hero Sharpe" from 1-5 trades.
         min_trades_rel = int(_cfg("min_trades_for_reliability", 10))
     except Exception:
         min_trades_rel = 30
@@ -932,7 +932,7 @@ def compute_full_evaluation_metrics(
         # optional: flag on the df for later debugging
         # Optional audit print (off by default to avoid spam in CV)
         if bool(_cfg("eval_print_reliability_debug", False)):
-            print(f"[Eval][Reliability] trades={int(trades)} < min_trades_rel={int(min_trades_rel)} → sharpe=NaN{_ctx}")
+            print(f"[Eval][Reliability] trades={int(trades)} < min_trades_rel={int(min_trades_rel)} -> sharpe=NaN{_ctx}")
 
     geo_mean_ann = compute_geometric_mean_annualized(df["strategy"])
 

@@ -1,4 +1,4 @@
-"""News scraper — RSS feeds, NewsAPI, and economic calendar data.
+"""News scraper -- RSS feeds, NewsAPI, and economic calendar data.
 
 All articles are normalized to ``NewsArticle`` dataclasses, deduplicated
 by title hash, and cached to disk (Parquet) so we never re-fetch on
@@ -105,7 +105,7 @@ class NewsScraper:
                 unique.append(a)
         return unique
 
-    # ── RSS ──────────────────────────────────────────────────────────
+    # -- RSS ----------------------------------------------------------
 
     def fetch_rss(self, feed_urls: Dict[str, str] | None = None) -> List[NewsArticle]:
         """Fetch articles from RSS feeds.
@@ -125,7 +125,7 @@ class NewsScraper:
         try:
             import feedparser
         except ImportError:
-            logger.warning("feedparser not installed — RSS scraping disabled")
+            logger.warning("feedparser not installed -- RSS scraping disabled")
             return articles
 
         for name, url in feeds.items():
@@ -157,7 +157,7 @@ class NewsScraper:
 
         return self._add_to_seen(articles)
 
-    # ── NewsAPI ──────────────────────────────────────────────────────
+    # -- NewsAPI ------------------------------------------------------
 
     def fetch_newsapi(
         self,
@@ -172,7 +172,7 @@ class NewsScraper:
         Returns empty list if no key is configured.
         """
         if not self.newsapi_key:
-            logger.debug("NewsAPI key not configured — skipping")
+            logger.debug("NewsAPI key not configured -- skipping")
             return []
 
         try:
@@ -226,7 +226,7 @@ class NewsScraper:
 
         return self._add_to_seen(articles)
 
-    # ── Economic Calendar ────────────────────────────────────────────
+    # -- Economic Calendar --------------------------------------------
 
     @staticmethod
     def economic_calendar_events(
@@ -273,7 +273,7 @@ class NewsScraper:
             except Exception:
                 pass
 
-        # FOMC meetings (approximate — 8 per year, ~every 6 weeks)
+        # FOMC meetings (approximate -- 8 per year, ~every 6 weeks)
         fomc_dates = []
         fomc_months = [1, 3, 5, 6, 7, 9, 10, 12]
         for month in fomc_months:
@@ -319,7 +319,7 @@ class NewsScraper:
         result.sort(key=lambda x: x["date"])
         return result
 
-    # ── Disk Cache ───────────────────────────────────────────────────
+    # -- Disk Cache ---------------------------------------------------
 
     def save_cache(self, articles: List[NewsArticle], label: str = "articles"):
         """Save articles to Parquet cache."""
@@ -428,7 +428,7 @@ class NewsScraper:
 
         return unique
 
-    # ── Helpers ───────────────────────────────────────────────────────
+    # -- Helpers -------------------------------------------------------
 
     @staticmethod
     def _parse_rss_date(entry) -> datetime:

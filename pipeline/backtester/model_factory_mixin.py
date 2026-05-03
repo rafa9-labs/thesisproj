@@ -1,4 +1,4 @@
-"""Auto-extracted mixin — see composed.py for the full MLBacktester."""
+"""Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from pipeline._imports import *  # noqa: F401,F403
 
 
@@ -40,7 +40,7 @@ class ModelFactoryMixin:
                 "NUMEXPR_NUM_THREADS","SKLEARN_JOBS","RF_JOBS","XGB_JOBS",
                 "TF_NUM_INTRAOP_THREADS","TF_NUM_INTEROP_THREADS"
             ]}
-            print(f"🧵 Threads[{tag}] env={envs} pools={pools}")
+            print(f"[THREAD] Threads[{tag}] env={envs} pools={pools}")
 
 
     def get_model(self, model_type, use_proba: bool = True, **params):
@@ -126,10 +126,10 @@ class ModelFactoryMixin:
                 elif penalty == "l1":
                     p["l1_ratio"] = 1.0
                 # elasticnet keeps its own l1_ratio from above
-                # none → set C=inf (sklearn recommendation)
+                # none -> set C=inf (sklearn recommendation)
                 elif penalty == "none":
                     p["C"] = float("inf")
-                # n_jobs has no effect since 1.8 — remove to avoid warning
+                # n_jobs has no effect since 1.8 -- remove to avoid warning
                 p.pop("n_jobs", None)
             else:
                 p["penalty"] = penalty
@@ -350,7 +350,7 @@ class ModelFactoryMixin:
             dt_params.setdefault("min_samples_split", 2)
             dt_params.setdefault("min_samples_leaf", 10)
 
-            # FX labels are often imbalanced → use balanced class weights by default.
+            # FX labels are often imbalanced -> use balanced class weights by default.
             dt_params.setdefault("class_weight", "balanced")
 
             # Mild cost-complexity pruning; Optuna can override via dt_ccp_alpha.
@@ -383,7 +383,7 @@ class ModelFactoryMixin:
             xgb_params.setdefault("min_child_weight", 1.0)
 
             # ---- REGULARIZATION KEYS (L2) ----
-            # Optuna gives us xgb_lambda → "lambda" after filter_params.
+            # Optuna gives us xgb_lambda -> "lambda" after filter_params.
             # XGBClassifier expects "reg_lambda" (sklearn-style name).
             if "lambda" in xgb_params and "reg_lambda" not in xgb_params:
                 xgb_params["reg_lambda"] = xgb_params.pop("lambda")
@@ -398,7 +398,7 @@ class ModelFactoryMixin:
                 int(os.environ.get("XGB_JOBS", max(1, (os.cpu_count() or 2) - 1)))
             )
 
-            # ---- GPU CONTROL (XGBoost ≥ 2.0 style) ----
+            # ---- GPU CONTROL (XGBoost >= 2.0 style) ----
             use_gpu = os.environ.get("XGB_USE_GPU", "0") == "1"
 
             if use_gpu:

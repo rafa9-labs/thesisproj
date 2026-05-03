@@ -260,7 +260,7 @@ class AdaptiveRegimeStrategy:
         regimes = np.full(n, "sideways", dtype=object)
 
         # NOTE: If both are true (high ADX + high vol), treat as VOLATILE.
-        # This avoids sending “wild trend” conditions to the LSTM expert.
+        # This avoids sending "wild trend" conditions to the LSTM expert.
         if adx is not None:
             adx = adx.astype(float, copy=False)
             regimes[(np.isfinite(adx)) & (adx > self.adx_thresh)] = "trend"
@@ -351,7 +351,7 @@ class AdaptiveRegimeStrategy:
         self.gate_feature_cols_ = None
 
         if not getattr(self, "use_learned_gate", False):
-            print("[GATE] use_learned_gate=False → skipping learned gate training.")
+            print("[GATE] use_learned_gate=False -> skipping learned gate training.")
             return
 
         df = getattr(self, "X_flat_with_regime", None)
@@ -487,7 +487,7 @@ class AdaptiveRegimeStrategy:
 
         m = len(y)
         if X_seq.shape[0] != m or X_flat.shape[0] != m:
-            raise ValueError(f"[❌] Shape mismatch: len(y)={m}, X_seq={X_seq.shape}, X_flat={X_flat.shape}")
+            raise ValueError(f"[[ERR]] Shape mismatch: len(y)={m}, X_seq={X_seq.shape}, X_flat={X_flat.shape}")
 
         # Quick label sanity (helps spot 'no neutral' conditions early)
         try:
@@ -602,7 +602,7 @@ class AdaptiveRegimeStrategy:
                     X_seq_train = X_seq_train[trend_mask]
                     y_seq_train = y_seq_train[trend_mask]
                 else:
-                    print("[WARN] No 'trend' windows detected — training LSTM on all windows.")
+                    print("[WARN] No 'trend' windows detected -- training LSTM on all windows.")
 
         # Train LSTM
         self.lstm.fit(
@@ -641,7 +641,7 @@ class AdaptiveRegimeStrategy:
             idx_val = idx[split:]
 
             if idx_val.size == 0:
-                print("[WARN] RF calibration skipped — cannot create a valid calibration split.")
+                print("[WARN] RF calibration skipped -- cannot create a valid calibration split.")
                 idx_val = None
 
             if idx_val is not None:
@@ -780,7 +780,7 @@ class AdaptiveRegimeStrategy:
                 prob_lstm.shape[0],
             )
 
-            # Combine experts: trend → LSTM, volatile → RF, sideways → Logit
+            # Combine experts: trend -> LSTM, volatile -> RF, sideways -> Logit
             blend = (w_trend[:, None] * prob_lstm) \
                   + (w_side[:, None]  * prob_log)  \
                   + (w_vol[:, None]   * prob_rf)
@@ -818,7 +818,7 @@ class AdaptiveRegimeStrategy:
             # Expected dims should match RF (and typically Logit) training dims
             if flat_scaled.shape[1] != getattr(self, "expected_dim_rf", flat_scaled.shape[1]):
                 raise ValueError(
-                    f"[❌] Scaled input dim {flat_scaled.shape[1]} != expected RF dim {self.expected_dim_rf}"
+                    f"[[ERR]] Scaled input dim {flat_scaled.shape[1]} != expected RF dim {self.expected_dim_rf}"
                 )
 
         # LSTM (trend)
@@ -842,7 +842,7 @@ class AdaptiveRegimeStrategy:
             x_batch = flat_scaled[side_idx]
             if x_batch.shape[1] != getattr(self, "expected_dim_logit", x_batch.shape[1]):
                 raise ValueError(
-                    f"[❌] Logit input dim {x_batch.shape[1]} != expected {self.expected_dim_logit}"
+                    f"[[ERR]] Logit input dim {x_batch.shape[1]} != expected {self.expected_dim_logit}"
                 )
             proba_log = self.logit.predict_proba(x_batch)
             proba_log = self._proba_to_3class(proba_log, self.logit)

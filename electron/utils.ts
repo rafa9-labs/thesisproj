@@ -7,6 +7,7 @@
 import net from "net";
 import path from "path";
 import fs from "fs";
+import { app } from "electron";
 
 const PORT_RANGE_START = 9000;
 const PORT_RANGE_END = 9999;
@@ -41,12 +42,16 @@ function isPortAvailable(port: number): Promise<boolean> {
 
 /**
  * Resolve the project root path.
- * In dev: the project repository root.
- * In prod: directory containing the app executable.
+ *
+ * In dev:  __dirname = frontend/electron-dist → go up 2 levels = project root
+ * In prod: Use the exe directory (e.g. release/win-unpacked/) as project root.
+ *          This is where the app binary lives alongside the resources directory.
  */
 export function getProjectRoot(isDev: boolean): string {
-  const { app } = require("electron");
-  return app.getAppPath();
+  if (isDev) {
+    return path.resolve(__dirname, "..", "..");
+  }
+  return path.dirname(app.getPath("exe"));
 }
 
 /**
@@ -72,7 +77,6 @@ export function getUserDataDir(isDev: boolean): string {
   if (isDev) {
     return process.cwd();
   }
-  const { app } = require("electron");
   const dataDir = path.join(app.getPath("userData"), "data");
   ensureDir(dataDir);
   return dataDir;
@@ -82,13 +86,15 @@ export function getUserDataDir(isDev: boolean): string {
  * Get the reference data directory (CSV files, HPO configs).
  *
  * In dev: project root (csv_data/, hpo/)
- * In prod: resources directory (bundled with app)
+ * In prod: extraResources directory (csv_data/ bundled alongside app)
+ *
+ * electron-builder.yml maps csv_data/ → process.resourcesPath/csv_data/
  */
 export function getReferenceDataDir(isDev: boolean, projectRoot: string): string {
   if (isDev) {
     return projectRoot;
   }
-  return path.resolve(process.resourcesPath, "app.asar.unpacked") || projectRoot;
+  return process.resourcesPath;
 }
 
 /**

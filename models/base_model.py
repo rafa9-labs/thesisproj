@@ -1,5 +1,5 @@
 """
-BaseModel — abstract interface for all ML models in the pipeline.
+BaseModel -- abstract interface for all ML models in the pipeline.
 
 Every model wrapper (sklearn, XGBoost, Keras, DQN, Ensemble) must
 conform to this interface so that `model_factory_mixin.get_model()`
@@ -23,8 +23,8 @@ class BaseModel(ABC):
     # Subclass metadata
     # ------------------------------------------------------------------
     model_type: str = ""           # e.g. "logistic", "cnn", "dqn"
-    is_deep: bool = False          # True → GPU path, subprocess worker
-    supports_proba: bool = True    # False → predict_proba raises
+    is_deep: bool = False          # True -> GPU path, subprocess worker
+    supports_proba: bool = True    # False -> predict_proba raises
 
     def __init__(self, **kwargs):
         """Store raw kwargs for reproducibility; subclasses use what they need."""

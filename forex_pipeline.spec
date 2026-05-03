@@ -3,7 +3,7 @@
 
 Build:
     pyinstaller forex_pipeline.spec
-    
+
 Output:
     dist/fx_backend/          (single-dir bundle)
     dist/fx_backend.exe       (entry point)
@@ -16,11 +16,45 @@ The bundle includes:
 - React frontend as static assets (served by FastAPI in desktop mode)
 
 User data (DB, results, cache) stored in %APPDATA%/FX ML Backtester/.
+
+NOTE: PyInstaller spec files run in a special namespace where
+Analysis, PYZ, EXE, and COLLECT are injected by the bootloader.
+IDE linters flag these as "undefined" — they are correct at runtime.
+Similarly, SPECPATH is injected by PyInstaller and is not available
+at static-analysis time. Suppress false positives with noqa comments.
 """
 
+import importlib.util
 import os
-import sys
 from pathlib import Path
+
+# PyInstaller spec files are executed via `exec(code, spec_namespace)` where
+# spec_namespace already contains SPECPATH, Analysis, PYZ, EXE, COLLECT.
+# When a linter analyzes this file, those names are undefined.  We conditionally
+# define stubs so the file is valid both for linters and for PyInstaller.
+from types import SimpleNamespace as _NS
+
+try:
+    from PyInstaller.utils.hooks import collect_submodules  # noqa: F401
+except ImportError:
+    # Linter-only fallback — PyInstaller is always installed when building.
+    def collect_submodules(package: str, filter=lambda _: True, on_error="warn once") -> list[str]: return []
+
+if "SPECPATH" not in globals():
+    SPECPATH: str = ""
+
+if "Analysis" not in globals():
+    def Analysis(*a, **kw) -> _NS:
+        return _NS(pure=None, zipped_data=None, scripts=[], binaries=[], zipfiles=[], datas=[])
+
+if "PYZ" not in globals():
+    def PYZ(*a, **kw): ...
+
+if "EXE" not in globals():
+    def EXE(*a, **kw): ...
+
+if "COLLECT" not in globals():
+    def COLLECT(*a, **kw): ...
 
 PROJECT_ROOT = str(Path(SPECPATH).resolve())
 
@@ -30,12 +64,21 @@ if not os.path.isdir(frontend_dist):
 
 block_cipher = None
 
+_xgb_lib_dir: str = ""
+_xgb_dir: str = ""
+if importlib.util.find_spec("xgboost") is not None:
+    import xgboost as _xgb  # noqa: F811 — intentional conditional import
+    _xgb_lib_dir = os.path.join(os.path.dirname(_xgb.__file__), "lib")
+    _xgb_dir = os.path.dirname(_xgb.__file__)
+
 datas = [
     (os.path.join(PROJECT_ROOT, "config.py"), "."),
     (os.path.join(PROJECT_ROOT, "hpo"), "hpo"),
     (os.path.join(PROJECT_ROOT, "csv_data"), "csv_data"),
     (os.path.join(PROJECT_ROOT, "schemas"), "schemas"),
 ]
+if _xgb_dir:
+    datas.append((os.path.join(_xgb_dir, "VERSION"), "xgboost"))
 
 if frontend_dist:
     datas.append((frontend_dist, os.path.join("frontend", "dist")))
@@ -54,9 +97,6 @@ hidden_imports = [
     "fastapi",
     "fastapi.responses",
     "fastapi.staticfiles",
-    "celery",
-    "celery.app",
-    "kombu",
     "redis",
     "sqlalchemy",
     "aiosqlite",
@@ -89,10 +129,6 @@ hidden_imports = [
     "models",
     "models.registry",
     "models.base_model",
-    "models.logistic",
-    "models.xgboost_model",
-    "models.svm",
-    "models.random_forest",
     "models.cnn",
     "models.lstm",
     "models.transformer",
@@ -113,7 +149,7 @@ hidden_imports = [
     "pipeline.coverage",
     "pipeline.plotting",
     "pipeline.workers",
-    "pipeline.logging_config",
+    "logging_config",
     "pipeline.standalone_utils",
     "pipeline.dqn_config",
     "pipeline.hpo_persistence",
@@ -146,7 +182,6 @@ hidden_imports = [
     "api",
     "api.main",
     "api.config",
-    "api.tasks",
     "api.routers.backtest",
     "api.routers.models",
     "api.routers.pairs",
@@ -167,8 +202,7 @@ hidden_imports = [
     "rl.wrappers",
 ]
 
-try:
-    import tensorflow
+if importlib.util.find_spec("tensorflow") is not None:
     hidden_imports += [
         "tensorflow",
         "keras",
@@ -177,12 +211,11 @@ try:
         "keras.src.models",
         "keras.src.optimizers",
     ]
-except ImportError:
-    pass
+
+hidden_imports += collect_submodules("celery")
+hidden_imports += collect_submodules("kombu")
 
 excludes = [
-    "matplotlib",
-    "plotly",
     "tensorboard",
     "tkinter",
     "pytest",
@@ -197,30 +230,23 @@ excludes = [
     "bitsandbytes",
     "av",
     "cv2",
-    "sympy",
-    "unittest",
-    "win32com",
-    "pythonwin",
-    "pywin32",
-    "pywin",
     "idlelib",
-    "pydoc",
-    "doctest",
-    "lib2to3",
-    "pdb",
-    "pygments",
-    "rich",
-    "setuptools",
 ]
 
-icon_path = os.path.join(PROJECT_ROOT, "frontend", "public", "favicon.ico")
+icon_path = os.path.join(PROJECT_ROOT, "build", "icon.ico")
+if not os.path.exists(icon_path):
+    icon_path = os.path.join(PROJECT_ROOT, "frontend", "public", "favicon.ico")
 if not os.path.exists(icon_path):
     icon_path = None
+
+_xgb_binaries = []
+if _xgb_lib_dir:
+    _xgb_binaries.append((os.path.join(_xgb_lib_dir, "xgboost.dll"), "xgboost/lib"))
 
 a = Analysis(
     [os.path.join(PROJECT_ROOT, "run_server.py")],
     pathex=[PROJECT_ROOT],
-    binaries=[],
+    binaries=_xgb_binaries,
     datas=datas,
     hiddenimports=hidden_imports,
     hookspath=[],

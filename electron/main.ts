@@ -28,8 +28,7 @@ let tray: Tray | null = null;
 let pythonManager: PythonManager | null = null;
 let splashWindow: BrowserWindow | null = null;
 let backendPort = 8001;
-
-const PROJECT_ROOT = getProjectRoot(isDev);
+let PROJECT_ROOT = "";
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -70,8 +69,11 @@ async function loadFrontend() {
     const devUrl = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5173";
     await mainWindow?.loadURL(devUrl);
   } else {
-    const indexPath = path.join(PROJECT_ROOT, "dist", "index.html");
-    await mainWindow?.loadFile(indexPath);
+    // In production, the backend serves the frontend on the same port.
+    // This ensures API calls (/api/v1/*) resolve to the same origin.
+    const backendUrl = `http://127.0.0.1:${backendPort}`;
+    console.log(`[Electron] Loading frontend from ${backendUrl}`);
+    await mainWindow?.loadURL(backendUrl);
   }
 }
 
@@ -118,6 +120,9 @@ async function cleanup() {
 }
 
 app.whenReady().then(async () => {
+  PROJECT_ROOT = getProjectRoot(isDev);
+  console.log(`[Electron] Project root: ${PROJECT_ROOT}`);
+
   Menu.setApplicationMenu(buildMenu(isDev));
 
   splashWindow = createSplashWindow();

@@ -75,7 +75,7 @@ def _record_hp_boundary_hit(name: str, value: float, low: float, high: float, ep
         low:   Lower bound used in trial.suggest_*.
         high:  Upper bound used in trial.suggest_*.
         eps_frac: Fraction of range treated as 'near the edge'
-                  (0.01 → within 1% of [low, high]).
+                  (0.01 -> within 1% of [low, high]).
     """
     try:
         low = float(low)
@@ -303,7 +303,7 @@ def _apply_ta_profile_legacy(trial, params):
     if params.get("use_vol_managed_mom") or params.get("use_vm_mom"):
         params["vm_mom_scale"] = trial.suggest_float("vm_mom_scale", 0.5, 2.0)
 
-    # === Indicator windows (only for what’s needed) ===
+    # === Indicator windows (only for what's needed) ===
     ind = {}
 
     # Base families first (as toggled above)
@@ -527,7 +527,7 @@ def _apply_ta_profile_fixed(trial, params):
     Behaviour:
       - Does NOT sample any TA-related hyperparameters from Optuna.
       - Forces a canonical, static TA backbone:
-          * use_* families: SMA, EMA, MACD, RSI, BBands, ATR, ADX, Stoch, MTF_MA → all True
+          * use_* families: SMA, EMA, MACD, RSI, BBands, ATR, ADX, Stoch, MTF_MA -> all True
           * indicator_windows set to fixed defaults.
       - Leaves all non-TA parameters in `params` untouched.
     """
@@ -627,7 +627,7 @@ def _apply_ta_profile_tuned(trial, params):
     ind = dict(params.get("indicator_windows") or {})
 
     # --- SMA / EMA: short, medium, longer intraday trend horizons ---
-    # (e.g. 10 ≈ fast, 20 ≈ standard, 40 ≈ slower trend)
+    # (e.g. 10 ~= fast, 20 ~= standard, 40 ~= slower trend)
     ind["sma"] = trial.suggest_categorical(
         "sma_window_core",
         [10, 20, 40],

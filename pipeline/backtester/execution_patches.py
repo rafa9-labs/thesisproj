@@ -9,12 +9,12 @@ Contains:
 - run_execution_loop(): the main bar-by-bar execution loop with all patches
 
 Patches:
-  #0 — Position sizer          (sizing_method: fixed/fractional/kelly/atr/vol_target)
-  #1 — Vol-target sizer        (eval_use_vol_target, legacy — delegates to #0 when sizing_method="vol_target")
-  #2 — Trailing stop / scale-out (eval_use_scaleout_trail)
-  #3 — TWAP executor            (eval_use_twap_execution)
-  #4 — Regime adapter           (eval_use_regime_adaptive)
-  #5 — Kill switch              (eval_use_kill_switch)
+  #0 -- Position sizer          (sizing_method: fixed/fractional/kelly/atr/vol_target)
+  #1 -- Vol-target sizer        (eval_use_vol_target, legacy -- delegates to #0 when sizing_method="vol_target")
+  #2 -- Trailing stop / scale-out (eval_use_scaleout_trail)
+  #3 -- TWAP executor            (eval_use_twap_execution)
+  #4 -- Regime adapter           (eval_use_regime_adaptive)
+  #5 -- Kill switch              (eval_use_kill_switch)
   +  SpreadGuard                (eval_use_spread_guard)
 """
 
@@ -77,12 +77,12 @@ class PatchConfig:
     annual_bars: int = 12096
     vol_floor: float = 1e-6
 
-    # Patch #1 — Vol-target sizer
+    # Patch #1 -- Vol-target sizer
     use_vol_target: bool = False
     target_bar: float = 0.0
     max_lev: float = 1.5
 
-    # Patch #2 — Trailing stop / scale-out
+    # Patch #2 -- Trailing stop / scale-out
     use_trail: bool = False
     tp1_z_base: float = 1.0
     trail_k_base: float = 2.5
@@ -91,13 +91,13 @@ class PatchConfig:
     max_hold_bars: int = 0
     min_hold_bars: int = 0
 
-    # Patch #3 — TWAP executor
+    # Patch #3 -- TWAP executor
     use_twap: bool = False
     twap_span: int = 2
     impact_eta: float = 0.0
     twap_freeze: bool = True
 
-    # Patch #4 — Regime adapter
+    # Patch #4 -- Regime adapter
     use_regime: bool = False
     tp1_z_calm: Optional[float] = None
     tp1_z_normal: Optional[float] = None
@@ -106,7 +106,7 @@ class PatchConfig:
     trail_k_normal: Optional[float] = None
     trail_k_volatile: Optional[float] = None
 
-    # Patch #5 — Kill switch
+    # Patch #5 -- Kill switch
     use_kill: bool = False
     kill_mode: str = "pct"          # "pct" or "sigma"
     kill_pct: float = 0.02
@@ -118,7 +118,7 @@ class PatchConfig:
     use_spread_guard: bool = True
     spread_cap: float = 0.00040
 
-    # Patch #0 — Position sizing (Sprint 2)
+    # Patch #0 -- Position sizing (Sprint 2)
     sizing_method: str = "fixed"
     sizing_risk_fraction: float = 0.02
     sizing_kelly_fraction: float = 0.5
@@ -129,7 +129,7 @@ class PatchConfig:
     sizing_max_leverage: float = 5.0
     sizing_contract_size: float = 100_000.0
 
-    # Patch #0b — Stop-loss / take-profit (Sprint 2)
+    # Patch #0b -- Stop-loss / take-profit (Sprint 2)
     stop_method: str = "none"
     stop_sl_pips: float = 30.0
     stop_tp_pips: float = 60.0
@@ -145,7 +145,7 @@ class PatchConfig:
     stop_tp1_pips: float = 30.0
     stop_tp2_pips: float = 0.0
 
-    # Patch #0c — Trailing stops (Sprint 2)
+    # Patch #0c -- Trailing stops (Sprint 2)
     trailing_method: str = "none"
     trailing_pips: float = 30.0
     trailing_atr_mult: float = 3.0
@@ -154,7 +154,7 @@ class PatchConfig:
     trailing_activation_pips: float = 10.0
     trailing_pip_value: float = 0.0001
 
-    # Patch #0d — Risk management (Sprint 2)
+    # Patch #0d -- Risk management (Sprint 2)
     risk_use_dd_breaker: bool = False
     risk_max_drawdown_pct: float = 0.20
     risk_dd_resume: str = "session_end"
@@ -553,7 +553,7 @@ def run_execution_loop(
                 spread_spike_blocked += 1
 
                 if debug_costs:
-                    print(f"[Eval][SpreadGuard] spike @ {df.index[i]} spread={_spr_full:.6f} > cap={spread_cap:.6f} → block entry{_ctx}")
+                    print(f"[Eval][SpreadGuard] spike @ {df.index[i]} spread={_spr_full:.6f} > cap={spread_cap:.6f} -> block entry{_ctx}")
 
         # Risk manager signal suppression (S2.4)
         if risk_any_active and _risk_should_suppress(risk_state):
@@ -697,7 +697,7 @@ def run_execution_loop(
                     # Regime-adaptive TP1/trail
                     tp1_z_eff, trail_k_eff = regime_tp_trail(i, sigma_ref)
 
-                    # TP1 → scale-out to 1/2
+                    # TP1 -> scale-out to 1/2
                     if (not scaled_out) and (cum_pl >= tp1_z_eff * sigma_ref):
                         scaled_out = True
                         tp1_hits += 1

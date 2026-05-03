@@ -1,4 +1,4 @@
-"""Job manager — tracks backtest and download jobs in SQLite."""
+"""Job manager -- tracks backtest and download jobs in SQLite."""
 from __future__ import annotations
 
 import json

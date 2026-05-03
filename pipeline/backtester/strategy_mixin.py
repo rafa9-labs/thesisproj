@@ -1,4 +1,4 @@
-"""Auto-extracted mixin — see composed.py for the full MLBacktester."""
+"""Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 
@@ -61,7 +61,7 @@ class StrategyMixin:
             # so keeping these large frames across calls yields ~0 hits and rising RAM.
             self._clear_feature_cache()
          
-            # 🛡️ Set TF runtime knobs *before* importing tensorflow
+            # [SHIELD] Set TF runtime knobs *before* importing tensorflow
             # Mirror global intra-trial knob
             _threads = int(os.getenv("BLAS_THREADS_PER_TRIAL", os.getenv("MLB_THREADS", str(max(1, (os.cpu_count() or 8) - 2)))))
             os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
@@ -138,7 +138,7 @@ class StrategyMixin:
             # --- Real-trading guard: if a target_active_rate is set, ensure coverage mode
             # so the existing train-anchored coverage threshold fitting can run.
             # This prevents the system from staying stuck at confidence_threshold=0.8
-            # and then getting bumped higher by αβγ, which can easily yield 0 trades.
+            # and then getting bumped higher by alphabetagamma, which can easily yield 0 trades.
             try:
                 in_real = bool(getattr(self, "_in_real_sim", False))
                 gmode = str(cfg_f.get("gating_mode", cfg_f.get("gate_mode", "threshold"))).lower()
@@ -231,11 +231,11 @@ class StrategyMixin:
                     if sess_mode in ("test_only", "both"):
                         test_data = test_data.loc[self._ny_mask.reindex(test_data.index, fill_value=False)]
                     
-            # Final embargo to avoid bleed — but NEVER eat CV mini-fold heads
+            # Final embargo to avoid bleed -- but NEVER eat CV mini-fold heads
             try:
                 embargo_n = int(self.features_config.get("final_embargo_bars", 0))
                 if bool(getattr(self, "_in_optuna_cv", False)):
-                    embargo_n = 0  # ⬅️ disable head-drop during CV mini-folds
+                    embargo_n = 0  # [LEFT] disable head-drop during CV mini-folds
                 if embargo_n > 0 and len(test_data) > embargo_n:
                     test_data = test_data.iloc[embargo_n:].copy()
                     if self._is_debug():
@@ -267,7 +267,7 @@ class StrategyMixin:
                     print(f"[CV/CLASSICAL] Eval anchor forced to fold start: {first_eval_ts} | test_len={len(test_data)} | warmup_need={_total_warmup_need}")
 
             if first_eval_ts is None:
-                print("❌ No tradable bar found in test window.")
+                print("[ERR] No tradable bar found in test window.")
 
                  # IMPORTANT: never persist heavy frames during Optuna CV.
                 if in_cv:
@@ -287,7 +287,7 @@ class StrategyMixin:
                 _in_cv   = bool(getattr(self, "_in_optuna_cv", False))
                 _in_real = bool(getattr(self, "_in_real_sim", False))
 
-                # Month-only slice (no warmup) for “how many bars exist this month?”
+                # Month-only slice (no warmup) for "how many bars exist this month?"
                 _month_raw = full_data.loc[true_test_start:test_end]
                 _raw_n = int(len(_month_raw))
                 # Apply the same NY session mask to the month slice (test-side semantics)
@@ -358,7 +358,7 @@ class StrategyMixin:
                 raise ValueError("Training data too short.")
             train_data = train_data.loc[:, ~train_data.columns.duplicated()]
 
-            # --- robust feature prefilter on TRAIN only (near-constant → corr → MI) ---
+            # --- robust feature prefilter on TRAIN only (near-constant -> corr -> MI) ---
             keep = None  # ensure defined even if an exception occurs
             if bool((self.features_config or {}).get("use_prefilter", True)) and features:
                 try:
@@ -397,14 +397,14 @@ class StrategyMixin:
                     X_pref = train_data.loc[common_idx, features]
                     y_pref = y_pre.loc[common_idx]
 
-                    # 3-stage prefilter (near-constant → high-corr collapse → MI top-K)
+                    # 3-stage prefilter (near-constant -> high-corr collapse -> MI top-K)
                     keep = prefilter_features_train(
                         X=X_pref,
                         y=y_pref,
                         cfg=(self.features_config or {}),
                     )
                 except Exception as e:
-                    print(f"⚠️ Prefilter skipped (non-fatal): {e}")
+                    print(f"[WARN] Prefilter skipped (non-fatal): {e}")
             else:
                 if self._is_debug():
                     print("[Prefilter] disabled via config or empty feature list.")
@@ -436,16 +436,16 @@ class StrategyMixin:
             if train_data_scaled[features].isna().any().any():
                 n_dropped = train_data_scaled[features].isna().any(axis=1).sum()
                 print(
-                    f"⚠️ Dropping {n_dropped} ({n_dropped/orig_train_len:.2%}) train rows with NaN after impute+scale (test_strategy).",
+                    f"[WARN] Dropping {n_dropped} ({n_dropped/orig_train_len:.2%}) train rows with NaN after impute+scale (test_strategy).",
                     train_data_scaled[features].isna().sum()[train_data_scaled[features].isna().sum() > 0],
                 )
                 train_data_scaled = train_data_scaled[~train_data_scaled[features].isna().any(axis=1)]
                 if len(train_data_scaled) == 0:
-                    print("⚠️ All train rows dropped after impute+scale. Skipping fold.")
+                    print("[WARN] All train rows dropped after impute+scale. Skipping fold.")
                     return _safe_metrics_return((np.nan,) * N_METRICS, context="test_strategy:train_all_rows_dropped")
 
                         # -------------------------------------------------------------
-            # Labels (train) — unified regime
+            # Labels (train) -- unified regime
             # If TripleBarrier is enabled, all supervised families (classical + deep)
             # train on TB event labels. Otherwise fall back to next-bar (T+1) labels.
             # -------------------------------------------------------------
@@ -473,7 +473,7 @@ class StrategyMixin:
             _pcol_tr = _resolve_price_col(train_data_scaled)
             if tb_on_lbl and _pcol_tr is None:
                 if self._is_debug():
-                    print("⚠️ TripleBarrier enabled but no price column; falling back to return-based labels (train).")
+                    print("[WARN] TripleBarrier enabled but no price column; falling back to return-based labels (train).")
                 tb_on_lbl = False
 
             if tb_on_lbl:
@@ -499,7 +499,7 @@ class StrategyMixin:
             # Features (aligned to y_train)
             X_train = train_data_scaled[features].to_numpy(dtype=np.float32, copy=False)
             if y_train is None or len(y_train) == 0:
-                print("⚠️ No labels generated (all NaN or below threshold). Skipping fold.")
+                print("[WARN] No labels generated (all NaN or below threshold). Skipping fold.")
                 return _safe_metrics_return((np.nan,) * N_METRICS, context="test_strategy:no_labels")
             y_train = y_train.astype(int)
             if self._is_debug():
@@ -571,7 +571,7 @@ class StrategyMixin:
             class_counts = dict(zip(unique, counts))
             too_few = [cls for cls, count in class_counts.items() if count < MIN_CLASS_SAMPLES]
             if len(too_few) > 0 or len(class_counts) < 2:
-                msg = (f"⚠️ Skipping fold: Not enough samples for classes {too_few} "
+                msg = (f"[WARN] Skipping fold: Not enough samples for classes {too_few} "
                        f"or only one class present: {class_counts}")
                 print(msg)
 
@@ -630,7 +630,7 @@ class StrategyMixin:
             if test_data_scaled[features].isna().any().any():
                 n_dropped = test_data_scaled[features].isna().any(axis=1).sum()
                 print(
-                    f"⚠️ Dropping {n_dropped} ({n_dropped/orig_test_len:.2%}) test rows with NaN after impute+scale (test_strategy).",
+                    f"[WARN] Dropping {n_dropped} ({n_dropped/orig_test_len:.2%}) test rows with NaN after impute+scale (test_strategy).",
                     test_data_scaled[features].isna().sum()[test_data_scaled[features].isna().sum() > 0],
                 )
                 test_data_scaled = test_data_scaled[~test_data_scaled[features].isna().any(axis=1)]
@@ -639,7 +639,7 @@ class StrategyMixin:
             X_test = test_data_scaled[features].to_numpy(dtype=np.float32, copy=False)
 
             if len(X_test) == 0:
-                print("❌ [ABORT] Empty X_test after scaling/alignment.")
+                print("[ERR] [ABORT] Empty X_test after scaling/alignment.")
                 return _safe_metrics_return((np.nan,) * N_METRICS, context="test_strategy:empty_X_test")
         
             # evaluation starts at the first tradable bar of the month (after session filter)
@@ -689,7 +689,7 @@ class StrategyMixin:
                     _lhs = int(_diag_pf.get("warmup_dropped", 0) or 0) + int(_diag_pf.get("anchor_dropped", 0) or 0) + int(_diag_pf.get("eligible_bars", 0) or 0)
                     if bars_total and _lhs and _lhs != bars_total:
                         print(
-                            f"⚠️ [EligDiag] Invariant mismatch on post-feature grid: "
+                            f"[WARN] [EligDiag] Invariant mismatch on post-feature grid: "
                             f"warm({warmup_dropped_pf})+anch({anchor_dropped_pf})+elig({eligible_bars_pf})={_lhs} vs bars_total={bars_total}"
                         )
 
@@ -717,7 +717,7 @@ class StrategyMixin:
                     pass
             except Exception as _e:
                 if self._is_debug():
-                    print(f"⚠️ [EligDiag] Post-feature eligibility diag failed (non-fatal): {_e}")
+                    print(f"[WARN] [EligDiag] Post-feature eligibility diag failed (non-fatal): {_e}")
 
             # Patch D (eligibility diagnostics, post-feature):
             # Recompute on the SAME bar grid used for gating/eval (test_data_scaled),
@@ -804,7 +804,7 @@ class StrategyMixin:
             def _make_windows_fast(X2d: np.ndarray, win: int, stride: int = 1, labels_1d=None):
                 """
                 Vectorized sliding windows.
-                X2d: (n, f) float32  →  (m, win, f), y_seq (m,) if labels_1d provided, idx_end (m,)
+                X2d: (n, f) float32  ->  (m, win, f), y_seq (m,) if labels_1d provided, idx_end (m,)
                 """
                 n = X2d.shape[0]
                 if n < win:
@@ -931,7 +931,7 @@ class StrategyMixin:
 
                     if not goto_predict:
                         # Pre-slice DF so that the resulting (strided) windows are identical to the
-                        # previous approach (build-all → stride → take last max_train_windows).
+                        # previous approach (build-all -> stride -> take last max_train_windows).
                         _si = _start_idx_for_last_strided_windows(
                             len(train_data_scaled), win, train_stride, max_train_windows
                         )
@@ -944,7 +944,7 @@ class StrategyMixin:
                             X2d_train, win=win, stride=max(1, train_stride), labels_1d=y1d_train
                         )
                         if X_seq_train is None or len(X_seq_train) == 0:
-                            print("❌ [ABORT] Empty training sequences for transformer.")
+                            print("[ERR] [ABORT] Empty training sequences for transformer.")
                             return _safe_metrics_return((np.nan,) * N_METRICS, context="test_strategy:transformer_empty_train_seq")
 
                         if X_seq_train.shape[0] > max_train_windows:
@@ -1013,9 +1013,9 @@ class StrategyMixin:
 
                     _maybe_mixed_precision(use_mixed_prec, "LSTM")
 
-                    # ─────────────────────────────────────────────
+                    # ---------------------------------------------
                     # A) LSTM with sequence windows (X_seq_train)
-                    # ─────────────────────────────────────────────
+                    # ---------------------------------------------
                     if lstm_use_seq:
                         win = max(2, int(lags_eff))
 
@@ -1037,7 +1037,7 @@ class StrategyMixin:
                             labels_1d=y1d,
                         )
                         if X_seq_train is None or len(X_seq_train) == 0:
-                            print("❌ [ABORT] Empty training sequences for LSTM (seq mode).")
+                            print("[ERR] [ABORT] Empty training sequences for LSTM (seq mode).")
                             return _safe_metrics_return((np.nan,) * N_METRICS, context="test_strategy:lstm_empty_train_seq")
                     
 
@@ -1093,9 +1093,9 @@ class StrategyMixin:
                         del X_seq_train, y_seq_train, X_cal, y_cal, pred_fn
                         _gc.collect()
 
-                    # ─────────────────────────────────────────────
+                    # ---------------------------------------------
                     # B) LSTM with simple 3D feed (no seq windows)
-                    # ─────────────────────────────────────────────
+                    # ---------------------------------------------
                     else:
                         params["input_shape"] = (X_train.shape[1], 1)
                         self.model = self.get_model(model_type, **params)
@@ -1199,7 +1199,7 @@ class StrategyMixin:
                         # ---- Sequence windowing path ----
                         win = max(2, int(lags_eff))
                         
-                        # Pre-slice DF so windows match build-all→stride→tail-slice
+                        # Pre-slice DF so windows match build-all->stride->tail-slice
                         _si = _start_idx_for_last_strided_windows(len(train_data_scaled), win, train_stride, max_train_windows)
                         _df_tr = train_data_scaled.iloc[_si:] if _si > 0 else train_data_scaled
                         X2d = _df_tr[features].to_numpy(dtype=np.float32, copy=False)
@@ -1210,7 +1210,7 @@ class StrategyMixin:
                             X2d, win=win, stride=train_stride, labels_1d=y1d
                         )
                         if X_seq_train is None or len(X_seq_train) == 0:
-                            print("❌ [ABORT] Empty training sequences for CNN (seq mode).")
+                            print("[ERR] [ABORT] Empty training sequences for CNN (seq mode).")
                             return _safe_metrics_return((np.nan,) * N_METRICS, context="test_strategy:cnn_empty_train_seq")
 
                         if X_seq_train.shape[0] > max_train_windows:
@@ -1329,7 +1329,7 @@ class StrategyMixin:
                 )
             else:
             
-                # Classical ML (logistic/logistic_ovr/svm/rf/xgb/…)
+                # Classical ML (logistic/logistic_ovr/svm/rf/xgb/...)
                 self.model = self.get_model(model_type, **params)
             
                 # Fit FIRST (required for sklearn Pipelines / predict_proba).
@@ -1380,7 +1380,7 @@ class StrategyMixin:
                             )
                 except Exception as _e:
                     if self._is_debug():
-                        print(f"⚠️ [Calib][Classical] Coverage fit skipped: {_e}")
+                        print(f"[WARN] [Calib][Classical] Coverage fit skipped: {_e}")
 
 
             # ---- RAM (soft guard) BEFORE prediction ----
@@ -1398,7 +1398,7 @@ class StrategyMixin:
                     if self._is_debug():
                         print(f"[RAM] After cleanup: free={free_retry:.2f} GB")
                     if free_retry < float(os.environ.get("MLB_MIN_FREE_GB", "2.5")):
-                        print(f"⚠️ Low free RAM persists ({free_retry:.2f} GB); continuing without raising.")
+                        print(f"[WARN] Low free RAM persists ({free_retry:.2f} GB); continuing without raising.")
             except Exception:
                 pass
 
@@ -1415,7 +1415,7 @@ class StrategyMixin:
 
                     X2d_test = test_data_scaled[features].to_numpy(dtype=np.float32, copy=False)
                     if X2d_test.shape[0] < win:
-                        print("❌ [ABORT] Test set shorter than window size for transformer.")
+                        print("[ERR] [ABORT] Test set shorter than window size for transformer.")
                         return _safe_metrics_return((np.nan,) * N_METRICS, context="test_strategy:transformer_test_too_short")
 
                     n_win = int(X2d_test.shape[0] - win + 1)
@@ -1441,7 +1441,7 @@ class StrategyMixin:
 
                         if use_chunk:
                             chunk_windows = int(os.environ.get("MLB_PRED_CHUNK_WINDOWS", "4096"))
-                            print(f"ℹ️ Low-RAM predict: chunking windows (chunk_windows={chunk_windows}).")
+                            print(f"[INFO] Low-RAM predict: chunking windows (chunk_windows={chunk_windows}).")
                             proba = self._predict_seq_windows_chunked(
                                 self.model, X2d_test, win=win, batch_size=bs, chunk_windows=chunk_windows
                             )
@@ -1520,10 +1520,10 @@ class StrategyMixin:
                     if np.isfinite(rv_s_tr) and rv_s_tr > 0:
                         vol_z_all = (rv_all - rv_m_tr) / rv_s_tr
                     else:
-                        # Degenerate train stats → neutral vol term (no hidden test-fit fallback).
+                        # Degenerate train stats -> neutral vol term (no hidden test-fit fallback).
                         vol_z_all = np.zeros_like(rv_all, dtype=np.float32)
 
-                    # Normalised spread vs vol: use TRAIN-derived floor (or constant) — never test-wide median.
+                    # Normalised spread vs vol: use TRAIN-derived floor (or constant) -- never test-wide median.
                     den_floor = den_floor_tr if (np.isfinite(den_floor_tr) and den_floor_tr > 1e-8) else 1e-6
                     den_all = np.where(rv_all > 1e-8, rv_all, den_floor).astype(np.float32)
                     spread_norm_all = np.divide(
@@ -1533,7 +1533,7 @@ class StrategyMixin:
                         where=np.isfinite(den_all),
                     )
 
-                    # αβγ coefficients unchanged
+                    # alphabetagamma coefficients unchanged
                     a = float(cfg_f.get("alpha_vol_z", 0.01))
                     b = float(cfg_f.get("beta_spread_norm", _PC["beta_spread_norm"]))
                     g = float(cfg_f.get("gamma_slip_norm", _PC["gamma_slip_norm"]))
@@ -1559,7 +1559,7 @@ class StrategyMixin:
 
                     if self._is_debug():
                         print(
-                            f"[Gate✔] Dynamic αβγ active | base={base_thr:.3f} α={a:.3f} β={b:.3f} γ={g:.3f} "
+                            f"[Gate[OK]] Dynamic alphabetagamma active | base={base_thr:.3f} alpha={a:.3f} beta={b:.3f} gamma={g:.3f} "
                             f"| median_thr={np.nanmedian(thr_vec):.3f} | bars={len(thr_vec)}"
                         )
 
@@ -1634,13 +1634,13 @@ class StrategyMixin:
                                         thr_vec[_eval_idx] = _tv
                                         if self._is_debug():
                                             print(
-                                                f"[Gate✔] Rolling-quantile cap active | q={1.0 - tgt:.3f} "
+                                                f"[Gate[OK]] Rolling-quantile cap active | q={1.0 - tgt:.3f} "
                                                 f"win={win_k} | thr_med={float(np.nanmedian(_tv)):.3f}"
                                             )
                             except Exception:
                                 pass
                         
-                        # preliminary decisions with αβγ only (causal)
+                        # preliminary decisions with alphabetagamma only (causal)
                         if n > 0:
                             _dr = decoded_raw[_eval_idx].copy()
                             _mc = max_conf[_eval_idx]
@@ -1690,7 +1690,7 @@ class StrategyMixin:
                         _mask = (max_conf[_eval_idx] < thr_vec[_eval_idx])
                         final_preds[_eval_idx[_mask]] = 0
 
-                    # No-trade month → invalid fold (let CV aggregator/Optuna handle)
+                    # No-trade month -> invalid fold (let CV aggregator/Optuna handle)
                 
                     if self._is_debug():
                         try:
@@ -1735,14 +1735,14 @@ class StrategyMixin:
 
 
                     # ==================================================================
-                    #  LSTM – SEQ MODE (sliding windows + idx_end)
+                    #  LSTM - SEQ MODE (sliding windows + idx_end)
                     # ==================================================================
                     if lstm_use_seq:
                         win = max(2, int(lags_eff))
 
                         X2d_test = test_data_scaled[features].to_numpy(dtype=np.float32, copy=False)
                         if X2d_test.shape[0] < win:
-                            print("❌ [ABORT] Test set shorter than window size for LSTM (seq mode).")
+                            print("[ERR] [ABORT] Test set shorter than window size for LSTM (seq mode).")
                             return _safe_metrics_return((np.nan,) * N_METRICS, context="test_strategy:lstm_seq_test_too_short")
                         n_win = int(X2d_test.shape[0] - win + 1)
                         idx_end = np.arange(win - 1, win - 1 + n_win, 1, dtype=int)
@@ -1755,7 +1755,7 @@ class StrategyMixin:
 
                         if use_chunk:
                             chunk_windows = int(os.environ.get("MLB_PRED_CHUNK_WINDOWS", "4096"))
-                            print(f"ℹ️ Low-RAM predict: chunking windows (chunk_windows={chunk_windows}).")
+                            print(f"[INFO] Low-RAM predict: chunking windows (chunk_windows={chunk_windows}).")
                             proba = self._predict_seq_windows_chunked(
                                 self.model, X2d_test, win=win, batch_size=bs, chunk_windows=chunk_windows
                             )
@@ -1839,7 +1839,7 @@ class StrategyMixin:
                             where=np.isfinite(den_all)
                         )
 
-                        # 3) αβγ: volatility-, spread-, and slippage-aware threshold bump
+                        # 3) alphabetagamma: volatility-, spread-, and slippage-aware threshold bump
                         a = float(cfg_f.get("alpha_vol_z", _global_f.get("alpha_vol_z", 0.004)))
                         b = float(cfg_f.get("beta_spread_norm", _global_f.get("beta_spread_norm", _PC["beta_spread_norm"])))
                         g = float(cfg_f.get("gamma_slip_norm", _global_f.get("gamma_slip_norm", _PC["gamma_slip_norm"])))
@@ -1881,7 +1881,7 @@ class StrategyMixin:
                                 base_thr_vec = thr_roll.fillna(float(base_thr)).to_numpy(dtype=np.float32)
                                 if self._is_debug():
                                     print(
-                                        f"[Gate✔][RollingQuantile] W={W} target={float(tgt_ar):.3f} "
+                                        f"[Gate[OK]][RollingQuantile] W={W} target={float(tgt_ar):.3f} "
                                         f"base_med={float(np.nanmedian(base_thr_vec)):.3f}"
                                     )
                             except Exception as _e:
@@ -1903,8 +1903,8 @@ class StrategyMixin:
                         thr_vec = thr_full[idx_arr]
 
                         print(
-                            "[Gate✔] Dynamic αβγ active | "
-                            f"base={base_thr:.3f} α={a:.3f} β={b:.3f} γ={g:.3f} "
+                            "[Gate[OK]] Dynamic alphabetagamma active | "
+                            f"base={base_thr:.3f} alpha={a:.3f} beta={b:.3f} gamma={g:.3f} "
                             f"| median_thr={np.nanmedian(thr_vec):.3f} | bars={len(thr_vec)}"
                         )
                         
@@ -1960,7 +1960,7 @@ class StrategyMixin:
 
                             n = int(_eval_idx.size)
                             if n > 0 and win_k > 1 and step > 0.0:
-                                # Decisions using αβγ-threshold only (on eval windows)
+                                # Decisions using alphabetagamma-threshold only (on eval windows)
                                 _dr = decoded_raw[_eval_idx].copy()
                                 _mc = max_conf[_eval_idx]
                                 _tv = thr_vec[_eval_idx]
@@ -1985,8 +1985,8 @@ class StrategyMixin:
                                 above = sel & (roll > high)
 
                                 drift = np.zeros(n, dtype=np.float32)
-                                drift[below] = -step   # too quiet → lower threshold → more trades
-                                drift[above] = step    # too active → raise threshold → fewer trades
+                                drift[below] = -step   # too quiet -> lower threshold -> more trades
+                                drift[above] = step    # too active -> raise threshold -> fewer trades
 
                                 min_conf_thr = float((cfg_f or {}).get("min_conf_thr", 0.33))
                                 # Apply drift to thresholds on eval windows (THIS WAS MISSING BEFORE)
@@ -2000,13 +2000,13 @@ class StrategyMixin:
                                                     
                             if self._is_debug():
                                 print(
-                                    "[Gate✔] Coverage nudge active | "
-                                    f"target={tgt:.2f} band=±{band:.2f} "
+                                    "[Gate[OK]] Coverage nudge active | "
+                                    f"target={tgt:.2f} band=+/-{band:.2f} "
                                     f"step={step:.3f} | median_used={self._last_conf_thr_used:.3f}"
                                 )
 
                         except Exception as _ee:
-                            # Fail-safe: keep αβγ-only thr if nudging breaks
+                            # Fail-safe: keep alphabetagamma-only thr if nudging breaks
                             self._last_conf_thr_used = float(np.nanmedian(thr_vec))
                             print(f"[Gate] Coverage nudge skipped: {type(_ee).__name__}: {_ee}")
 
@@ -2021,14 +2021,14 @@ class StrategyMixin:
                         except Exception:
                             pass
 
-                        # 5) Apply gating to predictions (seq mode) — only on eval windows, force flat elsewhere
+                        # 5) Apply gating to predictions (seq mode) -- only on eval windows, force flat elsewhere
                         final_preds = np.zeros_like(decoded_raw, dtype=int)
                         if _eval_idx.size > 0:
                             final_preds[_eval_idx] = decoded_raw[_eval_idx]
                             _mask = (max_conf[_eval_idx] < thr_vec[_eval_idx])
                             final_preds[_eval_idx[_mask]] = 0
 
-                        # No-trade month → invalid fold (let CV aggregator/Optuna handle)
+                        # No-trade month -> invalid fold (let CV aggregator/Optuna handle)
                         if self._is_debug():
                             try:
                                 _rawc   = pd.Series(decoded_raw[keep_win]).value_counts().to_dict()
@@ -2073,7 +2073,7 @@ class StrategyMixin:
 
 
                     # ==================================================================
-                    #  LSTM – 3D-FEED MODE (flat windows, no idx_end)
+                    #  LSTM - 3D-FEED MODE (flat windows, no idx_end)
                     # ==================================================================
                     else:
                         X_test_3d = X_test.astype(np.float32).reshape(
@@ -2159,7 +2159,7 @@ class StrategyMixin:
                             if np.count_nonzero(preds_try) > 0:
                                 if abs(thr - conf0) > 1e-9:
                                     print(
-                                        f"⚠️ Confidence threshold relaxed {conf0:.3f} → "
+                                        f"[WARN] Confidence threshold relaxed {conf0:.3f} -> "
                                         f"{thr:.3f} to avoid 0 trades."
                                     )
                                     self._last_conf_backoff_steps = 1
@@ -2189,7 +2189,7 @@ class StrategyMixin:
                             in_real = bool(getattr(self, "_in_real_sim", False))
                             if in_cv and not in_real:
                                 if self._is_debug():
-                                    print("❗ No trades predicted after filtering — penalizing this parameter set.")
+                                    print("[ERR] No trades predicted after filtering -- penalizing this parameter set.")
                                     try:
                                         _rawc = pd.Series(decoded_raw).value_counts().to_dict()
                                         _finalc = {} if final_preds is None else pd.Series(final_preds).value_counts().to_dict()
@@ -2198,7 +2198,7 @@ class StrategyMixin:
                                         pass
                                 return _safe_metrics_return((np.nan,) * N_METRICS, context="test_strategy:no_trades_cv")
                             if self._is_debug():
-                                print("🟨 No trades predicted after filtering — keeping 0-trade evaluation (real-sim / non-CV).")
+                                print("[FLAT] No trades predicted after filtering -- keeping 0-trade evaluation (real-sim / non-CV).")
                                 
                         # FAIL-SAFE: if still None here, force HOLD vector so we don't crash on eval_mask slicing.
                         if final_preds is None:
@@ -2250,7 +2250,7 @@ class StrategyMixin:
 
                         X2d_test = test_data_scaled[features].to_numpy(dtype=np.float32, copy=False)
                         if X2d_test.shape[0] < win:
-                            print("❌ [ABORT] Test set shorter than window size for CNN (seq mode).")
+                            print("[ERR] [ABORT] Test set shorter than window size for CNN (seq mode).")
                             return _safe_metrics_return((np.nan,) * N_METRICS, context="test_strategy:cnn_seq_test_too_short")
 
                         n_win = int(X2d_test.shape[0] - win + 1)
@@ -2264,7 +2264,7 @@ class StrategyMixin:
 
                         if use_chunk:
                             chunk_windows = int(os.environ.get("MLB_PRED_CHUNK_WINDOWS", "4096"))
-                            print(f"ℹ️ Low-RAM predict: chunking windows (chunk_windows={chunk_windows}).")
+                            print(f"[INFO] Low-RAM predict: chunking windows (chunk_windows={chunk_windows}).")
                             proba = self._predict_seq_windows_chunked(
                                 self.model, X2d_test, win=win, batch_size=bs, chunk_windows=chunk_windows
                             )
@@ -2323,7 +2323,7 @@ class StrategyMixin:
                         den_all = np.where(rv_all > 1e-8, rv_all, den_floor).astype(np.float32)
                         spread_norm_all = np.divide(sprd_all, den_all, out=np.zeros_like(sprd_all, dtype=np.float32), where=np.isfinite(den_all))
 
-                        # Dynamic αβγ coefficients (small by default) and slippage scaling in bps
+                        # Dynamic alphabetagamma coefficients (small by default) and slippage scaling in bps
                         a = float(cfg_f.get("alpha_vol_z", 0.01))
                         b = float(cfg_f.get("beta_spread_norm", _PC["beta_spread_norm"]))
                         g = float(cfg_f.get("gamma_slip_norm", _PC["gamma_slip_norm"]))
@@ -2338,7 +2338,7 @@ class StrategyMixin:
                         )
                         thr_full = np.clip(thr_full, 0.0, max_conf_thr).astype(np.float32)
 
-                        # ✅ Align thresholds with window-end indices (seq) or fallback to full rows
+                        # [OK] Align thresholds with window-end indices (seq) or fallback to full rows
                         try:
                             idx_arr = np.asarray(idx_end, dtype=int)
                         except NameError:
@@ -2349,7 +2349,7 @@ class StrategyMixin:
 
                         if self._is_debug():
                             print(
-                                f"[Gate✔] Dynamic αβγ active | base={base_thr:.3f} α={a:.3f} β={b:.3f} γ={g:.3f} "
+                                f"[Gate[OK]] Dynamic alphabetagamma active | base={base_thr:.3f} alpha={a:.3f} beta={b:.3f} gamma={g:.3f} "
                                 f"| median_thr={np.nanmedian(thr_vec):.3f} | bars={len(thr_vec)}"
                             )
                             
@@ -2419,7 +2419,7 @@ class StrategyMixin:
                                 ).astype(np.float32)
 
                                 if self._is_debug():
-                                    print(f"[Gate✔] Coverage nudge active | target={tgt:.2f} band=±{band:.2f} step={step:.3f}")
+                                    print(f"[Gate[OK]] Coverage nudge active | target={tgt:.2f} band=+/-{band:.2f} step={step:.3f}")
                         except Exception as _e:
                             print(f"[Gate] Coverage nudge skipped (cnn-seq): {_e}")
 
@@ -2522,7 +2522,7 @@ class StrategyMixin:
                         vol_w = int(cfg_f.get("vol_window_bars", _PC["vol_window_bars"]))
                         rv = realized_vol(rets, window=vol_w).to_numpy(dtype=np.float32)
                     
-                        # --- Causal scaling: compute μ/σ (and a safe floor) from TRAIN only ---
+                        # --- Causal scaling: compute mu/sigma (and a safe floor) from TRAIN only ---
                         # Avoid using full-test-month statistics to set live thresholds.
                         try:
                             rets_tr = train_data_scaled["returns"].astype(float)
@@ -2536,10 +2536,10 @@ class StrategyMixin:
                         if np.isfinite(rv_s_tr) and rv_s_tr > 0:
                             vol_z = (rv - rv_m_tr) / rv_s_tr
                         else:
-                            # Degenerate train stats → neutral vol term (no hidden test-fit fallback).
+                            # Degenerate train stats -> neutral vol term (no hidden test-fit fallback).
                             vol_z = np.zeros_like(rv, dtype=np.float32)
         
-                        # Normalized spread vs vol: use TRAIN-derived floor (or constant) — never test-wide median.
+                        # Normalized spread vs vol: use TRAIN-derived floor (or constant) -- never test-wide median.
                         den_floor = rv_floor_tr if (np.isfinite(rv_floor_tr) and rv_floor_tr > 1e-8) else 1e-6
                         den = np.where(rv > 1e-8, rv, den_floor).astype(np.float32)
                         spread_norm = np.divide(sprd, den, out=np.zeros_like(sprd, dtype=np.float32), where=np.isfinite(den))
@@ -2592,7 +2592,7 @@ class StrategyMixin:
                                                     
                             n = min(len(decoded_raw), len(thr_vec))
                             
-                            # preliminary gating with αβγ only
+                            # preliminary gating with alphabetagamma only
                             _pre = decoded_raw.copy()
                             _mask0 = (max_conf[:n] < thr_vec[:n])
                             np.putmask(_pre[:n], _mask0, 0)
@@ -2617,11 +2617,11 @@ class StrategyMixin:
                                 ).astype(np.float32)
 
                                 if self._is_debug():
-                                    print(f"[Gate✔] Coverage nudge active | target={tgt:.2f} band=±{band:.2f} step={step:.3f}")
+                                    print(f"[Gate[OK]] Coverage nudge active | target={tgt:.2f} band=+/-{band:.2f} step={step:.3f}")
                         except Exception as _e:
                             print(f"[Gate] Coverage nudge skipped: {_e}")
                         if self._is_debug():
-                            print(f"[Gate✔] Dynamic αβγ active | base={base_thr:.3f} α={a:.3f} β={b:.3f} γ={g:.3f} "
+                            print(f"[Gate[OK]] Dynamic alphabetagamma active | base={base_thr:.3f} alpha={a:.3f} beta={b:.3f} gamma={g:.3f} "
                                 f"| median_thr={np.nanmedian(thr_vec):.3f} | bars={len(thr_vec)}")
 
                         self._last_conf_thr_used = float(np.nanmedian(thr_vec))
@@ -2680,7 +2680,7 @@ class StrategyMixin:
                                 )
                                 proba = sanitize_proba(proba)
                         except Exception as _e:
-                            print(f"⚠️ Calibration failed ({cal_method}): {_e}")
+                            print(f"[WARN] Calibration failed ({cal_method}): {_e}")
                 except Exception:
                     try:
                         scores = self.model.decision_function(X_test)
@@ -2733,7 +2733,7 @@ class StrategyMixin:
 
                         mask_valid = np.isfinite(ret_fwd.to_numpy())
                         if mask_valid.any():
-                            # label_with_neutral → {0:short, 1:flat, 2:long}
+                            # label_with_neutral -> {0:short, 1:flat, 2:long}
                             y_cal = self.label_with_neutral(ret_fwd[mask_valid], thr).astype(int)
                             proba_cal = proba[mask_valid]
 
@@ -2761,7 +2761,7 @@ class StrategyMixin:
                 try:
                     cfg_f = getattr(self, "features_config", {}) or {}
                     if is_coverage_intent(cfg_f):
-                        # Learn a per-fold coverage→threshold mapping on the calibration tail of TRAIN (CV-safe)
+                        # Learn a per-fold coverage->threshold mapping on the calibration tail of TRAIN (CV-safe)
                         try:
                             # target coverage knob (accept both names)
                             _tgt = float(cfg_f.get("target_active_rate",
@@ -2796,7 +2796,7 @@ class StrategyMixin:
                                 p_cal = sanitize_proba(self.model.predict_proba(cal_X))
 
 
-                            # map coverage → threshold on this run and stash for aggregation (CV only)
+                            # map coverage -> threshold on this run and stash for aggregation (CV only)
                             coverage_thr = float(fit_coverage_threshold_on_calibration(p_cal, _tgt))
                             self._coverage_conf_thr = float(coverage_thr)
 
@@ -2824,7 +2824,7 @@ class StrategyMixin:
                                 f"cal_rows={int(getattr(cal_X, 'shape', [0])[0])} ctx={_ctx}"
                             )
                         except Exception as _ee:
-                            print(f"⚠️ Coverage threshold fit skipped in CV: {_ee}")
+                            print(f"[WARN] Coverage threshold fit skipped in CV: {_ee}")
                 except Exception as _e:
                     print(f"[Calib] Classical coverage threshold skipped: {_e}")
 
@@ -2899,7 +2899,7 @@ class StrategyMixin:
                 min_conf_thr = float(cfg_f.get("min_conf_thr", 0.33))
                 max_conf_thr = float(cfg_f.get("max_conf_thr", 0.90))
 
-                # safer αβγ defaults (small nudges, not giant jumps)
+                # safer alphabetagamma defaults (small nudges, not giant jumps)
                 a = float(cfg_f.get("alpha_vol_z", 0.004))
                 b = float(cfg_f.get("beta_spread_norm", _PC["beta_spread_norm"]))
                 g = float(cfg_f.get("gamma_slip_norm", _PC["gamma_slip_norm"]))
@@ -2926,7 +2926,7 @@ class StrategyMixin:
                 ).astype(np.float32)
 
                 if self._is_debug():
-                    print(f"[Gate✔] Dynamic αβγ active | base={base_thr:.3f} α={a:.3f} β={b:.3f} γ={g:.3f} "
+                    print(f"[Gate[OK]] Dynamic alphabetagamma active | base={base_thr:.3f} alpha={a:.3f} beta={b:.3f} gamma={g:.3f} "
                         f"| median_thr={np.nanmedian(thr_vec):.3f} | bars={len(thr_vec)}")
 
             
@@ -2996,7 +2996,7 @@ class StrategyMixin:
                             max_conf_thr
                         ).astype(np.float32)
                         if self._is_debug():
-                            print(f"[Gate✔] Coverage nudge active | target={tgt:.2f} band=±{band:.2f} step={step:.3f}")
+                            print(f"[Gate[OK]] Coverage nudge active | target={tgt:.2f} band=+/-{band:.2f} step={step:.3f}")
                 except Exception as _e:
                     print(f"[Gate] Coverage nudge skipped (deep-3D): {_e}")
 
@@ -3012,7 +3012,7 @@ class StrategyMixin:
 
                 if final_preds is None or (final_preds != 0).sum() == 0:
                     if self._is_debug():
-                        print("❗ No trades predicted after filtering — penalizing this parameter set.")
+                        print("[ERR] No trades predicted after filtering -- penalizing this parameter set.")
                     if in_cv:
                         return _safe_metrics_return(
                             (np.nan,) * N_METRICS,
@@ -3093,7 +3093,7 @@ class StrategyMixin:
             _idx = test_data_for_eval.index
             if len(_idx) >= 2:
                 gaps = pd.Series(_idx[1:] - _idx[:-1], index=_idx[:-1])
-                exp  = gaps.median()  # ≈ base bar length (auto-infers 15m)
+                exp  = gaps.median()  # ~= base bar length (auto-infers 15m)
                 is_edge = gaps > (exp * 1.5)
 
                 # Audit (debug-only): check whether the edge-bar guard is killing sparse signals
@@ -3125,7 +3125,7 @@ class StrategyMixin:
             # 5) Evaluation + storage
             # ----------------------------
             # The new dynamic edge-vs-cost gating already adjusts thresholds per-bar
-            # using α·vol_z + β·spread_norm + γ·slip_norm, so no extra quantile bump is needed.
+            # using alpha*vol_z + beta*spread_norm + gamma*slip_norm, so no extra quantile bump is needed.
 
             cfg_adj = dict(getattr(self, "features_config", {}) or {})
         
@@ -3204,7 +3204,7 @@ class StrategyMixin:
 
 
             if not _in_cv_mode:
-                # normal run — keep final month-level results
+                # normal run -- keep final month-level results
                 # Safety: keep canonical executed position in `position` (downstream expects it).
                 if _eval_df is not None and "position_exec" in _eval_df.columns:
                     try:
@@ -3227,7 +3227,7 @@ class StrategyMixin:
                 # clear any CV scratch storage
                 self._cv_last_eval_df = None
             else:
-                # CV run — expose a lightweight copy for the tuner/CV aggregator
+                # CV run -- expose a lightweight copy for the tuner/CV aggregator
                 # Keep only execution + PnL columns to avoid retaining the full feature matrix in RAM.
                 if _eval_df is not None and not _eval_df.empty:
                     _keep = [
@@ -3308,7 +3308,7 @@ class StrategyMixin:
                 pass
             _gc.collect()
 
-            # ✅ Return standardized, validated metrics
+            # [OK] Return standardized, validated metrics
             metrics = _safe_metrics_return(metrics, context="test_strategy")
             return metrics
 

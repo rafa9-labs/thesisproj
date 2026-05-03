@@ -1,5 +1,5 @@
 """
-Statistical metrics — Sharpe, PSR, DSR, temperature scaling, CV gates.
+Statistical metrics -- Sharpe, PSR, DSR, temperature scaling, CV gates.
 
 Extracted from MLBacktesterNoWFO.py lines 805-919.
 """
@@ -55,8 +55,8 @@ def _cv_status_is_ok(status: str) -> bool:
         s = str(status or "").strip()
     except Exception:
         return False
-    # Most robust: your table prints "🟢 OK" for passing folds.
-    if "🟢" in s and "OK" in s:
+    # Most robust: your table prints "[OK] OK" for passing folds.
+    if "[OK]" in s and "OK" in s:
         return True
     # Fallback: if someone removed emoji but kept the token.
     if re.search(r"\bOK\b", s):

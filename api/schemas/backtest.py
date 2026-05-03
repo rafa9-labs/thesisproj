@@ -127,7 +127,7 @@ QUICK_TEST_PRESETS: List[QuickTestPreset] = [
     QuickTestPreset(
         name="validate",
         label="Validate",
-        description="Smoke test — 1 model, 1 month, minimal HPO. ~30s",
+        description="Smoke test -- 1 model, 1 month, minimal HPO. ~30s",
         pair="EURUSD",
         timeframe="H1",
         models=["logistic"],
@@ -140,7 +140,7 @@ QUICK_TEST_PRESETS: List[QuickTestPreset] = [
     QuickTestPreset(
         name="quick",
         label="Quick Test",
-        description="Fast validation — 2 models, 3 months, light HPO. ~3-5 min",
+        description="Fast validation -- 2 models, 3 months, light HPO. ~3-5 min",
         pair="EURUSD",
         timeframe="H1",
         models=["logistic", "cnn"],

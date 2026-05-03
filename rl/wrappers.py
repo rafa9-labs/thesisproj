@@ -1,6 +1,6 @@
 """RL environment wrappers backported from utilsNoWFO.py.
 
-Phase 4.5 — cost-aware and reward-shaping wrappers for gym environments.
+Phase 4.5 -- cost-aware and reward-shaping wrappers for gym environments.
 """
 from __future__ import annotations
 

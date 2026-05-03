@@ -49,11 +49,11 @@ def refit_cnn_with_overrides(backtester, best_params,
         best_params.get("lags_range", 8)))
     )
 
-    # merge configs → backtester reads self.features_config inside test_strategy
+    # merge configs -> backtester reads self.features_config inside test_strategy
     final_cfg = dict(getattr(backtester, "features_config", {}) or {})
     final_cfg.update(best_params)
     final_cfg.update({
-        # runtime overrides (make it “full” refit)
+        # runtime overrides (make it "full" refit)
         "cnn_train_stride": 1,
         "cnn_epochs": max(30, int(best_params.get("cnn_epochs", 20))),
         "cnn_use_early_stopping": True,
@@ -63,7 +63,7 @@ def refit_cnn_with_overrides(backtester, best_params,
         # keep windows mode consistent (or force True if you want)
         "cnn_use_seq_windows": final_cfg.get("cnn_use_seq_windows",
                              best_params.get("cnn_use_seq_windows", True)),
-        # don’t force mixed precision unless you know you’re on GPU
+        # don't force mixed precision unless you know you're on GPU
         "cnn_mixed_precision": False,
     })
     # user-specified overrides win last
@@ -99,7 +99,7 @@ def refit_lstm_with_overrides(backtester, best_params,
     final_cfg = dict(getattr(backtester, "features_config", {}) or {})
     final_cfg.update(best_params)
     final_cfg.update({
-        # full refit (no speed caps) — but KEEP the same windowing regime as CV
+        # full refit (no speed caps) -- but KEEP the same windowing regime as CV
         "lstm_use_seq_windows": bool(
             best_params.get(
                 "lstm_use_seq_windows",
@@ -170,7 +170,7 @@ def refit_ensemble_cnn_lstm_xgb_with_overrides(backtester, best_params,
                                                overrides=None, **_):
     """
     Final, uncapped refit for the CNN+LSTM+XGB ensemble (one-shot; no Optuna).
-    Uses the best params, disables time caps/stride, and bumps epochs—then evaluates the fold.
+    Uses the best params, disables time caps/stride, and bumps epochs--then evaluates the fold.
     """
     overrides = overrides or {}
     params = _coerce_ensemble_lags(dict(best_params))  # do not mutate caller
@@ -191,7 +191,7 @@ def refit_ensemble_cnn_lstm_xgb_with_overrides(backtester, best_params,
     # Apply caller overrides (namespaced keys expected)
     ensemble_config.update({k: v for k, v in overrides.items()})
 
-    # 🚩 Final refit must be uncapped → hard overrides (no setdefault)
+    # [FLAG] Final refit must be uncapped -> hard overrides (no setdefault)
     ensemble_config["ensemble_train_stride"] = 1
     ensemble_config["ensemble_deep_max_train_windows"] = 10**9
 
@@ -223,7 +223,7 @@ def refit_ensemble_adaptive_regime_with_overrides(backtester, best_params,
                                                   overrides=None, **_):
     """
     Final, uncapped refit for the Adaptive Regime ensemble (one-shot; no Optuna).
-    Uses the best params, disables time caps/stride, and bumps epochs—then evaluates the fold.
+    Uses the best params, disables time caps/stride, and bumps epochs--then evaluates the fold.
     """
     overrides = overrides or {}
     params = _coerce_ensemble_lags(dict(best_params))
@@ -246,7 +246,7 @@ def refit_ensemble_adaptive_regime_with_overrides(backtester, best_params,
     # Apply overrides
     ensemble_config.update({k: v for k, v in (overrides or {}).items()})
 
-    # 🚩 Final refit must be uncapped → hard overrides (no setdefault)
+    # [FLAG] Final refit must be uncapped -> hard overrides (no setdefault)
     ensemble_config["ensemble_train_stride"] = 1
     ensemble_config["ensemble_deep_max_train_windows"] = 10**9
 
@@ -319,7 +319,7 @@ def _evaluate_original_no_refit(backtester, best_params,
     # Compute the lags we will ACTUALLY use for evaluation (single source of truth)
     tuned_lags = int(params.get("lags", params.get("lags_range", lags)))
 
-    # Build the exact eval features_config: defaults → (prior run cfg) → best_params
+    # Build the exact eval features_config: defaults -> (prior run cfg) -> best_params
     # Force tuned lags into the merged config so the downstream pipeline (warmup, shapes)
     # stays consistent with what Optuna tuned/printed.
     cfg_merged = backtester._merge_params_into_features_config(params, force_lags=tuned_lags)
@@ -331,7 +331,7 @@ def _evaluate_original_no_refit(backtester, best_params,
         clobbered = {k for k in backtester._optuna_locked_keys
                      if k in cfg_merged and cfg_merged[k] != params.get(k)}
         if clobbered:
-            print(f"⚠️ Optuna keys changed in eval merge: {sorted(clobbered)}")
+            print(f"[WARN] Optuna keys changed in eval merge: {sorted(clobbered)}")
 
     cfg_merged["test_warmup_bars"] = int(warm_bars)
 
@@ -350,7 +350,7 @@ def _evaluate_original_no_refit(backtester, best_params,
     try:
         tar = cfg_merged.get("target_active_rate", cfg_merged.get("target_coverage", None))
         if tar is not None:
-            print(f"[GateInfo][TUNING] target_active_rate={float(tar):.6f} is set → confidence_threshold is overridden by coverage thresholding.")
+            print(f"[GateInfo][TUNING] target_active_rate={float(tar):.6f} is set -> confidence_threshold is overridden by coverage thresholding.")
     except Exception:
         pass
 
@@ -463,7 +463,7 @@ def _select_better_result(
 
     # Final sanity check on metrics shape (defensive)
     if not isinstance(chosen, (list, tuple)) or len(chosen) != len(metric_names):
-        print("⚠️ Warning: invalid metrics shape from refit/selection; falling back to original.")
+        print("[WARN] Warning: invalid metrics shape from refit/selection; falling back to original.")
         return orig_metrics
 
     return chosen
@@ -480,7 +480,7 @@ def final_refit_if_deep(backtester, best_params,
     return its metrics.
 
     This keeps the pipeline simple:
-        Optuna best params → (optional) one deployment refit → trade.
+        Optuna best params -> (optional) one deployment refit -> trade.
     """
     # Lock tuned keys so overrides cannot silently clobber them
     setattr(backtester, "_optuna_locked_keys", set(best_params.keys()))
@@ -592,7 +592,7 @@ def _assert_free_ram(need_gb: float | str, trial=None) -> bool:
             from pipeline.workers import get_gpu_free_memory_mb
             free_list = get_gpu_free_memory_mb()
             if not free_list:
-                return True  # No GPU or nvidia-smi unavailable — don't block
+                return True  # No GPU or nvidia-smi unavailable -- don't block
             free_gb = free_list[0] / 1024.0  # Pick GPU 0
             return free_gb >= vram_need
         except Exception:
@@ -613,7 +613,7 @@ def _assert_free_ram(need_gb: float | str, trial=None) -> bool:
     floor = float(os.getenv("OPTUNA_MIN_FREE_GB_FLOOR", "0.30"))
     relaxed_need = max(floor, need_gb * relax)
     if avail >= relaxed_need and trial is not None and int(getattr(trial, "number", 0)) <= 1 and _has_vram():
-        print(f"⚠️ Low RAM: need>={need_gb:.2f}GB, avail={avail:.2f}GB — proceeding (bootstrap).")
+        print(f"[WARN] Low RAM: need>={need_gb:.2f}GB, avail={avail:.2f}GB -- proceeding (bootstrap).")
         return True
 
     return False

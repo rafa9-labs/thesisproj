@@ -1,5 +1,5 @@
 """
-Runtime performance knobs — thread budgets, GPU init, BLAS caps.
+Runtime performance knobs -- thread budgets, GPU init, BLAS caps.
 
 Extracted from MLBacktesterNoWFO.py lines 196-294.
 Imports config.py for centralized settings.
@@ -11,7 +11,7 @@ import multiprocessing
 
 from config import get_settings, apply_global_env
 
-# ── WSL2 CUDA auto-configuration ──
+# -- WSL2 CUDA auto-configuration --
 # TF on WSL2 needs LD_LIBRARY_PATH pointing to pip-installed nvidia CUDA libs.
 # This block auto-discovers them from the active venv's site-packages.
 def _configure_wsl2_cuda():
@@ -19,7 +19,7 @@ def _configure_wsl2_cuda():
     try:
         is_wsl = "microsoft" in os.uname().release.lower()
     except (AttributeError, OSError):
-        return  # Windows native — no uname
+        return  # Windows native -- no uname
     if not is_wsl:
         return
     if os.environ.get("LD_LIBRARY_PATH", "").count("nvidia") >= 3:
@@ -43,30 +43,30 @@ def _configure_wsl2_cuda():
 
 _configure_wsl2_cuda()
 
-# ── pandas pref ──
+# -- pandas pref --
 try:
     import pandas as pd
     pd.options.mode.copy_on_write = True
 except Exception:
     pass
 
-# ── Apply centralized config ──
+# -- Apply centralized config --
 _settings = get_settings()
 apply_global_env(_settings)
 
-# ── psutil ──
+# -- psutil --
 try:
     import psutil
 except Exception:
     psutil = None
 
-# ── threadpoolctl ──
+# -- threadpoolctl --
 try:
     from threadpoolctl import threadpool_limits as _tp_limits
 except Exception:
     _tp_limits = None
 
-# ── GPU allow-growth ──
+# -- GPU allow-growth --
 # Lazy: skip TF import entirely when only sklearn models are used.
 # Set TF_SKIP_INIT=1 to avoid the heavy TF load for logistic/xgboost runs.
 _TF_SKIP = os.environ.get("TF_SKIP_INIT", "0") == "1"
@@ -79,7 +79,7 @@ if not _TF_SKIP:
     except Exception:
         pass
 
-    # ── Force-CPU escape ──
+    # -- Force-CPU escape --
     if os.environ.get("TF_FORCE_CPU", "0") == "1":
         try:
             import tensorflow as _tf2
@@ -87,18 +87,18 @@ if not _TF_SKIP:
         except Exception:
             pass
 
-# ── Compute safe core count ──
+# -- Compute safe core count --
 SAFE_CORES = _settings.compute.safe_cores
 CPU_TOTAL = _settings.compute.cpu_total
 
-# ── Apply BLAS / OpenMP cap ──
+# -- Apply BLAS / OpenMP cap --
 try:
     from threadpoolctl import threadpool_limits
     threadpool_limits(limits=SAFE_CORES)
 except Exception:
     pass
 
-# ── TensorFlow thread tuning ──
+# -- TensorFlow thread tuning --
 if not _TF_SKIP:
     try:
         import tensorflow as _tf3
@@ -113,7 +113,7 @@ except UnicodeEncodeError:
     pass
 
 
-# ── Public GPU status helper ──
+# -- Public GPU status helper --
 # Heavy models (CNN, LSTM, Transformer, DQN) should run on GPU when available.
 # Usage:  from pipeline.runtime import gpu_status, GPU_DEVICES
 #         info = gpu_status()
@@ -132,7 +132,7 @@ def _detect_gpu():
         GPU_AVAILABLE = False
         GPU_DEVICES = []
 
-# Lazy detection — only when first queried
+# Lazy detection -- only when first queried
 _gpu_checked = False
 
 def gpu_status() -> dict:

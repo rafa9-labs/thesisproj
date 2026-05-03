@@ -46,7 +46,7 @@ def print_block_summary(block_id, calib_info, gate_info, reliability,
     """
     Per-fold compact summary. All fields are already precomputed by the caller.
     """
-    line = "─" * 70
+    line = "-" * 70
     log_print(f"\n\n\n{line}\n{fold_label} #{block_id}\n{line}", level="COMPACT")
 
     try:
@@ -65,11 +65,11 @@ def print_block_summary(block_id, calib_info, gate_info, reliability,
         level="COMPACT",
     )
     log_print(
-        "Dynamic αβγ → "
+        "Dynamic alphabetagamma -> "
         f"base={gate_info['base']:.3f} "
-        f"α={gate_info['alpha']:.3f} "
-        f"β={gate_info['beta']:.3f} "
-        f"γ={gate_info['gamma']:.3f} | "
+        f"alpha={gate_info['alpha']:.3f} "
+        f"beta={gate_info['beta']:.3f} "
+        f"gamma={gate_info['gamma']:.3f} | "
         f"median_thr={gate_info['median_thr']:.3f}",
         level="COMPACT",
     )
@@ -89,10 +89,10 @@ def print_block_summary(block_id, calib_info, gate_info, reliability,
         _sr_val = float(_sr_val)
     except Exception:
         _sr_val = float("nan")
-    sr_str = "—" if (_sr_val != _sr_val) else f"{_sr_val:+.3f}"
+    sr_str = "--" if (_sr_val != _sr_val) else f"{_sr_val:+.3f}"
 
     log_print(
-        f"Denoms → "
+        f"Denoms -> "
         f"val_rows={_rows_total} | "
         f"post_feature_bars_total={int(calib_info.get('bars_total', _rows_total) or _rows_total)} | "
         f"eligible={int(calib_info.get('bars_eligible', _rows_elig) or _rows_elig)} | "
@@ -104,13 +104,13 @@ def print_block_summary(block_id, calib_info, gate_info, reliability,
     )
 
     log_print(
-        f"Coverage nudge → band ±{gate_info['band']:.2f} "
+        f"Coverage nudge -> band +/-{gate_info['band']:.2f} "
         f"step {gate_info['step']:.3f}",
         level="COMPACT",
     )
     log_print(
-        "Reliability → "
-        f"PSRα={reliability['psr_alpha']:.2f} "
+        "Reliability -> "
+        f"PSRalpha={reliability['psr_alpha']:.2f} "
         f"cutoff={reliability['cutoff']:.2f} "
         f"min_trades={reliability['min_trades']} "
         f"indep={reliability['min_indep']}",
@@ -137,14 +137,14 @@ def print_block_summary(block_id, calib_info, gate_info, reliability,
     )
 
     log_print(line, level="COMPACT")
-    sr = block_stats.get("sr", "—")
+    sr = block_stats.get("sr", "--")
     if isinstance(sr, (float, int)) and np.isfinite(sr):
         sr_str = f"{float(sr):.3f}"
     else:
-        sr_str = "—"
+        sr_str = "--"
 
     log_print(
-        f"Denoms → "
+        f"Denoms -> "
         f"val_rows={_rows_total} | "
         f"post_feature_bars_total={int(calib_info.get('bars_total', _rows_total) or _rows_total)} | "
         f"eligible={int(calib_info.get('bars_eligible', _rows_elig) or _rows_elig)} | "
@@ -180,21 +180,21 @@ def print_pruned_block_summary(
     Compact summary for Mini-Block folds that were pruned or marked invalid.
     Mirrors the style of `print_block_summary` but focuses on the prune/invalid reason.
     """
-    line = "─" * 70
+    line = "-" * 70
 
     # Fallbacks for stats
-    rows_str = "—" if rows is None else str(int(rows))
-    trades_str = "—" if trades is None else str(int(trades))
+    rows_str = "--" if rows is None else str(int(rows))
+    trades_str = "--" if trades is None else str(int(trades))
 
     if isinstance(active_rate, (float, int)) and np.isfinite(active_rate):
         ar_str = f"{float(active_rate):.3f}"
     else:
-        ar_str = "—"
+        ar_str = "--"
 
     if isinstance(sharpe, (float, int)) and np.isfinite(sharpe):
         sr_str = f"{float(sharpe):.3f}"
     else:
-        sr_str = "—"
+        sr_str = "--"
 
     # Keep reason on a single, not-too-long line
     reason_str = str(reason).replace("\n", " ").strip()

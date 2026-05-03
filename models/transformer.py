@@ -63,7 +63,7 @@ def build_transformer(input_shape, config=None):
       - transformer_num_heads      / num_heads
       - transformer_d_model        / d_model
       - transformer_d_multiple     / d_multiple
-      - transformer_d_multiple_v2  / d_multiple_v2  (→ d_model = num_heads * d_multiple)
+      - transformer_d_multiple_v2  / d_multiple_v2  (-> d_model = num_heads * d_multiple)
       - transformer_ff_dim         / ff_dim
       - transformer_dropout_rate   / dropout_rate
       - transformer_dense_units    / dense_units
@@ -93,7 +93,7 @@ def build_transformer(input_shape, config=None):
     else:
         d_model = int(g("transformer_d_model", "d_model", 64))
 
-    # FFN width: default to ~4×d_model (canonical Transformer convention)
+    # FFN width: default to ~4xd_model (canonical Transformer convention)
     ff_dim      = int(g("transformer_ff_dim", "ff_dim", 4 * d_model))
     drop_rate   = float(min(max(0.0, g("transformer_dropout_rate", "dropout_rate", 0.1)), 0.5))
     dense_units = int(g("transformer_dense_units", "dense_units", ff_dim))
@@ -111,7 +111,7 @@ def build_transformer(input_shape, config=None):
     # Ensure divisibility
     if d_model % num_heads != 0:
         new_d_model = max(num_heads, int(round(d_model / num_heads) * num_heads))
-        print(f"[BUILD-TRANS] Adjusting d_model {d_model} → {new_d_model} to be divisible by heads={num_heads}")
+        print(f"[BUILD-TRANS] Adjusting d_model {d_model} -> {new_d_model} to be divisible by heads={num_heads}")
         d_model = new_d_model
     key_dim = d_model // num_heads
 

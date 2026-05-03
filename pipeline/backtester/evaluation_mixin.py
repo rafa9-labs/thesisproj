@@ -1,4 +1,4 @@
-"""Auto-extracted mixin — see composed.py for the full MLBacktester."""
+"""Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from pipeline._imports import *  # noqa: F401,F403
 
 
@@ -14,7 +14,7 @@ class EvaluationMixin:
         Generate WFO splits, shrinking train_months if necessary so that at least
         one split is produced (when data is limited).
 
-        period_unit: "months" (default), "weeks", or "days" — controls walk-forward granularity.
+        period_unit: "months" (default), "weeks", or "days" -- controls walk-forward granularity.
         """
         from config import period_offset, periods_between, convert_month_count_to_periods
 
@@ -33,7 +33,7 @@ class EvaluationMixin:
                     if best_train < min_train:
                         print(f"[WFO] No feasible split: need {req} {period_unit}, have {avail_periods}. Skipping ({train_periods}/{test_periods}).")
                         continue
-                    print(f"[WFO] Shrinking train {train_periods}→{best_train} {period_unit} due to limited history ({avail_periods} {period_unit}).")
+                    print(f"[WFO] Shrinking train {train_periods}->{best_train} {period_unit} due to limited history ({avail_periods} {period_unit}).")
                     train_periods_eff = int(best_train)
                 else:
                     train_periods_eff = int(train_periods)
@@ -112,7 +112,7 @@ class EvaluationMixin:
                     self.features_config = deepcopy(_base)
                 except Exception as e:
                     # DEBUG: don't swallow silently
-                    _dprint(f"⚠️ [evaluate_strategy] deepcopy(_month_base_features_config) failed: {e}")
+                    _dprint(f"[WARN] [evaluate_strategy] deepcopy(_month_base_features_config) failed: {e}")
 
         # ---- Basic coercions / defaults ----
         model_type = best_params["model_type"]
@@ -233,7 +233,7 @@ class EvaluationMixin:
 
             if (not isinstance(metrics, tuple)) or (len(metrics) != 16):
                 n = _safe_len(metrics)
-                raise ValueError(f"[ERROR] test_ensemble_strategy() returned {n} values — expected 16")
+                raise ValueError(f"[ERROR] test_ensemble_strategy() returned {n} values -- expected 16")
             return metrics
 
         # ---------- CNN / LSTM / Transformer / Classical ML ----------
@@ -268,7 +268,7 @@ class EvaluationMixin:
                 if (_dbg or in_real_sim) and (cfg.get("target_active_rate", None) is not None):
                     _print_once(
                         "gateinfo_target_active_rate",
-                        "[GateInfo] target_active_rate is set → coverage-calibrated threshold is used; "
+                        "[GateInfo] target_active_rate is set -> coverage-calibrated threshold is used; "
                         "fixed confidence_threshold is ignored.",
                     )
 
@@ -282,7 +282,7 @@ class EvaluationMixin:
                     label_threshold=label_threshold,
                 )
             finally:
-                # Always restore caller state so Top-N tries and later folds don’t leak config
+                # Always restore caller state so Top-N tries and later folds don't leak config
                 self.features_config = _cfg_snapshot
 
             # Optional: fail-fast on silent lags shrink (if your pipeline sets this attribute)
@@ -297,7 +297,7 @@ class EvaluationMixin:
             # Validate the fixed-length contract
             if (not isinstance(metrics, tuple)) or (len(metrics) != 16):
                 n = _safe_len(metrics)
-                raise ValueError(f"[ERROR] test_strategy() returned {n} values — expected 16")
+                raise ValueError(f"[ERROR] test_strategy() returned {n} values -- expected 16")
 
             return metrics
 
@@ -368,7 +368,7 @@ class EvaluationMixin:
         Parameters
         ----------
         i : int
-            Fold index (0-based) — will be logged as month = i+1.
+            Fold index (0-based) -- will be logged as month = i+1.
         perf, creturns : float
             Monthly equity factors for strategy and buy&hold (e.g., 0.995, 1.012).
         cumsum : float
@@ -474,7 +474,7 @@ class EvaluationMixin:
             _start = str(getattr(test_start, "date", lambda: test_start)())
             _end   = str(getattr(test_end, "date", lambda: test_end)())
             print(
-                f"📈 M{i+1} {_start}→{_end} | "
+                f"[CHART] M{i+1} {_start}->{_end} | "
                 f"month_factor: Strat {_ret_m:.5f} vs BH {_bh_m:.5f} | "
                 f"cum_equity: Strat {float(equity_strategy):.5f} vs BH {float(eq_bh):.5f} | "
                 f"cum_pnl: Strat {_earned_s:+.2%} vs BH {_earned_b:+.2%} | "
@@ -483,7 +483,7 @@ class EvaluationMixin:
         except Exception:
             # Fallback to legacy print if anything goes wrong
             print(
-                f"\n📈 Month {i + 1} Results: Strat(m): {perf:.5f} | BH(m): {creturns:.5f} | "
+                f"\n[CHART] Month {i + 1} Results: Strat(m): {perf:.5f} | BH(m): {creturns:.5f} | "
                 f"EqStrat: {equity_strategy:.5f} | EqBH: {eq_bh:.5f} | "
                 f"Sharpe: {sharpe:.2f} | Trades: {trades} | DD: {drawdown:.2%}"
             )

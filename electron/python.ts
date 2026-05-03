@@ -11,13 +11,14 @@
  * - Environment variable setup (FX_APP_MODE, FX_DATA_DIR, API_DB_PATH)
  */
 
-import { spawn, ChildProcess } from "child_process";
+import { spawn, exec, ChildProcess } from "child_process";
 import path from "path";
 import { findAvailablePort, getBackendExePath, getUserDataDir, ensureDataDirs } from "./utils";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
-const SHUTDOWN_TIMEOUT_MS = 5000;
+const SHUTDOWN_TIMEOUT_MS = 8000;
+const isWin = process.platform === "win32";
 
 export class PythonManager {
   private proc: ChildProcess | null = null;
@@ -46,8 +47,15 @@ export class PythonManager {
     return this.proc;
   }
 
+  /** Fixed port for dev mode — must match vite.config.ts proxy target. */
+  static readonly DEV_PORT = 8002;
+
   async start(): Promise<number> {
-    this.port = await findAvailablePort();
+    if (this.isDev) {
+      this.port = PythonManager.DEV_PORT;
+    } else {
+      this.port = await findAvailablePort();
+    }
     this.shuttingDown = false;
     this._spawn();
     return this.port;
@@ -123,13 +131,23 @@ export class PythonManager {
     this.shuttingDown = true;
     if (!this.proc || this.proc.exitCode !== null) return;
 
-    console.log("[Python] Shutting down...");
-    this.proc.kill("SIGTERM");
+    const pid = this.proc.pid;
+    console.log(`[Python] Shutting down (pid=${pid})...`);
+
+    if (isWin && pid) {
+      await this._killWindows(pid);
+    } else {
+      this.proc.kill("SIGTERM");
+    }
 
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
-        console.log("[Python] Force killing (SIGKILL)...");
-        this.proc?.kill("SIGKILL");
+        console.log("[Python] Force killing...");
+        if (isWin && pid) {
+          exec(`taskkill /F /T /PID ${pid}`, () => {});
+        } else {
+          this.proc?.kill("SIGKILL");
+        }
         resolve();
       }, SHUTDOWN_TIMEOUT_MS);
 
@@ -140,6 +158,19 @@ export class PythonManager {
     });
 
     this.proc = null;
+  }
+
+  private _killWindows(pid: number): Promise<void> {
+    return new Promise((resolve) => {
+      exec(`taskkill /PID ${pid} /T`, (err) => {
+        if (err) {
+          console.log(`[Python] taskkill /T failed, trying /F...`);
+          exec(`taskkill /F /T /PID ${pid}`, () => resolve());
+        } else {
+          resolve();
+        }
+      });
+    });
   }
 }
 

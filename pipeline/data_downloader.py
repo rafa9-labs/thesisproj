@@ -170,7 +170,7 @@ def download_pair(
     Returns
     -------
     dict[str, str]
-        Mapping of granularity → saved file path.
+        Mapping of granularity -> saved file path.
     """
     from oandapyV20 import API
 
@@ -190,7 +190,7 @@ def download_pair(
 
     for gran in granularities:
         print(f"\n{'='*60}")
-        print(f"Downloading {instrument} {gran} — {start_date.date()} to {end_date.date()}")
+        print(f"Downloading {instrument} {gran} -- {start_date.date()} to {end_date.date()}")
         print(f"{'='*60}")
 
         df = _fetch_candles(client, instrument, start_date, end_date, gran)

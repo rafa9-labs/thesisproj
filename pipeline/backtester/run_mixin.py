@@ -1,4 +1,4 @@
-"""Auto-extracted mixin — see composed.py for the full MLBacktester."""
+"""Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 
@@ -52,7 +52,7 @@ class RunMixin:
             return None, None
 
         log_print(f"Models to test in this WFO: {models_to_test}", level="COMPACT")
-        log_print("\n🚀 Running unified strategy tuner with walk-forward optimization...", level="COMPACT")
+        log_print("\n[LAUNCH] Running unified strategy tuner with walk-forward optimization...", level="COMPACT")
 
         model_type = config.get("model_type", "svm")
         use_proba = config.get("use_proba", True)  # currently unused here, kept for parity
@@ -72,7 +72,7 @@ class RunMixin:
                     self._ny_mask = pd.Series((_ny_times.hour >= 2) & (_ny_times.hour <= 13), index=full_idx)
                 walk_data = walk_data.loc[self._ny_mask.reindex(walk_data.index, fill_value=False)]
             except Exception as e:
-                log_print(f"⚠️ WFO session filter (NY) failed: {e} — proceeding without it.", level="COMPACT")
+                log_print(f"[WARN] WFO session filter (NY) failed: {e} -- proceeding without it.", level="COMPACT")
         max_end = walk_data.index[-1]
 
         if self._is_debug():
@@ -108,7 +108,7 @@ class RunMixin:
         # === ONE-TIME OPTUNA STUDY (before any parallel folds) ======================
         # Use the first fold's train window for tuning; cache Top-5 on self.
         if not tasks:
-            log_print("❌ No WFO tasks generated.", level="COMPACT")
+            log_print("[ERR] No WFO tasks generated.", level="COMPACT")
             return None, None
 
         first_start, first_train_months, first_test_months, _first_pu = tasks[0]
@@ -161,7 +161,7 @@ class RunMixin:
                     _nbar  = len(first_train_df)
                     _mode  = "monthly_roll" if monthly_req else "mini_block"
                     log_print(
-                        f"[HPO] mode={_mode} | tuning_span={_hpo_s} → {_hpo_e} "
+                        f"[HPO] mode={_mode} | tuning_span={_hpo_s} -> {_hpo_e} "
                         f"({_nbar} bars) | boundary(first_test_start)={first_test_start} (end-exclusive)"
                     , level="COMPACT")
                 else:
@@ -170,7 +170,7 @@ class RunMixin:
             pass
 
         if len(first_train_df) < 150:
-            print("❌ Not enough data in the first fold to run tuning.")
+            print("[ERR] Not enough data in the first fold to run tuning.")
             return None, None
 
         # Base features for the tuning fold (exclude leakage/targets)
@@ -188,7 +188,7 @@ class RunMixin:
         cv_config_first["cv_n_jobs"] = int(os.environ.get("CV_JOBS", os.cpu_count() or 1))
         cv_config_first["score_for_no_trades"] = -1.0
 
-        # 👉 Make CV knobs visible to the nested _single_study_cv via self.config
+        # [POINT] Make CV knobs visible to the nested _single_study_cv via self.config
         #    (that function reads getattr(self, "config", {}) then apply_cv_defaults(...))
         try:
             self.config = {**getattr(self, "config", {}), **dict(cv_config_first)}
@@ -222,7 +222,7 @@ class RunMixin:
                     "active": 0.0,
                     "sr": None,
                     "psr": None,
-                    "status": "⛔ UNSET",
+                    "status": "[BLOCK] UNSET",
                     "reason": "",
                 }
 
@@ -250,7 +250,7 @@ class RunMixin:
 
             
             
-            # ── Reset small per-fold CV diagnostics at the start of each trial ──
+            # -- Reset small per-fold CV diagnostics at the start of each trial --
             # Without this, _cv_fold_eval_frames accumulates copies of every fold
             # DataFrame across all Optuna trials, causing a slow RAM drift.
             try:
@@ -304,9 +304,9 @@ class RunMixin:
                     flag = cfg.get(f"use_{name}", None)
                     ta_rows.append((name, (val if isinstance(val, (int, float)) else str(val)),
                                 (flag if isinstance(flag, bool) else "")))
-                print(_fmt_table(["Param","Value"], core_tbl, title=f"📋 Trial #{getattr(trial, 'number', '?')} — Hyperparameters"))
+                print(_fmt_table(["Param","Value"], core_tbl, title=f"[LIST] Trial #{getattr(trial, 'number', '?')} -- Hyperparameters"))
                 if ta_rows:
-                    print(_fmt_table(["Indicator","Window/Value","Enabled"], ta_rows, title="📐 Indicators (trial view)"))
+                    print(_fmt_table(["Indicator","Window/Value","Enabled"], ta_rows, title="[MEASURE] Indicators (trial view)"))
                     
             _prev_cv  = getattr(self, "_in_cv", False)
             _prev_dbg = getattr(self, "_dbg_first_bars", False)
@@ -385,7 +385,7 @@ class RunMixin:
                 _r_min_eff  = 0.0
                 _L_gate_eff = 1
             else:
-                # Larger base thresholds = stricter → scale down by cv_relax
+                # Larger base thresholds = stricter -> scale down by cv_relax
                 _M_gate_eff = max(1, int(round(_M_gate_base * cv_relax)))
                 _r_min_eff  = max(0.0, _r_min_base * cv_relax)
                 _L_gate_eff = max(1, int(round(_L_gate_base * cv_relax)))
@@ -443,7 +443,7 @@ class RunMixin:
                     _cl = {k for k in self._optuna_locked_keys
                         if k in self.features_config and self.features_config[k] != params.get(k)}
                     if _cl:
-                        print(f"⚠️ Optuna keys were changed by CV/time-caps: {sorted(_cl)}")
+                        print(f"[WARN] Optuna keys were changed by CV/time-caps: {sorted(_cl)}")
 
                 
 
@@ -484,19 +484,19 @@ class RunMixin:
                     _print_trial_header_table(params, cfg, trial)
                     if monthly_roll_requested:
                         print(
-                            f"🔎 CV geometry: mode={cv_mode_effective} "
+                            f"[SEARCH] CV geometry: mode={cv_mode_effective} "
                             f"| cv_blocks={int(config.get('cv_blocks', 5))} "
                             f"| val_months={float(config.get('cv_val_months', 1.0)):.2f} "
                             f"| cv_train_months={config.get('cv_train_months', None)}"
                     )
                     else:
                         print(
-                            f"🔎 CV geometry: mode={cv_mode_effective} | K={int(config.get('cv_blocks', 5))} "
+                            f"[SEARCH] CV geometry: mode={cv_mode_effective} | K={int(config.get('cv_blocks', 5))} "
                             f"| embargo={int(config.get('cv_embargo_bars', 0))} "
                             f"| val_frac={float(config.get('cv_val_frac', 0.09)):.3f} "
                             f"| min_train_frac={float(config.get('cv_min_train_frac', 0.80)):.3f}"
                         )
-                    print(f"🔒 Confidence threshold (requested): {conf_thr:.3f} "
+                    print(f"[LOCK] Confidence threshold (requested): {conf_thr:.3f} "
                         f"| backoff_cv={bool(cfg.get('allow_conf_backoff_cv', False))} "
                         f"| floor_cv={float(cfg.get('conf_backoff_floor_cv', 0.33)):.2f}")
                 except Exception:
@@ -580,7 +580,7 @@ class RunMixin:
                             ts, te = f["train_iloc"]; vs, ve = f["val_iloc"]
                             rows.append([f["fold"], f["val_month"], f"{ts}:{te} ({max(0, te-ts)} bars)", f"{vs}:{ve} ({max(0, ve-vs)} bars)"])
                         print(_fmt_table(["Fold","ValMonth","Train(iloc)","Val(iloc)"], rows,
-                                         title="🗓️  Monthly-roll CV fold plan"))
+                                         title="[DATE]  Monthly-roll CV fold plan"))
 
                 # -------------------------------
                 # Mini-block CV (preferred path)
@@ -694,7 +694,7 @@ class RunMixin:
                                 import optuna as _opt
                                 raise _opt.TrialPruned("Broken CV geometry: val_window < 30")
                             if bool(config.get("print_cv_debug", False)):
-                                print(f"[MiniBlockCV] Shrinking val_window from {val_window_local} → {new_val} to keep K={k_blocks}")
+                                print(f"[MiniBlockCV] Shrinking val_window from {val_window_local} -> {new_val} to keep K={k_blocks}")
                             val_window_local = new_val
                             smax = total_len - val_window_local
 
@@ -760,7 +760,7 @@ class RunMixin:
                         cfg.setdefault("deep_cv_batch_size", 256)
                         cfg.setdefault("deep_cv_patience", 6)
 
-                        # Per-model early stopping defaults (don’t override Optuna if set)
+                        # Per-model early stopping defaults (don't override Optuna if set)
                         cfg.setdefault("cnn_use_early_stopping", True)
                         cfg.setdefault("lstm_use_early_stopping", True)
                         cfg.setdefault("transformer_use_early_stopping", True)
@@ -780,7 +780,7 @@ class RunMixin:
                                 if k in self.features_config and self.features_config[k] != params.get(k)
                             }
                             if clobbered:
-                                print(f"⚠️ Optuna keys were changed by CV/time-caps: {sorted(clobbered)}")
+                                print(f"[WARN] Optuna keys were changed by CV/time-caps: {sorted(clobbered)}")
 
                     # Timestamps for split starts (debug)
                     val_starts_ts = []
@@ -820,24 +820,24 @@ class RunMixin:
                         _M_gate_eff = 0
                         _r_min_eff = 0.0
                     else:
-                        # Larger thresholds = stricter ⇒ scale down to relax
+                        # Larger thresholds = stricter => scale down to relax
                         _M_gate_eff = max(0, int(round(_M_gate * _relax)))
                         _r_min_eff  = max(0.0, _r_min * _relax)
 
                     def _status_for_block(trades, sr, active, all_hold=False, pruned=False):
                         if pruned:
-                            return "🪓 prune"
+                            return "[PRUNE] prune"
                         if (trades is None) or (int(trades) <= 0) or all_hold:
-                            return "⛔ NoTrades"
+                            return "[BLOCK] NoTrades"
                         if (sr is None) or (not np.isfinite(sr)):
-                            return "⛔ SRNaN"
+                            return "[BLOCK] SRNaN"
                         if (int(trades) < _M_gate_eff) or (
                             active is not None and np.isfinite(active) and float(active) < _r_min_eff
                         ):
-                            return "🟡 Thin"
+                            return "[WARN] Thin"
                         if float(sr) < 0:
-                            return "🔴 Bad"
-                        return "🟢 OK"
+                            return "[BAD] Bad"
+                        return "[OK] OK"
 
                     def _fmt_dict(d):
                         try:
@@ -881,19 +881,19 @@ class RunMixin:
                         k_valid = int(_np.isfinite(arr).sum())
                         remaining = max(0, K_plan - processed)
 
-                        # ── (A) Degenerate no-trades heuristic ─────────────────────────────
+                        # -- (A) Degenerate no-trades heuristic -----------------------------
                         # If we've already evaluated N folds and NONE produced a valid score,
                         # this config is effectively dead: thresholds/gating too strict.
                         # Default N=2; can be tuned via cv_early_all_invalid_patience.
                         patience = int(config.get("cv_early_all_invalid_patience", 2))
                         if processed >= patience and k_valid == 0:
                             msg = (f"[MiniBlockCV:EARLY_DEGENERATE] "
-                                   f"{processed} folds, all invalid/no-trades → prune trial")
+                                   f"{processed} folds, all invalid/no-trades -> prune trial")
                             if bool(config.get("print_cv_debug", False)):
                                 print(msg)
                             raise _opt.TrialPruned(msg)
 
-                        # ── (B) Structural coverage hopelessness ───────────────────────────
+                        # -- (B) Structural coverage hopelessness ---------------------------
                         # Use cv_min_coverage as the design target. We only cut when even if
                         # all remaining folds were perfect, we cannot reach that coverage.
                         min_cov_base = float(config.get("cv_min_coverage", 0.80))
@@ -1001,7 +1001,7 @@ class RunMixin:
 
                         if bool(config.get("print_cv_debug", False)) and dropped_rows:
                             print(_fmt_table(["Fold","ValMonth","DroppedReason"], dropped_rows,
-                                             title="⚠️ Monthly-roll CV: dropped folds (guardrails)"))
+                                             title="[WARN] Monthly-roll CV: dropped folds (guardrails)"))
 
                         if len(filtered) >= min_valid_folds:
                             monthly_folds = filtered
@@ -1130,8 +1130,8 @@ class RunMixin:
                                 a_trades = getattr(self, "_cv_fold_guard_trades_main", None)
                                 if (a_uuid != g_uuid) or (a_trades != g_trades):
                                     print(
-                                        f"🚨 [CV][Patch7] Diagnostic mutated fold guard | ctx={ctx} | "
-                                        f"uuid {g_uuid}→{a_uuid} | trades {g_trades}→{a_trades}"
+                                        f"[ALERT] [CV][Patch7] Diagnostic mutated fold guard | ctx={ctx} | "
+                                        f"uuid {g_uuid}->{a_uuid} | trades {g_trades}->{a_trades}"
                                     )
                             except Exception:
                                 pass
@@ -1214,7 +1214,7 @@ class RunMixin:
                                     "vstart": vstart_ts,     # prefer these keys everywhere
                                     "vend": vend_ts,
 
-                                    # denoms (safe defaults — eligibility not computed in this early exit)
+                                    # denoms (safe defaults -- eligibility not computed in this early exit)
                                     "post_feature_bars_total": int(rows_i),
                                     "post_feature_eligible": int(rows_i),
                                     "eval_bars": int(rows_i),
@@ -1260,7 +1260,7 @@ class RunMixin:
                             except Exception:
                                 pass
                             
-                            # Evaluate block (generic: any "ensemble_*" → test_ensemble_strategy)
+                            # Evaluate block (generic: any "ensemble_*" -> test_ensemble_strategy)
                             if (
                                 isinstance(model_type_local, str)
                                 and model_type_local.startswith("ensemble_")
@@ -1795,7 +1795,7 @@ class RunMixin:
                         )
 
                         # Estimate average holding in bars and #independent bets (Lopez de Prado style)
-                        # active_rate ≈ (trades * avg_hold) / rows  ⇒ avg_hold ≈ (ar * rows) / trades
+                        # active_rate ~= (trades * avg_hold) / rows  => avg_hold ~= (ar * rows) / trades
                         avg_hold_bars = (
                             float("inf")
                             if trades_i <= 0
@@ -1819,7 +1819,7 @@ class RunMixin:
                         ar_target = float(_f_cfg.get("target_active_rate", config.get("target_active_rate", 0.10)))
                         ar_margin = float(
                             config.get("cv_active_rate_margin", 0.12)
-                        )  # ± absolute
+                        )  # +/- absolute
                         ar_low = float(
                             config.get(
                                 "cv_active_rate_low",
@@ -1934,7 +1934,7 @@ class RunMixin:
 
                         if config.get("print_cv_debug", False):
                             print(
-                                "[Debug] Reliability gates → "
+                                "[Debug] Reliability gates -> "
                                 f"psr_alpha={psr_alpha:.2f} (cutoff={1.0 - psr_alpha:.2f}) | "
                                 f"min_trades={min_trades_block} | "
                                 f"min_indep={min_indep_bets} | "
@@ -1966,11 +1966,11 @@ class RunMixin:
                             indep_bets = float("nan")
                             psr_block = float("nan")
 
-                        # ── Reliability decision: HARD vs SOFT vs OK ──
+                        # -- Reliability decision: HARD vs SOFT vs OK --
                         reason = None
                         hard_reject = False
 
-                        # 1) Truly broken → HARD
+                        # 1) Truly broken -> HARD
                         if np.isfinite(T_cap) and np.isfinite(trades_i) and float(trades_i) > float(T_cap):
                             reason = f"OvertradeCap(trades={int(trades_i)} > cap={int(T_cap)})"
                             hard_reject = True
@@ -1980,13 +1980,13 @@ class RunMixin:
                             )
                             hard_reject = True
 
-                        # 2) Too few trades → SOFT
+                        # 2) Too few trades -> SOFT
                         elif trades_i < min_trades_block:
                             reason = (
                                 f"TooFewTrades({trades_i}<{min_trades_block})"
                             )
 
-                        # 3) PSR / DSR / Sharpe checks → SOFT (informative)
+                        # 3) PSR / DSR / Sharpe checks -> SOFT (informative)
                         else:
                             try:
                                 n_eff_int = int(
@@ -2011,18 +2011,18 @@ class RunMixin:
                                     f"PSR<{1.0 - psr_alpha:.2f} ({psr:.3f})"
                                 )
                             elif dsr_prune and dsr <= 0.0:
-                                reason = f"DSR≤0 ({dsr:.3f})"
+                                reason = f"DSR<=0 ({dsr:.3f})"
                             elif float(sharpe) <= float(floor_cv_final):
                                 reason = (
-                                    f"Sharpe≤floor "
-                                    f"({float(sharpe):.2f} ≤ {float(floor_cv_final):.2f})"
+                                    f"Sharpe<=floor "
+                                    f"({float(sharpe):.2f} <= {float(floor_cv_final):.2f})"
                                 )
 
                         if reason is not None:
                             block_reasons.append(reason)
 
                             if hard_reject:
-                                # Hard fail → no score; mark NaNs and continue
+                                # Hard fail -> no score; mark NaNs and continue
                                 eff_conf_local = float(
                                     getattr(
                                         self,
@@ -2075,10 +2075,10 @@ class RunMixin:
                                             if np.isfinite(
                                                 avg_hold_bars
                                             )
-                                            else "—"
+                                            else "--"
                                         ),
-                                        "indep_bets": "—",
-                                        "psr": "—",
+                                        "indep_bets": "--",
+                                        "psr": "--",
                                     }
                                 )
 
@@ -2096,7 +2096,7 @@ class RunMixin:
                                 _early_structural_prune_if_hopeless()
                                 continue  # skip scoring for this block
 
-                            # Soft fail → informative only; still score block
+                            # Soft fail -> informative only; still score block
                             block_pruned.append(False)
                         else:
                             block_reasons.append("")
@@ -2375,9 +2375,9 @@ class RunMixin:
                             "test_len": getattr(self, "_last_test_len", rows_i),
                             "final_after_thr": _final_after,
                             "eff_conf": eff_conf_local,
-                            "avg_hold_bars": (float(avg_hold_bars) if np.isfinite(avg_hold_bars) else "—"),
-                            "indep_bets": (float(indep_bets) if np.isfinite(indep_bets) else "—"),
-                            "psr": (float(psr_block) if np.isfinite(psr_block) else "—"),
+                            "avg_hold_bars": (float(avg_hold_bars) if np.isfinite(avg_hold_bars) else "--"),
+                            "indep_bets": (float(indep_bets) if np.isfinite(indep_bets) else "--"),
+                            "psr": (float(psr_block) if np.isfinite(psr_block) else "--"),
                             "turnover": float(turnover),
                         })
 
@@ -2455,7 +2455,7 @@ class RunMixin:
                             
                             # --- Patch 2: fold reporting denominators (telemetry only) ---
                             # Use the same bar-grid universe as gating/execution (post-feature),
-                            # and the same evaluated bars as Gate✔/ExecAudit.
+                            # and the same evaluated bars as Gate[OK]/ExecAudit.
                             try:
                                 _diag = getattr(self, "_last_eligibility_diag", {}) or {}
                                 _bars_postfeat_total = int(_diag.get("bars_total", rows_i) or rows_i)
@@ -2471,7 +2471,7 @@ class RunMixin:
                             calib_info["bars_total"] = int(_bars_postfeat_total)
                             calib_info["bars_eligible"] = int(_bars_eval)
 
-                            # Dynamic αβγ and coverage nudge
+                            # Dynamic alphabetagamma and coverage nudge
                             alpha = float(cfg_f.get("alpha_vol_z", _cd.get("alpha_vol_z", 0.0)))
                             beta  = float(cfg_f.get("beta_spread_norm", _cd.get("beta_spread_norm", _PC["beta_spread_norm"])))
                             gamma = float(cfg_f.get("gamma_slip_norm", _cd.get("gamma_slip_norm", _PC["gamma_slip_norm"])))
@@ -2518,7 +2518,7 @@ class RunMixin:
                             # Clamp to sane range so cutoff computation can't go weird.
                             if (not np.isfinite(psr_alpha)) or (psr_alpha <= 0.0) or (psr_alpha >= 1.0):
                                 if config.get("print_cv_debug", False):
-                                    print(f"⚠️ [CV][Reliability] psr_alpha out of range ({psr_alpha}); reset → 0.10")
+                                    print(f"[WARN] [CV][Reliability] psr_alpha out of range ({psr_alpha}); reset -> 0.10")
                                 psr_alpha = 0.10
 
                             cutoff = float(
@@ -2770,7 +2770,7 @@ class RunMixin:
                             except Exception:
                                 pass
 
-                            # Normal block error → mark invalid and continue
+                            # Normal block error -> mark invalid and continue
                             _cv_penalty(
                                 "MiniBlockCV exception during block evaluation",
                                 split_start=int(split),
@@ -2874,7 +2874,7 @@ class RunMixin:
 
                             if isinstance(fr, dict):
                                 # IMPORTANT: when fold_records exists, the overview must be driven ONLY by it.
-                                # Never index parallel arrays here (that’s the historic drift bug).
+                                # Never index parallel arrays here (that's the historic drift bug).
                                 sc = fr.get("score", float("nan"))
                                 tr = fr.get("trades", float("nan"))
                                 ar = fr.get("active_rate", float("nan"))
@@ -2926,44 +2926,44 @@ class RunMixin:
                                 pruned = block_pruned[i] if i < len(block_pruned) else False
 
                             if not has_data:
-                                st = "⛔ NO DATA / PRUNED"
+                                st = "[BLOCK] NO DATA / PRUNED"
                             elif pruned:
-                                st = f"⛔ {reason or 'Pruned'}"
+                                st = f"[BLOCK] {reason or 'Pruned'}"
                             elif reason:
                                 # soft issues / diagnostics
                                 if "Bad" in reason or "SRNaN" in reason:
-                                    st = f"🔴 {reason}"
+                                    st = f"[BAD] {reason}"
                                 else:
-                                    st = f"⛔ {reason}"
+                                    st = f"[BLOCK] {reason}"
                             else:
-                                st = (f"🟡 {reason}" if reason else "🟢 OK")
+                                st = (f"[WARN] {reason}" if reason else "[OK] OK")
 
                             # PSR column: use stored block_psr (based on raw Sharpe & n_eff)
                             if has_data and ps is not None and np.isfinite(ps):
                                 psr_str = f"{float(ps):.3f}"
                             else:
-                                psr_str = "—"
+                                psr_str = "--"
 
                             rows_over.append([
                                 i + 1,
-                                (str(vstart) if vstart is not None else "—"),
-                                (str(vend)   if vend   is not None else "—"),
+                                (str(vstart) if vstart is not None else "--"),
+                                (str(vend)   if vend   is not None else "--"),
                                 int(tr_rows) if tr_rows else 0,
                                 int(rows_i) if rows_i else 0,
                                 int(pf_total) if pf_total else 0,
                                 int(pf_elig) if pf_elig else 0,
                                 int(eval_bars) if eval_bars else 0,
                                 int(tr) if tr is not None and np.isfinite(tr) else 0,
-                                (f"{float(ar):.3f}" if ar is not None and np.isfinite(ar) else "—"),
-                                (f"{float(pint):.3f}" if pint is not None and np.isfinite(pint) else "—"),
+                                (f"{float(ar):.3f}" if ar is not None and np.isfinite(ar) else "--"),
+                                (f"{float(pint):.3f}" if pint is not None and np.isfinite(pint) else "--"),
                                 (int(nint) if nint else 0),
-                                (f"{float(sh):.3f}" if sh is not None and np.isfinite(sh) else "—"),  # SR = raw Sharpe
+                                (f"{float(sh):.3f}" if sh is not None and np.isfinite(sh) else "--"),  # SR = raw Sharpe
                                 psr_str,                                                                # PSR(raw SR)
                                 st,
                             ])
 
                         if rows_over:
-                            _title = "🗓️  Monthly-roll CV overview" if bool(getattr(self, "_cv_used_monthly_last", False)) else "🧪 Mini-block overview"
+                            _title = "[DATE]  Monthly-roll CV overview" if bool(getattr(self, "_cv_used_monthly_last", False)) else "[TEST] Mini-block overview"
                             log_print(
                                 _fmt_table(
                                     ["#", "val_start", "val_end", "train_rows", "val_rows", "pf_total", "pf_elig", "eval_bars", "trades", "active", "PrecInt", "nInt", "SR", "PSR", "status"],
@@ -3020,11 +3020,11 @@ class RunMixin:
                                 )
                                 try:
                                     if reason_i:
-                                        st = f"⛔ {reason_i}"
+                                        st = f"[BLOCK] {reason_i}"
                                 except Exception:
                                     pass
 
-                                if table_only_failures and st == "🟢 OK":
+                                if table_only_failures and st == "[OK] OK":
                                     continue
 
                                 card = pred_cards[i] if i < len(pred_cards) else {}
@@ -3040,23 +3040,23 @@ class RunMixin:
 
                                 # PSR for verbose card: same logic as above
                                 psr_card = card.get("psr", None)
-                                psr_str = "—"
+                                psr_str = "--"
                                 try:
-                                    if psr_card is not None and psr_card != "—" and np.isfinite(float(psr_card)):
+                                    if psr_card is not None and psr_card != "--" and np.isfinite(float(psr_card)):
                                         psr_str = f"{float(psr_card):.3f}"
                                     else:
                                         indep = card.get("indep_bets", None)
                                         if (
                                             sc is not None
                                             and np.isfinite(sc)
-                                            and indep not in (None, "—")
+                                            and indep not in (None, "--")
                                         ):
                                             n_eff = int(max(2, round(float(indep))))
                                             psr_val = _psr(float(sc), n_eff, sr_bench=0.0)
                                             if np.isfinite(psr_val):
                                                 psr_str = f"{psr_val:.3f}"
                                 except Exception:
-                                    psr_str = "—"
+                                    psr_str = "--"
 
                                 rows_card = [
                                     ["val_start",        vstart],
@@ -3067,8 +3067,8 @@ class RunMixin:
                                     ["raw_preds",        _fmt_dict(card.get("raw_preds"))],
                                     ["decoded_before",   _fmt_dict(card.get("decoded_before"))],
                                     ["final_after_thr",  _fmt_dict(card.get("final_after_thr"))],
-                                    ["eff_conf",         (f"{float(block_eff_conf[i]):.3f}" if i < len(block_eff_conf) and np.isfinite(block_eff_conf[i]) else "—")],
-                                    ["indep_bets",       card.get("indep_bets", "—")],
+                                    ["eff_conf",         (f"{float(block_eff_conf[i]):.3f}" if i < len(block_eff_conf) and np.isfinite(block_eff_conf[i]) else "--")],
+                                    ["indep_bets",       card.get("indep_bets", "--")],
                                     ["psr",              psr_str],
                                     ["status",           st],
                                 ]
@@ -3077,7 +3077,7 @@ class RunMixin:
                                     _fmt_table(
                                         ["field", "value"],
                                         rows_card,
-                                        title=f"🎯 Predictions — Block {i+1:02d}",
+                                        title=f"[TARGET] Predictions -- Block {i+1:02d}",
                                     )
                                 )
 
@@ -3085,13 +3085,13 @@ class RunMixin:
                     _print_mini_tables()
 
                     # Gate on active folds:
-                    # - If literally ZERO valid folds → structural failure → prune.
+                    # - If literally ZERO valid folds -> structural failure -> prune.
                     # - Otherwise: KEEP the trial; few-fold coverage is treated as "very noisy/bad" but informative.
                     if cv_relax > 0.0 and active_folds == 0:
                         msg = (f"[MiniBlockCV:GATE_FAIL] active_folds=0/{K_plan} | "
                             f"M={M_gate}, r_min={r_min:.3f}")
                         if bool(config.get("print_cv_debug", False)):
-                            print(msg + " → TrialPruned (no usable folds)")
+                            print(msg + " -> TrialPruned (no usable folds)")
                         import optuna as _opt
                         raise _opt.TrialPruned(msg)
 
@@ -3100,7 +3100,7 @@ class RunMixin:
                     if active_folds < L_gate:
                         if bool(config.get("print_cv_debug", False)):
                             print(f"[MiniBlockCV:GATE_SOFT] active_folds={active_folds}/{K_plan} "
-                                  f"<{L_gate} → keeping trial with weak evidence.")
+                                  f"<{L_gate} -> keeping trial with weak evidence.")
 
 
                     # --- Aggregate fold scores (configurable) ---
@@ -3157,7 +3157,7 @@ class RunMixin:
                     if min_valid_folds is not None and min_valid_folds > 0:
                         if k_valid < min_valid_folds:
                             msg = (f"[MiniBlockCV:GATE_MIN_VALID_FOLDS] valid={k_valid}/{K_all} "
-                                   f"< min_folds={min_valid_folds} → PRUNE")
+                                   f"< min_folds={min_valid_folds} -> PRUNE")
                             if bool(config.get("print_cv_debug", False)):
                                 print(msg)
                             if prune_on_min_valid_folds:
@@ -3174,7 +3174,7 @@ class RunMixin:
                         if coverage < min_valid_frac:
                             if prune_low_valid:
                                 msg = (f"[MiniBlockCV:GATE_MIN_VALID] valid={k_valid}/{K_all} "
-                                       f"(cov={coverage:.2f}) < min={min_valid_frac:.2f} → PRUNE")
+                                       f"(cov={coverage:.2f}) < min={min_valid_frac:.2f} -> PRUNE")
                                 if bool(config.get("print_cv_debug", False)):
                                     print(msg)
                                 try:
@@ -3185,8 +3185,8 @@ class RunMixin:
                             else:
                                 # We'll keep the trial but apply a penalty later (after aggregation).
                                 if bool(config.get("print_cv_debug", False)):
-                                    print(f"[MiniBlockCV:GATE_MIN_VALID] cov={coverage:.2f} < {min_valid_frac:.2f} → "
-                                          f"KEEP & PENALIZE (cv_invalid_share_penalty × invalid_folds)")
+                                    print(f"[MiniBlockCV:GATE_MIN_VALID] cov={coverage:.2f} < {min_valid_frac:.2f} -> "
+                                          f"KEEP & PENALIZE (cv_invalid_share_penalty x invalid_folds)")
 
                     min_cov_base = float(config.get("cv_min_coverage", 0.80))
 
@@ -3199,20 +3199,20 @@ class RunMixin:
                         min_cov = max(0.0, min_cov_base * cv_relax)
 
                     if cv_relax > 0.0:
-                        # Normal behavior: if nothing usable OR too little coverage → prune the trial.
+                        # Normal behavior: if nothing usable OR too little coverage -> prune the trial.
                         if k_valid == 0 or coverage < min_cov:
                             msg = f"[MiniBlockCV] coverage={coverage:.2f} < min_cov={min_cov:.2f}"
                             if bool(config.get("print_cv_debug", False)):
-                                print(msg + " → TrialPruned")
+                                print(msg + " -> TrialPruned")
                             if optuna is not None:
                                 raise optuna.TrialPruned(msg)
                             # If Optuna is not available, fall back to "hopeless" score.
                             return float("nan")
                     else:
-                        # cv_prune_relax == 0.0 → no coverage-based pruning.
+                        # cv_prune_relax == 0.0 -> no coverage-based pruning.
                         # If k_valid == 0, we just log and continue; downstream agg will yield NaN.
                         if k_valid == 0 and bool(config.get("print_cv_debug", False)):
-                            print("[MiniBlockCV] cv_prune_relax=0.0 & k_valid=0 → no hard prune (returning NaN later).")
+                            print("[MiniBlockCV] cv_prune_relax=0.0 & k_valid=0 -> no hard prune (returning NaN later).")
 
                     vals = np.sort(arr_all[valid_mask])
                     trim_frac = float(config.get("cv_trim_frac", 0.0))
@@ -3306,8 +3306,8 @@ class RunMixin:
                                 penalty = per_fold_pen * float(invalid_folds)
                                 final_score = float(final_score - penalty)
                                 if bool(config.get("print_cv_debug", False)):
-                                    print(f"[MiniBlockCV:INVALID_PEN] invalid={invalid_folds} × {per_fold_pen:.2f} "
-                                        f"→ −{penalty:.2f} → final={final_score:.4f}")
+                                    print(f"[MiniBlockCV:INVALID_PEN] invalid={invalid_folds} x {per_fold_pen:.2f} "
+                                        f"-> -{penalty:.2f} -> final={final_score:.4f}")
                     except Exception:
                         pass
 
@@ -3325,7 +3325,7 @@ class RunMixin:
                             min_corr = float(config.get("cv_cscv_min_rank_corr", np.nan))
                             if np.isfinite(min_corr) and (float(corr) < min_corr) and bool(config.get("cv_strict_pruning", False)):
                                 if bool(config.get("print_cv_debug", False)):
-                                    print(f"[CSCV-PBO] corr={corr:.3f} < min={min_corr:.2f} → DISQUALIFY (strict)")
+                                    print(f"[CSCV-PBO] corr={corr:.3f} < min={min_corr:.2f} -> DISQUALIFY (strict)")
                                 import optuna as _opt
                                 raise _opt.TrialPruned("CSCV/PBO: rank-corr below minimum (strict)")
 
@@ -3387,7 +3387,7 @@ class RunMixin:
                                     print(
                                         f"[CSCV-PBO] corr={corr_f:.3f} proxy={pbo_proxy:.3f} "
                                         f"pen_frac={pen_frac:.3f} pen_amt={pen_amt:.4f} "
-                                        f"dir={direction} base={b:.4f} → final={float(final_score):.4f}"
+                                        f"dir={direction} base={b:.4f} -> final={float(final_score):.4f}"
                                     )
 
                     if bool(config.get("print_cv_fold_scores", False)) or bool(config.get("print_cv_debug", False)):
@@ -3399,7 +3399,7 @@ class RunMixin:
                         print(
                             f"[{prefix}:{agg_mode}] kept_folds={kept_ids}/{K_all} folds={_raw} "
                             f"| k={k_valid}/{K_all} (cov={coverage:.2f}) "
-                            f"| trim_frac={trim_frac:.2f} → final={_fin}"
+                            f"| trim_frac={trim_frac:.2f} -> final={_fin}"
                         )
 
                 # --- Store diagnostics (robust to partial folds) ---
@@ -3713,7 +3713,7 @@ class RunMixin:
             )
 
         log_print(
-            f"🏁 Optuna best trial: #{study_obj.best_trial.number} value={study_obj.best_value:.6f}",
+            f"[DONE] Optuna best trial: #{study_obj.best_trial.number} value={study_obj.best_value:.6f}",
             level="COMPACT",
         )
 
@@ -3774,7 +3774,7 @@ class RunMixin:
         self._optuna_consensus_pool_for_wfo = consensus_pool_once
         
         log_print(
-            f"📊 Stored Top-{len(self._optuna_top5_for_wfo or ['best'])} params "
+            f"[DATA] Stored Top-{len(self._optuna_top5_for_wfo or ['best'])} params "
             f"and {len(self._optuna_consensus_pool_for_wfo)} consensus candidates for fallback/consensus use." 
         , level="COMPACT")
         # ============================================================================
@@ -3806,7 +3806,7 @@ class RunMixin:
             test_data  = walk_data[(idx_w >= train_end) & (idx_w < test_end)]
             if len(train_data) < 150 or len(test_data) < 30:
                 log_print(
-                    f"⚠️ Skipping fold: train={len(train_data)}, test={len(test_data)} too small",
+                    f"[WARN] Skipping fold: train={len(train_data)}, test={len(test_data)} too small",
                     level="COMPACT",
                 )
                 return None
@@ -3840,12 +3840,12 @@ class RunMixin:
                     self._coverage_conf_thr = float(_cv_thr)
                     if self._is_debug():
                         log_print(
-                            f"[CV→Runtime] Using aggregated coverage conf_thr={self._coverage_conf_thr:.3f} as base.",
+                            f"[CV->Runtime] Using aggregated coverage conf_thr={self._coverage_conf_thr:.3f} as base.",
                             level="DEBUG",
                         )
             except Exception as _e:
                 if self._is_debug():
-                    log_print(f"[CV→Runtime] Coverage conf_thr aggregation not available: {_e}", level="DEBUG")
+                    log_print(f"[CV->Runtime] Coverage conf_thr aggregation not available: {_e}", level="DEBUG")
 
             top5_params_list = getattr(self, "_optuna_top5_for_wfo", None) or []
             if top5_params_list and "__top5_params" not in best_params:
@@ -3886,7 +3886,7 @@ class RunMixin:
             #       case `candidates` contains only the chosen CV winner.
             if not valid_found:
                 # Configurable minimum trades for *runtime* WFO.
-                # Default: 0 → allows "flat but valid" months.
+                # Default: 0 -> allows "flat but valid" months.
                 cfg_f = getattr(self, "features_config", {}) or {}
                 min_trades_wfo = int(cfg_f.get("min_trades_for_wfo", 0))
 
@@ -3915,23 +3915,23 @@ class RunMixin:
                             trades_int = 0
 
                         if trades_int >= min_trades_wfo:
-                            print(f"✅ Using Top-{idx+1} candidate (trades={trades_int})")
+                            print(f"[OK] Using Top-{idx+1} candidate (trades={trades_int})")
                             selected_params = dict(params_try)
                             valid_found = True
                             break
                         else:
                             print(
-                                f"⚠️ Top-{idx+1} candidate produced {trades_int} trades; "
+                                f"[WARN] Top-{idx+1} candidate produced {trades_int} trades; "
                                 "trying next."
                             )
                     except Exception as e:
-                        print(f"❌ Error with Top-{idx+1} candidate: {e}")
+                        print(f"[ERR] Error with Top-{idx+1} candidate: {e}")
                         continue
 
 
             # --- Optional SECOND Optuna study (only when allow_param_fallback=True) ---
             if (not valid_found or perf_tuple is None) and bool(self.features_config.get("allow_param_fallback", False)):
-                print("⚠️ Top-5 produced no valid result → starting a SECOND Optuna study now (sequential).")
+                print("[WARN] Top-5 produced no valid result -> starting a SECOND Optuna study now (sequential).")
 
                 try:
                     best2, score2, top5_2, _ = run_optuna_tuning(
@@ -3984,7 +3984,7 @@ class RunMixin:
 
                             if trades_int >= min_trades_wfo:
                                 print(
-                                    f"✅ Using SECOND-study Top-{idx+1} candidate "
+                                    f"[OK] Using SECOND-study Top-{idx+1} candidate "
                                     f"(trades={trades_int})"
                                 )
                                 selected_params = dict(params_try)
@@ -3992,30 +3992,30 @@ class RunMixin:
                                 break
                             else:
                                 print(
-                                    f"⚠️ SECOND-study Top-{idx+1} candidate produced {trades_int} "
+                                    f"[WARN] SECOND-study Top-{idx+1} candidate produced {trades_int} "
                                     "trades; trying next."
                                 )
                         except Exception as e:
-                            print(f"❌ Error with SECOND-study Top-{idx+1} candidate: {e}")
+                            print(f"[ERR] Error with SECOND-study Top-{idx+1} candidate: {e}")
                             continue
 
 
                 except Exception as e:
-                    print(f"❌ SECOND Optuna study failed: {e}")
+                    print(f"[ERR] SECOND Optuna study failed: {e}")
 
                 if not valid_found or perf_tuple is None:
-                    print("❗ No valid configuration was found in either study.")
+                    print("[ERR] No valid configuration was found in either study.")
                     return None
 
-            # --- FINAL GUARD: no usable metrics → skip this fold (WFO will log flat month upstream) ---
+            # --- FINAL GUARD: no usable metrics -> skip this fold (WFO will log flat month upstream) ---
             if (not valid_found) or (perf_tuple is None):
-                print("❗ evaluate_fold: no valid metrics produced for this fold; skipping.")
+                print("[ERR] evaluate_fold: no valid metrics produced for this fold; skipping.")
                 return None
 
             # ------------------------------------------------------------
             # Optuna uses capped, compute-saving CV. After a candidate is
             # selected for this fold/month, run a *single* uncapped refit
-            # (stride=1, deep_max_train_windows≈∞, etc.) and report those
+            # (stride=1, deep_max_train_windows~=inf, etc.) and report those
             # metrics. This preserves compute during search while ensuring
             # final reported results match the deployment training regime.
             # ------------------------------------------------------------
@@ -4037,7 +4037,7 @@ class RunMixin:
                     )
             except Exception as _e:
                 try:
-                    print(f"⚠️ Final refit skipped/failed; using original metrics. err={_e}")
+                    print(f"[WARN] Final refit skipped/failed; using original metrics. err={_e}")
                 except Exception:
                     pass
 
@@ -4087,7 +4087,7 @@ class RunMixin:
         backend = "threading" if is_gpu_model else "loky"
 
         if model_type in GPU_MODELS:
-            print("⚠️ Serializing TF-based trials to avoid GPU contention.")
+            print("[WARN] Serializing TF-based trials to avoid GPU contention.")
             n_jobs_actual = 1
         else:
             # Use our unified CPU-centric thread knob
@@ -4101,11 +4101,11 @@ class RunMixin:
         )
 
 
-        print(f"✅ Parallel walk-forward completed in {time.time() - start:.2f} seconds.")
+        print(f"[OK] Parallel walk-forward completed in {time.time() - start:.2f} seconds.")
 
         all_results = [r for r in all_results if r is not None]
         if not all_results:
-            print("❌ WFO failed completely.")
+            print("[ERR] WFO failed completely.")
             return None, None
 
         # Serialize config dicts for grouping
@@ -4141,7 +4141,7 @@ class RunMixin:
 
         param_cols = [c for c in candidates if _is_scalar_series(df_wfo[c])]
         if not param_cols:
-            print("⚠️ No hashable parameter columns to group by; cannot select best combo.")
+            print("[WARN] No hashable parameter columns to group by; cannot select best combo.")
             return df_wfo, None
 
         grouped = (
@@ -4149,13 +4149,13 @@ class RunMixin:
             .mean().sort_values(ascending=False)
         )
         if grouped.empty:
-            print("⚠️ WFO produced no valid rows to rank; cannot select best combo.")
+            print("[WARN] WFO produced no valid rows to rank; cannot select best combo.")
             return df_wfo, None
 
         topk_df = grouped.reset_index()
         best_combo = topk_df.iloc[0].to_dict()
 
-        # Carry __top5_* helpers through (don’t group on them)
+        # Carry __top5_* helpers through (don't group on them)
         for helper in ["__top5_info", "__top5_params", "__top5_path"]:
             if helper in df_wfo.columns:
                 first_nonnull = df_wfo[helper].dropna()

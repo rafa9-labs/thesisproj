@@ -2,13 +2,13 @@
 Position sizing models for the FX ML backtester.
 
 Provides five sizing methods dispatched by ``compute_size()``:
-  - FIXED            — constant 1.0 lot (baseline, legacy default)
-  - FIXED_FRACTIONAL — proportional to account equity
-  - KELLY            — Kelly criterion with configurable half-Kelly fraction
-  - ATR              — volatility-adjusted via Average True Range
-  - VOL_TARGET       — inverse-volatility target (migrated from execution_patches)
+  - FIXED            -- constant 1.0 lot (baseline, legacy default)
+  - FIXED_FRACTIONAL -- proportional to account equity
+  - KELLY            -- Kelly criterion with configurable half-Kelly fraction
+  - ATR              -- volatility-adjusted via Average True Range
+  - VOL_TARGET       -- inverse-volatility target (migrated from execution_patches)
 
-All sizers are **pure scalar functions** — no allocations, safe for the
+All sizers are **pure scalar functions** -- no allocations, safe for the
 tight bar-by-bar execution loop.
 
 Usage::

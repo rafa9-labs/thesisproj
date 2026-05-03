@@ -1,5 +1,5 @@
 """
-Model Comparison & Leaderboard — post-process pipeline results.
+Model Comparison & Leaderboard -- post-process pipeline results.
 
 Provides a clean API for:
   - Scanning the latest results directory
@@ -193,18 +193,18 @@ def leaderboard_to_ascii(df: pd.DataFrame, max_width: int = 120) -> str:
     for col in display_df.columns:
         if col in ("rank", "months", "trades"):
             display_df[col] = display_df[col].apply(
-                lambda x: str(int(x)) if pd.notna(x) else "—"
+                lambda x: str(int(x)) if pd.notna(x) else "--"
             )
         elif col == "model":
             continue
         else:
             display_df[col] = display_df[col].apply(
-                lambda x: f"{float(x):.4f}" if pd.notna(x) and isinstance(x, (int, float)) else "—"
+                lambda x: f"{float(x):.4f}" if pd.notna(x) and isinstance(x, (int, float)) else "--"
             )
 
     # Build table
     lines = []
-    header = " 🏆 MODEL LEADERBOARD ".center(max_width, "=")
+    header = " [TROPHY] MODEL LEADERBOARD ".center(max_width, "=")
     lines.append(header)
 
     # Column widths
@@ -365,10 +365,10 @@ def main():
         if not dirs:
             print("No results directories found.")
             return
-        print("\n📁 Available Results Directories:\n")
+        print("\n[DIR] Available Results Directories:\n")
         for i, d in enumerate(dirs, 1):
             ranking = os.path.join(d, "csv_ranking_FINAL.csv")
-            has_ranking = "✅" if os.path.isfile(ranking) else "❌"
+            has_ranking = "[OK]" if os.path.isfile(ranking) else "[ERR]"
             mod_time = os.path.getmtime(d)
             from datetime import datetime
             ts = datetime.fromtimestamp(mod_time).strftime("%Y-%m-%d %H:%M")
@@ -380,19 +380,19 @@ def main():
     if results_dir is None:
         results_dir = find_latest_results_dir()
         if results_dir is None:
-            print("❌ No results directories found. Run some backtests first.")
+            print("[ERR] No results directories found. Run some backtests first.")
             sys.exit(1)
 
     if not os.path.isdir(results_dir):
-        print(f"❌ Directory not found: {results_dir}")
+        print(f"[ERR] Directory not found: {results_dir}")
         sys.exit(1)
 
-    print(f"\n📊 Analyzing results: {results_dir}\n")
+    print(f"\n[DATA] Analyzing results: {results_dir}\n")
 
     # Leaderboard
     lb = build_leaderboard(results_dir)
     if lb.empty:
-        print("❌ No ranking data found in this results directory.")
+        print("[ERR] No ranking data found in this results directory.")
         sys.exit(1)
 
     print(leaderboard_to_ascii(lb))
@@ -400,7 +400,7 @@ def main():
     # Significance tests
     if not args.quick:
         if args.significance:
-            print("\n🔬 Paired Significance Tests (monthly returns):\n")
+            print("\n[ANALYSIS] Paired Significance Tests (monthly returns):\n")
             sig = paired_significance_test(results_dir)
             if sig is not None and not sig.empty:
                 print(sig.to_string(index=False))
@@ -410,7 +410,7 @@ def main():
     # Export
     if args.export:
         out = export_comparison_report(results_dir)
-        print(f"\n✅ Comparison report exported to: {out}")
+        print(f"\n[OK] Comparison report exported to: {out}")
 
 
 if __name__ == "__main__":

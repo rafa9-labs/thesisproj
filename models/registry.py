@@ -1,5 +1,5 @@
 """
-Model registry — maps model type names → builder callables.
+Model registry -- maps model type names -> builder callables.
 
 Usage:
     from models.registry import build_model, MODEL_REGISTRY, register_model

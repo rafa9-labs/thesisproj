@@ -1,6 +1,6 @@
 """Walk-forward execution helpers backported from utilsNoWFO.py.
 
-Phase 4.2b — test-bar alignment, warmup, trade logs, day-1 anchor.
+Phase 4.2b -- test-bar alignment, warmup, trade logs, day-1 anchor.
 """
 from __future__ import annotations
 
@@ -250,7 +250,7 @@ def build_trade_log_from_df(df, bar_minutes=None):
             entry_i = i
         elif current_side != 0.0:
             if side == 0.0:
-                # Closing into flat → close using this bar
+                # Closing into flat -> close using this bar
                 close_trade(i)
             elif side != current_side:
                 # Flip: close old trade at i-1, open new one at i

@@ -44,7 +44,7 @@ def run_optuna_tuning(
     Returns:
         best_params (dict): Best trial parameters with extra Top-N metadata.
         best_score (float): study.best_value (TRUE Sharpe).
-        topN_params (list[dict]): List of Top-N param dicts (ranked best→worse).
+        topN_params (list[dict]): List of Top-N param dicts (ranked best->worse).
         study (optuna.study.Study): the Optuna study.
         consensus_pool (list[dict]): Small pool of candidate configs (all valid trials) for consensus selection.
      """
@@ -187,7 +187,7 @@ def run_optuna_tuning(
             trials = []
 
         study = _DummyStudy()
-        print(f"[HPO] n_trials=0 → loaded cached config for {_model_name} from {used_path}")
+        print(f"[HPO] n_trials=0 -> loaded cached config for {_model_name} from {used_path}")
         return best, study.best_value, list(topN or []), study, list(topN or [])
 
         
@@ -214,8 +214,8 @@ def run_optuna_tuning(
 
     # ------------------------------------------------------------
     # Patch: model-aware startup trials
-    # If caller passes default 10 → treat as "auto".
-    # If caller passes anything else → respect it.
+    # If caller passes default 10 -> treat as "auto".
+    # If caller passes anything else -> respect it.
     # ------------------------------------------------------------
     try:
         _n_startup_arg = int(n_startup_trials)
@@ -255,7 +255,7 @@ def run_optuna_tuning(
         pruner = optuna.pruners.NopPruner()
     else:
         pruner = optuna.pruners.SuccessiveHalvingPruner(
-            min_resource=_pruner_min_resource,       # “min_folds before prune”
+            min_resource=_pruner_min_resource,       # "min_folds before prune"
             reduction_factor=_pruner_reduction_factor,
             bootstrap_count=0,
             min_early_stopping_rate=0                # allow pruning once min_resource is reached
@@ -536,7 +536,7 @@ def run_optuna_tuning(
             _summary += "No failure info available (all pruned?)."
         raise RuntimeError(_summary)
 
-    # 👉 Re-rank by Deflated Sharpe proxy (DSR)
+    # [POINT] Re-rank by Deflated Sharpe proxy (DSR)
     try:
         from utilsNoWFO import compute_dsr_scores
         _scores = [float(t.value) for t in completed]
@@ -592,16 +592,16 @@ def run_optuna_tuning(
         # Hyperparameter ranges used only for distance normalization.
         # Keep these aligned with the suggest_* ranges above.
         HP_RANGES = {
-            "lags_range":         (8.0, 40.0),   # 8–24 (ensembles) or 12–40 (others) → global span
-            "lag_depth":          (1.0, 4.0),    # 1–3 or 2–4
+            "lags_range":         (8.0, 40.0),   # 8-24 (ensembles) or 12-40 (others) -> global span
+            "lag_depth":          (1.0, 4.0),    # 1-3 or 2-4
             "target_active_rate": (0.24, 0.26),  # as in trial.suggest_float(...)
-            "label_threshold":    (5e-5, 5e-3),  # covers dynamic σ-based bounds
+            "label_threshold":    (5e-5, 5e-3),  # covers dynamic sigma-based bounds
             "alpha_vol_z":        (0.0, 0.03),
             "beta_spread_norm":   (0.0, 0.08),
             "gamma_slip_norm":    (0.0, 0.08),
         }
 
-        # Radius in normalized space (≈10–15% of search span).
+        # Radius in normalized space (~=10-15% of search span).
         GEOM_RADIUS = 0.10
 
         def _norm_dist(v1, v2, key):
@@ -662,7 +662,7 @@ def run_optuna_tuning(
                         max_d = d
 
                 # If we had at least one comparable dimension and everything is within
-                # GEOM_RADIUS, treat as "same robust region" → near-duplicate.
+                # GEOM_RADIUS, treat as "same robust region" -> near-duplicate.
                 if any_finite and max_d <= GEOM_RADIUS:
                     return True
 
@@ -719,8 +719,8 @@ def run_optuna_tuning(
 
     
     # Decide output location:
-    # - If month_out_dir is provided → save ONLY the per-month plot there with the project's filename.
-    # - Else (legacy) → create an optuna_runs/<id> audit folder with the usual artifacts.
+    # - If month_out_dir is provided -> save ONLY the per-month plot there with the project's filename.
+    # - Else (legacy) -> create an optuna_runs/<id> audit folder with the usual artifacts.
     legacy_optuna_dir = None
     if month_out_dir:
         out_dir = month_out_dir
@@ -741,7 +741,7 @@ def run_optuna_tuning(
             )
 
         except Exception as _e:
-            print(f"⚠️ Could not save learning summary: {_e}")
+            print(f"[WARN] Could not save learning summary: {_e}")
 
     if legacy_optuna_dir:
         try:
@@ -754,9 +754,9 @@ def run_optuna_tuning(
             imps = {str(k): float(v) for k, v in imps.items()}
             with open(imps_path, "w") as f:
                 _json.dump(imps, f, indent=2, sort_keys=True)
-            print(f"✅ Saved Optuna param importances → {imps_path}")
+            print(f"[OK] Saved Optuna param importances -> {imps_path}")
         except Exception as _e:
-            print(f"⚠️ Could not compute/save param importances: {_e}")
+            print(f"[WARN] Could not compute/save param importances: {_e}")
 
     # --- Build Top-N, normalize, and save audit JSON ---
 
@@ -973,7 +973,7 @@ def run_optuna_tuning(
         with open(top_path, "w") as f:
             json.dump(top_payload, f, indent=2, sort_keys=True)
     except Exception as _e:
-        print(f"⚠️ Failed to write Top-{top_n} JSON: {_e}")
+        print(f"[WARN] Failed to write Top-{top_n} JSON: {_e}")
 
     # 7) Embed Top-N pointers into best_params (for downstream refit)
     best_params["__top5_params"] = top_params_only
@@ -1463,7 +1463,7 @@ def run_optuna_tuning(
         os.makedirs("artifacts", exist_ok=True)
         with open("artifacts/best_exec_defaults.json", "w") as f:
             json.dump(tuned_subset, f, indent=2, sort_keys=True)
-        print("[Tuning] Wrote tuned execution defaults → artifacts/best_exec_defaults.json")
+        print("[Tuning] Wrote tuned execution defaults -> artifacts/best_exec_defaults.json")
     except Exception as e:
         print(f"[Tuning] Could not write tuned defaults: {e}")
 
@@ -1508,11 +1508,11 @@ def run_optuna_tuning(
                     )
             else:
                 print(
-                    f"ℹ️ Skipping Optuna progress plot for month {month_idx_int} "
+                    f"[INFO] Skipping Optuna progress plot for month {month_idx_int} "
                     f"(only month 1 is plotted)."
                 )
         except Exception as _e:
-            print(f"⚠️ Failed to save Optuna progress: {_e}")
+            print(f"[WARN] Failed to save Optuna progress: {_e}")
 
     # 2) Trial-level feature-frequency heatmap (top 20% trials, Sharpe-weighted)
     if legacy_optuna_dir and SAVE_TRIAL_FEATURE_FREQ and (save_feature_frequency_from_trials is not None) and not SKIP_PLOTS:
@@ -1532,7 +1532,7 @@ def run_optuna_tuning(
                 collapse_raw_lags=True,
             )
         except Exception as _e:
-            print(f"⚠️ Failed to save trial-level feature frequency: {_e}")
+            print(f"[WARN] Failed to save trial-level feature frequency: {_e}")
 
     # 3) Trial-duration stats (per study/run)
     try:
@@ -1554,7 +1554,7 @@ def run_optuna_tuning(
             min_sec = float(_np.min(durations))
             max_sec = float(_np.max(durations))
 
-            # month_ix is optional – best-effort cast
+            # month_ix is optional - best-effort cast
             try:
                 m_ix = int(month_ix) if month_ix is not None else ""
             except Exception:
@@ -1582,13 +1582,13 @@ def run_optuna_tuning(
                 writer.writerow(row)
 
             print(
-                f"⏱️ Trial-time stats: avg={avg_sec:.2f}s "
-                f"(n={len(durations)}) → {stats_csv}"
+                f"[TIME] Trial-time stats: avg={avg_sec:.2f}s "
+                f"(n={len(durations)}) -> {stats_csv}"
             )
         else:
-            print("⏱️ No trial durations available to log.")
+            print("[TIME] No trial durations available to log.")
     except Exception as _e:
-        print(f"⚠️ Could not save trial-time stats: {_e}")
+        print(f"[WARN] Could not save trial-time stats: {_e}")
 
     import gc as _gc
     _gc.collect()

@@ -1,4 +1,4 @@
-"""Auto-extracted mixin — see composed.py for the full MLBacktester."""
+"""Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 
@@ -118,7 +118,7 @@ class DeepMixin:
                     class_weight = {int(c): float(w) for c, w in zip(classes, weights)}
                     print(f"[CLASS-WEIGHT] {class_weight}")
         except Exception as _e:
-            print(f"⚠️ class_weight computation skipped: {_e}")
+            print(f"[WARN] class_weight computation skipped: {_e}")
 
         fit_kwargs = dict(
             x=X_tr, y=y_tr,
@@ -149,7 +149,7 @@ class DeepMixin:
             import numpy as _np
             idx = pd.Index(index)
             if len(idx) == 0:
-                print("ℹ️ [debug-dump] empty index.")
+                print("[INFO] [debug-dump] empty index.")
                 return
             n = int(min(n, len(idx)))
 
@@ -165,7 +165,7 @@ class DeepMixin:
             mc  = _as_arr(max_conf,   m, _np.nan)
             fp  = _as_arr(final_preds, m, _np.nan)
 
-            print(f"\n🔎 First {m} window-end decisions{(' — '+str(label)) if label else ''}")
+            print(f"\n[SEARCH] First {m} window-end decisions{(' -- '+str(label)) if label else ''}")
             print("timestamp                 | raw_cls | max_conf | final_pred")
             for i in range(m):
                 ts = str(idx[i])
@@ -194,7 +194,7 @@ class DeepMixin:
             - 'mean_return': per-strategy mean monthly return
             - 'std_return': per-strategy std of monthly return
             - 'sharpe_like': per-strategy mean/std
-            - 'pbo': estimated Probability of Backtest Overfitting (0–1 or NaN)
+            - 'pbo': estimated Probability of Backtest Overfitting (0-1 or NaN)
             - 'mcs_strategies': list of strategy_ids in a simple MCS proxy
         """
         import numpy as _np
@@ -223,7 +223,7 @@ class DeepMixin:
             )
             return None
 
-        # Build strategy × month matrix of monthly returns
+        # Build strategy x month matrix of monthly returns
         mat = df.pivot_table(
             index="test_end",
             columns="strategy_id",
@@ -238,7 +238,7 @@ class DeepMixin:
 
         if mat.shape[1] < 2:
             log_print(
-                "[PBO/MCS] Need ≥2 strategies with sufficient history for PBO/MCS; skipping.",
+                "[PBO/MCS] Need >=2 strategies with sufficient history for PBO/MCS; skipping.",
                 level="COMPACT",
             )
             return None
@@ -285,13 +285,13 @@ class DeepMixin:
                 continue
 
             # Empirical OOS quantile of the chosen strategy
-            # rank 1=worst, S=best  → quantile in (0,1)
+            # rank 1=worst, S=best  -> quantile in (0,1)
             ranks = _np.argsort(_np.argsort(oos_mean))  # 0-based rank
             u = (ranks[best_idx] + 1) / float(S + 1e-9)
             if u <= 0.0 or u >= 1.0 or not _np.isfinite(u):
                 continue
 
-            # Overfitting statistic ω = logit(u)
+            # Overfitting statistic omega = logit(u)
             omega = _np.log(u / (1.0 - u))
             omegas.append(omega)
 
@@ -301,7 +301,7 @@ class DeepMixin:
         else:
             pbo = float("nan")
 
-        # --- Simple MCS proxy (NOT full Hansen–Lunde–Nason MCS) ---
+        # --- Simple MCS proxy (NOT full Hansen-Lunde-Nason MCS) ---
         # Keep strategies whose mean return is within 1 std-error of the best.
         T_eff = float(mat.shape[0])
         best_mean = float(mean_ret.max())
@@ -387,9 +387,9 @@ class DeepMixin:
             try:
                 gpus = tf.config.list_physical_devices("GPU")
                 if gpus:
-                    print(f"[deep_mixin] GPU detected: {len(gpus)} device(s) — {gpus[0].name}")
+                    print(f"[deep_mixin] GPU detected: {len(gpus)} device(s) -- {gpus[0].name}")
                 else:
-                    print("[deep_mixin] No GPU detected — using CPU")
+                    print("[deep_mixin] No GPU detected -- using CPU")
             except Exception:
                 pass
         except Exception:
@@ -429,7 +429,7 @@ class DeepMixin:
         """
         Attach real per-bar cost columns (no synthetic means).
         - 'spread' is copied from self.data (if present).
-        - 'slippage_bps' is volatility-aware: base→high on high-vol bars.
+        - 'slippage_bps' is volatility-aware: base->high on high-vol bars.
         """
         import numpy as _np
         import pandas as pd
@@ -462,7 +462,7 @@ class DeepMixin:
                 df["spread"] = 0.0
                 
                 
-        # ANCHOR: # 2) Vol-aware slippage_bps per bar (0.20 base → 0.30 on high vol)
+        # ANCHOR: # 2) Vol-aware slippage_bps per bar (0.20 base -> 0.30 on high vol)
         # Price series is needed to normalize spread (price units) into fractional drag.
         # compute_full_evaluation_metrics() uses 'price' or 'mid_close' if available.
         if ("price" not in df.columns) and ("mid_close" not in df.columns):
@@ -493,7 +493,7 @@ class DeepMixin:
             # explicit config wins, then df.attrs, then self.features_config
             return cfg.get(k, cfg_from_attrs.get(k, cfg_from_self.get(k, default)))
 
-        # 2) Vol-aware slippage_bps per bar (base → high on high vol; MED fallback if thr missing)
+        # 2) Vol-aware slippage_bps per bar (base -> high on high vol; MED fallback if thr missing)
         if "slippage_bps" not in df.columns:
             base = float(_get_cfg("eval_slip_bps_lo", _get_cfg("cv_slippage_bps_base", 0.20)))
             high = float(_get_cfg("eval_slip_bps_hi", _get_cfg("cv_slippage_bps_high", 0.30)))
@@ -721,7 +721,7 @@ class DeepMixin:
                         )
             except Exception as _e2:
                 if bool(cfg.get("print_cv_debug", False)):
-                    print(f"⚠️ [Calib/deep] metrics skipped: {_e2}")
+                    print(f"[WARN] [Calib/deep] metrics skipped: {_e2}")
 
             # --- temperature (keep prior behavior: do NOT do this in CV unless you explicitly enable it)
             use_temp = bool(cfg.get("deep_calibrate", False)) and (
@@ -741,7 +741,7 @@ class DeepMixin:
                             )
                     except Exception as _e:
                         if self._is_debug():
-                            print(f"⚠️ [Calib] temperature fit skipped: {_e}")
+                            print(f"[WARN] [Calib] temperature fit skipped: {_e}")
 
             # --- coverage threshold (requested if gating_mode=coverage OR target_active_rate>0)
             _mode = str(cfg.get("gating_mode", cfg.get("gate_mode", "threshold"))).lower()
@@ -784,7 +784,7 @@ class DeepMixin:
                 )
 
         except Exception as _e:
-            print(f"⚠️ [Calib/deep] model={model_type} skipped: {_e}")
+            print(f"[WARN] [Calib/deep] model={model_type} skipped: {_e}")
             
     # ------------------------------------------------------------------
     # Lazy singleton ProcessPoolExecutor for deep model isolation.
@@ -834,7 +834,7 @@ class DeepMixin:
         ProcessPoolExecutor (spawn-safe on Windows).
 
         Benefits over subprocess.run():
-          - Worker process is reused → no repeated TF import
+          - Worker process is reused -> no repeated TF import
           - Proper exception propagation via Future.result()
           - Same memory isolation (OS-level process boundary)
 
@@ -887,11 +887,11 @@ class DeepMixin:
             future = pool.submit(deep_fit_predict_worker, job_json)
             result = future.result(timeout=600)  # 10-min timeout
         except Exception as e:
-            print(f"⚠️ [DEEP_WORKER] failed: {e}")
+            print(f"[WARN] [DEEP_WORKER] failed: {e}")
             return None, None
 
         if not result.get("success", False):
-            print(f"⚠️ [DEEP_WORKER] error: {result.get('error', 'unknown')}")
+            print(f"[WARN] [DEEP_WORKER] error: {result.get('error', 'unknown')}")
             return None, None
 
         try:
@@ -899,6 +899,6 @@ class DeepMixin:
             proba = np.load(proba_out)
             return proba, thr
         except Exception as e:
-            print(f"⚠️ [DEEP_WORKER] load outputs failed: {e}")
+            print(f"[WARN] [DEEP_WORKER] load outputs failed: {e}")
             return None, None
 

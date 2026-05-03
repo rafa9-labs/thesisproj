@@ -1,11 +1,11 @@
 """
-pipeline.execution — Advanced execution models for the FX backtester.
+pipeline.execution -- Advanced execution models for the FX backtester.
 
 Submodules:
-  position_sizing  — Fixed, fractional, Kelly, ATR, vol-target sizers
-  stops            — Fixed-pips, ATR, sigma SL/TP + breakeven + partial close
-  trailing         — Fixed-pips, ATR, Chandelier trailing stops
-  risk_manager     — Drawdown breaker, daily loss limit, consecutive loss limit
+  position_sizing  -- Fixed, fractional, Kelly, ATR, vol-target sizers
+  stops            -- Fixed-pips, ATR, sigma SL/TP + breakeven + partial close
+  trailing         -- Fixed-pips, ATR, Chandelier trailing stops
+  risk_manager     -- Drawdown breaker, daily loss limit, consecutive loss limit
 """
 
 from pipeline.execution.position_sizing import (

@@ -1,4 +1,4 @@
-"""Auto-extracted mixin — see composed.py for the full MLBacktester."""
+"""Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 from rl.environment import TradingEnv
@@ -67,7 +67,7 @@ class DQNMixin:
                 _ny_times = full_idx.tz_convert("America/New_York")
                 self._ny_mask = pd.Series((_ny_times.hour >= 2) & (_ny_times.hour <= 13), index=full_idx)
             except Exception as _e:
-                print(f"⚠️ Lazy NY mask build failed: {_e}")
+                print(f"[WARN] Lazy NY mask build failed: {_e}")
                 self._ny_mask = pd.Series(True, index=self.data.index)
 
         # NEW semantics:
@@ -95,7 +95,7 @@ class DQNMixin:
                 test_data = test_data.iloc[embargo_n:].copy()
                 print(f"[Embargo] Dropped first {embargo_n} test bars (DQN, non-CV).")
         except Exception as e:
-            print(f"⚠️ final_embargo_bars handling failed (DQN): {e}")
+            print(f"[WARN] final_embargo_bars handling failed (DQN): {e}")
 
         use_strict_day1 = bool(self.features_config.get("enforce_day1_start", True))
         if getattr(self, "_in_real_sim", False):
@@ -114,7 +114,7 @@ class DQNMixin:
             print(f"[CV/DQN] Eval anchor forced to fold start: {first_eval_ts} | test_len={len(test_data)} | warmup_need={_total_warmup_need}")
 
         if first_eval_ts is None:
-            print("❌ No tradable bar found in test window (DQN).")
+            print("[ERR] No tradable bar found in test window (DQN).")
             if bool(getattr(self, "_in_optuna_cv", False)):
                 self.results = None
                 self.results_full = None
@@ -317,7 +317,7 @@ class DQNMixin:
                     if self._is_debug():
                         print("[DQN] No pretrained DQN files found; will train from scratch.")
             except Exception as e:
-                print(f"⚠️ Failed to load pretrained DQNAgent; training from scratch instead: {e}")
+                print(f"[WARN] Failed to load pretrained DQNAgent; training from scratch instead: {e}")
                 self.model = None
                 loaded_from_disk = False
 
@@ -328,10 +328,10 @@ class DQNMixin:
             if use_pretrained and in_real_sim:
                 try:
                     self.model.save(dqn_model_path, dqn_cfg_path)
-                    print(f"💾 DQN model trained and saved to {dqn_model_path} / {dqn_cfg_path}.")
+                    print(f"[SAVE] DQN model trained and saved to {dqn_model_path} / {dqn_cfg_path}.")
 
                 except Exception as e:
-                    print(f"⚠️ Could not save DQN model: {e}")
+                    print(f"[WARN] Could not save DQN model: {e}")
 
         # 5) Prediction on test (windowed) + supervised-style gating compatibility
         feats = self.dqn_feature_list
@@ -447,7 +447,7 @@ class DQNMixin:
             # DQN has an explicit HOLD action. If we take argmax over {sell,hold,buy},
             # target_active_rate/coverage gating cannot "pull trades up" when HOLD dominates.
             # Under coverage intent, compute confidence over TRADE actions only (sell/buy),
-            # then apply conf_thr (and αβγ dynamic thr_vec) to that trade confidence.
+            # then apply conf_thr (and alphabetagamma dynamic thr_vec) to that trade confidence.
             if bool(cov_intent):
                 # trade_p: [sell, buy] only
                 trade_p = proba[:, [0, 2]]
@@ -571,11 +571,11 @@ class DQNMixin:
                 pass
 
         if len(result_df) == 0:
-            print("❌ No tradable rows left in DQN result after start cut.")
+            print("[ERR] No tradable rows left in DQN result after start cut.")
             return _safe_metrics_return((np.nan,) * N_METRICS, context="test_dqn_strategy:empty_result_after_cut")
 
         if (result_df["pred"] != 0).sum() == 0:
-            print("ℹ️ DQN produced no trades in this window.")
+            print("[INFO] DQN produced no trades in this window.")
 
         # Keep zero-lag here; compute_full_evaluation_metrics applies the 1-bar execution delay.
         result_df["pred"] = result_df["pred"].fillna(0.0)

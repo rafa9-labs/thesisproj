@@ -1,5 +1,5 @@
 """
-CSV → SQLite migration tool.
+CSV -> SQLite migration tool.
 
 Migrates all OANDA CSV files from csv_data/ into a single indexed SQLite database.
 Uses batched executemany for high throughput (~500k rows/min).
@@ -159,7 +159,7 @@ def migrate_all(
 
         existing = store.get_candle_count(pair, tf)
         if existing > 0 and not force:
-            print(f"  SKIP {pair} {tf} — {existing} rows already in DB (use --force to overwrite)")
+            print(f"  SKIP {pair} {tf} -- {existing} rows already in DB (use --force to overwrite)")
             continue
 
         n = migrate_pair(store, path, pair, tf, force=force)

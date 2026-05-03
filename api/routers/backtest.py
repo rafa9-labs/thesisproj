@@ -29,7 +29,7 @@ from api.schemas.backtest import (
     RuntimeEstimateResponse,
 )
 from api.services import JobManager
-from api.tasks import download_data_task, run_backtest_task
+from api.tasks import download_data_task, run_backtest_task, IS_DESKTOP
 from pipeline.pair_config import VALID_PAIRS
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
@@ -183,7 +183,25 @@ def submit_backtest(req: BacktestRequest):
     }
 
     jm.create_job(job_id, "backtest", config)
-    run_backtest_task.delay(job_id, config)
+
+    if IS_DESKTOP:
+        # Desktop mode: run synchronously, return completed result
+        try:
+            result = run_backtest_task._func(job_id, config)
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(500, f"Backtest failed: {exc}")
+        jm2 = JobManager(get_data_store())
+        completed = jm2.get_job(job_id)
+        return BacktestSubmitResponse(
+            job_id=job_id,
+            status="completed" if completed and completed.get("status") == "completed" else "failed",
+            pair=pair,
+            models=req.models,
+        )
+    else:
+        run_backtest_task.delay(job_id, config)
 
     return BacktestSubmitResponse(
         job_id=job_id,

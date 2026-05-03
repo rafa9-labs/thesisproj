@@ -2,12 +2,12 @@
 Shared imports for all pipeline modules.
 
 Heavy dependencies (TF, XGBoost, Optuna, model builders) are loaded lazily
-via _LazyModule proxy — the real import only fires on first attribute access.
+via _LazyModule proxy -- the real import only fires on first attribute access.
 This saves 15-30 seconds on startup when only running light tasks.
 """
 from __future__ import annotations
 
-# ── Standard Library (fast, always needed) ──
+# -- Standard Library (fast, always needed) --
 import gc as _gc
 import glob
 import hashlib
@@ -29,7 +29,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from typing import Optional, Tuple
 
-# ── Fast third-party (always needed) ──
+# -- Fast third-party (always needed) --
 import numpy as np
 import pandas as pd
 import psutil
@@ -48,14 +48,14 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.class_weight import compute_class_weight
 
-# ── Data paths & constants ──
+# -- Data paths & constants --
 CSV_1H    = "csv_data/EURUSD_10_years_H1_OANDA.csv"
 CSV_4H    = "csv_data/EURUSD_10_years_H4_OANDA.csv"
 CSV_15MIN = os.environ.get("CSV_15MIN", "csv_data/EURUSD_10_years_M15_OANDA.csv")
 CSV_30MIN = os.environ.get("CSV_30MIN", "csv_data/EURUSD_10_years_M30_OANDA.csv")
 BASE_CSV  = CSV_30MIN  # switch base timeframe by changing this line
 
-# ── DQN paths ──
+# -- DQN paths --
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DQN_GRID_CONFIG_PATH = os.path.join(_REPO_ROOT, "configs", "dqn_grid_config.json")
 MODEL_DQN_PATH = os.path.join(_REPO_ROOT, "dqn_model.h5")
@@ -64,10 +64,10 @@ DQN_AGENT_CONFIG_PATH = os.path.join(_REPO_ROOT, "dqn_agent_config.json")
 # pandas preference
 pd.options.mode.copy_on_write = True  # type: ignore[attr-defined]
 
-# ── Logging ──
+# -- Logging --
 from logging_config import log_print
 
-# ── Project-local utilities ──
+# -- Project-local utilities --
 from utilsNoWFO import (
     set_global_determinism,
     TRAIN_TEST_MONTHS, N_METRICS, METRIC_NAMES,
@@ -102,16 +102,16 @@ from utilsNoWFO import (
     _fmt_table_ascii,
 )
 
-# ── Late import of CLASS_DEFAULTS (must happen BEFORE pipeline.* imports below
-#    because refit → composed → strategy_mixin star-imports us while we're loading)
+# -- Late import of CLASS_DEFAULTS (must happen BEFORE pipeline.* imports below
+#    because refit -> composed -> strategy_mixin star-imports us while we're loading)
 from pipeline.metrics_tuples import CLASS_DEFAULTS, _safe_metrics_return, _empty_metrics  # noqa: F811,E402
 DEFAULT_CV = deepcopy(CLASS_DEFAULTS["cv"])
 DEFAULT_FEATURES = deepcopy(CLASS_DEFAULTS["features"])
 
-# ── Runtime knobs ──
+# -- Runtime knobs --
 from pipeline.runtime import SAFE_CORES, CPU_TOTAL
 
-# ── Pipeline utility modules ──
+# -- Pipeline utility modules --
 from pipeline.standalone_utils import (
     _load_csv_cached, _norm_class_counts,
     print_block_summary, print_pruned_block_summary,
@@ -124,9 +124,9 @@ from pipeline.tuning.runner import run_optuna_tuning
 from pipeline.tuning.refit import final_refit_if_deep, _evaluate_original_no_refit
 
 
-# ═══════════════════════════════════════════════════════════════════
-# Lazy imports — heavy modules loaded only on first use
-# ═══════════════════════════════════════════════════════════════════
+# ===================================================================
+# Lazy imports -- heavy modules loaded only on first use
+# ===================================================================
 
 class _LazyModule:
     """Proxy that defers `import X` until first attribute access."""
@@ -156,17 +156,17 @@ class _LazyModule:
         return dir(self._resolve())
 
 
-# Heavy ML frameworks — loaded on first use
+# Heavy ML frameworks -- loaded on first use
 tf = _LazyModule("tensorflow")
 keras = _LazyModule("tensorflow.keras")
 xgb = _LazyModule("xgboost")
 optuna = _LazyModule("optuna")
 
-# Lazy Keras aliases — resolved on first access
+# Lazy Keras aliases -- resolved on first access
 Callback = _LazyModule("tensorflow.keras.callbacks").Callback
 mixed_precision = _LazyModule("tensorflow.keras.mixed_precision")
 
-# XGBoost classifier — lazy
+# XGBoost classifier -- lazy
 XGBClassifier = _LazyModule("xgboost").XGBClassifier
 
 # Lazy model builders (they import TF internally)
@@ -184,7 +184,7 @@ EnsembleCNNLSTMXGBoost = _LazyModule("models.ensemble_cnn_lstm_xgboost").Ensembl
 AdaptiveRegimeStrategy = _LazyModule("models.ensemble_adaptive_regime").AdaptiveRegimeStrategy
 
 
-# ── Optional deps ──
+# -- Optional deps --
 try:
     from dotenv import load_dotenv
     load_dotenv(dotenv_path=".env", override=False)
@@ -212,7 +212,7 @@ try:
 except Exception as _ta_err:
     import logging as _logging
     _logging.getLogger(__name__).error(
-        "Failed to import 'ta' (technical-analysis library): %s  — "
+        "Failed to import 'ta' (technical-analysis library): %s  -- "
         "Install with: pip install ta", _ta_err)
     ta = None
 
@@ -221,13 +221,13 @@ CSV_ENGINE = _CSV_ENGINE
 _os = os
 _np = np
 
-# ── Runtime constants ──
+# -- Runtime constants --
 LOG_MODE = os.getenv("LOG_MODE", "COMPACT").upper()
 
 # (CLASS_DEFAULTS, _safe_metrics_return, _empty_metrics, DEFAULT_CV, DEFAULT_FEATURES
-#  moved to top of import block — before pipeline.* imports — to break circular import)
+#  moved to top of import block -- before pipeline.* imports -- to break circular import)
 
-# ── Force-export underscore-prefixed symbols for `from pipeline._imports import *` ──
+# -- Force-export underscore-prefixed symbols for `from pipeline._imports import *` --
 # (Python skips _ names in star-imports unless listed in __all__)
 import sys as _sys
 _mod = _sys.modules[__name__]

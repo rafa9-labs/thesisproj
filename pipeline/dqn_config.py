@@ -21,12 +21,12 @@ def _load_default_dqn_cfg(path: str) -> dict:
                 if isinstance(cfg, dict):
                     cfg.setdefault("_cfg_source", "grid_defaults")
             if not isinstance(cfg, dict):
-                print(f"⚠️ DQN config at {path} is not a dict; ignoring.")
+                print(f"[WARN] DQN config at {path} is not a dict; ignoring.")
                 cfg = {}
         else:
-            print(f"⚠️ DQN default config file not found at {path}; using built-in defaults.")
+            print(f"[WARN] DQN default config file not found at {path}; using built-in defaults.")
     except Exception as e:
-        print(f"⚠️ Failed to load DQN default config from {path}: {e}")
+        print(f"[WARN] Failed to load DQN default config from {path}: {e}")
         cfg = {}
 
     return cfg
@@ -93,7 +93,7 @@ def _coerce_dqn_cfg(cfg: dict, *, strict: bool = False) -> dict:
     cfg.setdefault("episodes", 50)
     cfg.setdefault("action_size", 3)
 
-    # ---- Type coercion + basic validity (no “policy” overrides) ----
+    # ---- Type coercion + basic validity (no "policy" overrides) ----
     # episodes: respect exactly if provided (no max(30, ...))
     try:
         cfg["episodes"] = max(1, int(cfg.get("episodes", 50)))
@@ -122,7 +122,7 @@ def _coerce_dqn_cfg(cfg: dict, *, strict: bool = False) -> dict:
     return cfg
 
 
-# ── Global HPO config helpers ────────────────────────────────────────────────
+# -- Global HPO config helpers ------------------------------------------------
 # Use the same default as utilsNoWFO (repo-root /hpo) to avoid CWD-dependent bugs.
 HPO_CONFIG_DIR = os.environ.get(
     "MLB_HPO_DIR",

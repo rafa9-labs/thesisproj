@@ -6,16 +6,16 @@ account-level risk thresholds are breached.  Each safeguard has its own
 toggle and configurable resume behaviour.
 
 Safeguards:
-  - Drawdown breaker   — pause when drawdown from equity peak exceeds N%
-  - Daily loss limit    — pause when cumulative daily PnL exceeds a loss threshold
-  - Consecutive losses  — pause after N consecutive losing trades
+  - Drawdown breaker   -- pause when drawdown from equity peak exceeds N%
+  - Daily loss limit    -- pause when cumulative daily PnL exceeds a loss threshold
+  - Consecutive losses  -- pause after N consecutive losing trades
 
 All safeguards operate at the **account level** (not per-trade) and
 coexist independently with the existing kill switch (Patch #5).
 
 Resume behaviour (per safeguard):
-  - ``"session_end"`` — paused until new calendar day / session gap
-  - ``"cooloff"``     — paused for N bars, then auto-resumes
+  - ``"session_end"`` -- paused until new calendar day / session gap
+  - ``"cooloff"``     -- paused for N bars, then auto-resumes
 
 Usage::
 
@@ -333,7 +333,7 @@ def reset_daily(state: RiskState, config: RiskConfig | None = None) -> None:
     """Reset daily PnL and session-based pauses for a new trading day.
 
     Called on each new calendar day or session gap.
-    Only resets safeguards with ``"session_end"`` resume mode —
+    Only resets safeguards with ``"session_end"`` resume mode --
     cooloff-based safeguards continue counting down via :meth:`tick_cooloffs`.
 
     Parameters

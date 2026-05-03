@@ -1,4 +1,4 @@
-# logging_config.py — Structured logging for FX MLBacktester
+# logging_config.py -- Structured logging for FX MLBacktester
 #
 # Replaces raw print() and log_print() calls with Python's logging module.
 # Supports the same LOG_MODE levels (COMPACT, DEBUG, QUIET) for backward compat.
@@ -51,20 +51,16 @@ class _SafeStreamHandler(logging.StreamHandler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            super().emit(record)
-        except UnicodeEncodeError:
             msg = self.format(record)
-            try:
-                msg = msg.encode(self.stream.encoding or "utf-8", errors="replace").decode(
-                    self.stream.encoding or "utf-8", errors="replace"
-                )
-            except Exception:
-                msg = msg.encode("ascii", errors="replace").decode("ascii")
+            encoding = getattr(self.stream, "encoding", None) or "utf-8"
             try:
                 self.stream.write(msg + self.terminator)
-                self.flush()
-            except Exception:
-                pass
+            except UnicodeEncodeError:
+                safe = msg.encode(encoding, errors="replace").decode(encoding, errors="replace")
+                self.stream.write(safe + self.terminator)
+            self.flush()
+        except Exception:
+            self.handleError(record)
 
 
 class _CompactFormatter(logging.Formatter):
@@ -141,9 +137,9 @@ def log_print(msg: str, level: str = "COMPACT") -> None:
     Backward-compatible shim for the existing log_print() calls.
 
     Maps the old level strings to Python logging levels:
-        - "COMPACT"  → INFO
-        - "DEBUG"    → DEBUG
-        - "QUIET"    → WARNING
+        - "COMPACT"  -> INFO
+        - "DEBUG"    -> DEBUG
+        - "QUIET"    -> WARNING
 
     This function is intentionally a thin wrapper so the existing
     codebase doesn't need to change all call sites at once.

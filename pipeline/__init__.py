@@ -1,1 +1,1 @@
-"""pipeline — modular extract of MLBacktesterNoWFO.py"""
+"""pipeline -- modular extract of MLBacktesterNoWFO.py"""

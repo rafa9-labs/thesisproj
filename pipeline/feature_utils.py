@@ -1,6 +1,6 @@
 """Feature engineering utilities backported from utilsNoWFO.py.
 
-Phase 4.2a — feature builders, selectors, and transformers.
+Phase 4.2a -- feature builders, selectors, and transformers.
 """
 from __future__ import annotations
 
@@ -283,7 +283,7 @@ def build_features_from_params(df, params: dict, base_features):
         if name in df.columns and name not in features:
             features.append(name)
         # elif name not in df.columns:
-        #     print(f"⚠️ build_features_from_params: '{name}' not in df.columns, skipping.")
+        #     print(f"[WARN] build_features_from_params: '{name}' not in df.columns, skipping.")
 
     # 1) One-off indicators (controlled by toggles in params)
     if params.get("use_sma", False) and "sma" in ind_win:

@@ -39,6 +39,6 @@ def _apply_low_ram_overrides(cfg: dict) -> dict:
     cfg["xgb_n_estimators"] = int(min(int(cfg.get("xgb_n_estimators", 350)), 300))
     # Avoid extra scaling buffers
     cfg["use_rolling_scaler"] = False
-    print(f"🧊 LOW-RAM overrides applied (avail≈{avail:.2f}GB).")
+    print(f"[COLD] LOW-RAM overrides applied (avail~={avail:.2f}GB).")
     return cfg
 

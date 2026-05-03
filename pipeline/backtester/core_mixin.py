@@ -1,4 +1,4 @@
-"""Auto-extracted mixin — see composed.py for the full MLBacktester."""
+"""Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from pipeline._imports import *  # noqa: F401,F403
 
 
@@ -86,7 +86,7 @@ class CoreMixin:
         self._in_real_sim = False        # set True inside real_trading_sim()
 
 
-        # ✅ Instance-private copy so in-class mutations never leak outward
+        # [OK] Instance-private copy so in-class mutations never leak outward
         self.features_config = deepcopy(features_config) if features_config else {}
 
         # --- Inject pair-specific pip_value (S3.2) ---
@@ -208,8 +208,8 @@ class CoreMixin:
         if adjusted and self._is_debug():
             tag = f" ({ctx})" if ctx else ""
             print(
-                f"[Gate✔] Coverage nudge params adjusted{tag}: "
-                f"band {band_old:.4f}→{band_f:.4f}, step {step_old:.4f}→{step_f:.4f}"
+                f"[Gate[OK]] Coverage nudge params adjusted{tag}: "
+                f"band {band_old:.4f}->{band_f:.4f}, step {step_old:.4f}->{step_f:.4f}"
             )
 
         return band_f, step_f
@@ -339,12 +339,12 @@ class CoreMixin:
         Returns
         -------
         bool
-            True  → label mix is acceptable for training.
-            False → fold should be skipped as structurally degenerate.
+            True  -> label mix is acceptable for training.
+            False -> fold should be skipped as structurally degenerate.
         """
-        # Empty labels → nothing to train on
+        # Empty labels -> nothing to train on
         if y_train is None or len(y_train) == 0:
-            print(f"⚠️ [{context}] Skipping fold: empty label vector.")
+            print(f"[WARN] [{context}] Skipping fold: empty label vector.")
             return False
         y_arr = np.asarray(y_train)
         u_tr, c_tr = np.unique(y_arr, return_counts=True)
@@ -358,19 +358,19 @@ class CoreMixin:
         u_dir = u_tr[dir_mask]
         c_dir = c_tr[dir_mask]
 
-        # No directional labels at all → useless for trading
+        # No directional labels at all -> useless for trading
         if len(u_dir) == 0:
-            print(f"⚠️ [{context}] Skipping fold: no directional labels in train {label_counts}")
+            print(f"[WARN] [{context}] Skipping fold: no directional labels in train {label_counts}")
             return False
 
-        # Both SHORT and LONG present → each must have at least min_dir_samples
+        # Both SHORT and LONG present -> each must have at least min_dir_samples
         if len(u_dir) >= 2 and (c_dir.min() if len(c_dir) else 0) < min_dir_samples:
-            print(f"⚠️ [{context}] Skipping fold: poor directional label mix in train {label_counts}")
+            print(f"[WARN] [{context}] Skipping fold: poor directional label mix in train {label_counts}")
             return False
 
-        # Only one directional class present (e.g. only LONG) → require enough events
+        # Only one directional class present (e.g. only LONG) -> require enough events
         if len(u_dir) == 1 and c_dir[0] < min_dir_samples:
-            print(f"⚠️ [{context}] Skipping fold: too few directional events in train {label_counts}")
+            print(f"[WARN] [{context}] Skipping fold: too few directional events in train {label_counts}")
             return False
 
         return True
@@ -381,7 +381,7 @@ class CoreMixin:
 
         This is called for *every* trial, CV fold, WFO month, and
         real-trading simulation. Any tweaks here are baked in from the
-        start – no feedback from test results.
+        start - no feedback from test results.
         """
         cfg_f = getattr(self, "features_config", {}) or {}
 
@@ -413,7 +413,7 @@ class CoreMixin:
                     max_conf_thr = 0.90
                 print(
                     f"[Calib][Coverage][TRIPWIRE][CV] conf_thr=nan cal_rows={cal_rows} "
-                    f"reason=missing_coverage_thr → forcing_conf_thr={max_conf_thr:.4f}"
+                    f"reason=missing_coverage_thr -> forcing_conf_thr={max_conf_thr:.4f}"
                 )
                 thr = float(max_conf_thr)
             else:
@@ -494,7 +494,7 @@ class CoreMixin:
         dyn_s = "on" if dyn_abg else "off"
 
         print(
-            f"🔒 [ConfGate] model={model_type} ctx={ctx_s} "
+            f"[LOCK] [ConfGate] model={model_type} ctx={ctx_s} "
             f"conf_requested={float(conf_requested):.3f} conf_base={float(base_thr):.3f} "
             f"conf_used_median={used_m:.3f} source={source} cov_thr={cov_s} dyn_abg={dyn_s}"
         )
@@ -700,7 +700,7 @@ class CoreMixin:
             base["allow_thin_trades_fallback"] = False
         # Warn once per instance to avoid spam
             if not bool(getattr(self, "_warned_thin_trades_disabled", False)):
-                print("🚫 [CV] allow_thin_trades_fallback is HARD-DISABLED (CV must not invent trades).")
+                print("[DISABLED] [CV] allow_thin_trades_fallback is HARD-DISABLED (CV must not invent trades).")
                 self._warned_thin_trades_disabled = True
                 
         # --- B1 Policy: enforce GLOBAL target coverage (signal intent) for ALL models ---
@@ -716,7 +716,7 @@ class CoreMixin:
                 exp = float(target_coverage_policy(_mt) or 0.0)
                 if exp > 0.0 and abs(tar - exp) > 1e-9:
                     # Re-enforce (should be redundant); keep non-fatal to avoid breaking long runs.
-                    print(f"⚠️ [CoveragePolicy][ASSERT] target_active_rate drifted to {tar:.6f}; re-enforcing policy={exp:.6f}")
+                    print(f"[WARN] [CoveragePolicy][ASSERT] target_active_rate drifted to {tar:.6f}; re-enforcing policy={exp:.6f}")
                     enforce_target_coverage_policy(base, model_type=_mt)
                     tar = float(base.get("target_active_rate", base.get("target_coverage", 0.0)) or 0.0)
 
@@ -727,7 +727,7 @@ class CoreMixin:
                     in_real = bool(getattr(self, "_in_real_sim", False))
                     where = "CV" if in_cv else ("REAL" if in_real else "RUN")
                     print(
-                        f"🎯 [CoveragePolicy][{where}] model_type={_mt} gating_mode={gm} "
+                        f"[TARGET] [CoveragePolicy][{where}] model_type={_mt} gating_mode={gm} "
                         f"target_active_rate={tar:.3f} target_coverage={tc:.3f} (policy-locked)"
                     )
                     self._printed_coverage_policy = True

@@ -46,11 +46,11 @@ def _safe_metrics_return(raw_metrics, context: str = "") -> tuple:
 # -----------------------------------------------------------------------------
 SAVE_TRADES = {
     # Monthly summary of trades per rep
-    # (1 row per month, per rep) → <run>/repetition_k/<Model>/csv/monthly_trade_summary_repK.csv
+    # (1 row per month, per rep) -> <run>/repetition_k/<Model>/csv/monthly_trade_summary_repK.csv
     "monthly_summary_per_rep_csv": True,
 
     # Per-trade BH vs model comparison (entry/exit)
-    # → <run>/repetition_k/<Model>/csv/trade_entry_exit_compare_repK.csv
+    # -> <run>/repetition_k/<Model>/csv/trade_entry_exit_compare_repK.csv
     "trade_entry_exit_compare_csv": True,
 
     # Reserved for future use:
@@ -60,7 +60,7 @@ SAVE_TRADES = {
 
 SAVE_EQUITY = {
     # Per-month equity PNG for each valid month of a given rep
-    # → <Model>/graphs/monthly_equity_k.png
+    # -> <Model>/graphs/monthly_equity_k.png
     # Disabled by default; enable explicitly when needed.
     "per_month_equity_png": True,
 
@@ -71,31 +71,31 @@ SAVE_EQUITY = {
 
 SAVE_METRICS = {
     # Per-month metrics CSV written during wrap-up
-    # → <Model>/Months/k/csv/csv_month_k.csv
+    # -> <Model>/Months/k/csv/csv_month_k.csv
     # Disabled by default; enable explicitly when needed.
     "per_month_metrics_csv": True,
 
     # Aggregated monthly results:
-    # → <RUN_DIR>/model_stats/monthly_results_all_<model>.csv
+    # -> <RUN_DIR>/model_stats/monthly_results_all_<model>.csv
     "monthly_results_all_csv": True,
 
     # Split by rep:
-    # → <RUN_DIR>/repetition_k/<Model>/csv/monthly_results_rep<k>_<model>.csv
+    # -> <RUN_DIR>/repetition_k/<Model>/csv/monthly_results_rep<k>_<model>.csv
     "monthly_results_per_rep_csv": True,
 }
 
 SAVE_FEATURES = {
     # Per-month feature heatmap:
-    # → <Model>/Months/k/heatmaps/feature_heatmap_k.png
+    # -> <Model>/Months/k/heatmaps/feature_heatmap_k.png
     "monthly_heatmap_png": False,
 
     # Features/config text dump:
-    # → <Model>/Months/k/csv/featuresconfigused_k.txt
+    # -> <Model>/Months/k/csv/featuresconfigused_k.txt
     "featuresconfig_txt": False,  # can turn on if you want the heavy dumps
 }
 
 # ---------------------------------------------------------------------
-# Global defaults (single source of truth) — module-level
+# Global defaults (single source of truth) -- module-level
 # ---------------------------------------------------------------------
 CLASS_DEFAULTS = {
     "features": {
@@ -196,7 +196,7 @@ CLASS_DEFAULTS = {
         "slippage_factor": 1.0,
         "eval_impact_eta": 0.0,
 
-        # --- Position sizing (Sprint 2 — S2.1) ---
+        # --- Position sizing (Sprint 2 -- S2.1) ---
         "sizing_method": "fixed",
         "sizing_risk_fraction": 0.02,
         "sizing_kelly_fraction": 0.5,
@@ -206,7 +206,7 @@ CLASS_DEFAULTS = {
         "sizing_initial_equity": 10000.0,
         "sizing_max_leverage": 5.0,
 
-        # --- Stop-loss / take-profit (Sprint 2 — S2.2) ---
+        # --- Stop-loss / take-profit (Sprint 2 -- S2.2) ---
         "stop_method": "none",
         "stop_sl_pips": 30.0,
         "stop_tp_pips": 60.0,
@@ -222,7 +222,7 @@ CLASS_DEFAULTS = {
         "stop_tp1_pips": 30.0,
         "stop_tp2_pips": 0.0,
 
-        # --- Trailing stops (Sprint 2 — S2.3) ---
+        # --- Trailing stops (Sprint 2 -- S2.3) ---
         "trailing_method": "none",
         "trailing_pips": 30.0,
         "trailing_atr_mult": 3.0,
@@ -231,7 +231,7 @@ CLASS_DEFAULTS = {
         "trailing_activation_pips": 10.0,
         "trailing_pip_value": 0.0001,
 
-        # --- Risk management (Sprint 2 — S2.4) ---
+        # --- Risk management (Sprint 2 -- S2.4) ---
         "risk_use_dd_breaker": False,
         "risk_max_drawdown_pct": 0.20,
         "risk_dd_resume": "session_end",
@@ -281,7 +281,7 @@ CLASS_DEFAULTS = {
         "deep_calibration_frac": 0.10,
         "deep_calibration_min_samples": 500,
 
-        # --- Trade gating — PSR/DSR-based reliability filters ---
+        # --- Trade gating -- PSR/DSR-based reliability filters ---
         "gating_mode": "bets_psr",
 
         # --- Final experiment coverage policy (fixed; comparable across models) ---
@@ -363,7 +363,7 @@ CLASS_DEFAULTS = {
         # --- Top-N consensus & meta-analysis (runtime) ---
         "deploy_topN_consensus": False,
 
-        # IMPORTANT: turn this OFF for the consensus experiment so results are not “adaptive mode”
+        # IMPORTANT: turn this OFF for the consensus experiment so results are not "adaptive mode"
         # (adaptive top3 can switch behavior / fall back and muddy your thesis comparison)
         "use_adaptive_top3_for_main_results": False,
 
@@ -378,10 +378,10 @@ CLASS_DEFAULTS = {
         # Make it accept your Top-3 even if #2/#3 are worse than #1
         "topN_min_perf_frac": 0.00,
 
-        # Make “geometry similarity” basically never reject members (Top-3 only -> don’t over-filter)
+        # Make "geometry similarity" basically never reject members (Top-3 only -> don't over-filter)
         "topN_geom_radius": 9.0,
 
-        # Keep the tolerances (they won’t matter much once geom_radius is huge, but harmless)
+        # Keep the tolerances (they won't matter much once geom_radius is huge, but harmless)
         "topN_lags_tol": 4.0,
         "topN_depth_tol": 1.0,
         "topN_target_tol": 0.05,
@@ -588,7 +588,7 @@ CLASS_DEFAULTS = {
         "plateau_patience": 15,
         "plateau_delta": 0.02,
 
-        # --- Disable extra stages: mini-fold → consensus → real trading (only) ---
+        # --- Disable extra stages: mini-fold -> consensus -> real trading (only) ---
         "robustness_eval": False,
         "robust_seeds": [1111, 2222, 3333],
         "robust_require_pass": False,

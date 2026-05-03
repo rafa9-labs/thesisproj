@@ -1,4 +1,9 @@
-"""Celery application and task definitions."""
+"""Celery application and task definitions.
+
+In desktop mode (FX_APP_MODE=desktop), Celery is unavailable so backtests
+run synchronously in-process. The task functions still exist as wrappers
+but fall back to direct execution when the broker is unreachable.
+"""
 from __future__ import annotations
 
 import json
@@ -11,10 +16,11 @@ from typing import Any, Callable, Dict
 
 import numpy as np
 import pandas as pd
-from celery import Celery
 
 from api.config import settings
 from api.schemas.backtest import HPO_TRIAL_MAPS
+
+IS_DESKTOP = os.environ.get("FX_APP_MODE", "") == "desktop"
 
 _TRIAL_COUNTS_FALLBACK = {
     "logistic":       {"random": 3, "bayes": 3},
@@ -52,23 +58,33 @@ def _compute_total_work(models: list[str], months: int, hpo_intensity: str | Non
         total += hpo_work + sim_work
     return max(total, 1)
 
-celery_app = Celery(
-    "fx_pipeline",
-    broker=settings.celery_broker_url,
-    backend=settings.celery_result_backend,
-)
+celery_app = None
+_celery_available = False
 
-celery_app.conf.update(
-    task_serializer="json",
-    result_serializer="json",
-    accept_content=["json"],
-    timezone="UTC",
-    enable_utc=True,
-    task_track_started=True,
-    task_acks_late=True,
-    worker_prefetch_multiplier=1,
-    broker_connection_retry_on_startup=True,
-)
+if not IS_DESKTOP:
+    try:
+        from celery import Celery
+
+        celery_app = Celery(
+            "fx_pipeline",
+            broker=settings.celery_broker_url,
+            backend=settings.celery_result_backend,
+        )
+
+        celery_app.conf.update(
+            task_serializer="json",
+            result_serializer="json",
+            accept_content=["json"],
+            timezone="UTC",
+            enable_utc=True,
+            task_track_started=True,
+            task_acks_late=True,
+            worker_prefetch_multiplier=1,
+            broker_connection_retry_on_startup=True,
+        )
+        _celery_available = True
+    except Exception:
+        _celery_available = False
 
 
 def _pub(event: str, job_id: str, data: Dict[str, Any]):
@@ -112,9 +128,8 @@ def _sanitize_metrics(metrics_list: list) -> list:
     return safe
 
 
-@celery_app.task(bind=True, name="run_backtest")
-def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
-    """Execute a backtest pipeline run inside a Celery worker."""
+def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
+    """Core backtest logic -- executed by Celery worker or in-process (desktop mode)."""
     project_root = settings.project_root
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
@@ -412,9 +427,8 @@ def run_backtest_task(self, job_id: str, config: Dict[str, Any]):
         raise
 
 
-@celery_app.task(bind=True, name="download_data")
-def download_data_task(self, job_id: str, pair: str, years: int = 10):
-    """Download pair data from OANDA and insert into SQLite."""
+def _download_data_impl(job_id: str, pair: str, years: int = 10):
+    """Core download logic -- executed by Celery worker or in-process (desktop mode)."""
     project_root = settings.project_root
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
@@ -456,3 +470,36 @@ def download_data_task(self, job_id: str, pair: str, years: int = 10):
         jm.update_status(job_id, "failed", error=str(e))
         _pub("download_failed", job_id, {"error": str(e)})
         raise
+
+
+# --- Public API: dispatch to Celery or in-process depending on availability ---
+
+if _celery_available and celery_app is not None:
+    run_backtest_task = celery_app.task(bind=True, name="run_backtest")(_run_backtest_impl)
+    download_data_task = celery_app.task(bind=True, name="download_data")(_download_data_impl)
+else:
+    class _SyncTask:
+        """Celery-compatible task interface for synchronous (desktop) execution."""
+
+        def delay(self, *args, **kwargs):
+            self._func(*args, **kwargs)
+            return _SyncResult()
+
+        def apply_async(self, *args, **kwargs):
+            self._func(*args[0] if args else [], **kwargs)
+            return _SyncResult()
+
+    class _SyncResult:
+        """Mimics AsyncResult for synchronous tasks."""
+        @property
+        def id(self):
+            return str(uuid.uuid4())
+
+    class RunBacktestSync(_SyncTask):
+        _func = staticmethod(_run_backtest_impl)
+
+    class DownloadDataSync(_SyncTask):
+        _func = staticmethod(_download_data_impl)
+
+    run_backtest_task = RunBacktestSync()
+    download_data_task = DownloadDataSync()

@@ -1,4 +1,4 @@
-"""Auto-extracted mixin — see composed.py for the full MLBacktester."""
+"""Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 
@@ -34,7 +34,7 @@ class EnsembleMixin:
 
         model_type = (best_params or {}).get("model_type", getattr(self, "model_type", ""))
         if model_type in {"dqn"}:
-            # excluded families for now → plain full-month eval
+            # excluded families for now -> plain full-month eval
             return self.evaluate_strategy(best_params, train_start, train_end, test_start, test_end)
 
         # Pull Top-3 alternates (back-compat with old __top5_params files)
@@ -59,7 +59,7 @@ class EnsembleMixin:
         # Eval anchor for monitoring (no look-ahead)
         first_eval_ts = getattr(self, "_expected_eval_start", None) or df1.index[0]
 
-        # Rolling window in bars = window_days × bars_per_day (estimated on actual index)
+        # Rolling window in bars = window_days x bars_per_day (estimated on actual index)
         bpd = max(1, estimate_bars_per_day(df1.index))
         nwin = int(max(1, window_days) * bpd)
 
@@ -77,11 +77,11 @@ class EnsembleMixin:
         t1 = find_hit_rate_switch_idx(df1.loc[first_eval_ts:], nwin, thr=float(hit_thr), start_ts=first_eval_ts)
 
         if t1 is None:
-            # No switch → keep Top-1 for whole month
+            # No switch -> keep Top-1 for whole month
             self._last_switch_log = []
             if log_switch:
-                print(f"✅ No switch: Top-1 held entire month "
-                    f"(window={window_days}d, bars/day≈{bpd}).")
+                print(f"[OK] No switch: Top-1 held entire month "
+                    f"(window={window_days}d, bars/day~={bpd}).")
             return m1
 
         # Compute resume timestamp (next bar after t1)
@@ -91,7 +91,7 @@ class EnsembleMixin:
         except Exception:
             pos = max(0, idx.searchsorted(pd.to_datetime(t1)))
         if pos >= len(idx) - 1:
-            # Trigger at final bar → effectively no room to switch
+            # Trigger at final bar -> effectively no room to switch
             self._last_switch_log = [{"at": str(pd.to_datetime(t1)), "to_rank": 2, "note": "triggered_at_end"}]
             if log_switch:
                 # window stats at t1
@@ -99,7 +99,7 @@ class EnsembleMixin:
                 trades_win = int(act_roll1.loc[:t1_ts].iloc[-1]) if len(act_roll1.loc[:t1_ts]) else 0
                 hits_win = int(hit_roll1.loc[:t1_ts].iloc[-1]) if len(hit_roll1.loc[:t1_ts]) else 0
                 hr_val = float(hr_series1.loc[:t1_ts].iloc[-1]) if len(hr_series1.loc[:t1_ts]) else float("nan")
-                print(f"⚠️ Switch triggered at end-of-month ({t1_ts}) but no bars remain. "
+                print(f"[WARN] Switch triggered at end-of-month ({t1_ts}) but no bars remain. "
                     f"Window={window_days}d | hit-rate={hr_val:.2%} on {trades_win} trades | hits={hits_win}.")
             self.results = df1
             return m1
@@ -112,7 +112,7 @@ class EnsembleMixin:
         hr_val = float(hr_series1.loc[:t1_ts].iloc[-1]) if len(hr_series1.loc[:t1_ts]) else float("nan")
 
         if log_switch:
-            print(f"🔁 [Switch #1] {t1_ts} → switching to Top-2 "
+            print(f"[REPEAT] [Switch #1] {t1_ts} -> switching to Top-2 "
                 f"(window={window_days}d | hit-rate={hr_val:.2%} on {trades_win} active trades "
                 f"< {hit_thr:.0%}); retrain_end={t1_ts}, resume={start2}.")
 
@@ -130,7 +130,7 @@ class EnsembleMixin:
             "resume_ts": str(pd.to_datetime(start2)),
         }]
 
-        # Decide on second switch (to Top-3) — only after another full window of Top-2 data
+        # Decide on second switch (to Top-3) -- only after another full window of Top-2 data
         t2 = None
         if len(top_alts) >= 2 and not df2.empty:
             bpd2 = max(1, estimate_bars_per_day(df2.index))
@@ -189,7 +189,7 @@ class EnsembleMixin:
                     trades2 = int(act_roll2.loc[:t2_ts].iloc[-1])
                     hits2 = int(hit_roll2.loc[:t2_ts].iloc[-1])
                     hr2 = float(hr_series2.loc[:t2_ts].iloc[-1])
-                    print(f"⚠️ Switch #2 triggered at end-of-month ({t2_ts}) but no bars remain. "
+                    print(f"[WARN] Switch #2 triggered at end-of-month ({t2_ts}) but no bars remain. "
                         f"Window={window_days}d | hit-rate={hr2:.2%} on {trades2} trades | hits={hits2}.")
             return compute_full_evaluation_metrics(
                 df=combined,
@@ -208,7 +208,7 @@ class EnsembleMixin:
                 hr2 = float(hr_series2.loc[:t2_ts].iloc[-1])
             else:
                 trades2, hits2, hr2 = 0, 0, float("nan")
-            print(f"🔁 [Switch #2] {t2_ts} → switching to Top-3 "
+            print(f"[REPEAT] [Switch #2] {t2_ts} -> switching to Top-3 "
                 f"(window={window_days}d | hit-rate={hr2:.2%} on {trades2} active trades "
                 f"< {hit_thr:.0%}); retrain_end={t2_ts}, resume={start3}.")
 
@@ -549,7 +549,7 @@ class EnsembleMixin:
                 _ny_times = full_idx.tz_convert("America/New_York")
                 self._ny_mask = pd.Series((_ny_times.hour >= 2) & (_ny_times.hour <= 13), index=full_idx)
             except Exception as _e:
-                print(f"⚠️ Lazy NY mask build failed in ensemble path: {_e}")
+                print(f"[WARN] Lazy NY mask build failed in ensemble path: {_e}")
                 self._ny_mask = pd.Series(True, index=self.data.index)
 
         if sess_mode in ("test_only", "both"):
@@ -565,7 +565,7 @@ class EnsembleMixin:
                 if sess_mode in ("test_only", "both"):
                     test_data = test_data.loc[self._ny_mask.reindex(test_data.index, fill_value=False)]
 
-        # Optional final embargo — disable for CV mini-folds
+        # Optional final embargo -- disable for CV mini-folds
         try:
             embargo_n = int(cfg_f.get("final_embargo_bars", 0))
             if in_cv:
@@ -574,7 +574,7 @@ class EnsembleMixin:
                 test_data = test_data.iloc[embargo_n:].copy()
                 print(f"[Embargo] Dropped first {embargo_n} test bars (ensemble, non-CV).")
         except Exception as e:
-            print(f"⚠️ final_embargo_bars handling failed (ensemble): {e}")
+            print(f"[WARN] final_embargo_bars handling failed (ensemble): {e}")
 
         use_strict_day1 = bool(self.features_config.get("enforce_day1_start", True))
         
@@ -598,7 +598,7 @@ class EnsembleMixin:
             print(f"[CV/ENSEMBLE] Eval anchor forced to fold start: {first_eval_ts} | test_len={len(test_data)} | warmup_need={_total_warmup_need}")
 
         if first_eval_ts is None:
-            print("❌ No tradable bar found in test window (ensemble).")
+            print("[ERR] No tradable bar found in test window (ensemble).")
             # Bail safely with fixed 16-metric contract.
             # IMPORTANT: never persist heavy frames during Optuna CV.
             if in_cv:
@@ -642,7 +642,7 @@ class EnsembleMixin:
             if features:
                 df.dropna(subset=features, inplace=True)
 
-        # Scale (fit on train → apply to test)
+        # Scale (fit on train -> apply to test)
         train_data, means, stds = self.scale_features(train_data, features)
         test_data,  _,    _     = self.scale_features(test_data,  features, means, stds)
 
@@ -684,7 +684,7 @@ class EnsembleMixin:
 
         # If triple-barrier is requested but we can't resolve a price series, fall back safely.
         if tb_on_lbl and (_price_col is None or (_price_col not in train_data.columns) or (_price_col not in test_data.columns)):
-            print("⚠️ TripleBarrier enabled but no price column found; falling back to return-based labels.")
+            print("[WARN] TripleBarrier enabled but no price column found; falling back to return-based labels.")
             tb_on_lbl = False
 
         if tb_on_lbl:
@@ -713,7 +713,7 @@ class EnsembleMixin:
                 _sl = float(cfg_lbl.get("tb_sl_mult", 1.0))
                 _mh = int(cfg_lbl.get("tb_max_holding", 48))
                 _nz = float(cfg_lbl.get("tb_neutral_zone", 0.0))
-                print(f"[Labeling] TripleBarrier ON | pt={_pt}×σ sl={_sl}×σ hold={_mh} bars neutral={_nz}")
+                print(f"[Labeling] TripleBarrier ON | pt={_pt}xsigma sl={_sl}xsigma hold={_mh} bars neutral={_nz}")
                 print(f"[Labeling] Train counts={dict(Counter(y_train))} | Test counts={dict(Counter(y_test))}")
         else:
             _ret_fwd_tr = train_data["returns"].shift(-1)
@@ -725,7 +725,7 @@ class EnsembleMixin:
             y_test      = self.label_with_neutral(_ret_fwd_te.loc[test_data.index],  threshold=float(cfg_lbl.get("label_threshold", 0.0)))
 
         if y_train is None or y_test is None or len(y_train) == 0 or len(y_test) == 0:
-            print("⚠️ Labels empty in ensemble strategy. Skipping fold.")
+            print("[WARN] Labels empty in ensemble strategy. Skipping fold.")
             # Avoid returning stale frames from previous months/folds.
             if in_cv:
                 self.results = None
@@ -863,7 +863,7 @@ class EnsembleMixin:
  
 
         if X_seq_train.shape[0] == 0 or X_seq_test.shape[0] == 0:
-            print("⚠️ Ensemble produced zero windows. Skipping fold.")
+            print("[WARN] Ensemble produced zero windows. Skipping fold.")
             return _safe_metrics_return((np.nan,) * N_METRICS, context="test_ensemble_strategy:zero_windows")
 
         if self._is_debug():
@@ -951,14 +951,14 @@ class EnsembleMixin:
                 else:
                     xgb_cfg.pop("device", None)
             else:
-                # 🔹 Non-CV path (refit + final evaluation): ALWAYS use OOF stacking
+                # [*] Non-CV path (refit + final evaluation): ALWAYS use OOF stacking
                 xgb_cfg = dict(xgb_cfg)
                 xgb_cfg.setdefault("n_estimators", min(int(xgb_cfg.get("n_estimators", 400)), 400))
                 xgb_cfg.setdefault("n_jobs", int(xgb_cfg.get("n_jobs", 3)))
                 xgb_cfg.setdefault("xgb_eval_fraction", float(xgb_cfg.get("xgb_eval_fraction", 0.10)))
                 xgb_cfg.setdefault("xgb_early_stopping_rounds", int(xgb_cfg.get("xgb_early_stopping_rounds", 50)))
                 
-                # 🔹 Force OOF ON here regardless of tuned value
+                # [*] Force OOF ON here regardless of tuned value
                 xgb_cfg.setdefault("use_oof_meta", False)
                 xgb_cfg.setdefault("oof_splits", 3)
                 use_gpu = (os.environ.get("XGB_USE_GPU", "0") == "1")
@@ -1223,7 +1223,7 @@ class EnsembleMixin:
             X_seq_test,  y_test_win,  idx_test,  X_flat_test  = make_windows(test_data)
 
             if X_seq_train.shape[0] == 0 or X_seq_test.shape[0] == 0:
-                print("⚠️ Ensemble (adaptive) produced zero windows. Skipping fold.")
+                print("[WARN] Ensemble (adaptive) produced zero windows. Skipping fold.")
                 return _safe_metrics_return((np.nan,) * N_METRICS, context="test_ensemble_strategy:adaptive_zero_windows")
 
             # Extra safety: apply stride/cap on the already-windowed arrays (train only)
@@ -1486,7 +1486,7 @@ class EnsembleMixin:
         # Generic postprocessing for all ensembles
         # ---------------------------------------
         if proba is None or (hasattr(proba, "__len__") and len(proba) == 0):
-            print("❌ Ensemble produced no probabilities.")
+            print("[ERR] Ensemble produced no probabilities.")
             return _safe_metrics_return((np.nan,) * N_METRICS, context="test_ensemble_strategy:no_probabilities")
 
 
@@ -1594,7 +1594,7 @@ class EnsembleMixin:
         idx_test_arr = np.asarray(idx_test, dtype=int)
         thr_vec = thr_full[idx_test_arr]
         if self._is_debug():
-            print(f"[Gate✔] Dynamic αβγ active | base={base_thr:.3f} α={a:.3f} β={b:.3f} γ={g:.3f} "
+            print(f"[Gate[OK]] Dynamic alphabetagamma active | base={base_thr:.3f} alpha={a:.3f} beta={b:.3f} gamma={g:.3f} "
                         f"| median_thr={np.nanmedian(thr_vec):.3f} | bars={len(thr_vec)}")
             
         # ------------------------------------------------------------
@@ -1611,7 +1611,7 @@ class EnsembleMixin:
             _eval_idx = np.asarray([], dtype=int)
 
         if _eval_idx.size == 0:
-            print("❌ No tradable test windows in ensemble after start cut.")
+            print("[ERR] No tradable test windows in ensemble after start cut.")
             return _safe_metrics_return((np.nan,) * N_METRICS, context="test_ensemble_strategy:no_eval_windows")
 
         # --- Soft coverage-drift nudge (mirrors test_strategy runtime control) ---
@@ -1625,7 +1625,7 @@ class EnsembleMixin:
                 raise ValueError("no_eval_windows_for_nudge")
 
 
-            # Rolling-quantile cap (prevents "bunched confidence" → near-zero trades)
+            # Rolling-quantile cap (prevents "bunched confidence" -> near-zero trades)
             _low = max(0.0, tgt - band)
             allow_qcap = bool(merged.get("runtime_allow_rolling_qcap", True))
             if allow_qcap and win_k > 1 and n_nudge >= win_k:
@@ -1648,7 +1648,7 @@ class EnsembleMixin:
                             thr_vec[_eval_idx] = _tv
                             if self._is_debug():
                                 print(
-                                    f"[Gate✔] Rolling-quantile cap active | q={1.0 - tgt:.3f} "
+                                    f"[Gate[OK]] Rolling-quantile cap active | q={1.0 - tgt:.3f} "
                                     f"win={win_k} | thr_med={float(np.nanmedian(thr_vec[_eval_idx])):.3f}"
                                 )
                 except Exception:
@@ -1705,7 +1705,7 @@ class EnsembleMixin:
                     tmp[_eval_idx] = np.asarray(decoded_raw, dtype=int)[_eval_idx]
                     tmp[_eval_idx[np.asarray(max_conf, dtype=np.float32)[_eval_idx] < t]] = 0
                 if (tmp != 0).sum() > 0:
-                    print(f"[Backoff] lowered conf_thr → {t:.2f}; active_rate={np.mean(tmp!=0):.3f}")
+                    print(f"[Backoff] lowered conf_thr -> {t:.2f}; active_rate={np.mean(tmp!=0):.3f}")
                     final_preds = tmp
                     self._last_conf_thr_used = float(t)
                     conf_thr_final = float(t)
@@ -1725,7 +1725,7 @@ class EnsembleMixin:
         # -------- Start-cut before building result_df (FIX: index/pred alignment) --------
         _mask_keep = np.asarray(keep_win, dtype=bool)
         if not _mask_keep.any():
-            print("❌ No tradable test windows in ensemble after start cut.")
+            print("[ERR] No tradable test windows in ensemble after start cut.")
             return _safe_metrics_return((np.nan,) * N_METRICS, context="test_strategy:deep2d_no_trades")
 
         # apply mask first, then build aligned result df
@@ -1785,7 +1785,7 @@ class EnsembleMixin:
             except Exception:
                 pass
         except Exception as _e:
-            print(f"⚠️ Ensemble reindex to full eval window failed, using narrow frame: {_e}")
+            print(f"[WARN] Ensemble reindex to full eval window failed, using narrow frame: {_e}")
             # fall back to the original result_df
 
 
@@ -1857,10 +1857,10 @@ class EnsembleMixin:
             if getattr(self, "_in_optuna_cv", False):
                 return _safe_metrics_return((np.nan,) * N_METRICS, context="test_ensemble_strategy:empty_result_df_cv")
 
-            print("ℹ️ Ensemble evaluation window empty after cleaning. Returning no-trades metrics.")
+            print("[INFO] Ensemble evaluation window empty after cleaning. Returning no-trades metrics.")
             return _no_trades_tuple()
 
-        # Heuristic for “no activity”: all zeros (or single class that maps to flat)
+        # Heuristic for "no activity": all zeros (or single class that maps to flat)
         # If your pipeline uses {0,1,2}, adjust this if 1/2 map to long/short.
         has_activity = (result_df["pred"] != 0).any()
         if not has_activity:
@@ -1873,7 +1873,7 @@ class EnsembleMixin:
 
             # Non-CV: keep going so compute_full_evaluation_metrics produces flat curves + attrs.
             if self._is_debug():
-                print("ℹ️ [Ensemble] No trades in this window; computing flat metrics.")
+                print("[INFO] [Ensemble] No trades in this window; computing flat metrics.")
             return _no_trades_tuple()
 
         # ----------------------------
@@ -1973,7 +1973,7 @@ class EnsembleMixin:
                         self._cv_fold_eval_frames = [self._cv_last_eval_df.copy()]
             except Exception:
                 if self.debug:
-                    self._log("⚠️ Failed to append CV fold eval frame", level="warning")
+                    self._log("[WARN] Failed to append CV fold eval frame", level="warning")
                     
             self.results = None
             self.results_full = None

@@ -1,4 +1,4 @@
-"""Auto-extracted mixin — see composed.py for the full MLBacktester."""
+"""Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from pipeline._imports import *  # noqa: F401,F403
 
 
@@ -25,8 +25,8 @@ class FeaturesMixin:
         1) Compute base indicators (as toggled in config).
         2) Add SAR unconditionally.
         3) Include MTF moving averages if present (computed in get_data()).
-        4) Momentum extensions: EMA–SMA spread, price–MA z-scores, crossover bins, slope differential.
-        5) Composite features: re-entry + momentum, extension/ATR with low ADX, squeeze→expansion, ATR channels,
+        4) Momentum extensions: EMA-SMA spread, price-MA z-scores, crossover bins, slope differential.
+        5) Composite features: re-entry + momentum, extension/ATR with low ADX, squeeze->expansion, ATR channels,
         trend confirmation, MTF alignment, volatility-managed momentum, MACD/ATR ratio.
         6) Expand with lags/rolling stats; add hour features; drop NAs on active features.
 
@@ -49,7 +49,7 @@ class FeaturesMixin:
             if getattr(self, attr, False):
                 return
             try:
-                print(f"⚠️ [prepare_features][{tag}] {type(exc).__name__}: {exc}")
+                print(f"[WARN] [prepare_features][{tag}] {type(exc).__name__}: {exc}")
             except Exception:
                 # Last-resort: never crash due to logging
                 pass
@@ -83,7 +83,7 @@ class FeaturesMixin:
         ind_win = (cfg.get("indicator_windows", {}) or {})
 
         # Feature-slice caching is now opt-in (default OFF) and always bypassed during Optuna CV.
-        # Rationale: cache_key includes slice boundaries → reuse is usually ~0 in walk-forward/monthly runs.
+        # Rationale: cache_key includes slice boundaries -> reuse is usually ~0 in walk-forward/monthly runs.
         in_cv = bool(getattr(self, "_in_optuna_cv", False))
         # Canonical flag is "slice_cache_enabled" (default OFF).
         # Back-compat: allow older configs that used "feat_cache_enabled".
@@ -96,7 +96,7 @@ class FeaturesMixin:
             if slice_cache_enabled and in_cv:
                 msg += " but BYPASSED during Optuna CV"
             print(msg)
-            self._feat_cache_mode_logged = True  # CLEANUP: was False → caused repeated prints forever
+            self._feat_cache_mode_logged = True  # CLEANUP: was False -> caused repeated prints forever
 
         # Optional safety net: cap number of cached engineered slices (default 0 = unlimited).
         # This is a *resource* guard only: it must not affect results because the cache is
@@ -301,7 +301,7 @@ class FeaturesMixin:
             except Exception as e:
                 if debug:
                     print(
-                        f"⚠️ FeatureBank reuse failed in prepare_features; "
+                        f"[WARN] FeatureBank reuse failed in prepare_features; "
                         f"falling back to per-slice TA: {e}"
                     )
                 use_fb = False
@@ -455,7 +455,7 @@ class FeaturesMixin:
                     if c in df.columns and c not in base_features:
                         base_features.append(c)
 
-            # Optional realized-volatility & bipower variation — add before expansion so they get lags/rolls
+            # Optional realized-volatility & bipower variation -- add before expansion so they get lags/rolls
             if cfg.get("use_rv_features", False) and "returns" in df:
                 w_s = int(cfg.get("rv_window_short", 30))
                 w_l = int(cfg.get("rv_window_long", 120))
@@ -669,7 +669,7 @@ class FeaturesMixin:
         # DEBUG: print once, not per feature
         if debug and missing_for_expansion:
             print(
-                f"⚠️ Skipping lag/rolls for {len(missing_for_expansion)} base_features missing in df "
+                f"[WARN] Skipping lag/rolls for {len(missing_for_expansion)} base_features missing in df "
                 f"(showing up to 8): {missing_for_expansion[:8]}"
             )
 
@@ -744,13 +744,13 @@ class FeaturesMixin:
             df_out.dropna(subset=dropna_subset, inplace=True)
         else:
             if debug:
-                print("⚠️ No valid features for dropna_subset, running full dropna().")
+                print("[WARN] No valid features for dropna_subset, running full dropna().")
             df_out.dropna(inplace=True)
 
         if len(df_out) == 0:
             import logging as _logging
             _logging.getLogger(__name__).warning(
-                "prepare_features: DataFrame empty after dropna — "
+                "prepare_features: DataFrame empty after dropna -- "
                 "returning early with no features (possible data issue)"
             )
             self._last_used_features = []
@@ -760,10 +760,10 @@ class FeaturesMixin:
         if df_out.columns.duplicated().any():
             dup_cols = df_out.columns[df_out.columns.duplicated()].tolist()
             if debug:
-                print(f"⚠️ Duplicate columns detected and removed: {dup_cols}")
+                print(f"[WARN] Duplicate columns detected and removed: {dup_cols}")
             else:
                 # CLEANUP: compact one-liner in non-debug
-                print(f"⚠️ Duplicate columns detected and removed: n={len(dup_cols)}")
+                print(f"[WARN] Duplicate columns detected and removed: n={len(dup_cols)}")
             df_out = df_out.loc[:, ~df_out.columns.duplicated()]
 
         # Keep last-used feature list for logging/diagnostics
@@ -781,7 +781,7 @@ class FeaturesMixin:
                 ).hexdigest()[:16]
                 save_to_disk(_disk_key, df_out, features)
             except Exception as _e:
-                # Disk cache is purely an optimization — never crash
+                # Disk cache is purely an optimization -- never crash
                 if debug:
                     print(f"[DISK_CACHE] save failed: {_e}")
 

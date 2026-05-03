@@ -1,4 +1,4 @@
-"""Auto-extracted mixin — see composed.py for the full MLBacktester."""
+"""Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from pipeline._imports import *  # noqa: F401,F403
 
 
@@ -12,8 +12,8 @@ class DataMixin:
         """
         Load and preprocess raw market data for the specified window.
 
-        - 30m data → index=time (tz-aware), rename to price/high/low, compute log returns.
-        - 1H / 4H data → loaded for multi-timeframe (MTF) features.
+        - 30m data -> index=time (tz-aware), rename to price/high/low, compute log returns.
+        - 1H / 4H data -> loaded for multi-timeframe (MTF) features.
         - Precompute/Load 'mtf_ma_fast' (1H fast MA, shifted) and 'mtf_ma_slow' (4H slow MA, shifted).
         Uses tuned windows from features_config['indicator_windows'] and prefers precomputed columns if present.
         """
@@ -28,7 +28,7 @@ class DataMixin:
         # compute log-returns
         raw["returns"] = np.log(raw["price"] / raw["price"].shift(1))
 
-        # 🔽 Downcast numeric columns to float32 to save RAM
+        # [DOWN] Downcast numeric columns to float32 to save RAM
         for col in ("price", "high", "low", "spread", "returns"):
             if col in raw.columns:
                 raw[col] = raw[col].astype("float32")
@@ -62,15 +62,15 @@ class DataMixin:
                     )
                 except Exception as _e:
                     if self._is_debug():
-                        print(f"⚠️ Failed to attach macro features: {_e}")
+                        print(f"[WARN] Failed to attach macro features: {_e}")
 
-        # --- One-time NY session mask (02:00–13:00 NYT) ---
+        # --- One-time NY session mask (02:00-13:00 NYT) ---
         try:
             _ny_times = self.data.index.tz_convert("America/New_York")
             _ny_active = (_ny_times.hour >= 2) & (_ny_times.hour <= 13)
             self._ny_mask = pd.Series(_ny_active, index=self.data.index)
         except Exception as _e:
-            print(f"⚠️ Failed to precompute NY session mask: {_e}")
+            print(f"[WARN] Failed to precompute NY session mask: {_e}")
             self._ny_mask = pd.Series(True, index=self.data.index)  # safe fallback
 
         # ---- 1H and 4H for MTF features (cached) ----
@@ -86,7 +86,7 @@ class DataMixin:
         except Exception:
             pass
 
-        # 🔽 Downcast numeric columns in 1H / 4H to float32 as well
+        # [DOWN] Downcast numeric columns in 1H / 4H to float32 as well
         for _df in (self.df_1h, self.df_4h):
             for _col in _df.columns:
                 # only downcast numeric dtypes
@@ -162,7 +162,7 @@ class DataMixin:
                 print(f"[MTF] fast_w={fast_w}, slow_w={slow_w} (mtf_ma_fast/slow ready)")
 
         except Exception as _e:
-            print(f"⚠️ Precompute/Load MTF features failed: {_e}")
+            print(f"[WARN] Precompute/Load MTF features failed: {_e}")
 
     @staticmethod
     def rolling_slope(series: pd.Series, window: int) -> pd.Series:
@@ -304,7 +304,7 @@ class DataMixin:
         except Exception as e:
             # Fail silently (with debug print) and fall back to per-slice path
             if self._is_debug():
-                print(f"⚠️ FeatureBank build failed; falling back to per-slice TA: {e}")
+                print(f"[WARN] FeatureBank build failed; falling back to per-slice TA: {e}")
             self._feature_bank_full = None
             self._feature_bank_meta = {}
             self._feature_bank_key  = None
@@ -336,7 +336,7 @@ class DataMixin:
         else:
             vol_thr = float(cfg.get("vol_thresh", 0.001))  # fallback
 
-        # 1) Guard: if these cols don’t exist, just skip and return df unmodified
+        # 1) Guard: if these cols don't exist, just skip and return df unmodified
         if adx_col not in df.columns or vol_col not in df.columns:
             # no regime annotation possible; keep compatibility
             df["regime_id"] = 1  # or SIDEWAYS default
@@ -353,7 +353,7 @@ class DataMixin:
 
         regime[trend_mask & ~vol_high] = 1  # TREND
         regime[~trend_mask & vol_high] = 2  # VOLATILE
-        regime[trend_mask & vol_high]  = 2  # strong but wild → treat as VOLATILE for now
+        regime[trend_mask & vol_high]  = 2  # strong but wild -> treat as VOLATILE for now
 
         df["trend_score"] = trend_score
         df["vol_score"]   = vol_score

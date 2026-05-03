@@ -1,4 +1,4 @@
-"""FX ML Backtester — PyInstaller entry point.
+"""FX ML Backtester -- PyInstaller entry point.
 
 This file is the production entry point for the bundled application.
 It starts the FastAPI backend, serving both the API and the React frontend.
@@ -18,7 +18,23 @@ def _is_frozen() -> bool:
     return getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
 
 
+def _find_frontend_dist(project_root: str) -> str | None:
+    candidates = [
+        os.path.join(project_root, "_internal", "frontend", "dist"),
+        os.path.join(project_root, "frontend", "dist"),
+        os.path.join(project_root, "dist"),
+        os.path.join(os.path.dirname(project_root), "frontend", "dist"),
+    ]
+    for c in candidates:
+        if os.path.isdir(c):
+            return c
+    return None
+
+
 def _setup_paths():
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     if _is_frozen():
         bundle_dir = sys._MEIPASS
         project_root = os.path.dirname(sys.executable)
@@ -78,11 +94,7 @@ def main():
     import uvicorn
     from api.main import app
 
-    frontend_dist = os.path.join(project_root, "frontend", "dist")
-    if not os.path.isdir(frontend_dist):
-        parent_frontend = os.path.join(os.path.dirname(project_root), "frontend", "dist")
-        if os.path.isdir(parent_frontend):
-            frontend_dist = parent_frontend
+    frontend_dist = _find_frontend_dist(project_root)
 
     _serve_static(app, frontend_dist)
 

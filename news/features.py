@@ -4,7 +4,7 @@ Provides ``merge_news_features()`` which performs a walk-forward-safe
 left-join of aggregated sentiment + event flags onto price bars.
 
 Walk-forward guarantee: only news articles with ``timestamp < bar_time``
-are used for each row — no future information leaks in.
+are used for each row -- no future information leaks in.
 """
 
 from __future__ import annotations
@@ -67,10 +67,10 @@ def merge_news_features(
         try:
             df.index = pd.to_datetime(df.index)
         except Exception:
-            logger.warning("Cannot convert df index to DatetimeIndex — skipping news features")
+            logger.warning("Cannot convert df index to DatetimeIndex -- skipping news features")
             return df
 
-    # ── Sentiment merge ──────────────────────────────────────────────
+    # -- Sentiment merge ----------------------------------------------
     if news_df is not None and not news_df.empty:
         news_copy = news_df.copy()
         if "timestamp" in news_copy.columns:
@@ -113,7 +113,7 @@ def merge_news_features(
         for w in vol_windows:
             df[f"news_volume_{w}bars"] = np.float32(0.0)
 
-    # ── Event flags ──────────────────────────────────────────────────
+    # -- Event flags --------------------------------------------------
     if cfg.get("news_event_flags", True) and events:
         df = _add_event_flags(df, events, event_proximity_bars)
 

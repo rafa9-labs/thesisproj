@@ -3,19 +3,19 @@ Trailing stop implementations for the FX ML backtester.
 
 Provides three trailing-stop methods that dynamically update the SL price
 as the trade moves favourably.  Trailing stops operate in **price space**
-and integrate with the S2.2 stop/TP system — they overwrite the static SL
+and integrate with the S2.2 stop/TP system -- they overwrite the static SL
 once activated, and the existing stop check catches the exit.
 
 Trailing methods:
-  - FIXED_PIPS   — fixed pip distance from best price seen
-  - ATR           — ATR × multiplier distance from best price
-  - CHANDELIER    — highest_high(N) − multiplier × ATR (long)
+  - FIXED_PIPS   -- fixed pip distance from best price seen
+  - ATR           -- ATR x multiplier distance from best price
+  - CHANDELIER    -- highest_high(N) - multiplier x ATR (long)
 
 All trailing stops share:
-  - **Activation threshold** — trailing only kicks in after unrealised
+  - **Activation threshold** -- trailing only kicks in after unrealised
     profit exceeds *activation_pips*; before that, the static SL from
     the stop/TP module stays active.
-  - **Ratchet-only** — the trailing SL only moves toward current price,
+  - **Ratchet-only** -- the trailing SL only moves toward current price,
     never away from it.
 
 Usage::

@@ -1,6 +1,6 @@
 """Additional metrics backported from utilsNoWFO.py.
 
-Phase 4.4 — PSR, DSR, Brier/NLL, drawdown curves, rolling stats.
+Phase 4.4 -- PSR, DSR, Brier/NLL, drawdown curves, rolling stats.
 """
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ def compute_brier_and_nll(proba, y_true):
 
 def probabilistic_sharpe_ratio(returns, sr_benchmark=0.0, periods_per_year=12):
     """
-    Bailey & López de Prado (2012) style PSR (simplified, iid assumption).
+    Bailey & Lopez de Prado (2012) style PSR (simplified, iid assumption).
     Returns probability that SR > sr_benchmark.
     """
     import numpy as np
@@ -114,7 +114,7 @@ def compute_dsr_scores(scores):
     """
     Deflated 'Sharpe' proxy over an array of trial scores.
     Returns a list of DSR-like probabilities (higher is better), one per score.
-    Approximates multiple-testing via a Šidák-style family correction.
+    Approximates multiple-testing via a Sidak-style family correction.
     """
     x = np.asarray(scores, dtype=float)
     n = int(np.isfinite(x).sum())
@@ -161,12 +161,12 @@ def compute_rolling_sharpe_series(
     frequency_per_year: float | None = None,
 ) -> "pd.Series":
     """
-    Compute an annualised rolling Sharpe ratio from an equity curve (×).
+    Compute an annualised rolling Sharpe ratio from an equity curve (x).
 
     Parameters
     ----------
     equity : pd.Series
-        Cumulative equity (×), strictly positive.
+        Cumulative equity (x), strictly positive.
     window : int
         Rolling window length in bars.
     frequency_per_year : float or None
@@ -210,7 +210,7 @@ def compute_rolling_sharpe_series(
 
 def compute_drawdown_curve(equity: "pd.Series") -> "pd.Series":
     """
-    Public helper: convert an equity curve (×) into a drawdown curve in percent.
+    Public helper: convert an equity curve (x) into a drawdown curve in percent.
 
     Uses the internal _compute_drawdown (fractional drawdown, negative values)
     and scales by 100.
