@@ -47,13 +47,7 @@ export function ComparePage() {
 
   if (jobsLoading) {
     return (
-      <div className="flex flex-col gap-6">
-        <h2
-          className="text-base font-semibold uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          Model Comparison
-        </h2>
+      <div className="flex flex-col gap-5">
         <CompareSkeleton />
       </div>
     );
@@ -61,13 +55,7 @@ export function ComparePage() {
 
   if (multiModelJobs.length === 0) {
     return (
-      <div className="flex flex-col gap-6">
-        <h2
-          className="text-base font-semibold uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          Model Comparison
-        </h2>
+      <div className="flex flex-col gap-5">
         <EmptyState
           icon={<GitCompare size={48} />}
           title="No multi-model jobs"
@@ -78,14 +66,8 @@ export function ComparePage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h2
-          className="text-base font-semibold uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          Model Comparison
-        </h2>
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-end">
         <select
           value={selectedJobId ?? ""}
           onChange={(e) => setSelectedJobId(e.target.value || null)}

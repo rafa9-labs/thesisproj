@@ -12,13 +12,7 @@ export function NewsPage() {
   const features = status?.features;
 
   return (
-    <div className="flex flex-col gap-6">
-      <h2
-        className="text-base font-semibold uppercase tracking-[0.1em]"
-        style={{ color: "var(--color-text-secondary)" }}
-      >
-        News &amp; Sentiment
-      </h2>
+    <div className="flex flex-col gap-5">
 
       <div className="grid grid-cols-3 gap-4">
         <Card icon={<TrendingUp size={16} style={{ color: "var(--color-accent-success)" }} />} title="Sentiment Engine">
@@ -37,7 +31,7 @@ export function NewsPage() {
                     key={e}
                     className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
                     style={{
-                      backgroundColor: "rgba(255,152,0,0.1)",
+                      backgroundColor: "rgba(245,158,11,0.1)",
                       color: "var(--color-accent-warning)",
                       fontFamily: "var(--font-mono)",
                     }}
