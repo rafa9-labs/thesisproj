@@ -85,6 +85,7 @@ export class PythonManager {
       TF_CPP_MIN_LOG_LEVEL: "3",
       FX_APP_MODE: this.isDev ? "dev" : "desktop",
       API_PORT: String(this.port),
+      LOG_FORMAT: this.isDev ? "text" : "json",
     };
 
     if (!this.isDev) {
@@ -100,13 +101,36 @@ export class PythonManager {
     });
 
     this.proc.stdout?.on("data", (data: Buffer) => {
-      const msg = data.toString().trim();
-      if (msg) console.log(`[Python:out] ${msg}`);
+      const lines = data.toString().split("\n");
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const parsed = this._parseLine(trimmed);
+        if (parsed) {
+          if (parsed.evt) {
+            const evtName = String(parsed.evt);
+            const evtMsg = parsed.msg ? String(parsed.msg) : JSON.stringify(parsed);
+            this.onStatus(evtName, evtMsg);
+          }
+          console.log(`[Python:out] ${trimmed}`);
+        } else {
+          console.log(`[Python:out] ${trimmed}`);
+        }
+      }
     });
 
     this.proc.stderr?.on("data", (data: Buffer) => {
-      const msg = data.toString().trim();
-      if (msg) console.log(`[Python:err] ${msg}`);
+      const lines = data.toString().split("\n");
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const parsed = this._parseLine(trimmed);
+        if (parsed && parsed.level === "ERROR") {
+          const errMsg = parsed.msg ? String(parsed.msg) : trimmed;
+          this.onStatus("error", errMsg);
+        }
+        console.log(`[Python:err] ${trimmed}`);
+      }
     });
 
     this.proc.on("exit", (code, signal) => {
@@ -125,6 +149,27 @@ export class PythonManager {
       console.error(`[Python] Failed to start: ${err.message}`);
       this.onStatus("error", `Backend failed to start: ${err.message}`);
     });
+  }
+
+  /** Parse a JSON log line from the Python backend. Returns null if not JSON. */
+  private _parseLine(line: string): Record<string, unknown> | null {
+    // JSON mode: line is raw JSON like {"ts":"...","level":"INFO","msg":"..."}
+    if (line.startsWith("{")) {
+      try {
+        return JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    }
+    // Text mode event: [EVT] {...}
+    if (line.startsWith("[EVT] ")) {
+      try {
+        return JSON.parse(line.slice(6)) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    }
+    return null;
   }
 
   async stop(): Promise<void> {

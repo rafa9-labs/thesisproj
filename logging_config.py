@@ -1,27 +1,31 @@
 # logging_config.py -- Structured logging for FX MLBacktester
 #
-# Replaces raw print() and log_print() calls with Python's logging module.
-# Supports the same LOG_MODE levels (COMPACT, DEBUG, QUIET) for backward compat.
+# Supports two output formats controlled by LOG_FORMAT env var:
+#   LOG_FORMAT=text  (default) -- human-readable: [LEVEL] message
+#   LOG_FORMAT=json           -- machine-parseable: {"ts","level","msg","module"}
+#
+# LOG_MODE controls verbosity: COMPACT (default), DEBUG, QUIET.
 #
 # Usage:
 #   from logging_config import get_logger
 #   log = get_logger(__name__)
 #   log.info("Training started")
-#   log.debug("Verbose details")
 
 """
 Centralized logging configuration.
 
 Drop-in replacement for the ad-hoc log_print() / print() pattern.
-Maintains backward compatibility with LOG_MODE env variable.
+Supports human-readable text (default) and structured JSON output
+for machine parsing (e.g. Electron frontend progress tracking).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
-import warnings
+import time
 from typing import Optional
 
 
@@ -29,26 +33,27 @@ from typing import Optional
 # LOG_MODE backward-compatible mapping
 # ---------------------------------------------------------------------------
 _LOG_MODE_MAP = {
-    "QUIET": logging.WARNING + 10,    # suppress almost everything
-    "COMPACT": logging.INFO,           # normal operation
-    "DEBUG": logging.DEBUG,            # verbose
+    "QUIET": logging.WARNING + 10,
+    "COMPACT": logging.INFO,
+    "DEBUG": logging.DEBUG,
 }
 
 _DEFAULT_LEVEL = logging.INFO
 
 
 def _resolve_level() -> int:
-    """Resolve log level from LOG_MODE env var."""
     mode = os.getenv("LOG_MODE", "COMPACT").upper().strip()
     return _LOG_MODE_MAP.get(mode, _DEFAULT_LEVEL)
 
 
+def _is_json_mode() -> bool:
+    return os.getenv("LOG_FORMAT", "text").lower().strip() in ("json", "1", "true")
+
+
 # ---------------------------------------------------------------------------
-# Custom formatter
+# Custom handlers
 # ---------------------------------------------------------------------------
 class _SafeStreamHandler(logging.StreamHandler):
-    """StreamHandler that survives Unicode encoding errors on Windows cp1252."""
-
     def emit(self, record: logging.LogRecord) -> None:
         try:
             msg = self.format(record)
@@ -63,12 +68,10 @@ class _SafeStreamHandler(logging.StreamHandler):
             self.handleError(record)
 
 
+# ---------------------------------------------------------------------------
+# Formatters
+# ---------------------------------------------------------------------------
 class _CompactFormatter(logging.Formatter):
-    """
-    Compact format:  [LEVEL] message
-    For DEBUG level: includes timestamp and module.
-    """
-
     _compact = logging.Formatter("[%(levelname)s] %(message)s")
     _debug = logging.Formatter(
         "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -81,6 +84,24 @@ class _CompactFormatter(logging.Formatter):
         return self._compact.format(record)
 
 
+class _JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        entry = {
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(record.created)),
+            "level": record.levelname,
+            "msg": record.getMessage(),
+            "module": record.name,
+        }
+        if record.exc_info and record.exc_info[0]:
+            entry["exc_type"] = record.exc_info[0].__name__
+            entry["exc_msg"] = str(record.exc_info[1])
+        try:
+            return json.dumps(entry, ensure_ascii=True)
+        except (TypeError, ValueError):
+            entry["msg"] = str(record.getMessage())
+            return json.dumps(entry, ensure_ascii=True)
+
+
 # ---------------------------------------------------------------------------
 # Logger factory
 # ---------------------------------------------------------------------------
@@ -88,7 +109,6 @@ _configured: bool = False
 
 
 def _ensure_root_configured() -> None:
-    """Configure the root 'mlbacktester' logger once."""
     global _configured
     if _configured:
         return
@@ -98,31 +118,19 @@ def _ensure_root_configured() -> None:
     logger = logging.getLogger("mlbacktester")
     logger.setLevel(level)
 
-    # Only add handler if none exist (prevents duplicate handlers in notebooks)
     if not logger.handlers:
         handler = _SafeStreamHandler(sys.stdout)
         handler.setLevel(level)
-        handler.setFormatter(_CompactFormatter())
+        if _is_json_mode():
+            handler.setFormatter(_JsonFormatter())
+        else:
+            handler.setFormatter(_CompactFormatter())
         logger.addHandler(handler)
 
-    # Prevent propagation to root logger (avoids duplicate output)
     logger.propagate = False
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
-    """
-    Get a logger under the 'mlbacktester' namespace.
-
-    Parameters
-    ----------
-    name : str, optional
-        Sub-module name (e.g. 'pipeline.data_loader').
-        If None, returns the root 'mlbacktester' logger.
-
-    Returns
-    -------
-    logging.Logger
-    """
     _ensure_root_configured()
     if name:
         return logging.getLogger(f"mlbacktester.{name}")
@@ -132,26 +140,17 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
 # ---------------------------------------------------------------------------
 # Backward-compatible log_print() shim
 # ---------------------------------------------------------------------------
+_LEVEL_MAP = {
+    "COMPACT": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "QUIET": logging.WARNING,
+}
+
+
 def log_print(msg: str, level: str = "COMPACT") -> None:
-    """
-    Backward-compatible shim for the existing log_print() calls.
-
-    Maps the old level strings to Python logging levels:
-        - "COMPACT"  -> INFO
-        - "DEBUG"    -> DEBUG
-        - "QUIET"    -> WARNING
-
-    This function is intentionally a thin wrapper so the existing
-    codebase doesn't need to change all call sites at once.
-    """
-    _level_map = {
-        "COMPACT": logging.INFO,
-        "DEBUG": logging.DEBUG,
-        "QUIET": logging.WARNING,
-    }
     _ensure_root_configured()
     logger = logging.getLogger("mlbacktester")
-    py_level = _level_map.get(level.upper().strip(), logging.INFO)
+    py_level = _LEVEL_MAP.get(level.upper().strip(), logging.INFO)
     try:
         logger.log(py_level, msg)
     except UnicodeEncodeError:
@@ -160,10 +159,36 @@ def log_print(msg: str, level: str = "COMPACT") -> None:
 
 
 # ---------------------------------------------------------------------------
+# Structured event helper (for Electron progress tracking)
+# ---------------------------------------------------------------------------
+def emit_event(event_type: str, **kwargs) -> None:
+    """Emit a structured JSON event for machine parsing.
+
+    Always outputs JSON (even in text mode) so the Electron parser
+    can reliably detect event lines by the ``"evt"`` key.
+    In text mode the JSON is prefixed with [EVT] for grep-ability.
+    """
+    entry = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "evt": event_type}
+    entry.update(kwargs)
+    try:
+        line = json.dumps(entry, ensure_ascii=True, default=str)
+    except (TypeError, ValueError):
+        entry = {"ts": entry["ts"], "evt": event_type, "raw": str(kwargs)}
+        line = json.dumps(entry, ensure_ascii=True)
+    if _is_json_mode():
+        sys.stdout.write(line + "\n")
+    else:
+        sys.stdout.write("[EVT] " + line + "\n")
+    try:
+        sys.stdout.flush()
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Suppress noisy third-party loggers
 # ---------------------------------------------------------------------------
 def suppress_noisy_loggers() -> None:
-    """Suppress verbose third-party loggers (optuna, PIL, matplotlib, etc.)."""
     for name in (
         "optuna",
         "PIL",
@@ -177,5 +202,4 @@ def suppress_noisy_loggers() -> None:
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
-# Auto-suppress on import
 suppress_noisy_loggers()

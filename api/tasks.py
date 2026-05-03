@@ -19,6 +19,7 @@ import pandas as pd
 
 from api.config import settings
 from api.schemas.backtest import HPO_TRIAL_MAPS
+from logging_config import emit_event
 
 IS_DESKTOP = os.environ.get("FX_APP_MODE", "") == "desktop"
 
@@ -47,14 +48,16 @@ def _get_trial_counts(hpo_intensity: str | None, model: str) -> Dict[str, int]:
 CV_BLOCKS_DEFAULT = 5
 
 
-def _compute_total_work(models: list[str], months: int, hpo_intensity: str | None = None, cv_blocks: int = CV_BLOCKS_DEFAULT) -> int:
+def _compute_total_work(models: list[str], months: int, hpo_intensity: str | None = None, cv_blocks: int = CV_BLOCKS_DEFAULT, period_unit: str = "months") -> int:
+    from config import convert_month_count_to_periods
+    n_periods = convert_month_count_to_periods(months, period_unit)
     total = 0
     for m in models:
         tc = _get_trial_counts(hpo_intensity, m)
         n_trials = tc.get("random", 3) + tc.get("bayes", 3)
         n_trials = max(n_trials, 10)
         hpo_work = n_trials * cv_blocks
-        sim_work = months
+        sim_work = n_periods
         total += hpo_work + sim_work
     return max(total, 1)
 
@@ -151,6 +154,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     seed = config.get("seed", 42)
     hpo_intensity = config.get("hpo_intensity", "quick")
     trading_costs = config.get("trading_costs", True)
+    period_unit = config.get("period_unit", "months")
 
     if end is None:
         from datetime import date
@@ -172,9 +176,10 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     except Exception:
         pass
 
-    total_work = _compute_total_work(models, months, hpo_intensity)
+    total_work = _compute_total_work(models, months, hpo_intensity, period_unit=period_unit)
     jm.update_status(job_id, "running")
     _pub("job_started", job_id, {"pair": pair, "models": models, "total_work": total_work})
+    emit_event("job_started", job_id=job_id, pair=pair, models=",".join(models), total_work=total_work)
 
     completed_work = 0
 
@@ -188,17 +193,20 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             completed_work += cv_b
         elif phase == "month":
             completed_work += 1
+        elif phase == "period":
+            completed_work += 1
         pct = min(round((completed_work / total_work) * 100, 1), 100) if total_work > 0 else 0
         data["completed_work"] = completed_work
         data["total_work"] = total_work
         data["progress_pct"] = pct
         if phase in ("hpo", "hpo_trial"):
             evt_name = "hpo_progress"
-        elif phase == "month":
+        elif phase in ("month", "period"):
             evt_name = "month_progress"
         else:
             evt_name = "model_phase"
         _pub(evt_name, job_id, data)
+        emit_event(evt_name, job_id=job_id, model=model, pct=pct, **data)
 
     all_metrics = []
 
@@ -235,6 +243,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             base_cfg["n_trials"] = n_trials_hdr
             base_cfg["n_startup_trials"] = tc.get("random", 3)
             base_cfg["seed"] = seed
+            base_cfg["period_unit"] = period_unit
             base_cfg.update(config.get("config_overrides", {}))
 
             df_sim = bt.real_trading_simulation(
@@ -418,12 +427,14 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
 
         jm.update_status(job_id, "completed", result=result)
         _pub("job_complete", job_id, {"metrics": all_metrics})
+        emit_event("job_complete", job_id=job_id, n_models=len(all_metrics))
         return result
 
     except Exception as e:
         tb = traceback.format_exc()
         jm.update_status(job_id, "failed", error=f"{e}\n{tb}")
         _pub("job_failed", job_id, {"error": str(e)})
+        emit_event("job_failed", job_id=job_id, error=str(e)[:200])
         raise
 
 

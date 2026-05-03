@@ -12,9 +12,13 @@ class RealTradingMixin:
     """
     def real_trading_simulation(self, config, models_to_test=None, months=1):
         """
-        Simulate sequential (month-by-month) live trading:
-        - per month: tune (or short-circuit for DQN), evaluate, log metrics,
-        and carry continuous equity to the next month.
+        Simulate sequential walk-forward live trading:
+        - per period: tune (or short-circuit for DQN), evaluate, log metrics,
+        and carry continuous equity to the next period.
+
+        The `months` parameter defines the total walk-forward span in months.
+        When period_unit is "weeks" or "days", the span is converted to the
+        equivalent number of periods for the iteration loop.
 
         Returns
         -------
@@ -82,7 +86,7 @@ class RealTradingMixin:
         self.slippage_factor = float(config.get("slippage_factor", self.slippage_factor))
 
         def _log_flat_month_fallback(
-            month_idx,
+            period_idx,
             train_start,
             train_end,
             test_start,
@@ -332,7 +336,7 @@ class RealTradingMixin:
                 monthly_bh_factor  = float(creturns)
 
             result = {
-                "month": month_idx,
+                "month": period_idx,
                 "model": model_type,
                 "train_start": train_start,
                 "train_end": train_end,
@@ -359,11 +363,11 @@ class RealTradingMixin:
 
             model_name = friendly_model_name(model_type)
             model_base_dir = os.path.join(out_dir, model_name)
-            month_dirs = month_dir_path(model_base_dir, month_idx)
-            csv_path   = os.path.join(month_dirs["csv"], f"csv_month_{month_idx}.csv")
+            month_dirs = month_dir_path(model_base_dir, period_idx)
+            csv_path   = os.path.join(month_dirs["csv"], f"csv_month_{period_idx}.csv")
 
             self.log_simulation_result(
-                i=month_idx - 1,
+                i=period_idx - 1,
                 test_start=test_start,
                 test_end=test_end,
                 perf=float(result["cstrategy"]),         # 1.0 for a flat month
@@ -400,7 +404,7 @@ class RealTradingMixin:
                 trade_dfs.append(pd.DataFrame())
 
             print(
-                f"[FLAT] Month {month_idx}: logged FLAT month "
+                f"[FLAT] Month {period_idx}: logged FLAT month "
                 f"(no usable config / no valid metrics)."
             )
 
@@ -645,7 +649,18 @@ class RealTradingMixin:
         )
         period_unit = config.get("period_unit", "months")
 
-        # ---- carry continuous state across months ----
+        # Convert total walk-forward span (in months) to number of periods
+        from config import convert_month_count_to_periods as _cvt_periods
+        n_periods = _cvt_periods(months, period_unit)
+
+        if period_unit != "months" and n_periods > 365:
+            log_print(
+                f"[WARN] period_unit={period_unit} with months={months} produces "
+                f"{n_periods} iterations -- this may be very slow. Consider reducing months.",
+                level="COMPACT",
+            )
+
+        # ---- carry continuous state across periods ----
         prev_eq_strategy = 1.0
         prev_eq_bh = 1.0
         prev_position = 0.0
@@ -713,12 +728,12 @@ class RealTradingMixin:
 
         # --- DQN periodic retraining settings (ignored for other models) ---
         if model_type == "dqn":
-            # Retrain once every N test months (default: 12).
-            dqn_retrain_period = int(config.get("dqn_retrain_period_months", 12))
-            dqn_month_counter = 0
+            dqn_retrain_period_months = int(config.get("dqn_retrain_period_months", 12))
+            dqn_retrain_period = _cvt_periods(dqn_retrain_period_months, period_unit)
+            dqn_period_counter = 0
         else:
             dqn_retrain_period = None
-            dqn_month_counter = 0
+            dqn_period_counter = 0
             
         # --- helper: deterministic month config fingerprint (auditable) ---
         def _month_cfg_fingerprint(_cfg: dict):
@@ -754,9 +769,8 @@ class RealTradingMixin:
             except Exception:
                 return "na", {}
 
-        for i in range(months):
-            # month_idx must exist even if we crash early in the month loop
-            month_idx = i + 1
+        for i in range(n_periods):
+            period_idx = i + 1
             
             # V2 export safety: always define, then overwrite if evaluator provides it
             _signal_coverage_month = float("nan")
@@ -766,8 +780,8 @@ class RealTradingMixin:
             # ------------------------------------------------------------
             try:
                 # NOTE: keep both spellings; downstream log/ctx code reads _rt_month_ix.
-                setattr(self, "_rt_month_idx", int(month_idx))
-                setattr(self, "_rt_month_ix", int(month_idx))
+                setattr(self, "_rt_month_idx", int(period_idx))
+                setattr(self, "_rt_month_ix", int(period_idx))
 
             except Exception:
                 pass
@@ -900,7 +914,7 @@ class RealTradingMixin:
                         # At the START of each retrain block (every N months),
                         # delete only the *model* so the next evaluation will train a new one.
                         # KEEP the JSON config so your manual settings persist.
-                        if (dqn_month_counter % dqn_retrain_period) == 0:
+                        if (dqn_period_counter % dqn_retrain_period) == 0:
                             try:
                                 if os.path.exists(MODEL_DQN_PATH):
                                     os.remove(MODEL_DQN_PATH)
@@ -944,7 +958,7 @@ class RealTradingMixin:
                         )
                         # Increment DQN month counter only on successful evaluation
                         if dqn_retrain_period:
-                            dqn_month_counter += 1
+                            dqn_period_counter += 1
                     except Exception as e:
                         print(f"[ERR] DQN evaluation failed for month {i + 1}: {e}")
                         metrics = None
@@ -1817,7 +1831,7 @@ class RealTradingMixin:
                                     _effective['target_active_rate'] = float(
                                         max(0.0, min(_tar_cap, _tar0 * _mult))
 )
-                                    log_print(f"[RealSim][Coverage] m{month_idx} target_active_rate base={_tar0:.3f} mult={_mult:.3f} effective={_effective['target_active_rate']:.3f}", level="COMPACT")
+                                    log_print(f"[RealSim][Coverage] m{period_idx} target_active_rate base={_tar0:.3f} mult={_mult:.3f} effective={_effective['target_active_rate']:.3f}", level="COMPACT")
                         except Exception:
                             pass
 
@@ -1853,7 +1867,7 @@ class RealTradingMixin:
 
                         _fp = _hashlib.sha1(_json.dumps(_fp_view, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:10]
                         log_print(
-                            f"[CONFIG-FINGERPRINT] m{month_idx} sha1={_fp} | "
+                            f"[CONFIG-FINGERPRINT] m{period_idx} sha1={_fp} | "
                             f"tar={_fp_view['target_active_rate']} conf={_fp_view['confidence_threshold']} cal={_fp_view['calibrate_method']} | "
                             f"lags={_fp_view['lags']} ld={_fp_view['lag_depth']} | "
                             f"rwk={_fp_view['roll_windows_key']} rwk2={_fp_view['roll_windows_key_v2']} | "
@@ -1870,12 +1884,12 @@ class RealTradingMixin:
                                 _base = float(_month_base.get("target_active_rate", _tuned))
                                 if bool(getattr(self, "_in_real_sim", False)):
                                     log_print(
-                                        f"[CONFIG] m{month_idx} target_active_rate base={_base} tuned={_tuned} effective={_eff} (real-sim override)",
+                                        f"[CONFIG] m{period_idx} target_active_rate base={_base} tuned={_tuned} effective={_eff} (real-sim override)",
                                         level="COMPACT",
                                     )
                                 else:
                                     log_print(
-                                        f"[WARN] [CONFIG-DRIFT] m{month_idx} target_active_rate tuned={_tuned} effective={_eff}",
+                                        f"[WARN] [CONFIG-DRIFT] m{period_idx} target_active_rate tuned={_tuned} effective={_eff}",
                                         level="COMPACT",
                                     )
 
@@ -1890,7 +1904,7 @@ class RealTradingMixin:
                                 best_combo.update(_params_internal)
 
                     except Exception as _e_cfg:
-                        log_print(f"[WARN] [CONFIG-FINGERPRINT] m{month_idx} failed: {type(_e_cfg).__name__}: {_e_cfg}", level="COMPACT")
+                        log_print(f"[WARN] [CONFIG-FINGERPRINT] m{period_idx} failed: {type(_e_cfg).__name__}: {_e_cfg}", level="COMPACT")
                         
                     # ------------------------------------------------------------
                     # Patch 1: Re-fingerprint immediately before each evaluation call
@@ -1938,7 +1952,7 @@ class RealTradingMixin:
                             ).hexdigest()[:10]
 
                             log_print(
-                                f"[CONFIG-FINGERPRINT] m{month_idx} {_tag} sha1={_sha} | "
+                                f"[CONFIG-FINGERPRINT] m{period_idx} {_tag} sha1={_sha} | "
                                 f"tar={_view['target_active_rate']} conf={_view['confidence_threshold']} cal={_view['calibrate_method']} | "
                                 f"lags={_view['lags']} ld={_view['lag_depth']} | "
                                 f"| roll_windows={_view['roll_windows']} | "
@@ -1948,7 +1962,7 @@ class RealTradingMixin:
                             return _eff
                         except Exception as __e:
                             log_print(
-                                f"[WARN] [CONFIG-FINGERPRINT] m{month_idx} {_tag} failed: {type(__e).__name__}: {__e}",
+                                f"[WARN] [CONFIG-FINGERPRINT] m{period_idx} {_tag} failed: {type(__e).__name__}: {__e}",
                                level="COMPACT",
                             )
                             return _params_in
@@ -2139,7 +2153,7 @@ class RealTradingMixin:
                     _thr_med = getattr(self, "_last_conf_thr_used", None)
                     _conf    = getattr(self, "_last_conf_stats_max_conf", None)
                     if self._is_debug():
-                        print_conf_stats(_conf, label=f"real_m{month_idx}", thr=_thr_med)
+                        print_conf_stats(_conf, label=f"real_m{period_idx}", thr=_thr_med)
                 except Exception:
                     pass
                 
@@ -2163,7 +2177,7 @@ class RealTradingMixin:
                                 _mm[_i] = 0.0
                                 _repl.append(_i)
                         if _repl:
-                            print(f"[RealSim][MetricsSanitize] m{month_idx} replaced non-finite metric(s) at idx={_repl}")
+                            print(f"[RealSim][MetricsSanitize] m{period_idx} replaced non-finite metric(s) at idx={_repl}")
                             metrics = tuple(_mm)
                 except Exception:
                     pass
@@ -2172,7 +2186,7 @@ class RealTradingMixin:
                 # If still invalid (e.g., no trades), log a flat month instead of skipping
                 if not _is_valid_metrics_tuple(metrics):
                     prev_eq_strategy, prev_eq_bh, prev_position = _log_flat_month_fallback(
-                        month_idx=month_idx,
+                        period_idx=period_idx,
                         train_start=train_start,
                         train_end=train_end,
                         test_start=test_start,
@@ -2610,7 +2624,8 @@ class RealTradingMixin:
 
                 _progress_cb = getattr(self, "_progress_callback", None)
                 if _progress_cb:
-                    _progress_cb("month", model_type, {"month": i + 1, "total_months": months, "sharpe": result.get("sharpe", None), "trades": result.get("trades", None)})
+                    phase = "month" if period_unit == "months" else "period"
+                    _progress_cb(phase, model_type, {"period": i + 1, "total_periods": n_periods, "sharpe": result.get("sharpe", None), "trades": result.get("trades", None)})
                 
                 # PBO/MCS monthly bookkeeping (does not affect trading logic)
                 try:
@@ -2662,7 +2677,7 @@ class RealTradingMixin:
                         if tdf is None or tdf.empty:
                             continue
 
-                        month_idx = int(row.get("month_idx", idx + 1))
+                        period_idx = int(row.get("period_idx", idx + 1))
                         n_trades = int(len(tdf))
 
                         if n_trades > 0:
@@ -2684,7 +2699,7 @@ class RealTradingMixin:
                                 "run_id": _os.path.basename(RUN_DIR_LOCAL),
                                 "model_type": model_type,
                                 "repetition": int(rep_idx),
-                                "month_idx": month_idx,
+                                "period_idx": period_idx,
                                 "test_start": row.get("test_start"),
                                 "test_end": row.get("test_end"),
                                 "n_trades": n_trades,
@@ -2789,7 +2804,7 @@ class RealTradingMixin:
                                     "run_id": _os.path.basename(RUN_DIR_LOCAL),
                                     "model_type": model_type,
                                     "repetition": int(rep_idx),
-                                    "month_idx": int(row.get("month_idx", idx + 1)),
+                                    "period_idx": int(row.get("period_idx", idx + 1)),
                                     "trade_id": tr.get("trade_id"),
                                     "side": tr.get("side"),
                                     "side_sign": tr.get("side_sign"),
@@ -2990,7 +3005,7 @@ class RealTradingMixin:
                     )
             else:
                 for idx, row in df_months.iterrows():
-                    month_ix = int(row.get("month_idx", idx + 1))
+                    month_ix = int(row.get("period_idx", idx + 1))
                     mdirs = month_dir_path(model_base_dir, month_ix)
 
                     # (a) CSV with only that month row (clean)
