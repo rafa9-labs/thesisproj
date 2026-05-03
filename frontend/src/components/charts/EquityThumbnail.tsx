@@ -34,7 +34,7 @@ export function EquityThumbnail({ data, width = 120, height = 36 }: EquityThumbn
 
   const finalVal = data && data.length > 0 ? data[data.length - 1].value : 0;
   const startVal = data && data.length > 0 ? data[0].value : 0;
-  const color = finalVal >= startVal ? "#089981" : "#F23645";
+  const color = finalVal >= startVal ? "var(--color-accent-success)" : "var(--color-accent-danger)";
 
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>

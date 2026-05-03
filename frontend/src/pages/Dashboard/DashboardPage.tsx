@@ -14,7 +14,7 @@ import { PerformanceHeatmapSection } from "./PerformanceHeatmapSection";
 
 function DashboardSkeleton() {
   return (
-    <div className="flex flex-col gap-6 animate-pulse">
+    <div className="flex flex-col gap-5 animate-pulse">
       <div className="grid grid-cols-4 gap-4">
         {Array.from({ length: 4 }, (_, i) => (
           <div key={i} className="h-24 rounded-lg" style={{ backgroundColor: "var(--color-surface)" }} />
@@ -74,13 +74,7 @@ export function DashboardPage() {
 
   if (jobsLoading) {
     return (
-      <div className="flex flex-col gap-6">
-        <h2
-          className="text-base font-semibold uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          Dashboard
-        </h2>
+      <div className="flex flex-col gap-5">
         <DashboardSkeleton />
       </div>
     );
@@ -89,14 +83,7 @@ export function DashboardPage() {
   const hasCompleted = completedJobs.length > 0;
 
   return (
-    <div className="flex flex-col gap-6">
-      <h2
-        className="text-base font-semibold uppercase tracking-[0.1em]"
-        style={{ color: "var(--color-text-secondary)" }}
-      >
-        Dashboard
-      </h2>
-
+    <div className="flex flex-col gap-5">
       <div className="grid grid-cols-4 gap-4">
         <MetricCard label="Total Runs" value={kpis.totalRuns} icon={<BarChart3 size={16} />} />
         <MetricCard

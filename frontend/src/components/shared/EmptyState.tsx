@@ -36,7 +36,7 @@ export function EmptyState({
           onClick={onAction}
           className="mt-2 rounded-md px-6 py-2 text-xs font-bold uppercase transition-colors duration-150"
           style={{
-            backgroundColor: "var(--color-accent)",
+            backgroundColor: "var(--color-brand)",
             color: "var(--color-text-inverse)",
             letterSpacing: "0.05em",
           }}

@@ -51,14 +51,14 @@ export function MetricCard({
 
   const sparkColor =
     deltaType === "positive"
-      ? "#089981"
+      ? "#22C55E"
       : deltaType === "negative"
-        ? "#F23645"
-        : "#80899F";
+        ? "#EF4444"
+        : "#5A6578";
 
   return (
     <div
-      className="flex flex-col gap-1 rounded-lg border p-4 transition-colors duration-150"
+      className="flex flex-col gap-1 rounded-lg border p-4 transition-all duration-150 hover:border-[var(--color-border-active)]"
       style={{
         backgroundColor: "var(--color-surface)",
         borderColor: "var(--color-border)",

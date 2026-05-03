@@ -69,9 +69,9 @@ export function PerformanceHeatmapSection({ data, isLoading }: PerformanceHeatma
               onClick={() => setMetric(opt.key)}
               className="rounded-md border px-2 py-0.5 text-[10px] transition-colors"
               style={{
-                borderColor: metric === opt.key ? "var(--color-accent)" : "var(--color-border)",
-                backgroundColor: metric === opt.key ? "rgba(41,98,255,0.1)" : "var(--color-surface)",
-                color: metric === opt.key ? "var(--color-accent)" : "var(--color-text-secondary)",
+                borderColor: metric === opt.key ? "var(--color-primary)" : "var(--color-border)",
+                backgroundColor: metric === opt.key ? "var(--color-primary-glow)" : "var(--color-surface)",
+                color: metric === opt.key ? "var(--color-primary)" : "var(--color-text-secondary)",
                 cursor: "pointer",
                 fontFamily: "var(--font-mono)",
               }}
