@@ -108,12 +108,6 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h2
-        className="text-base font-semibold uppercase tracking-[0.1em]"
-        style={{ color: "var(--color-text-secondary)" }}
-      >
-        Settings
-      </h2>
 
       <Section icon={<SettingsIcon size={18} />} title="General" defaultOpen>
         <FieldRow label="Verbose Mode (Apprentice)">
@@ -161,7 +155,7 @@ export function SettingsPage() {
               value={store.threadBudget}
               onChange={(e) => store.setField("threadBudget", Number(e.target.value))}
               className="w-32"
-              style={{ accentColor: "var(--color-accent)" }}
+              style={{ accentColor: "var(--color-primary)" }}
             />
             <span
               className="text-xs"
