@@ -51,13 +51,7 @@ export function ResultsPage() {
 
   if (!jobId) {
     return (
-      <div className="flex flex-col gap-6">
-        <h2
-          className="text-base font-semibold uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          Results
-        </h2>
+      <div className="flex flex-col gap-5">
         <EmptyState
           icon={<BarChart3 size={48} />}
           title="No results to display"
@@ -71,11 +65,11 @@ export function ResultsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-5">
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate("/backtest")}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:border-[var(--color-border-active)]"
             style={{
               borderColor: "var(--color-border)",
               backgroundColor: "var(--color-surface)",
@@ -84,12 +78,6 @@ export function ResultsPage() {
           >
             <ArrowLeft size={12} /> Back
           </button>
-          <h2
-            className="text-base font-semibold uppercase tracking-[0.1em]"
-            style={{ color: "var(--color-text-secondary)" }}
-          >
-            Results
-          </h2>
         </div>
         <Skeleton />
       </div>
@@ -98,11 +86,11 @@ export function ResultsPage() {
 
   if (isError || !results) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-5">
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate("/backtest")}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:border-[var(--color-border-active)]"
             style={{
               borderColor: "var(--color-border)",
               backgroundColor: "var(--color-surface)",
@@ -154,12 +142,12 @@ export function ResultsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 overflow-y-auto" style={{ height: "100%" }}>
+    <div className="flex flex-col gap-5 overflow-y-auto" style={{ height: "100%" }}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate("/backtest")}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors"
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:border-[var(--color-border-active)]"
             style={{
               borderColor: "var(--color-border)",
               backgroundColor: "var(--color-surface)",
@@ -198,9 +186,9 @@ export function ResultsPage() {
               onClick={() => setActiveModelIdx(i)}
               className="rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors"
               style={{
-                borderColor: i === activeModelIdx ? "var(--color-accent)" : "var(--color-border)",
-                backgroundColor: i === activeModelIdx ? "rgba(41,98,255,0.1)" : "var(--color-surface)",
-                color: i === activeModelIdx ? "var(--color-accent)" : "var(--color-text-secondary)",
+                borderColor: i === activeModelIdx ? "var(--color-brand)" : "var(--color-border)",
+                backgroundColor: i === activeModelIdx ? "var(--color-brand-glow)" : "var(--color-surface)",
+                color: i === activeModelIdx ? "var(--color-brand)" : "var(--color-text-secondary)",
                 cursor: "pointer",
               }}
             >

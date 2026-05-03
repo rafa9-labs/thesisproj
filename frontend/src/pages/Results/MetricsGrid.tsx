@@ -132,9 +132,9 @@ export function MetricsGrid({ metrics, modelName, warnings, monthlyResults }: Me
         <div
           className="rounded-md border px-3 py-2 text-xs"
           style={{
-            backgroundColor: "rgba(255, 167, 38, 0.08)",
-            borderColor: "var(--color-accent-warning, #ffa726)",
-            color: "var(--color-accent-warning, #ffa726)",
+            backgroundColor: "rgba(245, 158, 11, 0.08)",
+            borderColor: "var(--color-accent-warning)",
+            color: "var(--color-accent-warning)",
           }}
         >
           {warnings.map((w, i) => (

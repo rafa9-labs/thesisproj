@@ -23,7 +23,7 @@ export function ExportBar({ onExportCsv, onExportPng, onExportJson, disabled }: 
             key={btn.label}
             onClick={btn.onClick}
             disabled={isDisabled}
-            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold uppercase transition-colors duration-150"
+            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold uppercase transition-all duration-150 hover:border-[var(--color-border-active)]"
             style={{
               borderColor: "var(--color-border)",
               backgroundColor: "var(--color-surface)",
