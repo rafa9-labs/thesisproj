@@ -44,12 +44,12 @@ export function QuickTestBar() {
   return (
     <div
       className="rounded-lg border p-4"
-      style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-accent)" }}
+      style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-brand)" }}
     >
       <div className="mb-3 flex items-center gap-2">
         <span
           className="text-xs font-bold uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-accent)" }}
+          style={{ color: "var(--color-brand)" }}
         >
           Quick Start
         </span>
@@ -73,12 +73,12 @@ export function QuickTestBar() {
               minWidth: "180px",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "var(--color-accent)";
-              e.currentTarget.style.backgroundColor = "var(--color-surface)";
+              e.currentTarget.style.borderColor = "var(--color-brand)";
+              e.currentTarget.style.backgroundColor = "var(--color-elevated)";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = "var(--color-border)";
-              e.currentTarget.style.backgroundColor = "var(--color-bg)";
+              e.currentTarget.style.backgroundColor = "var(--color-surface)";
             }}
           >
             <span

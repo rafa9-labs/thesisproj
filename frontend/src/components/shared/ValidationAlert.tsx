@@ -13,7 +13,7 @@ export function ValidationAlert({ warnings, errors }: ValidationAlertProps) {
           className="rounded-md border p-3"
           style={{
             borderColor: "var(--color-accent-danger)",
-            backgroundColor: "rgba(242, 54, 69, 0.08)",
+            backgroundColor: "rgba(239, 68, 68, 0.08)",
           }}
         >
           <div className="mb-1 text-xs font-semibold" style={{ color: "var(--color-accent-danger)" }}>
@@ -33,7 +33,7 @@ export function ValidationAlert({ warnings, errors }: ValidationAlertProps) {
           className="rounded-md border p-3"
           style={{
             borderColor: "var(--color-accent-warning)",
-            backgroundColor: "rgba(255, 152, 0, 0.08)",
+            backgroundColor: "rgba(245, 158, 11, 0.08)",
           }}
         >
           <div className="mb-1 text-xs font-semibold" style={{ color: "var(--color-accent-warning)" }}>

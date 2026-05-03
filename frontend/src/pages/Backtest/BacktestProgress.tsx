@@ -35,8 +35,8 @@ function ModelPill({ model, mp, done, current }: { model: string; mp?: ModelProg
     <div
       className="flex flex-col gap-1 rounded-md border px-2.5 py-1.5"
       style={{
-        borderColor: done ? "var(--color-accent-success)" : current ? "var(--color-accent)" : "var(--color-border)",
-        backgroundColor: done ? "rgba(8,153,129,0.08)" : "transparent",
+        borderColor: done ? "var(--color-accent-success)" : current ? "var(--color-brand)" : "var(--color-border)",
+        backgroundColor: done ? "rgba(34,197,94,0.08)" : "transparent",
         minWidth: 120,
       }}
     >
@@ -47,7 +47,7 @@ function ModelPill({ model, mp, done, current }: { model: string; mp?: ModelProg
             backgroundColor: done
               ? "var(--color-accent-success)"
               : current
-                ? "var(--color-accent-warning)"
+                ? "var(--color-brand)"
                 : "var(--color-text-muted)",
           }}
         />
@@ -126,7 +126,7 @@ export function BacktestProgress({ jobId }: { jobId: string | null }) {
                   ? "var(--color-accent-danger)"
                   : job.status === "completed"
                     ? "var(--color-accent-success)"
-                    : "var(--color-accent)",
+                    : "var(--color-brand)",
             }}
           />
         </div>

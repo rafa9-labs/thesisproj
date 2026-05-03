@@ -106,7 +106,7 @@ function ModelCard({
       className="flex flex-col gap-1.5 rounded-md border p-3 text-left transition-all duration-150"
       style={{
         borderColor: isSelected ? categoryColor : "var(--color-border)",
-        backgroundColor: isSelected ? "var(--color-elevated)" : "var(--color-app)",
+        backgroundColor: isSelected ? "var(--color-elevated)" : "var(--color-surface)",
         opacity: isFull ? 0.4 : 1,
         cursor: isFull ? "not-allowed" : "pointer",
         borderLeftWidth: isSelected ? 3 : 1,

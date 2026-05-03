@@ -98,7 +98,7 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors }: RunSum
             className="rounded-md border p-3"
             style={{
               borderColor: errors > 0 ? "var(--color-accent-danger)" : "var(--color-accent-warning)",
-              backgroundColor: errors > 0 ? "rgba(242,54,69,0.05)" : "rgba(255,152,0,0.05)",
+              backgroundColor: errors > 0 ? "rgba(239,68,68,0.05)" : "rgba(245,158,11,0.05)",
             }}
           >
             <span className="text-xs font-semibold" style={{ color: errors > 0 ? "var(--color-accent-danger)" : "var(--color-accent-warning)" }}>
@@ -121,7 +121,7 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors }: RunSum
             disabled={errors > 0}
             className="rounded-md px-6 py-2 text-xs font-bold uppercase transition-colors"
             style={{
-              backgroundColor: errors > 0 ? "var(--color-border)" : "var(--color-accent)",
+              backgroundColor: errors > 0 ? "var(--color-border)" : "var(--color-brand)",
               color: errors > 0 ? "var(--color-text-muted)" : "var(--color-text-inverse)",
               letterSpacing: "0.05em",
               cursor: errors > 0 ? "not-allowed" : "pointer",

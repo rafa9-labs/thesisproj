@@ -58,20 +58,14 @@ export function BacktestPage() {
     <div className="flex flex-col gap-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2
-          className="text-base font-semibold uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          New Backtest
-        </h2>
         <div className="flex items-center gap-4">
           <RuntimeEstimate />
           <button
             onClick={() => hasModels && ok && setSummaryOpen(true)}
             disabled={!hasModels || submit.isPending}
-            className="rounded-md px-6 py-2 text-xs font-bold uppercase transition-colors duration-150"
+            className="rounded-md px-6 py-2 text-xs font-bold uppercase transition-all duration-150 hover:brightness-110"
             style={{
-              backgroundColor: hasModels ? "var(--color-accent)" : "var(--color-border)",
+              backgroundColor: hasModels ? "var(--color-brand)" : "var(--color-border)",
               color: hasModels ? "var(--color-text-inverse)" : "var(--color-text-muted)",
               letterSpacing: "0.05em",
               cursor: hasModels ? "pointer" : "not-allowed",
@@ -93,7 +87,7 @@ export function BacktestPage() {
           onClick={() => setAdvancedMode(false)}
           className="rounded px-3 py-1 text-xs font-semibold uppercase transition-colors"
           style={{
-            backgroundColor: !advancedMode ? "var(--color-accent)" : "transparent",
+            backgroundColor: !advancedMode ? "var(--color-primary)" : "transparent",
             color: !advancedMode ? "var(--color-text-inverse)" : "var(--color-text-muted)",
             border: "1px solid var(--color-border)",
           }}
@@ -104,7 +98,7 @@ export function BacktestPage() {
           onClick={() => setAdvancedMode(true)}
           className="rounded px-3 py-1 text-xs font-semibold uppercase transition-colors"
           style={{
-            backgroundColor: advancedMode ? "var(--color-accent)" : "transparent",
+            backgroundColor: advancedMode ? "var(--color-primary)" : "transparent",
             color: advancedMode ? "var(--color-text-inverse)" : "var(--color-text-muted)",
             border: "1px solid var(--color-border)",
           }}

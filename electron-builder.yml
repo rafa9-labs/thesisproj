@@ -1,8 +1,8 @@
-# FX ML Backtester — Electron Builder Configuration
+# KodaQuant — Electron Builder Configuration
 # Docs: https://www.electron.build/configuration.yml
 
-appId: com.fxbacktester.app
-productName: "FX ML Backtester"
+appId: com.kodaquant.app
+productName: "KodaQuant"
 copyright: "Copyright © 2026 rafa9-labs"
 
 # Directories
@@ -50,7 +50,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: "FX ML Backtester"
+  shortcutName: "KodaQuant"
   installerIcon: icon.ico
   uninstallerIcon: icon.ico
   installerHeaderIcon: icon.ico
@@ -61,8 +61,8 @@ nsis:
 # File type associations
 fileAssociations:
   - ext: fxbacktest
-    name: FX Backtest Config
-    description: "FX ML Backtester Configuration"
+    name: KodaQuant Config
+    description: "KodaQuant Configuration"
     icon: icon.ico
 
 # Linux (for future)
