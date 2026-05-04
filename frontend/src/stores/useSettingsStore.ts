@@ -58,10 +58,10 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()((set, 
 
   saveToStorage: () => {
     try {
-      const { verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed } = get();
+      const { verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, dataDir } = get();
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed }),
+        JSON.stringify({ verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, dataDir }),
       );
     } catch {
       /* ignore */

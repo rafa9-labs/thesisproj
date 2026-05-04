@@ -56,9 +56,8 @@ nsis:
   installerLanguages:
     - en_US
   language: 1033
-  # Custom installer welcome/finish pages (optional, add bitmaps to build/ dir):
-  # installerHeader: build/installer-header.bmp    # 150x57 header banner
-  # installerSidebar: build/installer-sidebar.bmp   # 162x314 left sidebar
+  installerHeader: build/installer-header.bmp
+  installerSidebar: build/installer-sidebar.bmp
 
 # File type associations
 fileAssociations:

@@ -1,8 +1,9 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { DashboardPage } from "./pages/Dashboard/DashboardPage";
 import { BacktestPage } from "./pages/Backtest/BacktestPage";
+import { WelcomePage } from "./pages/Welcome/WelcomePage";
 
 const ResultsPage = lazy(() =>
   import("./pages/Results/ResultsPage").then((m) => ({ default: m.ResultsPage })),
@@ -36,7 +37,15 @@ function PageSpinner() {
   );
 }
 
+const WELCOME_KEY = "kodaquant-welcome-done";
+
 export default function App() {
+  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(WELCOME_KEY));
+
+  if (showWelcome) {
+    return <WelcomePage onComplete={() => setShowWelcome(false)} />;
+  }
+
   return (
     <Routes>
       <Route element={<AppShell />}>
