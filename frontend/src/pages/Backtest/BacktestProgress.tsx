@@ -1,7 +1,14 @@
 import { useEffect } from "react";
 import { useJobStore } from "@/stores/useJobStore";
 import { useJobStatus } from "@/api/queries";
-import type { ModelProgress } from "@/stores/useJobStore";
+
+interface ModelProgressLocal {
+  phase: "pending" | "hpo" | "simulation" | "complete" | "failed";
+  hpoTrial: number;
+  hpoTotalTrials: number;
+  simMonth: number;
+  simTotalMonths: number;
+}
 
 function PhaseBar({
   label,
@@ -30,7 +37,7 @@ function PhaseBar({
   );
 }
 
-function ModelPill({ model, mp, done, current }: { model: string; mp?: ModelProgress; done: boolean; current: boolean }) {
+function ModelPill({ model, mp, done, current }: { model: string; mp?: ModelProgressLocal; done: boolean; current: boolean }) {
   return (
     <div
       className="flex flex-col gap-1 rounded-md border px-2.5 py-1.5"

@@ -2,12 +2,17 @@
 setlocal enabledelayedexpansion
 
 echo =============================================
-echo  FX ML Backtester - Full Electron Build
+echo  KodaQuant - Full Electron Build
 echo =============================================
 echo.
 
 cd /d "%~dp0.."
 set "PROJECT_ROOT=%cd%"
+
+REM Read version from package.json
+for /f "tokens=2 delims=:, " %%a in ('findstr /C:"\"version\"" frontend\package.json') do set "APP_VER=%%~a"
+echo  Version: %APP_VER%
+echo.
 
 echo [1/7] Checking prerequisites...
 where node >nul 2>&1
@@ -101,11 +106,11 @@ echo.
 
 if exist "release\" (
     echo Output: release\
-    for %%f in (release\FX*Setup*.exe) do (
+    for %%f in (release\KodaQuant-Setup-*.exe) do (
         echo   Installer: %%f
         for %%a in ("%%f") do echo   Size: %%~za bytes
     )
-    if not exist "release\FX*Setup*.exe" (
+    if not exist "release\KodaQuant-Setup-*.exe" (
         echo   (No installer .exe found - check release\ directory)
     )
     for /f "tokens=3" %%a in ('dir /s "release\win-unpacked" 2^>nul ^| findstr /c:"File(s)"') do set UNPACKED_SIZE=%%a
@@ -113,4 +118,4 @@ if exist "release\" (
 )
 echo.
 echo To install: Run the .exe installer in release\
-echo To test unpacked: release\win-unpacked\FX ML Backtester.exe
+echo To test unpacked: release\win-unpacked\KodaQuant.exe

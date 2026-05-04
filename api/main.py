@@ -8,7 +8,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from api.config import settings
-from api.routers import backtest, config, data, health, models, news, pairs, ws
+from api.middleware import install_security_middleware
+from api.routers import backtest, config, data, health, license, models, news, pairs, ws
 
 IS_DESKTOP = os.environ.get("FX_APP_MODE", "") == "desktop"
 
@@ -25,6 +26,8 @@ app = FastAPI(
     version=settings.version,
     lifespan=lifespan,
 )
+
+install_security_middleware(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,6 +54,7 @@ app.include_router(news.router, prefix="/api/v1")
 app.include_router(backtest.router, prefix="/api/v1")
 app.include_router(config.router, prefix="/api/v1")
 app.include_router(data.router, prefix="/api/v1")
+app.include_router(license.router, prefix="/api/v1")
 app.include_router(ws.router, prefix="/api/v1")
 
 

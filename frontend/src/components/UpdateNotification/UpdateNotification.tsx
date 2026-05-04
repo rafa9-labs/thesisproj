@@ -1,6 +1,18 @@
 import { useState, useEffect } from "react";
 import { Download, RefreshCw, X } from "lucide-react";
 
+interface ElectronUpdateAPI {
+  checkForUpdates?: () => Promise<unknown>;
+  downloadUpdate?: () => Promise<unknown>;
+  installUpdate?: () => Promise<unknown>;
+  isUpdateDownloaded?: () => Promise<boolean>;
+  onUpdateAvailable?: (cb: (info: UpdateInfo) => void) => void;
+  onUpdateProgress?: (cb: (progress: DownloadProgress) => void) => void;
+  onUpdateDownloaded?: (cb: (info: UpdateInfo) => void) => void;
+  onUpdateNotAvailable?: (cb: () => void) => void;
+  onTriggerUpdateCheck?: (cb: () => void) => void;
+}
+
 interface UpdateInfo {
   version: string;
   releaseDate?: string;
@@ -13,6 +25,10 @@ interface DownloadProgress {
   total: number;
 }
 
+function getElectronAPI(): ElectronUpdateAPI | null {
+  return (window as Record<string, unknown>).electronAPI as ElectronUpdateAPI | null;
+}
+
 export function UpdateNotification() {
   const [updateAvailable, setUpdateAvailable] = useState<UpdateInfo | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -22,7 +38,7 @@ export function UpdateNotification() {
   const [checking, setChecking] = useState(false);
 
   useEffect(() => {
-    const api = (window as any).electronAPI;
+    const api = getElectronAPI();
     if (!api) return;
 
     api.onUpdateAvailable?.((info: UpdateInfo) => {
@@ -47,36 +63,40 @@ export function UpdateNotification() {
   }, []);
 
   const handleCheckForUpdates = async () => {
-    const api = (window as any).electronAPI;
+    const api = getElectronAPI();
     if (!api?.checkForUpdates) return;
     setChecking(true);
     try {
       await api.checkForUpdates();
-    } catch {}
+    } catch (_e) {
+      void _e;
+    }
     setChecking(false);
   };
 
   useEffect(() => {
-    const api = (window as any).electronAPI;
+    const api = getElectronAPI();
     if (!api) return;
 
     const handler = () => {
       handleCheckForUpdates();
     };
     api.onTriggerUpdateCheck?.(handler);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDownload = async () => {
-    const api = (window as any).electronAPI;
+    const api = getElectronAPI();
     if (!api?.downloadUpdate) return;
     setDownloading(true);
     try {
       await api.downloadUpdate();
-    } catch {}
+    } catch (_e) {
+      void _e;
+    }
   };
 
   const handleInstall = async () => {
-    const api = (window as any).electronAPI;
+    const api = getElectronAPI();
     if (!api?.installUpdate) return;
     await api.installUpdate();
   };

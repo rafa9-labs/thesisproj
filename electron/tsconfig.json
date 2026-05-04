@@ -12,12 +12,11 @@
     "resolveJsonModule": true,
     "declaration": false,
     "ignoreDeprecations": "6.0",
-    "typeRoots": [
-      "../frontend/node_modules/@types",
-      "../frontend/node_modules/electron"
-    ],
+    "baseUrl": "..",
     "paths": {
-      "electron": ["../frontend/node_modules/electron"]
+      "electron": ["frontend/node_modules/electron"],
+      "@sentry/electron/main": ["frontend/node_modules/@sentry/electron/main/index.d.ts"],
+      "electron-updater": ["frontend/node_modules/electron-updater/out/main.d.ts"]
     }
   },
   "include": ["./*.ts"]

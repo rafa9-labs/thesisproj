@@ -121,26 +121,30 @@ export const useJobStore = create<JobStore>()((set, get) => ({
 
       if (event.event === "hpo_progress") {
         const m = event.model;
+        const trial = event.trial ?? 0;
+        const totalTrials = event.total_trials ?? event.n_trials ?? 0;
         const phaseMap = new Map(updated.modelPhases);
         const mp = phaseMap.get(m) || { phase: "hpo" as const, hpoTrial: 0, hpoTotalTrials: 0, simMonth: 0, simTotalMonths: 0 };
-        phaseMap.set(m, { ...mp, phase: "hpo", hpoTrial: event.trial, hpoTotalTrials: event.total_trials });
+        phaseMap.set(m, { ...mp, phase: "hpo", hpoTrial: trial, hpoTotalTrials: totalTrials });
         updated.modelPhases = phaseMap;
         updated.completedWork = event.completed_work ?? updated.completedWork;
         updated.totalWork = event.total_work ?? updated.totalWork;
         updated.progress = event.progress_pct ?? updated.progress;
-        updated.progressText = `HPO: trial ${event.trial}/${event.total_trials} (${m})`;
+        updated.progressText = `HPO: trial ${trial}/${totalTrials} (${m})`;
       }
 
       if (event.event === "month_progress") {
         const m = event.model;
+        const month = event.month ?? event.period ?? 0;
+        const totalMonths = event.total_months ?? event.total_periods ?? 0;
         const phaseMap = new Map(updated.modelPhases);
         const mp = phaseMap.get(m) || { phase: "simulation" as const, hpoTrial: 0, hpoTotalTrials: 0, simMonth: 0, simTotalMonths: 0 };
-        phaseMap.set(m, { ...mp, phase: "simulation", simMonth: event.month, simTotalMonths: event.total_months });
+        phaseMap.set(m, { ...mp, phase: "simulation", simMonth: month, simTotalMonths: totalMonths });
         updated.modelPhases = phaseMap;
         updated.completedWork = event.completed_work ?? updated.completedWork;
         updated.totalWork = event.total_work ?? updated.totalWork;
         updated.progress = event.progress_pct ?? updated.progress;
-        updated.progressText = `${m}: month ${event.month}/${event.total_months}`;
+        updated.progressText = `${m}: month ${month}/${totalMonths}`;
       }
 
       if (event.event === "job_complete") {

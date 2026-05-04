@@ -1,5 +1,5 @@
 /**
- * Utility functions for the FX ML Backtester Electron shell.
+ * Utility functions for the KodaQuant Electron shell.
  *
  * Port discovery, path resolution, and data directory management.
  */
@@ -69,7 +69,7 @@ export function getBackendExePath(isDev: boolean, projectRoot: string): string {
  * Get the user data directory for persistent storage.
  *
  * In dev: project root (same as source data)
- * In prod: %APPDATA%/FX ML Backtester/ (Windows) or equivalent
+ * In prod: %APPDATA%/KodaQuant/ (Windows) or equivalent
  *
  * This is where the database, results, and cache are stored.
  */

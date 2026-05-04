@@ -63,6 +63,7 @@ if not os.path.isdir(frontend_dist):
     frontend_dist = ""
 
 block_cipher = None
+_KEY = "kodaquant-2026-protect"
 
 _xgb_lib_dir: str = ""
 _xgb_dir: str = ""
@@ -200,6 +201,21 @@ hidden_imports = [
     "rl.environment",
     "rl.replay_buffer",
     "rl.wrappers",
+    "api.licensing",
+    "api.licensing.storage",
+    "api.licensing.fingerprint",
+    "api.licensing.paddle_client",
+    "api.licensing.gates",
+    "api.licensing.manager",
+    "api.licensing.middleware",
+    "api.middleware",
+    "cryptography",
+    "cryptography.fernet",
+    "cryptography.hazmat",
+    "cryptography.hazmat.primitives",
+    "cryptography.hazmat.primitives.hashes",
+    "cryptography.hazmat.primitives.kdf",
+    "cryptography.hazmat.primitives.kdf.hkdf",
 ]
 
 if importlib.util.find_spec("tensorflow") is not None:
@@ -231,6 +247,10 @@ excludes = [
     "av",
     "cv2",
     "idlelib",
+    ".env",
+    ".env.local",
+    ".env.production",
+    ".env.development",
 ]
 
 icon_path = os.path.join(PROJECT_ROOT, "build", "icon.ico")
@@ -256,10 +276,11 @@ a = Analysis(
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
+    key=_KEY,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher, key=_KEY)
 
 exe = EXE(
     pyz,

@@ -1,4 +1,4 @@
-interface HeatmapCellData {
+export interface HeatmapCellData {
   model: string;
   pair: string;
   sharpe: number | null;

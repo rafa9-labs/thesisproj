@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     model_check_interval: float = 2.0
     max_concurrent_backtests: int = 2
 
+    paddle_vendor_id: str = ""
+    paddle_product_id: str = ""
+    paddle_api_key: str = ""
+    paddle_sandbox: bool = False
+    app_secret: str = ""
+    license_db_path: str = ""
+
     @property
     def db_full_path(self) -> str:
         fx_data_dir = os.environ.get("FX_DATA_DIR")

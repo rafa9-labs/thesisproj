@@ -1,5 +1,5 @@
 /**
- * Electron main process — FX ML Backtester desktop shell.
+ * Electron main process — KodaQuant desktop shell.
  *
  * Responsibilities:
  * 1. Show splash screen while backend starts
@@ -9,9 +9,12 @@
  * 5. Graceful shutdown with SIGTERM → wait → SIGKILL
  * 6. System tray + native menus
  * 7. Dynamic port discovery (9000-9999)
+ * 8. Auto-update via electron-updater (production only)
+ * 9. License verification on startup
+ * 10. Sentry crash reporting (opt-in)
  */
 
-import { app, BrowserWindow, Menu, Tray, shell } from "electron";
+import { app, BrowserWindow, Menu, Tray, shell, ipcMain } from "electron";
 import path from "path";
 import { PythonManager } from "./python";
 import { waitForBackend } from "./health";
@@ -19,6 +22,10 @@ import { buildMenu } from "./menu";
 import { createTray } from "./tray";
 import { createSplashWindow, updateSplashStatus, destroySplash } from "./splash";
 import { getProjectRoot, getUserDataDir } from "./utils";
+import { checkLicense, registerLicenseIPC, LicenseInfo } from "./license";
+import { startAntiDebugChecks, stopAntiDebugChecks, disableContextMenuInProduction } from "./anti_debug";
+import { setupAutoUpdater } from "./updater";
+import { initSentry } from "./sentry";
 
 const isDev = !app.isPackaged;
 const isWin = process.platform === "win32";
@@ -36,7 +43,7 @@ function createWindow() {
     height: 900,
     minWidth: 1280,
     minHeight: 800,
-    title: "FX ML Backtester",
+    title: "KodaQuant",
     backgroundColor: "#131722",
     show: false,
     webPreferences: {
@@ -62,6 +69,8 @@ function createWindow() {
     shell.openExternal(url);
     return { action: "deny" };
   });
+
+  disableContextMenuInProduction(mainWindow.webContents);
 }
 
 async function loadFrontend() {
@@ -106,9 +115,15 @@ async function startBackend() {
       port: backendPort,
     });
   }
+
+  registerLicenseIPC(backendPort);
+
+  const licenseInfo = await checkLicense(backendPort);
+  console.log(`[Electron] License: plan=${licenseInfo.plan}, needs_activation=${licenseInfo.needs_activation}`);
 }
 
 async function cleanup() {
+  stopAntiDebugChecks();
   if (pythonManager) {
     await pythonManager.stop();
     pythonManager = null;
@@ -135,7 +150,16 @@ app.whenReady().then(async () => {
   destroySplash(splashWindow!);
   splashWindow = null;
 
+  startAntiDebugChecks();
+
   await loadFrontend();
+
+  ipcMain.handle("get-app-version", () => app.getVersion());
+
+  if (!isDev) {
+    initSentry(process.env.SENTRY_DSN);
+    setupAutoUpdater(mainWindow!);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

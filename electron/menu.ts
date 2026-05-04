@@ -37,6 +37,8 @@ export function buildMenu(isDev: boolean): Menu {
     {
       label: "Help",
       submenu: [
+        { label: "Check for Updates...", click: () => triggerUpdateCheck() },
+        { type: "separator" },
         {
           label: "Documentation",
           click: () => shell.openExternal("https://github.com/rafa9-labs/thesisproj"),
@@ -58,5 +60,12 @@ function sendNav(path: string) {
   const win = BrowserWindow.getAllWindows()[0];
   if (win) {
     win.webContents.send("navigate", path);
+  }
+}
+
+function triggerUpdateCheck() {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) {
+    win.webContents.send("trigger-update-check");
   }
 }

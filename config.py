@@ -495,3 +495,12 @@ def apply_global_env(settings: Settings) -> None:
     ):
         os.environ.setdefault(var, str(sc))
     os.environ["BLAS_THREADS_PER_TRIAL"] = str(sc)
+
+
+# ---------------------------------------------------------------------------
+# Licensing constants
+# ---------------------------------------------------------------------------
+FREE_MODELS = frozenset({"logistic", "xgboost", "random_forest"})
+FREE_EXECUTION_TYPES = frozenset({"fixed_lot"})
+LICENSE_TRIAL_DAYS = 14
+LICENSE_GRACE_PERIOD_DAYS = 7

@@ -39,10 +39,9 @@ win:
         - x64
   icon: icon.ico
   artifactName: "${productName}-Setup-${version}.${ext}"
+  # Code signing: set env var CSC_LINK (p12 cert path) and CSC_KEY_PASSWORD for production.
+  # For dev builds without signing, signAndEditExecutable: false skips signing entirely.
   signAndEditExecutable: false
-
-# Skip code signing for dev builds (requires Admin/symlink privilege otherwise).
-# Set signAndEditExecutable: true and run from Admin terminal for production signed builds.
 
 # NSIS installer config
 nsis:
@@ -57,6 +56,9 @@ nsis:
   installerLanguages:
     - en_US
   language: 1033
+  # Custom installer welcome/finish pages (optional, add bitmaps to build/ dir):
+  # installerHeader: build/installer-header.bmp    # 150x57 header banner
+  # installerSidebar: build/installer-sidebar.bmp   # 162x314 left sidebar
 
 # File type associations
 fileAssociations:
@@ -83,3 +85,4 @@ publish:
   provider: github
   owner: rafa9-labs
   repo: thesisproj
+  releaseType: release
