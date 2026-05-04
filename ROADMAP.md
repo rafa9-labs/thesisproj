@@ -1,7 +1,7 @@
-# FX ML Backtester — Product Roadmap
+# KodaQuant — Product Roadmap
 
-> **Last Updated**: 2026-04-20
-> **Branch**: `feature/phase2-api-bridge`
+> **Last Updated**: 2026-05-04
+> **Branch**: `fix/s11-update-progress-heatmap`
 > **Revenue Target**: £500–2K/month within 3 months of launch
 > **Philosophy**: Optimize → Feature Parity → Polish → Secure → Deploy → Scale → Enrich → Automate
 
@@ -613,34 +613,56 @@ The walk-forward engine uses `pd.DateOffset(months=...)` in 7 call sites across 
 
 ---
 
-## Sprint 11: Installer & Auto-Update ⬜ NOT STARTED
+## Sprint 11: Installer & Auto-Update 🔄 IN PROGRESS
 
 > **Goal**: Professional Windows installer with automatic updates.
 > **Est**: 6-8h
 
-- [ ] **S11.1** Windows installer (Inno Setup / NSIS)
-  - Custom installer wizard with branding
-  - Start menu shortcut + desktop shortcut
-  - File association (.fxbacktest for sharing configs)
-  - Uninstaller with "keep data" option
-  - Silent install option for enterprise deployment
-  - **Files**: `installer/setup.iss`
-  - **Est**: 3h
+- [x] **S11.1a** Brand cleanup + get-app-version IPC ✅ DONE (2026-05-04)
+  - `electron/main.ts`: title "KodaQuant", ipcMain.handle("get-app-version"), updater/sentry wiring
+  - `electron/utils.ts`: user data dir renamed from "FX ML Backtester" to "KodaQuant"
+  - `electron/preload.ts`: update IPC channels (checkForUpdates, downloadUpdate, installUpdate, etc.)
+  - **Files**: `electron/main.ts`, `electron/utils.ts`, `electron/preload.ts`
 
-- [ ] **S11.2** Auto-update system
-  - GitHub Releases as update source
-  - Version check on startup
-  - Differential updates (patch only changed files)
-  - Update notification in UI (download + install button)
-  - Rollback mechanism if update fails
-  - **Files**: `electron/updater.ts`, `frontend/src/components/UpdateNotification/`
-  - **Est**: 3h
+- [x] **S11.2** Auto-update system ✅ DONE (2026-05-04)
+  - `electron-updater` installed + `electron/updater.ts` — full autoUpdater lifecycle
+  - IPC handlers: check-for-updates, download-update, install-update, is-update-downloaded
+  - Help menu "Check for Updates..." always visible (dev + prod)
+  - `frontend/src/components/UpdateNotification/` — 4 states (available, downloading, ready, checking)
+  - Shell-only update strategy (Electron+React delta ~2MB; Python backend requires full reinstall)
+  - **Files**: `electron/updater.ts`, `electron/menu.ts`, `frontend/src/components/UpdateNotification/`
 
-- [ ] **S11.3** Crash reporting
-  - Sentry integration (Electron + Python error capture)
-  - User opt-in for anonymous crash reports
-  - Breadcrumbs for debugging
-  - **Files**: `electron/sentry.ts`, `api/middleware/error_tracking.py`
+- [x] **S11.3** Crash reporting ✅ DONE (2026-05-04)
+  - `@sentry/electron` installed + `electron/sentry.ts` — opt-in, production-only, PII scrubbed
+  - DSN from SENTRY_DSN env var
+  - `captureException()` and `captureMessage()` helpers
+  - **Files**: `electron/sentry.ts`
+
+- [x] **S11.1c** Version management ✅ DONE (2026-05-04)
+  - `scripts/set_version.py` — single-source-of-truth version setter (package.json + spec file)
+  - `scripts/publish_release.bat` — full build+tag+push pipeline
+  - `scripts/build_electron.bat` — reads version from package.json
+  - **Files**: `scripts/set_version.py`, `scripts/publish_release.bat`, `scripts/build_electron.bat`
+
+- [x] **S11.F1** Fix: Help menu "Check for Updates" ✅ DONE (2026-05-04)
+  - Menu item was hidden in dev mode (app.isPackaged guard removed)
+  - **Files**: `electron/menu.ts`
+
+- [x] **S11.F2** Fix: WebSocket progress field name mismatch ✅ DONE (2026-05-04)
+  - Backend sends `period`/`total_periods`, frontend expected `month`/`total_months` → simMonth always undefined
+  - Backend sends `n_trials`, frontend expected `total_trials` → hpoTotalTrials always undefined
+  - Frontend now reads both variants: `event.month ?? event.period`, `event.total_trials ?? event.n_trials`
+  - **Files**: `frontend/src/api/schemas.ts`, `frontend/src/stores/useJobStore.ts`
+
+- [x] **S11.F3** Fix: HeatmapCellData not exported ✅ DONE (2026-05-04)
+  - `SharpeHeatmap.tsx` declared `interface HeatmapCellData` without `export`
+  - PerformanceHeatmapSection.tsx import was failing at runtime
+  - **Files**: `frontend/src/components/charts/SharpeHeatmap.tsx`
+
+- [ ] **S11.1b** NSIS installer branding
+  - Custom installer bitmaps (welcome/finish headers + sidebar)
+  - Uncomment bitmap refs in `electron-builder.yml`
+  - **Files**: `electron-builder.yml`, `build/` directory
   - **Est**: 1h
 
 - [ ] **S11.4** First-run experience
@@ -846,7 +868,7 @@ cd frontend && npm run dev
 | **S8B** | Frontend ↔ API Integration & Bug Fixes | 6-8h | ✅ DONE (2026-04-20) |
 | **S9** | Electron Desktop Shell | 10-12h | ✅ COMPLETE (S9.1-9.5 all done) |
 | **S10** | Security & Licensing (Paddle) | 12-15h | ✅ DONE (2026-05-04) |
-| **S11** | Installer & Auto-Update | 6-8h | TODO |
+| **S11** | Installer & Auto-Update | 6-8h | 🔄 IN PROGRESS (S11.2/3 done, S11.1b/4 remaining) |
 | **S12** | Commercial Infrastructure | 8-10h | TODO |
 | **S13** | Beta & Launch | 6-8h | TODO |
 | **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
@@ -861,8 +883,8 @@ cd frontend && npm run dev
 | S5-S6 | 200+ tests, >80% coverage, news features integrated | ✅ BOTH DONE — 496+ tests
 | S7 | FastAPI serves all pipeline operations via REST + WebSocket | ✅ DONE
 | S8 | React UI replaces Streamlit for all user interactions | ✅ DONE — all 8 sub-tasks complete |
-| S9 | Electron wraps React + Python into desktop app | 🔄 S9.1-3 scaffolded; S9.4-5 remaining |
+| S9 | Electron wraps React + Python into desktop app | ✅ COMPLETE (S9.1-9.5 all done) |
 | S10 | Code protected, Paddle licensing active, feature gating works |
-| S11 | Windows installer + auto-update functional |
+| S11 | Windows installer + auto-update functional | 🔄 S11.2/3 done, S11.1b/4 remaining |
 | S12 | Product listed on Paddle, landing page live, docs published |
 | S13 | Beta tested, publicly launched, first sales |
