@@ -35,37 +35,54 @@ export function AssetSelector() {
   };
 
   const inputStyle: React.CSSProperties = {
-    backgroundColor: "var(--color-elevated)",
-    borderColor: "var(--color-border)",
+    backgroundColor: "var(--color-glass)",
+    borderColor: "var(--color-glass-border)",
     color: "var(--color-text-primary)",
     fontFamily: "var(--font-mono)",
+    backdropFilter: "blur(8px)",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    color: "var(--color-text-muted)",
+    fontSize: "11px",
+    fontWeight: 500,
+    textTransform: "uppercase",
+    letterSpacing: "0.1em",
   };
 
   return (
     <div
-      className="rounded-lg border p-4"
-      style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
+      className="flex flex-col gap-6 rounded-xl border p-6"
+      style={{
+        backgroundColor: "var(--color-glass)",
+        borderColor: "var(--color-glass-border)",
+        backdropFilter: "blur(12px)",
+      }}
     >
-      <h3
-        className="mb-3 text-xs font-semibold uppercase tracking-[0.1em]"
-        style={{ color: "var(--color-text-secondary)" }}
-      >
-        Asset Selection
-      </h3>
+      <div className="flex items-center gap-2 mb-1">
+        <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
+        <h3
+          className="text-[11px] font-medium uppercase tracking-[0.12em]"
+          style={{ color: "var(--color-text-secondary)" }}
+        >
+          Asset Selection
+        </h3>
+      </div>
+      <p className="mb-2 text-[11px] font-light leading-relaxed max-w-[720px]" style={{ color: "var(--color-text-muted)" }}>
+        Choose the currency pair, timeframe, and date range for the backtest. The model trains on historical OHLCV data from the selected period.
+      </p>
 
       {isLoading ? (
-        <div className="h-8 animate-skeleton rounded" style={{ backgroundColor: "var(--color-elevated)" }} />
+        <div className="h-8 animate-skeleton rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
       ) : (
         <>
           <div className="flex gap-4">
             <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                Pair
-              </label>
+              <label style={labelStyle}>Pair</label>
               <select
                 value={pair}
                 onChange={(e) => setField("pair", e.target.value)}
-                className="rounded border px-3 py-2 text-sm"
+                className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
                 style={inputStyle}
               >
                 {pairs?.map((p) => (
@@ -77,13 +94,11 @@ export function AssetSelector() {
             </div>
 
             <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                Timeframe
-              </label>
+              <label style={labelStyle}>Timeframe</label>
               <select
                 value={timeframe}
                 onChange={(e) => setField("timeframe", e.target.value)}
-                className="rounded border px-3 py-2 text-sm"
+                className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
                 style={inputStyle}
               >
                 {selected?.timeframes.map((t) => (
@@ -95,46 +110,42 @@ export function AssetSelector() {
             </div>
 
             <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                Start Date
-              </label>
+              <label style={labelStyle}>Start Date</label>
               <input
                 type="date"
                 value={startDate}
                 min={dataMin}
                 max={endDate || dataMax}
                 onChange={(e) => handleStartChange(e.target.value)}
-                className="rounded border px-3 py-2 text-sm"
+                className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
                 style={inputStyle}
               />
             </div>
 
             <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                End Date
-              </label>
+              <label style={labelStyle}>End Date</label>
               <input
                 type="date"
                 value={endDate}
                 min={startDate || dataMin}
                 max={dataMax}
                 onChange={(e) => handleEndChange(e.target.value)}
-                className="rounded border px-3 py-2 text-sm"
+                className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
                 style={inputStyle}
               />
             </div>
           </div>
 
-          <div className="mt-2 flex items-center gap-4">
+          <div className="mt-1 flex items-center gap-4">
             {tfData && (
               <p
-                className="text-xs"
+                className="text-[11px] font-light"
                 style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
               >
                 {tfData.rows.toLocaleString()} rows | {dataMin} → {dataMax} | OANDA
               </p>
             )}
-            <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+            <p className="text-[11px] font-light" style={{ color: "var(--color-text-muted)" }}>
               {startDate || endDate ? "Custom range" : "Full range"}
             </p>
           </div>

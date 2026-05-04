@@ -17,49 +17,54 @@ export function ModelSelector() {
 
   return (
     <div
-      className="rounded-lg border p-4"
-      style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
+      className="flex flex-col gap-4 rounded-lg border p-5"
+      style={{
+        backgroundColor: "var(--color-glass)",
+        borderColor: "var(--color-glass-border)",
+        backdropFilter: "blur(12px)",
+      }}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <h3
-          className="text-xs font-semibold uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-text-secondary)" }}
+      <div className="mb-1 flex items-center justify-between">
+        <span
+          className="text-[11px] font-medium uppercase tracking-[0.12em]"
+          style={{ color: "var(--color-text-muted)" }}
         >
           Model Selection
-        </h3>
-        <span className="text-xs" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+        </span>
+        <span className="text-[11px] font-medium" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
           {selected.length}/5 selected
         </span>
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="h-24 animate-skeleton rounded-md"
-              style={{ backgroundColor: "var(--color-elevated)" }}
+              className="h-28 animate-skeleton rounded-lg"
+              style={{ backgroundColor: "var(--color-glass-hover)" }}
             />
           ))}
         </div>
       ) : (
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-7">
           {Object.entries(modelCategories).map(([catKey, cat]) => {
             const catModels = modelsByCategory[catKey] ?? [];
             if (catModels.length === 0) return null;
             return (
               <div key={catKey}>
-                <div className="mb-2 flex items-center gap-2">
-                  <div className="h-px flex-1" style={{ backgroundColor: cat.color, opacity: 0.3 }} />
+                {/* Gradient divider line */}
+                <div className="mb-3 flex items-center gap-3">
+                  <div className="h-px flex-1" style={{ background: `linear-gradient(to right, transparent, ${cat.color}, transparent)` }} />
                   <span
-                    className="text-xs font-semibold uppercase tracking-[0.1em]"
+                    className="text-[10px] font-light uppercase tracking-[0.14em] whitespace-nowrap"
                     style={{ color: cat.color }}
                   >
                     {cat.label}
                   </span>
-                  <div className="h-px flex-1" style={{ backgroundColor: cat.color, opacity: 0.3 }} />
+                  <div className="h-px flex-1" style={{ background: `linear-gradient(to right, ${cat.color}, transparent)` }} />
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {catModels.map((m) => (
                     <ModelCard
                       key={m.name}
@@ -103,13 +108,15 @@ function ModelCard({
     <button
       onClick={onToggle}
       disabled={isFull}
-      className="flex flex-col gap-1.5 rounded-md border p-3 text-left transition-all duration-150"
+      className="flex flex-col gap-2 rounded-lg border p-4 text-left transition-all duration-300"
       style={{
-        borderColor: isSelected ? categoryColor : "var(--color-border)",
-        backgroundColor: isSelected ? "var(--color-elevated)" : "var(--color-surface)",
-        opacity: isFull ? 0.4 : 1,
+        borderColor: isSelected ? categoryColor : "var(--color-glass-border)",
+        backgroundColor: isSelected ? "rgba(0,229,255,0.06)" : "var(--color-glass)",
+        opacity: isFull ? 0.35 : 1,
         cursor: isFull ? "not-allowed" : "pointer",
         borderLeftWidth: isSelected ? 3 : 1,
+        backdropFilter: "blur(8px)",
+        boxShadow: isSelected ? `0 0 16px ${categoryColor}20` : "none",
       }}
     >
       <div className="flex items-center justify-between">
@@ -118,26 +125,26 @@ function ModelCard({
         </span>
         {isSelected && (
           <span
-            className="text-xs font-bold"
+            className="text-xs font-semibold"
             style={{ color: categoryColor, fontFamily: "var(--font-mono)" }}
           >
             ✓
           </span>
         )}
       </div>
-      <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+      <span className="text-[12px] font-light leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
         {desc?.short ?? model.description}
       </span>
       {needsGpu && !isSelected && (
-        <div className="flex items-center gap-1">
-          <AlertTriangle size={10} style={{ color: "var(--color-accent-warning)" }} />
-          <span className="text-[10px]" style={{ color: "var(--color-accent-warning)" }}>
+        <div className="flex items-center gap-1.5">
+          <AlertTriangle size={10} strokeWidth={1.5} style={{ color: "var(--color-accent-warning)" }} />
+          <span className="text-[10px] font-medium" style={{ color: "var(--color-accent-warning)" }}>
             GPU recommended
           </span>
         </div>
       )}
       {verbose && desc?.apprentice && (
-        <p className="mt-1 text-[11px] leading-snug" style={{ color: "var(--color-text-secondary)" }}>
+        <p className="mt-1 text-[11px] font-light leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
           {desc.apprentice}
         </p>
       )}

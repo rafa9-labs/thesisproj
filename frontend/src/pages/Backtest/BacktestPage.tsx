@@ -55,61 +55,38 @@ export function BacktestPage() {
   const hasModels = selectedModels.length > 0;
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Header */}
+    <div className="flex flex-col gap-6">
+      {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <RuntimeEstimate />
           <button
             onClick={() => hasModels && ok && setSummaryOpen(true)}
             disabled={!hasModels || submit.isPending}
-            className="rounded-md px-6 py-2 text-xs font-bold uppercase transition-all duration-150 hover:brightness-110"
+            className="rounded-md px-7 py-2.5 text-xs font-semibold uppercase transition-all duration-300 hover:brightness-110"
             style={{
-              backgroundColor: hasModels ? "var(--color-brand)" : "var(--color-border)",
+              background: hasModels
+                ? "linear-gradient(135deg, #00E5FF 0%, #22D3EE 100%)"
+                : "var(--color-glass-border)",
               color: hasModels ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-              letterSpacing: "0.05em",
+              letterSpacing: "0.08em",
               cursor: hasModels ? "pointer" : "not-allowed",
               opacity: submit.isPending ? 0.6 : 1,
+              boxShadow: hasModels
+                ? "0 0 24px rgba(0,229,255,0.2)"
+                : "none",
             }}
           >
-            {submit.isPending ? "Submitting..." : "Deploy Backtest"}
+            {submit.isPending ? "Submitting…" : "Deploy Backtest"}
           </button>
         </div>
       </div>
 
       {/* Quick Start */}
-
       <QuickTestBar />
-
-      {/* Mode toggle */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => setAdvancedMode(false)}
-          className="rounded px-3 py-1 text-xs font-semibold uppercase transition-colors"
-          style={{
-            backgroundColor: !advancedMode ? "var(--color-primary)" : "transparent",
-            color: !advancedMode ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-            border: "1px solid var(--color-border)",
-          }}
-        >
-          Simple
-        </button>
-        <button
-          onClick={() => setAdvancedMode(true)}
-          className="rounded px-3 py-1 text-xs font-semibold uppercase transition-colors"
-          style={{
-            backgroundColor: advancedMode ? "var(--color-primary)" : "transparent",
-            color: advancedMode ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-            border: "1px solid var(--color-border)",
-          }}
-        >
-          Advanced
-        </button>
-      </div>
 
       {/* Active progress */}
       {activeJobId && (
-
         <BacktestProgress jobId={activeJobId} />
       )}
 
@@ -118,7 +95,7 @@ export function BacktestPage() {
         <ValidationAlert warnings={warnings} errors={errors} />
       )}
 
-      {/* Config sections — Simple mode shows essential panels only */}
+      {/* Config sections */}
       <AssetSelector />
       <ModelSelector />
 
@@ -126,11 +103,11 @@ export function BacktestPage() {
         <>
           <FeaturesPanel />
           <LabelsPanel />
-          <HpoPanel />
+          <HpoPanel advancedMode={advancedMode} onToggleAdvanced={() => setAdvancedMode(!advancedMode)} />
           <ExecutionPanel />
         </>
       ) : (
-        <HpoPanel />
+        <HpoPanel advancedMode={advancedMode} onToggleAdvanced={() => setAdvancedMode(!advancedMode)} />
       )}
 
       {/* Run summary modal */}

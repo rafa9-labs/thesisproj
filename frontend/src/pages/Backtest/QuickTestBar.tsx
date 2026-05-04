@@ -43,21 +43,25 @@ export function QuickTestBar() {
 
   return (
     <div
-      className="rounded-lg border p-4"
-      style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-brand)" }}
+      className="rounded-lg border p-5"
+      style={{
+        backgroundColor: "var(--color-glass)",
+        borderColor: "rgba(0,229,255,0.15)",
+        backdropFilter: "blur(12px)",
+      }}
     >
       <div className="mb-3 flex items-center gap-2">
         <span
-          className="text-xs font-bold uppercase tracking-[0.1em]"
+          className="text-[11px] font-medium uppercase tracking-[0.12em]"
           style={{ color: "var(--color-brand)" }}
         >
           Quick Start
         </span>
         <span
-          className="text-xs"
+          className="text-[11px] font-light"
           style={{ color: "var(--color-text-muted)" }}
         >
-          — pre-fill settings, then tweak & deploy
+          — pre-fill settings, then tweak &amp; deploy
         </span>
       </div>
       <div className="flex gap-3">
@@ -65,42 +69,35 @@ export function QuickTestBar() {
           <button
             key={p.name}
             onClick={() => applyPreset(p)}
-            className="flex flex-col items-start gap-1 rounded-md border px-4 py-2.5 transition-colors duration-150"
+            className="flex flex-col items-start gap-1 rounded-lg border px-4 py-3 transition-all duration-300 hover:border-[var(--color-border-active)]"
             style={{
-              borderColor: "var(--color-border)",
-              backgroundColor: "var(--color-bg)",
+              borderColor: "var(--color-glass-border)",
+              backgroundColor: "var(--color-glass-hover)",
               cursor: "pointer",
               minWidth: "180px",
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "var(--color-brand)";
-              e.currentTarget.style.backgroundColor = "var(--color-elevated)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "var(--color-border)";
-              e.currentTarget.style.backgroundColor = "var(--color-surface)";
-            }}
           >
             <span
-              className="text-sm font-semibold"
+              className="text-sm font-medium"
               style={{ color: "var(--color-text-primary)" }}
             >
               {p.label}
             </span>
             <span
-              className="text-xs"
+              className="text-[11px] font-light"
               style={{ color: "var(--color-text-muted)" }}
             >
               {p.description}
             </span>
-            <div className="mt-1 flex gap-1.5 flex-wrap">
+            <div className="mt-1.5 flex gap-1.5 flex-wrap">
               {p.models.map((m) => (
                 <span
                   key={m}
-                  className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase"
+                  className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.04em]"
                   style={{
-                    backgroundColor: "var(--color-accent-classical)",
-                    color: "var(--color-text-inverse)",
+                    backgroundColor: "rgba(34,211,238,0.12)",
+                    color: "var(--color-accent-classical)",
+                    border: "1px solid rgba(34,211,238,0.15)",
                   }}
                 >
                   {m}
@@ -109,8 +106,9 @@ export function QuickTestBar() {
               <span
                 className="rounded px-1.5 py-0.5 text-[10px] font-medium"
                 style={{
-                  backgroundColor: "var(--color-border)",
-                  color: "var(--color-text-secondary)",
+                  backgroundColor: "var(--color-glass-hover)",
+                  color: "var(--color-text-muted)",
+                  border: "1px solid var(--color-glass-border)",
                 }}
               >
                 {p.pair}
@@ -118,8 +116,9 @@ export function QuickTestBar() {
               <span
                 className="rounded px-1.5 py-0.5 text-[10px] font-medium"
                 style={{
-                  backgroundColor: "var(--color-border)",
-                  color: "var(--color-text-secondary)",
+                  backgroundColor: "var(--color-glass-hover)",
+                  color: "var(--color-text-muted)",
+                  border: "1px solid var(--color-glass-border)",
                 }}
               >
                 {p.hpo_intensity}
