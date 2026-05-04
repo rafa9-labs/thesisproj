@@ -1,39 +1,44 @@
 export const colors = {
-  app: "#0B0E14",
-  surface: "#11151C",
-  elevated: "#181D27",
-  border: "#1E2430",
-  borderSubtle: "#151926",
-  borderActive: "#2A3244",
+  app: "#050608",
+  surface: "#0A0D12",
+  elevated: "#11151C",
 
-  textPrimary: "#F0F2F5",
-  textSecondary: "#8B95A5",
-  textMuted: "#5A6578",
-  textInverse: "#0B0E14",
+  glass: "rgba(255,255,255,0.03)",
+  glassBorder: "rgba(255,255,255,0.06)",
+  glassHover: "rgba(255,255,255,0.05)",
 
-  primary: "#5B8DEF",
-  primaryGlow: "rgba(91,141,239,0.15)",
+  border: "#1A1F2A",
+  borderSubtle: "#131820",
+  borderActive: "rgba(0,229,255,0.25)",
 
-  brand: "#D4AF37",
-  brandGlow: "rgba(212,175,55,0.15)",
+  textPrimary: "#E8ECF1",
+  textSecondary: "#7A8494",
+  textMuted: "#4A5568",
+  textInverse: "#050608",
 
-  accent: "#5B8DEF",
+  primary: "#00E5FF",
+  primaryGlow: "rgba(0,229,255,0.15)",
+
+  brand: "#00E5FF",
+  brandGlow: "rgba(0,229,255,0.15)",
+
+  accent: "#00E5FF",
   accentSuccess: "#22C55E",
   accentDanger: "#EF4444",
   accentWarning: "#F59E0B",
-  accentInfo: "#5B8DEF",
-  accentClassical: "#06B6D4",
-  accentDeep: "#8B5CF6",
+  accentInfo: "#00E5FF",
+  accentClassical: "#22D3EE",
+  accentDeep: "#A78BFA",
   accentRl: "#F59E0B",
   accentEnsemble: "#EC4899",
 
-  chartLine: "#00D4AA",
+  chartLine: "#00E5FF",
   chartBuyhold: "#555555",
   chartDrawdown: "rgba(239,68,68,0.35)",
 
   eventHigh: "#EF4444",
   eventMedium: "#F59E0B",
-  eventLow: "#5B8DEF",
+  eventLow: "#00E5FF",
 } as const;
 
 export const spacing = {
@@ -59,15 +64,15 @@ export const layout = {
 } as const;
 
 export const typography = {
-  metricValue: { fontFamily: "JetBrains Mono", fontSize: "24px", fontWeight: 700 },
-  metricLabel: { fontFamily: "Inter", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" },
-  navItem: { fontFamily: "Inter", fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em" },
+  metricValue: { fontFamily: "JetBrains Mono", fontSize: "24px", fontWeight: 600 },
+  metricLabel: { fontFamily: "Inter", fontSize: "11px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.12em" },
+  navItem: { fontFamily: "Inter", fontSize: "11px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.12em" },
   sectionHeader: { fontFamily: "Inter", fontSize: "16px", fontWeight: 600 },
   body: { fontFamily: "Inter", fontSize: "13px", fontWeight: 400 },
   bodySmall: { fontFamily: "Inter", fontSize: "12px", fontWeight: 400 },
   engineParam: { fontFamily: "JetBrains Mono", fontSize: "12px", fontWeight: 400 },
   price: { fontFamily: "JetBrains Mono", fontSize: "14px", fontWeight: 400 },
-  button: { fontFamily: "Inter", fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" },
+  button: { fontFamily: "Inter", fontSize: "12px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" },
   terminalLog: { fontFamily: "JetBrains Mono", fontSize: "12px", fontWeight: 400 },
 } as const;
 

@@ -8,6 +8,9 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  Check,
+  X,
+  AlertTriangle,
 } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useConfig, useSaveConfig } from "@/api/queries";
@@ -24,12 +27,16 @@ function Section({ icon, title, children, defaultOpen = false }: SectionProps) {
 
   return (
     <div
-      className="rounded-lg border"
-      style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
+      className="rounded-lg border transition-all duration-200 hover:border-[var(--color-border-active)]"
+      style={{
+        borderColor: "var(--color-glass-border)",
+        backgroundColor: "var(--color-glass)",
+        backdropFilter: "blur(12px)",
+      }}
     >
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
+        className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors duration-200"
         style={{ cursor: "pointer" }}
       >
         <span style={{ color: "var(--color-text-muted)" }}>{icon}</span>
@@ -37,15 +44,15 @@ function Section({ icon, title, children, defaultOpen = false }: SectionProps) {
           {title}
         </span>
         {open ? (
-          <ChevronDown size={16} style={{ color: "var(--color-text-muted)" }} />
+          <ChevronDown size={16} strokeWidth={1.5} style={{ color: "var(--color-text-muted)" }} />
         ) : (
-          <ChevronRight size={16} style={{ color: "var(--color-text-muted)" }} />
+          <ChevronRight size={16} strokeWidth={1.5} style={{ color: "var(--color-text-muted)" }} />
         )}
       </button>
       {open && (
         <div
-          className="border-t px-4 py-4"
-          style={{ borderColor: "var(--color-border)" }}
+          className="border-t px-5 py-4"
+          style={{ borderColor: "var(--color-glass-border)" }}
         >
           {children}
         </div>
@@ -56,8 +63,8 @@ function Section({ icon, title, children, defaultOpen = false }: SectionProps) {
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-2">
-      <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+    <div className="flex items-center justify-between gap-4 py-2.5">
+      <span className="text-[11px] font-light tracking-wide" style={{ color: "var(--color-text-secondary)" }}>
         {label}
       </span>
       <div className="flex items-center gap-2">{children}</div>
@@ -69,20 +76,193 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   return (
     <button
       onClick={() => onChange(!value)}
-      className="relative h-5 w-9 rounded-full transition-colors"
+      className="relative h-5 w-9 rounded-full transition-all duration-200"
       style={{
-        backgroundColor: value ? "var(--color-accent-success)" : "var(--color-elevated)",
+        backgroundColor: value ? "var(--color-brand)" : "var(--color-glass-border)",
         cursor: "pointer",
+        boxShadow: value ? "0 0 8px rgba(0,229,255,0.25)" : "none",
       }}
     >
       <span
-        className="absolute top-0.5 h-4 w-4 rounded-full transition-transform"
+        className="absolute top-0.5 h-4 w-4 rounded-full transition-transform duration-200"
         style={{
-          backgroundColor: "var(--color-text-primary)",
+          backgroundColor: value ? "var(--color-text-inverse)" : "var(--color-text-muted)",
           left: value ? 18 : 2,
         }}
       />
     </button>
+  );
+}
+
+interface LicenseInfo {
+  plan: string;
+  licensed: boolean;
+  trial_active: boolean;
+  trial_days_left: number;
+  needs_activation: boolean;
+  license_key: string;
+  expires_at: string;
+  machine_id: string;
+}
+
+function LicenseSection() {
+  const [license, setLicense] = useState<LicenseInfo | null>(null);
+  const [inputKey, setInputKey] = useState("");
+  const [activating, setActivating] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
+    fetch(`${apiBase}/license/status`)
+      .then((r) => r.json())
+      .then((data) => setLicense(data as LicenseInfo))
+      .catch(() => {});
+  }, []);
+
+  const handleActivate = async () => {
+    if (!inputKey.trim()) return;
+    setActivating(true);
+    setError("");
+    try {
+      const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
+      const res = await fetch(`${apiBase}/license/activate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ license_key: inputKey.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const statusRes = await fetch(`${apiBase}/license/status`);
+        setLicense(await statusRes.json());
+        setInputKey("");
+      } else {
+        setError(data.detail || data.error || "Activation failed");
+      }
+    } catch {
+      setError("Connection failed");
+    } finally {
+      setActivating(false);
+    }
+  };
+
+  const handleDeactivate = async () => {
+    try {
+      const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
+      await fetch(`${apiBase}/license/deactivate`, { method: "POST" });
+      const statusRes = await fetch(`${apiBase}/license/status`);
+      setLicense(await statusRes.json());
+    } catch {}
+  };
+
+  if (!license) {
+    return (
+      <div className="py-3 text-xs" style={{ color: "var(--color-text-muted)" }}>
+        Checking license status...
+      </div>
+    );
+  }
+
+  const planLabel: Record<string, string> = {
+    free: "Free",
+    trial: "Trial",
+    pro: "Pro",
+    team: "Team",
+  };
+  const planColor: Record<string, string> = {
+    free: "var(--color-text-muted)",
+    trial: "#f59e0b",
+    pro: "var(--color-accent)",
+    team: "#10b981",
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span
+            className="rounded-md border px-3 py-1.5 text-xs font-semibold"
+            style={{
+              borderColor: planColor[license.plan] || "var(--color-border)",
+              backgroundColor: `${planColor[license.plan] || "var(--color-accent)"}15`,
+              color: planColor[license.plan] || "var(--color-text-primary)",
+            }}
+          >
+            {planLabel[license.plan] || license.plan}
+          </span>
+          {license.trial_active && (
+            <span className="text-xs" style={{ color: "#f59e0b" }}>
+              {license.trial_days_left} days left
+            </span>
+          )}
+        </div>
+        {license.licensed && (
+          <button
+            onClick={handleDeactivate}
+            className="rounded-md border px-2 py-1 text-xs"
+            style={{
+              borderColor: "var(--color-border)",
+              color: "var(--color-text-muted)",
+              cursor: "pointer",
+            }}
+          >
+            Deactivate
+          </button>
+        )}
+      </div>
+
+      {license.needs_activation && !license.trial_active && (
+        <div className="flex flex-col gap-2">
+          <input
+            type="text"
+            value={inputKey}
+            onChange={(e) => setInputKey(e.target.value)}
+            placeholder="XXXX-XXXX-XXXX-XXXX"
+            className="rounded-md border px-3 py-1.5 text-xs"
+            style={{
+              borderColor: "var(--color-border)",
+              backgroundColor: "var(--color-app)",
+              color: "var(--color-text-primary)",
+              fontFamily: "var(--font-mono)",
+            }}
+            onKeyDown={(e) => e.key === "Enter" && handleActivate()}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleActivate}
+              disabled={activating}
+              className="rounded-md px-3 py-1.5 text-xs font-semibold"
+              style={{
+                backgroundColor: "var(--color-accent)",
+                color: "#fff",
+                cursor: activating ? "not-allowed" : "pointer",
+                opacity: activating ? 0.6 : 1,
+              }}
+            >
+              {activating ? "Activating..." : "Activate"}
+            </button>
+          </div>
+          {error && (
+            <p className="text-xs" style={{ color: "#ef4444" }}>{error}</p>
+          )}
+        </div>
+      )}
+
+      {license.machine_id && (
+        <FieldRow label="Machine ID">
+          <span className="text-xs font-mono" style={{ color: "var(--color-text-muted)" }}>
+            {license.machine_id}
+          </span>
+        </FieldRow>
+      )}
+
+      <div className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+        {license.plan === "free"
+          ? "Free: 3 models (logistic, XGBoost, RF) + fixed lot sizing"
+          : license.plan === "trial"
+            ? "Full access during trial period"
+            : "All features unlocked"}
+      </div>
+    </div>
   );
 }
 
@@ -107,7 +287,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
 
       <Section icon={<SettingsIcon size={18} />} title="General" defaultOpen>
         <FieldRow label="Verbose Mode (Apprentice)">
@@ -121,13 +301,14 @@ export function SettingsPage() {
             type="text"
             value={store.apiUrl}
             onChange={(e) => store.setField("apiUrl", e.target.value)}
-            className="rounded-md border px-3 py-1.5 text-xs"
+            className="rounded-md border px-3 py-1.5 text-xs transition-all duration-200 focus:outline-none"
             style={{
-              borderColor: "var(--color-border)",
-              backgroundColor: "var(--color-app)",
+              borderColor: "var(--color-glass-border)",
+              backgroundColor: "var(--color-glass)",
               color: "var(--color-text-primary)",
               fontFamily: "var(--font-mono)",
               width: 240,
+              backdropFilter: "blur(8px)",
             }}
           />
         </FieldRow>
@@ -135,9 +316,10 @@ export function SettingsPage() {
           <span
             className="rounded-md border px-3 py-1.5 text-xs"
             style={{
-              borderColor: "var(--color-border)",
-              backgroundColor: "var(--color-elevated)",
+              borderColor: "var(--color-glass-border)",
+              backgroundColor: "var(--color-glass)",
               color: "var(--color-text-primary)",
+              backdropFilter: "blur(8px)",
             }}
           >
             Dark (only)
@@ -155,11 +337,14 @@ export function SettingsPage() {
               value={store.threadBudget}
               onChange={(e) => store.setField("threadBudget", Number(e.target.value))}
               className="w-32"
-              style={{ accentColor: "var(--color-primary)" }}
+              style={{
+                accentColor: "var(--color-brand)",
+                background: `linear-gradient(to right, var(--color-brand) 0%, var(--color-brand) ${((store.threadBudget - 1) / 15) * 100}%, var(--color-glass-border) ${((store.threadBudget - 1) / 15) * 100}%, var(--color-glass-border) 100%)`,
+              }}
             />
             <span
-              className="text-xs"
-              style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", minWidth: 24 }}
+              className="text-xs font-medium"
+              style={{ color: "var(--color-brand)", fontFamily: "var(--font-mono)", minWidth: 24 }}
             >
               {store.threadBudget}
             </span>
@@ -188,13 +373,14 @@ export function SettingsPage() {
             value={store.oandaApiKey ?? ""}
             onChange={(e) => store.setField("oandaApiKey", e.target.value || null)}
             placeholder="Enter API key…"
-            className="rounded-md border px-3 py-1.5 text-xs"
+            className="rounded-md border px-3 py-1.5 text-xs transition-all duration-200 focus:outline-none"
             style={{
-              borderColor: "var(--color-border)",
-              backgroundColor: "var(--color-app)",
+              borderColor: "var(--color-glass-border)",
+              backgroundColor: "var(--color-glass)",
               color: "var(--color-text-primary)",
               fontFamily: "var(--font-mono)",
               width: 240,
+              backdropFilter: "blur(8px)",
             }}
           />
         </FieldRow>
@@ -209,21 +395,7 @@ export function SettingsPage() {
       </Section>
 
       <Section icon={<Key size={18} />} title="License">
-        <div className="flex flex-col items-center gap-3 py-4">
-          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-            License activation will be available in the commercial release.
-          </span>
-          <span
-            className="rounded-md border px-3 py-1.5 text-xs"
-            style={{
-              borderColor: "var(--color-accent)",
-              backgroundColor: "rgba(41,98,255,0.1)",
-              color: "var(--color-accent)",
-            }}
-          >
-            Developer Build — Unlimited
-          </span>
-        </div>
+        <LicenseSection />
       </Section>
 
       <Section icon={<SettingsIcon size={18} />} title="Pipeline Configuration">
@@ -240,10 +412,10 @@ export function SettingsPage() {
               store.setField("apiUrl", "http://localhost:8000");
               syncToBackend("reset", true);
             }}
-            className="mt-2 self-start rounded-md border px-3 py-1.5 text-xs font-bold uppercase"
+            className="mt-2 self-start rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] transition-all duration-200 hover:border-[var(--color-border-active)]"
             style={{
-              borderColor: "var(--color-border)",
-              backgroundColor: "var(--color-elevated)",
+              borderColor: "var(--color-glass-border)",
+              backgroundColor: "var(--color-glass-hover)",
               color: "var(--color-text-secondary)",
               cursor: "pointer",
             }}

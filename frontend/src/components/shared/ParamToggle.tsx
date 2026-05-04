@@ -1,6 +1,6 @@
 interface ParamToggleProps {
   label: string;
-  paramKey: string;
+  paramKey?: string;
   checked: boolean;
   description?: string;
   onChange: (checked: boolean) => void;
@@ -8,44 +8,44 @@ interface ParamToggleProps {
 
 export function ParamToggle({
   label,
-  paramKey,
   checked,
   description,
   onChange,
 }: ParamToggleProps) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>
-            {label}
-          </span>
-          <span
-            className="text-xs"
-            style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-muted)" }}
-          >
-            {paramKey}
-          </span>
-        </div>
+        <span
+          className="text-[11px] font-medium uppercase tracking-[0.1em]"
+          style={{ color: "var(--color-text-muted)" }}
+        >
+          {label}
+        </span>
         <button
           role="switch"
           aria-checked={checked}
           onClick={() => onChange(!checked)}
-          className="relative h-5 w-9 rounded-full transition-colors duration-200"
+          className="relative h-5 w-9 rounded-full transition-all duration-200"
           style={{
             backgroundColor: checked
-              ? "var(--color-accent)"
-              : "var(--color-border)",
+              ? "var(--color-brand)"
+              : "var(--color-glass-border)",
+            boxShadow: checked ? "0 0 8px rgba(0,229,255,0.25)" : "none",
           }}
         >
           <span
-            className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200"
-            style={{ left: checked ? "18px" : "2px" }}
+            className="absolute top-0.5 h-4 w-4 rounded-full transition-transform duration-200"
+            style={{
+              left: checked ? "18px" : "2px",
+              backgroundColor: checked
+                ? "var(--color-text-inverse)"
+                : "var(--color-text-muted)",
+            }}
           />
         </button>
       </div>
       {description && (
-        <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+        <p className="text-[11px] font-light leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
           {description}
         </p>
       )}

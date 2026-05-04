@@ -15,6 +15,7 @@ import type {
   HpoIntensity,
   HeatmapResponse,
   NewsEvent,
+  LicenseStatusResponse,
 } from "./schemas";
 
 export function useHealth() {
@@ -229,5 +230,57 @@ export function useNewsEvents(start: number | null, end: number | null, impact?:
     },
     enabled: start !== null && end !== null,
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useLicenseStatus() {
+  return useQuery({
+    queryKey: ["license-status"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LicenseStatusResponse>("/license/status");
+      return data;
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useActivateLicense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (licenseKey: string) => {
+      const { data } = await apiClient.post<LicenseStatusResponse>("/license/activate", {
+        license_key: licenseKey,
+      });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["license-status"] });
+    },
+  });
+}
+
+export function useDeactivateLicense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      await apiClient.post("/license/deactivate");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["license-status"] });
+    },
+  });
+}
+
+export function useStartTrial() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await apiClient.post("/license/trial");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["license-status"] });
+    },
   });
 }

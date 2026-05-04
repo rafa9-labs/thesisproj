@@ -53,7 +53,7 @@ export function ResultsPage() {
     return (
       <div className="flex flex-col gap-5">
         <EmptyState
-          icon={<BarChart3 size={48} />}
+          icon={<BarChart3 size={48} strokeWidth={1} />}
           title="No results to display"
           description="Run a backtest first, then navigate here to see equity curves, metrics, trade logs, and HPO diagnostics."
           actionLabel="Run Backtest"
@@ -69,14 +69,14 @@ export function ResultsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate("/backtest")}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:border-[var(--color-border-active)]"
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-all duration-200 hover:border-[var(--color-border-active)]"
             style={{
-              borderColor: "var(--color-border)",
-              backgroundColor: "var(--color-surface)",
-              color: "var(--color-text-secondary)",
+              borderColor: "var(--color-glass-border)",
+              backgroundColor: "transparent",
+              color: "var(--color-text-muted)",
             }}
           >
-            <ArrowLeft size={12} /> Back
+            <ArrowLeft size={12} strokeWidth={1.5} /> Back
           </button>
         </div>
         <Skeleton />
@@ -90,18 +90,18 @@ export function ResultsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate("/backtest")}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:border-[var(--color-border-active)]"
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-all duration-200 hover:border-[var(--color-border-active)]"
             style={{
-              borderColor: "var(--color-border)",
-              backgroundColor: "var(--color-surface)",
-              color: "var(--color-text-secondary)",
+              borderColor: "var(--color-glass-border)",
+              backgroundColor: "transparent",
+              color: "var(--color-text-muted)",
             }}
           >
-            <ArrowLeft size={12} /> Back
+            <ArrowLeft size={12} strokeWidth={1.5} /> Back
           </button>
         </div>
         <EmptyState
-          icon={<BarChart3 size={48} />}
+          icon={<BarChart3 size={48} strokeWidth={1} />}
           title="Failed to load results"
           description="The job may not exist or hasn't completed yet."
           actionLabel="Run Backtest"
@@ -142,34 +142,34 @@ export function ResultsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-5 overflow-y-auto" style={{ height: "100%" }}>
+    <div className="flex flex-col gap-6 overflow-y-auto" style={{ height: "100%" }}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate("/backtest")}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:border-[var(--color-border-active)]"
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-all duration-200 hover:border-[var(--color-border-active)]"
             style={{
-              borderColor: "var(--color-border)",
-              backgroundColor: "var(--color-surface)",
-              color: "var(--color-text-secondary)",
+              borderColor: "var(--color-glass-border)",
+              backgroundColor: "transparent",
+              color: "var(--color-text-muted)",
               cursor: "pointer",
             }}
           >
-            <ArrowLeft size={12} /> Back
+            <ArrowLeft size={12} strokeWidth={1.5} /> Back
           </button>
           <h2
-            className="text-base font-semibold uppercase tracking-[0.1em]"
+            className="text-base font-medium uppercase tracking-[0.1em]"
             style={{ color: "var(--color-text-secondary)" }}
           >
             Results
           </h2>
           <span
-            className="text-xs"
+            className="text-xs font-light"
             style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
           >
             {results.pair}
           </span>
-          <StatusDot color="var(--color-accent-success)" />
+          <StatusDot color="var(--color-brand)" />
         </div>
         <ExportBar onExportCsv={handleExportCsv} onExportPng={handleExportPng} onExportJson={handleExportJson} />
       </div>
@@ -184,12 +184,14 @@ export function ResultsPage() {
             <button
               key={m.model}
               onClick={() => setActiveModelIdx(i)}
-              className="rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors"
+              className="rounded-md border px-3.5 py-1.5 text-[11px] font-medium uppercase tracking-[0.08em] transition-all duration-200"
               style={{
-                borderColor: i === activeModelIdx ? "var(--color-brand)" : "var(--color-border)",
-                backgroundColor: i === activeModelIdx ? "var(--color-brand-glow)" : "var(--color-surface)",
-                color: i === activeModelIdx ? "var(--color-brand)" : "var(--color-text-secondary)",
+                borderColor: i === activeModelIdx ? "var(--color-brand)" : "var(--color-glass-border)",
+                backgroundColor: i === activeModelIdx ? "var(--color-brand-glow)" : "var(--color-glass)",
+                color: i === activeModelIdx ? "var(--color-brand)" : "var(--color-text-muted)",
                 cursor: "pointer",
+                boxShadow: i === activeModelIdx ? "0 0 12px rgba(0,229,255,0.1)" : "none",
+                backdropFilter: "blur(8px)",
               }}
             >
               {m.model} — Sharpe {m.sharpe?.toFixed(2) ?? "—"}
@@ -233,10 +235,11 @@ export function ResultsPage() {
         <div
           className="fixed bottom-12 right-6 rounded-lg border p-3 text-xs"
           style={{
-            backgroundColor: "var(--color-elevated)",
-            borderColor: "var(--color-border)",
+            backgroundColor: "var(--color-glass)",
+            borderColor: "var(--color-glass-border)",
             fontFamily: "var(--font-mono)",
             zIndex: 50,
+            backdropFilter: "blur(12px)",
           }}
         >
           <div className="flex items-center justify-between gap-4">

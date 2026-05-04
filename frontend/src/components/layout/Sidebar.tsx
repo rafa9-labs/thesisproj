@@ -6,7 +6,8 @@ import {
   GitCompare,
   Newspaper,
   Settings,
-  Diamond,
+  PanelLeftOpen,
+  PanelLeftClose,
 } from "lucide-react";
 import { KodaLogo } from "@/components/shared/KodaLogo";
 import { layout } from "@/lib/tokens";
@@ -61,9 +62,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       className="flex flex-col border-r transition-all duration-200"
       style={{
         width,
-        borderColor: "var(--color-border)",
+        borderColor: "var(--color-border-subtle)",
         backgroundColor: "var(--color-surface)",
         flexShrink: 0,
+        overflowX: "hidden",
+        position: "relative",
+        zIndex: 10,
       }}
     >
       {/* Logo area */}
@@ -71,7 +75,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         className="flex items-center border-b"
         style={{
           height: layout.headerHeight,
-          borderColor: "var(--color-border)",
+          borderColor: "var(--color-border-subtle)",
           padding: collapsed ? "0 20px" : "0 16px",
           justifyContent: collapsed ? "center" : "flex-start",
         }}
@@ -80,12 +84,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="flex-1 overflow-y-auto py-3">
         {navGroups.map((group) => (
-          <div key={group.label} className="mb-2">
+          <div key={group.label} className="mb-1">
             {!collapsed && (
               <div
-                className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                className="px-4 py-2 text-[10px] font-medium uppercase tracking-[0.14em]"
                 style={{
                   color: "var(--color-text-muted)",
                   fontFamily: "var(--font-sans)",
@@ -103,17 +107,17 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 <button
                   key={item.path}
                   onClick={() => navigate(item.path)}
-                  className="flex items-center text-left transition-colors duration-150"
+                  className="flex items-center text-left transition-all duration-200"
                   style={{
                     width: "100%",
-                    height: 40,
+                    height: 38,
                     gap: collapsed ? 0 : 12,
                     paddingLeft: collapsed ? 0 : 16,
                     paddingRight: collapsed ? 0 : 12,
                     justifyContent: collapsed ? "center" : "flex-start",
                     borderLeft: isActive
-                      ? "3px solid var(--color-brand)"
-                      : "3px solid transparent",
+                      ? "2px solid var(--color-brand)"
+                      : "2px solid transparent",
                     backgroundColor: isActive
                       ? "var(--color-brand-glow)"
                       : "transparent",
@@ -125,16 +129,17 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 >
                   <item.icon
                     size={18}
+                    strokeWidth={isActive ? 2 : 1.5}
                     style={{
                       minWidth: 18,
                       color: isActive
                         ? "var(--color-brand)"
-                        : "var(--color-text-secondary)",
+                        : "var(--color-text-muted)",
                     }}
                   />
                   {!collapsed && (
                     <span
-                      className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.08em]"
+                      className="whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.1em]"
                       style={{ fontFamily: "var(--font-sans)" }}
                     >
                       {item.label}
@@ -150,22 +155,19 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Collapse toggle */}
       <button
         onClick={onToggle}
-        className="flex items-center justify-center border-t transition-colors duration-150 hover:bg-[var(--color-elevated)]"
+        className="flex items-center justify-center border-t transition-colors duration-200 hover:bg-[var(--color-glass-hover)]"
         style={{
           height: 36,
-          borderColor: "var(--color-border)",
+          borderColor: "var(--color-border-subtle)",
           color: "var(--color-text-muted)",
         }}
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
-        <Diamond
-          size={14}
-          style={{
-            color: "var(--color-text-muted)",
-            transform: collapsed ? "rotate(0deg)" : "rotate(45deg)",
-            transition: "transform 200ms ease",
-          }}
-        />
+        {collapsed ? (
+          <PanelLeftOpen size={14} strokeWidth={1.5} style={{ color: "var(--color-text-muted)" }} />
+        ) : (
+          <PanelLeftClose size={14} strokeWidth={1.5} style={{ color: "var(--color-text-muted)" }} />
+        )}
       </button>
     </aside>
   );

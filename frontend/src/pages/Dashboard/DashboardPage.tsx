@@ -14,13 +14,13 @@ import { PerformanceHeatmapSection } from "./PerformanceHeatmapSection";
 
 function DashboardSkeleton() {
   return (
-    <div className="flex flex-col gap-5 animate-pulse">
+    <div className="flex flex-col gap-6 animate-pulse">
       <div className="grid grid-cols-4 gap-4">
         {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="h-24 rounded-lg" style={{ backgroundColor: "var(--color-surface)" }} />
+          <div key={i} className="h-28 rounded-lg" style={{ backgroundColor: "var(--color-glass-hover)" }} />
         ))}
       </div>
-      <div className="h-[300px] rounded-lg" style={{ backgroundColor: "var(--color-surface)" }} />
+      <div className="h-[300px] rounded-lg" style={{ backgroundColor: "var(--color-glass-hover)" }} />
     </div>
   );
 }
@@ -74,7 +74,7 @@ export function DashboardPage() {
 
   if (jobsLoading) {
     return (
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-6">
         <DashboardSkeleton />
       </div>
     );
@@ -83,25 +83,25 @@ export function DashboardPage() {
   const hasCompleted = completedJobs.length > 0;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-8">
       <div className="grid grid-cols-4 gap-4">
-        <MetricCard label="Total Runs" value={kpis.totalRuns} icon={<BarChart3 size={16} />} />
+        <MetricCard label="Total Runs" value={kpis.totalRuns} icon={<BarChart3 size={16} strokeWidth={1.5} />} />
         <MetricCard
           label="Best Sharpe"
           value={formatMetric(kpis.bestSharpe)}
-          icon={<Trophy size={16} />}
+          icon={<Trophy size={16} strokeWidth={1.5} />}
           delta={kpis.bestSharpe !== null ? (kpis.bestSharpe >= 1 ? "Excellent" : kpis.bestSharpe >= 0.5 ? "Good" : "Weak") : null}
           deltaType={(kpis.bestSharpe ?? 0) >= 1 ? "positive" : "neutral"}
         />
         <MetricCard
           label="Avg Win Rate"
           value={formatPercent(kpis.avgWinRate, 1)}
-          icon={<Activity size={16} />}
+          icon={<Activity size={16} strokeWidth={1.5} />}
         />
         <MetricCard
           label="Best Return"
           value={formatPercent(kpis.bestReturn)}
-          icon={<TrendingUp size={16} />}
+          icon={<TrendingUp size={16} strokeWidth={1.5} />}
           deltaType={(kpis.bestReturn ?? 0) >= 0 ? "positive" : "negative"}
         />
       </div>

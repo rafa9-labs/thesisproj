@@ -54,29 +54,30 @@ export function MetricCard({
       ? "#22C55E"
       : deltaType === "negative"
         ? "#EF4444"
-        : "#5A6578";
+        : "#4A5568";
 
   return (
     <div
-      className="flex flex-col gap-1 rounded-lg border p-4 transition-all duration-150 hover:border-[var(--color-border-active)]"
+      className="flex flex-col gap-2 rounded-lg border p-5 transition-all duration-300 hover:border-[var(--color-border-active)]"
       style={{
-        backgroundColor: "var(--color-surface)",
-        borderColor: "var(--color-border)",
+        backgroundColor: "var(--color-glass)",
+        borderColor: "var(--color-glass-border)",
+        backdropFilter: "blur(12px)",
       }}
     >
       <div className="flex items-center justify-between">
         <span
-          className="text-[11px] font-semibold uppercase"
-          style={{ color: "var(--color-text-secondary)", letterSpacing: "0.08em" }}
+          className="text-[11px] font-medium uppercase tracking-[0.12em]"
+          style={{ color: "var(--color-text-muted)" }}
         >
           {label}
         </span>
-        {icon && <span style={{ color: "var(--color-text-muted)" }}>{icon}</span>}
+        {icon && <span style={{ color: "var(--color-text-muted)", opacity: 0.6 }}>{icon}</span>}
       </div>
       <div className="flex items-end justify-between gap-2">
         <span
-          className="text-2xl font-bold"
-          style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}
+          className="text-2xl font-semibold"
+          style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)", letterSpacing: "-0.02em" }}
         >
           {value ?? "—"}
         </span>
@@ -85,7 +86,7 @@ export function MetricCard({
         )}
       </div>
       {delta && (
-        <span className="text-xs" style={{ color: deltaColor }}>
+        <span className="text-[11px] font-medium" style={{ color: deltaColor }}>
           {delta}
         </span>
       )}

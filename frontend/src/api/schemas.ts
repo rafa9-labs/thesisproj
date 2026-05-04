@@ -229,3 +229,18 @@ export interface NewsEvent {
   currency: string;
   impact: "high" | "medium" | "low";
 }
+
+export interface LicenseStatusResponse {
+  plan: string;
+  licensed: boolean;
+  trial_active: boolean;
+  trial_days_left: number;
+  license_key: string;
+  activation_id: string;
+  expires_at: string;
+  last_verified: string;
+  machine_id: string;
+  needs_activation: boolean;
+  available_models: string[];
+  locked_models: string[];
+}

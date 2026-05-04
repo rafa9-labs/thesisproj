@@ -1,6 +1,6 @@
 interface ParamSliderProps {
   label: string;
-  paramKey: string;
+  paramKey?: string;
   value: number;
   min: number;
   max: number;
@@ -11,7 +11,6 @@ interface ParamSliderProps {
 
 export function ParamSlider({
   label,
-  paramKey,
   value,
   min,
   max,
@@ -20,19 +19,14 @@ export function ParamSlider({
   onChange,
 }: ParamSliderProps) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-            {label}
-          </span>
-          <span
-            className="text-xs"
-            style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-muted)" }}
-          >
-            {paramKey}
-          </span>
-        </div>
+        <span
+          className="text-[11px] font-medium uppercase tracking-[0.1em]"
+          style={{ color: "var(--color-text-muted)" }}
+        >
+          {label}
+        </span>
         <input
           type="number"
           value={value}
@@ -40,12 +34,14 @@ export function ParamSlider({
           max={max}
           step={step}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="w-20 rounded border px-2 py-1 text-right text-xs"
+          className="w-20 rounded border px-2 py-1 text-right text-xs transition-all duration-200 focus:outline-none"
           style={{
             fontFamily: "var(--font-mono)",
-            backgroundColor: "var(--color-surface)",
-            borderColor: "var(--color-border)",
-            color: "var(--color-text-primary)",
+            backgroundColor: "var(--color-glass)",
+            borderColor: "var(--color-glass-border)",
+            color: "var(--color-brand)",
+            fontWeight: 500,
+            backdropFilter: "blur(8px)",
           }}
         />
       </div>
@@ -56,11 +52,14 @@ export function ParamSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-1.5 w-full cursor-pointer appearance-none rounded-full"
-        style={{ accentColor: "var(--color-accent)" }}
+        className="h-1 w-full cursor-pointer appearance-none rounded-full"
+        style={{
+          accentColor: "var(--color-brand)",
+          background: `linear-gradient(to right, var(--color-brand) 0%, var(--color-brand) ${((value - min) / (max - min)) * 100}%, var(--color-glass-border) ${((value - min) / (max - min)) * 100}%, var(--color-glass-border) 100%)`,
+        }}
       />
       {description && (
-        <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+        <p className="text-[11px] font-light leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
           {description}
         </p>
       )}

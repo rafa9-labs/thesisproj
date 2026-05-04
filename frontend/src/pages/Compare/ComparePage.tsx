@@ -47,7 +47,7 @@ export function ComparePage() {
 
   if (jobsLoading) {
     return (
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-6">
         <CompareSkeleton />
       </div>
     );
@@ -55,7 +55,7 @@ export function ComparePage() {
 
   if (multiModelJobs.length === 0) {
     return (
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-6">
         <EmptyState
           icon={<GitCompare size={48} />}
           title="No multi-model jobs"
@@ -66,19 +66,20 @@ export function ComparePage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-end">
         <select
           value={selectedJobId ?? ""}
           onChange={(e) => setSelectedJobId(e.target.value || null)}
-          className="rounded-md border px-3 py-2 text-xs"
+          className="rounded-md border px-3 py-2 text-xs transition-all duration-200 focus:outline-none"
           style={{
-            borderColor: "var(--color-border)",
-            backgroundColor: "var(--color-surface)",
+            borderColor: "var(--color-glass-border)",
+            backgroundColor: "var(--color-glass)",
             color: "var(--color-text-primary)",
             fontFamily: "var(--font-mono)",
             cursor: "pointer",
             minWidth: 280,
+            backdropFilter: "blur(8px)",
           }}
         >
           <option value="">Select a multi-model job…</option>
@@ -123,12 +124,13 @@ export function ComparePage() {
         <div
           className="flex items-center justify-center rounded-lg border p-8"
           style={{
-            backgroundColor: "var(--color-surface)",
-            borderColor: "var(--color-border)",
+            backgroundColor: "var(--color-glass)",
+            borderColor: "var(--color-glass-border)",
             color: "var(--color-text-muted)",
+            backdropFilter: "blur(12px)",
           }}
         >
-          <span className="text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+          <span className="text-sm font-light" style={{ fontFamily: "var(--font-mono)" }}>
             Could not load results for this job.
           </span>
         </div>

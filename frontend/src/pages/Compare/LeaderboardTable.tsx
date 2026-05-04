@@ -103,8 +103,8 @@ export function LeaderboardTable({ metrics = [], sortMetric = "sharpe" }: Leader
             style={{
               width: 22,
               height: 22,
-              backgroundColor: value <= 3 ? "rgba(41,98,255,0.15)" : "transparent",
-              color: value <= 3 ? "var(--color-accent)" : "var(--color-text-muted)",
+              backgroundColor: value <= 3 ? "var(--color-primary-glow)" : "transparent",
+              color: value <= 3 ? "var(--color-primary)" : "var(--color-text-muted)",
             }}
           >
             {value}
@@ -114,7 +114,8 @@ export function LeaderboardTable({ metrics = [], sortMetric = "sharpe" }: Leader
       {
         headerName: "Model",
         field: "model",
-        width: 150,
+        flex: 1,
+        minWidth: 120,
         sortable: true,
         suppressMovable: true,
         cellRenderer: CategoryDotRenderer,
@@ -122,7 +123,8 @@ export function LeaderboardTable({ metrics = [], sortMetric = "sharpe" }: Leader
       {
         headerName: "Sharpe",
         field: "sharpe",
-        width: 90,
+        flex: 1,
+        minWidth: 80,
         sortable: true,
         suppressMovable: true,
         type: "numericColumn",
@@ -170,7 +172,8 @@ export function LeaderboardTable({ metrics = [], sortMetric = "sharpe" }: Leader
       {
         headerName: "Return",
         field: "total_return",
-        width: 95,
+        flex: 1,
+        minWidth: 85,
         sortable: true,
         suppressMovable: true,
         type: "numericColumn",
@@ -197,12 +200,13 @@ export function LeaderboardTable({ metrics = [], sortMetric = "sharpe" }: Leader
       <div
         className="flex items-center justify-center rounded-lg border p-8"
         style={{
-          backgroundColor: "var(--color-surface)",
-          borderColor: "var(--color-border)",
+          backgroundColor: "var(--color-glass)",
+          borderColor: "var(--color-glass-border)",
           color: "var(--color-text-muted)",
+          backdropFilter: "blur(12px)",
         }}
       >
-        <span className="text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+        <span className="text-sm font-light" style={{ fontFamily: "var(--font-mono)" }}>
           No metrics data available
         </span>
       </div>
@@ -210,29 +214,31 @@ export function LeaderboardTable({ metrics = [], sortMetric = "sharpe" }: Leader
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <h3
-        className="text-xs font-semibold uppercase tracking-[0.08em]"
-        style={{ color: "var(--color-text-secondary)" }}
+        className="text-[11px] font-medium uppercase tracking-[0.12em]"
+        style={{ color: "var(--color-text-muted)" }}
       >
         Leaderboard
       </h3>
       <div
         className="ag-theme-alpine-dark rounded-lg border overflow-hidden"
         style={{
+          width: "100%",
           height: Math.min(metrics.length * 40 + 44, 320),
-          borderColor: "var(--color-border)",
-          backgroundColor: "var(--color-surface)",
-          "--ag-background-color": "#1E222D",
-          "--ag-header-background-color": "#2A2E39",
-          "--ag-odd-row-background-color": "#1a1e29",
-          "--ag-row-hover-color": "rgba(41,98,255,0.08)",
-          "--ag-selected-row-background-color": "rgba(41,98,255,0.15)",
-          "--ag-range-selection-border-color": "#2962FF",
-          "--ag-border-color": "#363A45",
-          "--ag-header-foreground-color": "#80899F",
-          "--ag-foreground-color": "#EDEFF5",
-          "--ag-row-border-color": "#2A2E39",
+          borderColor: "var(--color-glass-border)",
+          backgroundColor: "var(--color-glass)",
+          backdropFilter: "blur(12px)",
+          "--ag-background-color": "#0A0D12",
+          "--ag-header-background-color": "#11151C",
+          "--ag-odd-row-background-color": "#080A0F",
+          "--ag-row-hover-color": "rgba(0,229,255,0.06)",
+          "--ag-selected-row-background-color": "rgba(0,229,255,0.12)",
+          "--ag-range-selection-border-color": "#00E5FF",
+          "--ag-border-color": "#1A1F2A",
+          "--ag-header-foreground-color": "#5A6578",
+          "--ag-foreground-color": "#E8ECF1",
+          "--ag-row-border-color": "#1A1F2A",
           "--ag-font-size": "12px",
           "--ag-font-family": "Inter, sans-serif",
           "--ag-grid-size": "4px",

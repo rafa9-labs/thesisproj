@@ -5,7 +5,7 @@ interface SelectOption {
 
 interface ParamSelectProps {
   label: string;
-  paramKey: string;
+  paramKey?: string;
   value: string;
   options: SelectOption[];
   description?: string;
@@ -14,7 +14,6 @@ interface ParamSelectProps {
 
 export function ParamSelect({
   label,
-  paramKey,
   value,
   options,
   description,
@@ -22,26 +21,23 @@ export function ParamSelect({
 }: ParamSelectProps) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-2">
-        <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>
-          {label}
-        </span>
-        <span
-          className="text-xs"
-          style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-muted)" }}
-        >
-          {paramKey}
-        </span>
-      </div>
+      <span
+        className="text-[11px] font-medium uppercase tracking-[0.1em]"
+        style={{ color: "var(--color-text-muted)" }}
+      >
+        {label}
+      </span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded border px-2 py-1.5 text-sm"
+        className="rounded border px-2.5 py-2 text-sm transition-all duration-200 focus:outline-none"
         style={{
           fontFamily: "var(--font-sans)",
-          backgroundColor: "var(--color-surface)",
-          borderColor: "var(--color-border)",
+          fontWeight: 400,
+          backgroundColor: "var(--color-glass)",
+          borderColor: "var(--color-glass-border)",
           color: "var(--color-text-primary)",
+          backdropFilter: "blur(8px)",
         }}
       >
         {options.map((opt) => (
@@ -51,7 +47,7 @@ export function ParamSelect({
         ))}
       </select>
       {description && (
-        <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+        <p className="text-[11px] font-light leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
           {description}
         </p>
       )}

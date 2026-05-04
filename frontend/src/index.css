@@ -4,50 +4,55 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* Base canvas */
-  --color-app: #0B0E14;
-  --color-surface: #11151C;
-  --color-elevated: #181D27;
+  /* Base canvas — deeper blacks */
+  --color-app: #050608;
+  --color-surface: #0A0D12;
+  --color-elevated: #11151C;
+
+  /* Glass surfaces */
+  --color-glass: rgba(255, 255, 255, 0.03);
+  --color-glass-border: rgba(255, 255, 255, 0.06);
+  --color-glass-hover: rgba(255, 255, 255, 0.05);
 
   /* Borders */
-  --color-border: #1E2430;
-  --color-border-subtle: #151926;
-  --color-border-active: #2A3244;
+  --color-border: #1A1F2A;
+  --color-border-subtle: #131820;
+  --color-border-active: rgba(0, 229, 255, 0.25);
 
   /* Typography */
-  --color-text-primary: #F0F2F5;
-  --color-text-secondary: #8B95A5;
-  --color-text-muted: #5A6578;
-  --color-text-inverse: #0B0E14;
+  --color-text-primary: #E8ECF1;
+  --color-text-secondary: #7A8494;
+  --color-text-muted: #4A5568;
+  --color-text-inverse: #050608;
 
-  /* Primary action — steel blue (trust) */
-  --color-primary: #5B8DEF;
-  --color-primary-glow: rgba(91, 141, 239, 0.15);
+  /* Primary action — cyan (energy, precision) */
+  --color-primary: #00E5FF;
+  --color-primary-glow: rgba(0, 229, 255, 0.15);
 
-  /* Brand accent — gold (KodaQuant identity) */
-  --color-brand: #D4AF37;
-  --color-brand-glow: rgba(212, 175, 55, 0.15);
+  /* Brand accent — cyan (replaces gold) */
+  --color-brand: #00E5FF;
+  --color-brand-glow: rgba(0, 229, 255, 0.15);
 
   /* Semantic accents — tuned for dark backgrounds */
-  --color-accent: #5B8DEF;
+  --color-accent: #00E5FF;
   --color-accent-success: #22C55E;
   --color-accent-danger: #EF4444;
   --color-accent-warning: #F59E0B;
-  --color-accent-info: #5B8DEF;
-  --color-accent-classical: #06B6D4;
-  --color-accent-deep: #8B5CF6;
+  --color-accent-info: #00E5FF;
+  --color-accent-classical: #22D3EE;
+  --color-accent-deep: #A78BFA;
   --color-accent-rl: #F59E0B;
   --color-accent-ensemble: #EC4899;
 
   /* Chart tokens */
-  --color-chart-line: #00D4AA;
+  --color-chart-line: #00E5FF;
   --color-chart-buyhold: #555555;
   --color-chart-drawdown: rgba(239, 68, 68, 0.35);
 
   /* Event severity */
   --color-event-high: #EF4444;
   --color-event-medium: #F59E0B;
-  --color-event-low: #5B8DEF;
+  --color-event-low: #00E5FF;
 }
 
 * {
@@ -110,7 +115,7 @@ input[type="number"]::-webkit-outer-spin-button {
   animation: pulse-skeleton 1.5s ease-in-out infinite;
 }
 
-/* Gold ping for active / running states */
+/* Cyan ping for active / running states */
 @keyframes ping-brand {
   75%, 100% {
     transform: scale(2.2);
@@ -120,6 +125,16 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .animate-ping-brand {
   animation: ping-brand 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Subtle glow pulse for active cards */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(0, 229, 255, 0.06); }
+  50% { box-shadow: 0 0 16px rgba(0, 229, 255, 0.12); }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
 }
 
 /* Subtle slide-in for drawers / panels */
