@@ -480,25 +480,6 @@
 
 ---
 
-## Future Investigation: Daily/Weekly Walk-Forward Periods (MOVED TO S14.1)
-
-> **Status**: Not currently supported. Pipeline is hardcoded to monthly periods.
-> **Effort**: Medium refactor (3-5 hours core + 2-3 hours tests)
-
-The walk-forward engine uses `pd.DateOffset(months=...)` in 7 call sites across 3 files:
-- `pipeline/backtester/real_trading_mixin.py` (lines 762-765, 777, 793, 1022)
-- `pipeline/backtester/evaluation_mixin.py` (lines 41, 45, 49, 52)
-- `pipeline/backtester/run_mixin.py` (lines 113, 540, 3791-3792)
-
-**What would be needed:**
-1. Add `period_unit: Literal["months", "weeks", "days"]` to config/schemas
-2. Create `_make_offset(count, unit)` helper replacing all `DateOffset(months=...)`
-3. Generalize `months_between()` in `evaluation_mixin.py` to handle days/weeks
-4. Convert 37-month warm-up offset proportionally (≈160 weeks or 1120 days)
-5. Generalize `pd.to_period("M")` in CV fold builder
-6. Update frontend schemas + UI controls
-
-**Candidate for**: Sprint 14 or post-launch enhancement.
 
 > **Goal**: Wrap React + FastAPI into a native-feeling desktop application.
 > **Architecture**: Electron main process + Python subprocess + React BrowserWindow
@@ -758,16 +739,18 @@ The walk-forward engine uses `pd.DateOffset(months=...)` in 7 call sites across 
 
 ---
 
-## Sprint 15: KodaQuant Branding
+## Sprint 15: KodaQuant Branding 🔄 PARTIAL
 
 > **Goal**: Rename and rebrand from "FX ML Backtester / thesisproj" to "KodaQuant" for commercial launch.
 > **Est**: 4-6h
 
-- [ ] **S15.1** App name update
-  - Rename product references from "FX ML Backtester" to "KodaQuant" in all user-facing places
-  - Update: `electron-builder.yml` (productName, shortcutName), `forex_pipeline.spec`, `run_server.py` print messages, API startup banner, frontend title/meta
-  - GitHub repo name stays as-is (internal)
-  - **Est**: 1h
+- [x] **S15.1** App name update — PARTIAL ✅ DONE (2026-05-04)
+  - `electron/main.ts` title → "KodaQuant", `electron-builder.yml` productName/shortcutName → "KodaQuant"
+  - `electron/utils.ts` user data dir → `%APPDATA%/KodaQuant/data/`
+  - `scripts/build_python.bat` entry point → "KodaQuant"
+  - `frontend/package.json` name → "kodaquant", description → "KodaQuant"
+  - **Remaining**: `forex_pipeline.spec` docstring, API startup banner, README, internal references
+  - **Files**: partially done in S11.1a
 
 - [ ] **S15.2** UI theme & color scheme
   - Define KodaQuant color palette (primary, accent, background)
@@ -788,6 +771,242 @@ The walk-forward engine uses `pd.DateOffset(months=...)` in 7 call sites across 
   - About dialog with version, license info, links
   - README update with KodaQuant branding
   - **Est**: 1h
+
+---
+
+## Sprint 16: Trading Logic, Overfitting & Backtest Transparency
+
+> **Goal**: Improve core backtest quality — better training logic, overfitting detection, and results that users can actually understand and trust.
+> **Est**: 12-16h
+
+- [ ] **S16.1** Overfitting detection & reporting
+  - Train/test score divergence detection (e.g. Sharpe drops > 40% from train to OOS)
+  - Bootstrap confidence intervals for key metrics (Sharpe, return, max DD)
+  - Overfitting risk score per model in results (color-coded: green/yellow/red)
+  - Cross-validation fold stability report (std of Sharpe across folds)
+  - **Files**: `pipeline/backtester/evaluation_mixin.py`, `pipeline/metrics_eval.py`, new `pipeline/overfitting.py`
+  - **Est**: 4h
+
+- [ ] **S16.2** Walk-forward transparency panel
+  - Per-period breakdown: train Sharpe vs test Sharpe, train return vs test return
+  - Visual timeline showing which months are train vs test (interactive)
+  - Signal count per period (was the model trading or sitting out?)
+  - Regime overlay: which market regime each period fell into
+  - **Files**: `frontend/src/pages/Results/WalkForwardPanel.tsx`, new `api/routers/backtest.py` endpoint
+  - **Est**: 3h
+
+- [ ] **S16.3** Training diagnostics — what the model actually learned
+  - Feature importance heatmap per model (gain-based for tree models, permutation for others)
+  - Prediction distribution: histogram of predicted probabilities vs actual outcomes
+  - Confusion matrix per walk-forward period
+  - "Was this model confident?" — filter trades by prediction confidence bands
+  - **Files**: `pipeline/backtester/real_trading_mixin.py`, `frontend/src/pages/Results/TrainingDiagnostics.tsx`
+  - **Est**: 4h
+
+- [ ] **S16.4** Plain-English backtest summary generator
+  - Auto-generate a 3-sentence natural-language summary: "This backtest ran XGBoost on EURUSD H1 from Jan 2023 to Dec 2025. It achieved a Sharpe of 1.2 with 58% win rate and -8.3% max drawdown. The model was most confident during low-volatility trending periods."
+  - Key findings bullets (best period, worst period, regime performance)
+  - Copy-to-clipboard for sharing
+  - **Files**: new `pipeline/summary_generator.py`, `frontend/src/pages/Results/BacktestSummary.tsx`
+  - **Est**: 2h
+
+- [ ] **S16.5** Better default training parameters
+  - Audit search space bounds — tighten ranges that allow degenerate configs
+  - Add early stopping patience defaults (stop if 20 trials without improvement)
+  - Minimum trade count filter (reject configs that trade < 10 times/month)
+  - Default to `calibrate=True` for production runs
+  - **Files**: `config.py` (SEARCH_SPACE), `pipeline/tuning/runner.py`
+  - **Est**: 2h
+
+---
+
+## Sprint 17: UI Polish, Tabs Flow & Search
+
+> **Goal**: Make the app feel professional — smooth page transitions, global search, consistent component patterns, and UI cleanup.
+> **Est**: 8-10h
+
+- [ ] **S17.1** Global search bar (Cmd+K / Ctrl+K)
+  - Search across: backtest jobs, model names, currency pairs, settings
+  - Fuzzy matching with keyboard navigation
+  - Recent searches stored in localStorage
+  - **Files**: `frontend/src/components/shared/CommandPalette.tsx`
+  - **Est**: 3h
+
+- [ ] **S17.2** Tab flow & navigation redesign
+  - Results page: tab per model (not scroll) with persistent tab state
+  - Compare page: side-by-side with tab anchors (Overview, Equity, Metrics, Trades, HPO)
+  - Settings page: tab sections (General, Models, Execution, License, About)
+  - Keyboard shortcuts for tab navigation (1-5 keys)
+  - **Files**: `frontend/src/pages/Results/ResultsPage.tsx`, `frontend/src/pages/Compare/ComparePage.tsx`, `frontend/src/pages/Settings/SettingsPage.tsx`
+  - **Est**: 2h
+
+- [ ] **S17.3** UI consistency & cleanup pass
+  - Standardize all section headers (typeface, size, tracking, margin)
+  - Consistent skeleton loading states (replace ad-hoc spinners)
+  - Error boundary per page (not just global)
+  - Responsive breakpoints for 1280px / 1600px / 1920px
+  - Remove unused imports, dead code, commented-out blocks across all pages
+  - **Files**: all `frontend/src/pages/**/*.tsx`
+  - **Est**: 2h
+
+- [ ] **S17.4** Empty states & onboarding hints
+  - No-data states for Dashboard, Results, Compare with call-to-action
+  - Tooltip hints for first-time users (e.g. "Select a model to begin")
+  - Progressive disclosure: hide advanced features until basic workflow completed
+  - **Files**: `frontend/src/components/shared/EmptyState.tsx`, all page components
+  - **Est**: 2h
+
+---
+
+## Sprint 18: Live News & Market Data Integration
+
+> **Goal**: Connect real-time news sentiment and live price data to backtesting and (later) live trading. Make S6's news features actually impactful on trading signals.
+> **Est**: 10-14h
+
+- [ ] **S18.1** Live news feed with impact scoring
+  - Real-time RSS aggregation (ForexLive, Reuters, Bloomberg) via background task
+  - NLP impact scoring per currency pair (EURUSD, GBPUSD, etc.) in real time
+  - News timeline overlay on backtest equity curves (already partially done in S6.4)
+  - Live news panel in dashboard with auto-refresh
+  - **Files**: `news/scraper.py`, `news/sentiment.py`, `frontend/src/pages/Dashboard/NewsFeedPanel.tsx`, new `api/routers/news.py` live endpoint
+  - **Est**: 3h
+
+- [ ] **S18.2** Live price data from OANDA API
+  - OANDA streaming API integration for all configured pairs
+  - Real-time candle subscriptions (M1, M5, M15, M30, H1, H4)
+  - Price cache in Redis with TTL (latest 1000 candles per pair per timeframe)
+  - Frontend WebSocket for live price ticks
+  - **Files**: new `pipeline/live_feed.py`, `api/routers/prices.py`, `frontend/src/api/livePrices.ts`
+  - **Est**: 4h
+
+- [ ] **S18.3** News-impact feature engineering (live mode)
+  - Score each incoming news event → generate real-time sentiment features
+  - Map news events to affected pairs (e.g. NFP → all USD pairs, BOE rate → GBP pairs)
+  - Feature pipeline: news event → sentiment score → rolling aggregates → model input
+  - Backtest mode: replay historical news as if they arrived in real-time
+  - **Files**: `news/features.py` (extend), `pipeline/backtester/features_mixin.py`
+  - **Est**: 3h
+
+- [ ] **S18.4** Live market dashboard
+  - Price ticker strip at top of Dashboard (scrolling pair prices)
+  - Mini sparkline charts per pair (last 24h)
+  - Economic calendar widget with next-7-days events
+  - Click pair → open backtest with that pair pre-selected
+  - **Files**: `frontend/src/pages/Dashboard/MarketDashboard.tsx`, `frontend/src/components/charts/SparklineChart.tsx`
+  - **Est**: 3h
+
+---
+
+## Sprint 19: Ensemble Models & Model Extensibility
+
+> **Goal**: Implement all ensemble model types defined in the registry, add custom model support, and make the model layer truly extensible.
+> **Est**: 8-10h
+
+- [ ] **S19.1** Remaining ensemble implementations
+  - Ensemble VotingClassifier (majority vote, soft vote, weighted)
+  - Ensemble Stacking (meta-learner on top of base model predictions)
+  - Ensemble Adaptive Regime — enhance with dynamic weight rebalancing per regime
+  - Ensemble CNN-LSTM-XGBoost — verify end-to-end, add to UI model selector
+  - Ensure all 10+ model types appear in frontend ModelSelector
+  - **Files**: `models/ensemble_voting.py`, `models/ensemble_stacking.py`, `models/ensemble_adaptive_regime.py`, `models/ensemble_cnn_lstm_xgboost.py`, `frontend/src/pages/Backtest/ModelSelector.tsx`
+  - **Est**: 4h
+
+- [ ] **S19.2** Custom model plugin system
+  - `models/plugins/` directory — drop-in Python files with `build()`, `train()`, `predict()` interface
+  - Auto-discovery: scan plugins dir on startup, register with ModelRegistry
+  - Frontend: "Custom Model" option in ModelSelector with upload textarea
+  - Validation: run smoke test on plugin registration
+  - **Files**: new `models/plugins/`, `models/registry.py` (extend)
+  - **Est**: 3h
+
+- [ ] **S19.3** Model comparison benchmark suite
+  - Standardized benchmark dataset (fixed pair, timeframe, date range)
+  - Run all models on same data with same HPO budget
+  - Generate comparison report: Sharpe, return, win rate, avg trade, max DD, training time
+  - Export as PDF/HTML for sharing
+  - **Files**: `pipeline/model_comparison.py` (extend), `frontend/src/pages/Compare/BenchmarkReport.tsx`
+  - **Est**: 2h
+
+---
+
+## Sprint 20: LLM / AI Integration & Intelligent Trading
+
+> **Goal**: Leverage LLMs for market interpretation, strategy generation, and trade reasoning. Make the product genuinely AI-augmented, not just ML.
+> **Est**: 10-14h
+
+- [ ] **S20.1** LLM-powered market commentary
+  - On-demand natural language analysis of current market conditions
+  - Feed recent price action + news events + sentiment to LLM via structured prompt
+  - Display in a "Market Insight" panel (not chat, just generated commentary)
+  - Cache results (5-min TTL) to avoid excessive API calls
+  - Support OpenAI, Anthropic, and local LLM (Ollama) backends
+  - **Files**: new `pipeline/llm/commentary.py`, `api/routers/insights.py`, `frontend/src/pages/Dashboard/MarketInsightPanel.tsx`
+  - **Est**: 3h
+
+- [ ] **S20.2** Strategy suggestion engine
+  - Given pair + timeframe + recent performance, suggest strategy adjustments
+  - "Your XGBoost model on EURUSD H1 had 48% win rate last month. Consider: (1) tightening stop-loss to 15 pips, (2) switching to H4 timeframe, (3) adding ATR volatility filter."
+  - Not auto-executing — purely advisory
+  - **Files**: new `pipeline/llm/strategy_suggest.py`
+  - **Est**: 2h
+
+- [ ] **S20.3** LLM-augmented feature engineering
+  - LLM generates candidate feature specifications from market context
+  - Human-in-the-loop: suggest features → user approves → auto-generate code → run backtest
+  - E.g. "Given the current NFP-sensitive regime, consider: EURUSD_H1_ATR_RATIO_14 = ATR(14) / ATR(50)"
+  - **Files**: new `pipeline/llm/feature_suggest.py`, `pipeline/backtester/features_mixin.py` (extend)
+  - **Est**: 3h
+
+- [ ] **S20.4** Model insertion via LLM
+  - Define a model spec in natural language → LLM generates the Python code
+  - Auto-validate (build/train/predict smoke test)
+  - Register as custom plugin (ties into S19.2)
+  - Sandbox: run generated code in restricted environment
+  - **Files**: new `pipeline/llm/model_generator.py`, `models/plugins/` (auto-generated)
+  - **Est**: 3h
+
+---
+
+## Sprint 21: Live Trading with OANDA
+
+> **Goal**: Enable real-time trading via OANDA API (demo first, then live). Paper trading with real data, then live execution with risk controls.
+> **Est**: 12-16h
+
+- [ ] **S21.1** OANDA API client (v20 REST)
+  - Account info, position list, trade list, order submission
+  - Market + limit + stop orders with SL/TP
+  - Position management (close partial, modify SL/TP)
+  - Demo and live account support (configurable API key + URL)
+  - Rate limiting (OANDA: 120 req/sec for demo, 20 for live)
+  - **Files**: new `trading/oanda_client.py`, `trading/oanda_models.py`
+  - **Est**: 3h
+
+- [ ] **S21.2** Paper trading engine
+  - Run trained models against live OANDA price feed
+  - Generate signals, execute paper trades (no real money)
+  - Track paper portfolio: equity, positions, P&L in real time
+  - Compare paper vs backtest performance for the same period
+  - **Files**: new `trading/paper_engine.py`, `api/routers/trading.py`
+  - **Est**: 4h
+
+- [ ] **S21.3** Live trading engine with risk controls
+  - Signal → execute via OANDA API with position sizing
+  - Max position size limit (e.g. 2% of equity)
+  - Max daily trades limit
+  - Kill switch: stop all trading if drawdown > threshold
+  - Confirmation dialog before live order submission
+  - Trade journal: timestamp, signal, entry, exit, P&L, model confidence
+  - **Files**: new `trading/live_engine.py`, `trading/risk_controls.py`, `frontend/src/pages/Trading/LiveTradingPage.tsx`
+  - **Est**: 4h
+
+- [ ] **S21.4** Trading dashboard UI
+  - Live position monitor (open trades, P&L, time in trade)
+  - Signal history with confidence scores
+  - One-click "Start Paper Trading" / "Start Live Trading" with warnings
+  - Emergency stop button (closes all positions)
+  - Trade history with filtering and CSV export
+  - **Files**: `frontend/src/pages/Trading/` (TradingPage, PositionMonitor, TradeHistory, RiskControls)
+  - **Est**: 4h
 
 ---
 
@@ -816,8 +1035,8 @@ Phase 11 (Testing) is now Sprint 5.
 # Start Redis (required for Celery + WebSocket progress)
 redis-server
 
-# Start FastAPI backend (port 8001)
-cd api && uvicorn main:app --host 127.0.0.1 --port 8001 --reload
+# Start FastAPI backend (port 8002)
+cd api && uvicorn main:app --host 127.0.0.1 --port 8002 --reload
 
 # Start Celery worker (separate terminal)
 celery -A api.tasks.celery_app worker --loglevel=info --pool=solo -Q celery
@@ -836,6 +1055,9 @@ cd frontend && npm run dev
 | `api/tasks.py` | Celery backtest tasks + result serialization |
 | `api/routers/backtest.py` | Backtest + heatmap + cross-pair API endpoints |
 | `api/routers/news.py` | News status + economic events API |
+| `api/routers/license.py` | License management (7 endpoints) |
+| `api/licensing/` | Paddle, fingerprint, storage, gates, middleware |
+| `api/middleware/` | Security headers + rate limiting |
 | `api/schemas/news.py` | News event schemas |
 | `frontend/src/pages/Backtest/` | Backtest config UI (9 components) |
 | `frontend/src/pages/Results/` | Results display + charts (7 components) |
@@ -844,14 +1066,25 @@ cd frontend && npm run dev
 | `frontend/src/components/charts/` | All chart components (10 files) |
 | `frontend/src/api/websocket.ts` | WebSocket manager for real-time progress |
 | `frontend/src/api/queries.ts` | React Query hooks for all API endpoints |
+| `frontend/src/stores/useJobStore.ts` | Job state + WebSocket progress tracking |
+| `frontend/src/components/UpdateNotification/` | Auto-update UI notification |
+| `electron/main.ts` | Electron main process (KodaQuant shell) |
+| `electron/updater.ts` | Auto-update via electron-updater |
+| `electron/sentry.ts` | Opt-in crash reporting |
+| `electron/license.ts` | License IPC for Paddle |
 | `pipeline/backtester/composed.py` | MLBacktester engine |
 | `pipeline/backtester/data_mixin.py` | Data loading + date range handling |
 | `pipeline/backtester/real_trading_mixin.py` | Real trading simulation + walk-forward |
+| `pipeline/backtester/features_mixin.py` | Feature engineering (TA indicators) |
 | `pipeline/runtime.py` | GPU detection, thread budgets, CUDA config |
 | `config.py` | Global configuration |
 | `models/registry.py` | Model registry |
 | `pipeline/execution/position_sizing.py` | Position sizing models |
 | `pipeline/model_comparison.py` | Model comparison & leaderboard |
+| `scripts/set_version.py` | Single-source version management |
+| `scripts/publish_release.bat` | Build + tag + push release pipeline |
+| `scripts/build_electron.bat` | 7-step Electron + PyInstaller build |
+| `electron-builder.yml` | Electron builder config (NSIS, GitHub publish) |
 
 ## Full Sprint Sequence
 
@@ -872,7 +1105,13 @@ cd frontend && npm run dev
 | **S12** | Commercial Infrastructure | 8-10h | TODO |
 | **S13** | Beta & Launch | 6-8h | TODO |
 | **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
-| **S15** | KodaQuant Branding | 4-6h | TODO |
+| **S15** | KodaQuant Branding | 4-6h | 🔄 PARTIAL (S15.1 name update done, S15.2-4 remaining) |
+| **S16** | Trading Logic, Overfitting & Backtest Transparency | 12-16h | TODO |
+| **S17** | UI Polish, Tabs Flow & Search | 8-10h | TODO |
+| **S18** | Live News & Market Data Integration | 10-14h | TODO |
+| **S19** | Ensemble Models & Model Extensibility | 8-10h | TODO |
+| **S20** | LLM / AI Integration & Intelligent Trading | 10-14h | TODO |
+| **S21** | Live Trading with OANDA | 12-16h | TODO |
 
 ## Completion Criteria Summary
 
@@ -884,7 +1123,14 @@ cd frontend && npm run dev
 | S7 | FastAPI serves all pipeline operations via REST + WebSocket | ✅ DONE
 | S8 | React UI replaces Streamlit for all user interactions | ✅ DONE — all 8 sub-tasks complete |
 | S9 | Electron wraps React + Python into desktop app | ✅ COMPLETE (S9.1-9.5 all done) |
-| S10 | Code protected, Paddle licensing active, feature gating works |
+| S10 | Code protected, Paddle licensing active, feature gating works | ✅ DONE
 | S11 | Windows installer + auto-update functional | 🔄 S11.2/3 done, S11.1b/4 remaining |
 | S12 | Product listed on Paddle, landing page live, docs published |
 | S13 | Beta tested, publicly launched, first sales |
+| S15 | All user-facing text says "KodaQuant", professional branding | 🔄 S15.1 done |
+| S16 | Overfitting detection works, backtest summary is human-readable, training is transparent |
+| S17 | Cmd+K search, tab-style navigation, consistent UI, no dead code |
+| S18 | Live news feed + live OANDA prices feed into backtesting + dashboard |
+| S19 | All ensemble types working, plugin system for custom models |
+| S20 | LLM commentary, strategy suggestions, AI-augmented features |
+| S21 | Paper trading on OANDA demo, live trading with risk controls |
