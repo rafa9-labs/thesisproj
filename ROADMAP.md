@@ -594,7 +594,7 @@
 
 ---
 
-## Sprint 11: Installer & Auto-Update 🔄 IN PROGRESS
+## Sprint 11: Installer & Auto-Update ✅ COMPLETE (2026-05-04)
 
 > **Goal**: Professional Windows installer with automatic updates.
 > **Est**: 6-8h
@@ -640,18 +640,19 @@
   - PerformanceHeatmapSection.tsx import was failing at runtime
   - **Files**: `frontend/src/components/charts/SharpeHeatmap.tsx`
 
-- [ ] **S11.1b** NSIS installer branding
-  - Custom installer bitmaps (welcome/finish headers + sidebar)
-  - Uncomment bitmap refs in `electron-builder.yml`
-  - **Files**: `electron-builder.yml`, `build/` directory
-  - **Est**: 1h
+- [ ] **S11.1b** NSIS installer branding ✅ DONE (2026-05-04)
+  - Generated `build/installer-header.bmp` (150×57) and `build/installer-sidebar.bmp` (162×314)
+  - KodaQuant dark theme with accent cyan branding
+  - Uncommented bitmap refs in `electron-builder.yml`
+  - **Files**: `build/installer-header.bmp`, `build/installer-sidebar.bmp`, `electron-builder.yml`
 
-- [ ] **S11.4** First-run experience
-  - Welcome wizard (set data path, configure OANDA API key, choose default pair)
-  - Quick start guide / interactive tutorial
-  - Sample backtest with pre-loaded data (demo mode)
-  - **Files**: `frontend/src/pages/Welcome/`
-  - **Est**: 1h
+- [ ] **S11.4** First-run experience ✅ DONE (2026-05-04)
+  - 2-step WelcomeWizard: (1) pair + timeframe selection, (2) optional OANDA API key + data directory
+  - First-launch detection via `localStorage` key `kodaquant-welcome-done`
+  - Settings persistence: oandaApiKey, dataDir saved to settings store
+  - Default pair/timeframe set in backtest store on completion
+  - "Skip for now" option available
+  - **Files**: `frontend/src/pages/Welcome/WelcomePage.tsx`, `frontend/src/App.tsx`, `frontend/src/stores/useSettingsStore.ts`
 
 ---
 
@@ -1101,7 +1102,7 @@ cd frontend && npm run dev
 | **S8B** | Frontend ↔ API Integration & Bug Fixes | 6-8h | ✅ DONE (2026-04-20) |
 | **S9** | Electron Desktop Shell | 10-12h | ✅ COMPLETE (S9.1-9.5 all done) |
 | **S10** | Security & Licensing (Paddle) | 12-15h | ✅ DONE (2026-05-04) |
-| **S11** | Installer & Auto-Update | 6-8h | 🔄 IN PROGRESS (S11.2/3 done, S11.1b/4 remaining) |
+| **S11** | Installer & Auto-Update | 6-8h | ✅ COMPLETE (2026-05-04) |
 | **S12** | Commercial Infrastructure | 8-10h | TODO |
 | **S13** | Beta & Launch | 6-8h | TODO |
 | **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
@@ -1124,7 +1125,7 @@ cd frontend && npm run dev
 | S8 | React UI replaces Streamlit for all user interactions | ✅ DONE — all 8 sub-tasks complete |
 | S9 | Electron wraps React + Python into desktop app | ✅ COMPLETE (S9.1-9.5 all done) |
 | S10 | Code protected, Paddle licensing active, feature gating works | ✅ DONE
-| S11 | Windows installer + auto-update functional | 🔄 S11.2/3 done, S11.1b/4 remaining |
+| S11 | Windows installer + auto-update functional | ✅ COMPLETE (2026-05-04) |
 | S12 | Product listed on Paddle, landing page live, docs published |
 | S13 | Beta tested, publicly launched, first sales |
 | S15 | All user-facing text says "KodaQuant", professional branding | 🔄 S15.1 done |
