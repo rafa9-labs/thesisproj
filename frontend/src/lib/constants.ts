@@ -55,9 +55,15 @@ export const DEFAULTS = {
   useSlopeDiff: false,
   useRvFeatures: true,
 
-  useNews: false,
+  useNews: true,
   newsEventFlags: true,
   newsSentimentBackend: "vader" as const,
+
+  llmSentimentEnabled: true,
+  llmBackend: "ollama" as const,
+  llmModel: "llama3",
+  llmWeight: 0.7,
+  llmApiKey: "",
 
   startDate: "" as string,
   endDate: "" as string,
@@ -159,6 +165,11 @@ export const SELECT_OPTIONS = {
   newsSentimentBackend: [
     { value: "vader", label: "VADER (Rule-based)" },
     { value: "finbert", label: "finBERT (Neural)" },
+  ],
+  llmBackend: [
+    { value: "ollama", label: "Ollama (Local, Free)" },
+    { value: "openai", label: "OpenAI API" },
+    { value: "anthropic", label: "Anthropic API" },
   ],
   hpoIntensity: [
     { value: "light", label: "Light (1+1 trials)" },

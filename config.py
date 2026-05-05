@@ -328,6 +328,22 @@ PIPELINE_CONSTANTS = {
     "deep_cv_batch_size": 256,
     "deep_cv_patience": 6,
     "deep_cv_max_epochs": 12,
+
+    # News & sentiment
+    "use_news": True,
+    "news_sentiment_backend": "vader",
+    "news_volume_windows": [6, 24],
+    "news_event_flags": True,
+
+    # LLM sentiment
+    "llm_sentiment_enabled": True,
+    "llm_backend": "ollama",
+    "llm_model": "llama3",
+    "llm_api_key": "",
+    "llm_weight": 0.7,
+    "llm_batch_size": 10,
+    "llm_cache_ttl_hours": 720,
+    "llm_ollama_url": "http://localhost:11434",
 }
 
 # ---------------------------------------------------------------------------

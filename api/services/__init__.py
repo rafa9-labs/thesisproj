@@ -66,6 +66,34 @@ class JobManager:
                 r["result"] = json.loads(r["result"])
         return rows
 
+    def list_jobs_paginated(self, job_type: Optional[str] = None, limit: int = 50, offset: int = 0) -> tuple[List[Dict], int]:
+        count_sql = "SELECT COUNT(*) FROM jobs"
+        params_count: list = []
+        if job_type:
+            count_sql += " WHERE type = ?"
+            params_count.append(job_type)
+        with self.store._cursor() as (conn, cur):
+            cur.execute(count_sql, params_count)
+            total = cur.fetchone()[0]
+
+        sql = "SELECT * FROM jobs"
+        params: list = []
+        if job_type:
+            sql += " WHERE type = ?"
+            params.append(job_type)
+        sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        with self.store._cursor() as (conn, cur):
+            cur.execute(sql, params)
+            cols = [d[0] for d in cur.description]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+        for r in rows:
+            if r.get("config"):
+                r["config"] = json.loads(r["config"])
+            if r.get("result"):
+                r["result"] = json.loads(r["result"])
+        return rows, total
+
     def delete_job(self, job_id: str) -> bool:
         with self.store._cursor() as (conn, cur):
             cur.execute("DELETE FROM jobs WHERE id = ?", (job_id,))

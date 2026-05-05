@@ -233,6 +233,20 @@ export function useNewsEvents(start: number | null, end: number | null, impact?:
   });
 }
 
+export function useLiveSentiment(pair: string = "EURUSD") {
+  return useQuery({
+    queryKey: ["live-sentiment", pair],
+    queryFn: async () => {
+      const { data } = await apiClient.get<Record<string, any>>("/news/sentiment/live", {
+        params: { pair },
+      });
+      return data;
+    },
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+}
+
 export function useLicenseStatus() {
   return useQuery({
     queryKey: ["license-status"],
@@ -282,5 +296,16 @@ export function useStartTrial() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["license-status"] });
     },
+  });
+}
+
+export function useResultsHistory(params: { limit?: number; offset?: number; pair?: string; model?: string; sort_by?: string; sort_order?: string } = {}) {
+  return useQuery({
+    queryKey: ["results-history", params],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ results: import("./schemas").BacktestSummaryItem[]; total: number }>("/backtest/results/summary", { params });
+      return data;
+    },
+    staleTime: 10_000,
   });
 }

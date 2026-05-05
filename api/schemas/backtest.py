@@ -244,6 +244,30 @@ class BacktestListItem(BaseModel):
 
 class BacktestListResponse(BaseModel):
     jobs: List[BacktestListItem]
+    total: int = 0
+    offset: int = 0
+    limit: int = 50
+
+
+class BacktestSummaryItem(BaseModel):
+    job_id: str
+    created_at: str
+    pair: str
+    timeframe: str = ""
+    models: List[str]
+    sharpe: Optional[float] = None
+    total_return_pct: Optional[float] = None
+    win_rate: Optional[float] = None
+    max_drawdown_pct: Optional[float] = None
+    total_trades: Optional[int] = None
+    status: str = "completed"
+
+
+class BacktestSummaryResponse(BaseModel):
+    results: List[BacktestSummaryItem]
+    total: int = 0
+    offset: int = 0
+    limit: int = 50
 
 
 class ModelInfo(BaseModel):

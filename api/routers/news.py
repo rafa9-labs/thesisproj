@@ -91,3 +91,93 @@ def get_news_events(
 
     all_events.sort(key=lambda e: e.time)
     return NewsEventsResponse(events=all_events, count=len(all_events))
+
+
+@router.get("/sentiment/live")
+def get_live_sentiment(
+    pair: str = Query("EURUSD", description="Currency pair for sentiment analysis"),
+):
+    """Get live sentiment data for a currency pair.
+
+    Aggregates VADER sentiment from cached news articles and optionally
+    LLM-sentiment if configured.
+    """
+    try:
+        from news.scraper import NewsScraper
+        from news.sentiment import SentimentAnalyzer
+        scraper = NewsScraper()
+        articles = scraper.fetch_all()
+        vader_analyzer = SentimentAnalyzer(backend="vader")
+        scored_vader = vader_analyzer.score_articles(articles)
+
+        vader_directions = [s.score for _, s in scored_vader]
+        vader_magnitudes = [s.magnitude for _, s in scored_vader]
+
+        vader_avg = sum(vader_directions) / max(len(vader_directions), 1)
+        vader_mag = sum(vader_magnitudes) / max(len(vader_magnitudes), 1)
+
+        top_articles = []
+        for article, s in sorted(scored_vader, key=lambda x: abs(x[1].score), reverse=True)[:5]:
+            top_articles.append({
+                "title": article.title[:120],
+                "source": article.source,
+                "sentiment_score": round(s.score, 4),
+                "timestamp": article.timestamp.isoformat() if hasattr(article.timestamp, "isoformat") else str(article.timestamp),
+            })
+
+        result = {
+            "pairs": {
+                pair: {
+                    "vader_sentiment": round(vader_avg, 4),
+                    "vader_magnitude": round(vader_mag, 4),
+                    "blended_sentiment": round(vader_avg, 4),
+                    "article_count": len(articles),
+                    "last_updated": datetime.now(tz=timezone.utc).isoformat(),
+                }
+            },
+            "top_articles": top_articles,
+            "backend": "vader",
+            "model": "vader",
+        }
+
+        try:
+            from pipeline.llm.sentiment import LLMSentimentEngine
+            from config import PIPELINE_CONSTANTS
+            llm_config = {
+                "llm_sentiment_enabled": True,
+                "llm_backend": PIPELINE_CONSTANTS.get("llm_backend", "ollama"),
+                "llm_model": PIPELINE_CONSTANTS.get("llm_model", "llama3"),
+                "llm_api_key": PIPELINE_CONSTANTS.get("llm_api_key", ""),
+                "llm_weight": PIPELINE_CONSTANTS.get("llm_weight", 0.7),
+                "llm_ollama_url": PIPELINE_CONSTANTS.get("llm_ollama_url", "http://localhost:11434"),
+            }
+            engine = LLMSentimentEngine(config=llm_config)
+            scored_llm = engine.score_articles(articles[:5], pair=pair)
+            live = engine.get_live_sentiment(pair, articles[:5])
+            engine.close()
+
+            llm_w = llm_config["llm_weight"]
+            llm_dir = live.get("direction", 0.0)
+            blended = llm_w * llm_dir + (1 - llm_w) * vader_avg
+
+            result["pairs"][pair].update({
+                "llm_sentiment": round(llm_dir, 4),
+                "llm_confidence": round(live.get("confidence", 0.0), 4),
+                "llm_volatility": round(live.get("volatility", 0.3), 4),
+                "blended_sentiment": round(blended, 4),
+                "llm_weight": llm_w,
+                "currencies_affected": live.get("currencies_affected", []),
+            })
+            result["backend"] = llm_config["llm_backend"]
+            result["model"] = llm_config["llm_model"]
+        except Exception:
+            result["pairs"][pair]["llm_sentiment"] = None
+
+        return result
+    except Exception as e:
+        return {
+            "pairs": {},
+            "error": str(e)[:200],
+            "backend": "unavailable",
+            "model": "none",
+        }

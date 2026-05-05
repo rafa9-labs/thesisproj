@@ -206,7 +206,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
         else:
             evt_name = "model_phase"
         _pub(evt_name, job_id, data)
-        emit_event(evt_name, job_id=job_id, model=model, pct=pct, **data)
+        emit_event(evt_name, job_id=job_id, pct=pct, **data)
 
     all_metrics = []
 
@@ -234,6 +234,52 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 features_config=feat_cfg,
             )
             bt._progress_callback = _progress_cb
+
+            # --- Inject news & sentiment data if enabled ---
+            if feat_cfg.get("use_news", True):
+                try:
+                    from news.scraper import NewsScraper
+                    from news.sentiment import SentimentAnalyzer
+
+                    scraper = NewsScraper()
+                    articles = scraper.fetch_all()
+                    backend = feat_cfg.get("news_sentiment_backend", "vader")
+                    analyzer = SentimentAnalyzer(backend=backend)
+                    scored = analyzer.score_articles(articles)
+                    news_aggregated = analyzer.aggregate_to_df(scored, freq="1h")
+                    econ_events = scraper.economic_calendar_events()
+                    bt._news_aggregated = news_aggregated
+                    bt._news_economic_events = econ_events
+                    _pub("news_loaded", job_id, {"articles": len(articles), "backend": backend})
+                except Exception as _news_err:
+                    _pub("news_skip", job_id, {"reason": str(_news_err)[:200]})
+
+            # --- Inject LLM sentiment data if enabled ---
+            if feat_cfg.get("llm_sentiment_enabled", True):
+                try:
+                    from pipeline.llm.sentiment import LLMSentimentEngine
+
+                    llm_engine = LLMSentimentEngine(config=feat_cfg)
+                    llm_articles = getattr(bt, "_news_raw_articles", [])
+                    if not llm_articles:
+                        try:
+                            from news.scraper import NewsScraper
+                            scraper = NewsScraper()
+                            llm_articles = scraper.fetch_all()
+                        except Exception:
+                            pass
+
+                    pair_val = pair or "EURUSD"
+                    scored_llm = llm_engine.score_articles(llm_articles, pair=pair_val)
+                    llm_aggregated = llm_engine.aggregate_to_df(scored_llm, freq="1h")
+                    bt._llm_aggregated = llm_aggregated
+                    _pub("llm_loaded", job_id, {
+                        "articles": len(llm_articles),
+                        "backend": feat_cfg.get("llm_backend", "ollama"),
+                    })
+                    llm_engine.close()
+                except Exception as _llm_err:
+                    _pub("llm_skip", job_id, {"reason": str(_llm_err)[:200]})
 
             base_cfg = deepcopy(CLASS_DEFAULTS["features"])
             base_cfg.update(deepcopy(CLASS_DEFAULTS["cv"]))
@@ -486,8 +532,8 @@ def _download_data_impl(job_id: str, pair: str, years: int = 10):
 # --- Public API: dispatch to Celery or in-process depending on availability ---
 
 if _celery_available and celery_app is not None:
-    run_backtest_task = celery_app.task(bind=True, name="run_backtest")(_run_backtest_impl)
-    download_data_task = celery_app.task(bind=True, name="download_data")(_download_data_impl)
+    run_backtest_task = celery_app.task(name="run_backtest")(_run_backtest_impl)
+    download_data_task = celery_app.task(name="download_data")(_download_data_impl)
 else:
     class _SyncTask:
         """Celery-compatible task interface for synchronous (desktop) execution."""

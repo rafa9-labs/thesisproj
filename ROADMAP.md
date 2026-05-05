@@ -656,51 +656,72 @@
 
 ---
 
-## Sprint 12: Commercial Infrastructure ⬜ NOT STARTED
+## Sprint 12: Product Intelligence & UX Overhaul ⬜ NOT STARTED
 
-> **Goal**: Everything needed to sell and support the product via Paddle.
-> **Pricing**: Free trial (14 days) → Pro (£149 one-time + £49/year updates) → Team (£299 + £99/year)
-> **Est**: 8-10h
+> **Goal**: Make news features actually work and matter for trading. Add LLM-driven sentiment as a first-class feature. Redesign Dashboard and Results into what a trader actually needs.
+> **Branch**: `feature/s12-product-intelligence`
+> **Est**: 15-16h
 
-- [ ] **S12.1** Paddle product & pricing setup
-  - Paddle product page: FX Backtester Pro
-  - Pricing tiers configured in Paddle dashboard
-  - Discount codes for launch promotion
-  - License email templates (welcome, renewal reminder)
+- [ ] **S12.1** Fix broken news pipeline wiring
+  - `api/tasks.py`: before `_run_backtest_impl()`, call `NewsScraper().fetch_all()` → `SentimentAnalyzer(backend=cfg["news_sentiment_backend"]).score_articles()` → `aggregate_to_df()` → inject `bt._news_aggregated` and `bt._news_economic_events`
+  - `pipeline/backtester/features_mixin.py`: when `use_news=True` and no data injected, log warning instead of silently skipping; default ON when data available
+  - `config.py`: change `use_news` default to `True`; thread `news_sentiment_backend` through to `SentimentAnalyzer`
+  - Integration test: backtest with `use_news=True` asserting news feature columns appear in output
+  - **Files**: `api/tasks.py`, `pipeline/backtester/features_mixin.py`, `config.py`, `news/features.py`
   - **Est**: 2h
 
-- [ ] **S12.2** Landing page / marketing website
-  - Next.js or Astro static site
-  - Hero section with demo GIF/video
-  - Features grid, pricing table, testimonials placeholder
-  - "Buy Now" button → Paddle checkout
-  - Blog section for SEO
-  - **Files**: `website/` package
+- [ ] **S12.2a** LLM sentiment engine — core module
+  - New `pipeline/llm/` package (`__init__.py`, `sentiment.py`, `prompts.py`)
+  - Abstract `LLMSentimentBackend` with `OllamaBackend` (default), `OpenAIBackend`, `AnthropicBackend`
+  - Structured prompt per article → JSON output: `{direction: float[-1,1], confidence: float[0,1], volatility: float[0,1], currencies: [str]}`
+  - Per-article caching: SQLite table `llm_sentiment_cache` (article hash → scores, process once, reuse forever)
+  - Fallback: if Ollama unavailable, fall back to VADER silently
+  - Config keys: `llm_sentiment_enabled=True`, `llm_backend="ollama"`, `llm_model="llama3"`, `llm_api_key=""`, `llm_weight=0.7`, `llm_batch_size=10`, `llm_cache_ttl_hours=720`
+  - **Files**: `pipeline/llm/__init__.py`, `pipeline/llm/sentiment.py`, `pipeline/llm/prompts.py`, `config.py`
   - **Est**: 3h
 
-- [ ] **S12.3** Documentation site
-  - MkDocs Material theme
-  - Getting started guide
-  - API reference (auto-generated from FastAPI schemas)
-  - Execution models guide
-  - FAQ / troubleshooting
-  - **Files**: `docs/` directory
+- [ ] **S12.2b** LLM sentiment — feature integration + blending
+  - Extend `news/features.py`: new `merge_llm_features()` that left-joins LLM sentiment columns onto OHLC bars
+  - New feature columns: `llm_sentiment`, `llm_confidence`, `llm_volatility`, `llm_sentiment_ma_6`, `llm_sentiment_ma_24`
+  - Blending formula: `final_sentiment = llm_weight * llm_sentiment + (1 - llm_weight) * vader_sentiment`
+  - Wire into `features_mixin.py`: if `llm_sentiment_enabled`, call `merge_llm_features()` after VADER/finBERT merge
+  - Wire into `api/tasks.py`: call LLM analysis after news fetch, before backtester run
+  - **Files**: `news/features.py`, `pipeline/backtester/features_mixin.py`, `api/tasks.py`
   - **Est**: 2h
 
-- [ ] **S12.4** Legal & compliance
-  - Terms of Service (software license agreement)
-  - Privacy Policy
-  - Disclaimer (not financial advice)
-  - EULA for commercial use
-  - **Files**: `legal/` directory
+- [ ] **S12.2c** LLM sentiment — frontend config + API endpoints
+  - `frontend/src/pages/Backtest/FeaturesPanel.tsx`: add LLM toggle, backend dropdown (Ollama/OpenAI/Anthropic), model name input, weight slider (0-1)
+  - `api/routers/news.py`: add `GET /news/sentiment/live` endpoint returning current aggregate sentiment per pair
+  - `api/schemas/backtest.py`: add LLM config fields
+  - `frontend/src/api/queries.ts`: add `useLiveSentiment()` hook
+  - `frontend/src/lib/constants.ts`: add LLM defaults
+  - **Files**: `frontend/src/pages/Backtest/FeaturesPanel.tsx`, `api/routers/news.py`, `api/schemas/backtest.py`, `frontend/src/api/queries.ts`, `frontend/src/lib/constants.ts`
+  - **Est**: 2h
+
+- [ ] **S12.2d** LLM sentiment — tests
+  - `tests/test_llm_sentiment.py`: mock Ollama responses, test caching, test blending, test fallback to VADER
+  - Test per-article scoring, batch aggregation, walk-forward integrity
+  - **Files**: `tests/test_llm_sentiment.py`
   - **Est**: 1h
 
-- [ ] **S12.5** Analytics & monitoring
-  - Anonymous usage telemetry (model usage, feature adoption)
-  - Download tracking via Paddle webhooks
-  - Conversion funnel monitoring (trial → paid)
-  - **Files**: `api/middleware/analytics.py`
-  - **Est**: 1h
+- [ ] **S12.3** Results history browser
+  - New `ResultsHistoryPage` component at `/results` route: full-width table of ALL completed backtests
+  - Columns: Date, Pair, Models, Sharpe, Return %, Win Rate, Max DD, Status, Actions
+  - Sortable by any column, filterable (pair, model, status), searchable
+  - Click row → `/results/:jobId` for detailed view
+  - Checkbox select → bulk export (CSV + JSON of selected results)
+  - API: `GET /backtest/results/summary` (lightweight, no equity curves/trades); pagination (`offset`/`limit`) on existing `GET /backtest`
+  - Routing: `/results` → `ResultsHistoryPage`, `/results/:jobId` → existing `ResultsPage`
+  - **Files**: new `frontend/src/pages/Results/ResultsHistoryPage.tsx`, `api/routers/backtest.py`, `api/schemas/backtest.py`, `frontend/src/App.tsx`, `frontend/src/api/queries.ts`
+  - **Est**: 3h
+
+- [ ] **S12.4** Dashboard redesign — live command center
+  - New `QuickActions` component: 2-3 buttons (Quick Run with last-used config, Re-run Last)
+  - New `MarketPulsePanel` component: live sentiment gauge (VADER + LLM blended), last 5 high-impact news with LLM scores, next 7 days economic calendar
+  - Restructure `DashboardPage`: Quick Actions → KPI Bar → Recent Activity + Market Pulse (side-by-side) → Performance Heatmap
+  - Move config-heavy controls to Backtest page; Dashboard becomes info-first, action-light
+  - **Files**: `frontend/src/pages/Dashboard/DashboardPage.tsx` (restructure), new `Dashboard/QuickActions.tsx`, new `Dashboard/MarketPulsePanel.tsx`, `api/routers/news.py` (live sentiment endpoint)
+  - **Est**: 3h
 
 ---
 
@@ -1103,7 +1124,7 @@ cd frontend && npm run dev
 | **S9** | Electron Desktop Shell | 10-12h | ✅ COMPLETE (S9.1-9.5 all done) |
 | **S10** | Security & Licensing (Paddle) | 12-15h | ✅ DONE (2026-05-04) |
 | **S11** | Installer & Auto-Update | 6-8h | ✅ COMPLETE (2026-05-04) |
-| **S12** | Commercial Infrastructure | 8-10h | TODO |
+| **S12** | Product Intelligence & UX Overhaul | 15-16h | TODO |
 | **S13** | Beta & Launch | 6-8h | TODO |
 | **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
 | **S15** | KodaQuant Branding | 4-6h | 🔄 PARTIAL (S15.1 name update done, S15.2-4 remaining) |
@@ -1113,6 +1134,7 @@ cd frontend && npm run dev
 | **S19** | Ensemble Models & Model Extensibility | 8-10h | TODO |
 | **S20** | LLM / AI Integration & Intelligent Trading | 10-14h | TODO |
 | **S21** | Live Trading with OANDA | 12-16h | TODO |
+| **S22** | Commercial Infrastructure (deferred from S12) | 8-10h | TODO |
 
 ## Completion Criteria Summary
 
@@ -1126,7 +1148,7 @@ cd frontend && npm run dev
 | S9 | Electron wraps React + Python into desktop app | ✅ COMPLETE (S9.1-9.5 all done) |
 | S10 | Code protected, Paddle licensing active, feature gating works | ✅ DONE
 | S11 | Windows installer + auto-update functional | ✅ COMPLETE (2026-05-04) |
-| S12 | Product listed on Paddle, landing page live, docs published |
+| S12 | News pipeline works end-to-end, LLM sentiment produces ML features, Results shows all history, Dashboard is a live command center |
 | S13 | Beta tested, publicly launched, first sales |
 | S15 | All user-facing text says "KodaQuant", professional branding | 🔄 S15.1 done |
 | S16 | Overfitting detection works, backtest summary is human-readable, training is transparent |
@@ -1135,3 +1157,53 @@ cd frontend && npm run dev
 | S19 | All ensemble types working, plugin system for custom models |
 | S20 | LLM commentary, strategy suggestions, AI-augmented features |
 | S21 | Paper trading on OANDA demo, live trading with risk controls |
+| S22 | Product listed on Paddle, landing page live, docs published, legal complete, analytics active |
+
+---
+
+## Sprint 22: Commercial Infrastructure ⬜ DEFERRED FROM S12
+
+> **Goal**: Everything needed to sell and support the product via Paddle.
+> **Pricing**: Free trial (14 days) → Pro (£149 one-time + £49/year updates) → Team (£299 + £99/year)
+> **Est**: 8-10h
+> **Note**: Originally S12, deferred to focus on product intelligence features first.
+
+- [ ] **S22.1** Paddle product & pricing setup
+  - Paddle product page: KodaQuant Pro
+  - Pricing tiers configured in Paddle dashboard
+  - Discount codes for launch promotion
+  - License email templates (welcome, renewal reminder)
+  - **Est**: 2h
+
+- [ ] **S22.2** Landing page / marketing website
+  - Next.js or Astro static site
+  - Hero section with demo GIF/video
+  - Features grid, pricing table, testimonials placeholder
+  - "Buy Now" button → Paddle checkout
+  - Blog section for SEO
+  - **Files**: `website/` package
+  - **Est**: 3h
+
+- [ ] **S22.3** Documentation site
+  - MkDocs Material theme
+  - Getting started guide
+  - API reference (auto-generated from FastAPI schemas)
+  - Execution models guide
+  - FAQ / troubleshooting
+  - **Files**: `docs/` directory
+  - **Est**: 2h
+
+- [ ] **S22.4** Legal & compliance
+  - Terms of Service (software license agreement)
+  - Privacy Policy
+  - Disclaimer (not financial advice)
+  - EULA for commercial use
+  - **Files**: `legal/` directory
+  - **Est**: 1h
+
+- [ ] **S22.5** Analytics & monitoring
+  - Anonymous usage telemetry (model usage, feature adoption)
+  - Download tracking via Paddle webhooks
+  - Conversion funnel monitoring (trial → paid)
+  - **Files**: `api/middleware/analytics.py`
+  - **Est**: 1h

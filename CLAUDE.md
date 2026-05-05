@@ -204,13 +204,13 @@ Tools: fetch_html, fetch_markdown, fetch_txt, fetch_json, fetch_readable, fetch_
 | **Sprint 9** | Electron Desktop Shell | 🔄 SCAFFOLDED | 10-12h |
 | **Sprint 10** | Security & Licensing (Paddle) | ⬜ TODO | 12-15h |
 | **Sprint 11** | Installer & Auto-Update | ⬜ TODO | 6-8h |
-| **Sprint 12** | Commercial Infrastructure | ⬜ TODO | 8-10h |
+| **Sprint 12** | Product Intelligence & UX Overhaul | ⬜ TODO | 15-16h |
 | **Sprint 13** | Beta & Launch | ⬜ TODO | 6-8h |
 
 **Product target**: Commercial Electron desktop app (React + FastAPI + Python), sold via Paddle.
 **Pricing**: Hybrid — one-time purchase + annual updates subscription.
 
-**Next task**: Sprint 9 — Electron Desktop Shell (S9.4 PyInstaller + S9.5 build pipeline)
+**Next task**: Sprint 12 — Product Intelligence & UX Overhaul (S12.1 fix news pipeline → S12.2 LLM sentiment → S12.3 Results history → S12.4 Dashboard redesign)
 
 See `ROADMAP.md` for full sprint details with sub-tasks and file references.
 

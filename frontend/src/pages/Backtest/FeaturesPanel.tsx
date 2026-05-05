@@ -234,6 +234,67 @@ export function FeaturesPanel() {
                   onChange={(v) => setField("newsSentimentBackend", v as "vader" | "finbert")}
                 />
               </div>
+
+              {/* LLM Sentiment */}
+              {state.llmSentimentEnabled !== undefined && (
+                <div className="flex flex-col gap-4 pl-4 border-l-2 border-cyan-500/30 mt-2">
+                  <ParamToggle
+                    label="LLM Sentiment"
+                    checked={state.llmSentimentEnabled}
+                    description="Use Ollama/OpenAI/Anthropic LLM to score news with directional sentiment. Falls back to VADER if unavailable."
+                    onChange={(v) => setField("llmSentimentEnabled", v)}
+                  />
+                  {state.llmSentimentEnabled && (
+                    <>
+                      <div className="max-w-sm">
+                        <ParamSelect
+                          label="LLM Backend"
+                          value={state.llmBackend}
+                          options={[...SELECT_OPTIONS.llmBackend]}
+                          description={state.llmBackend === "ollama" ? "Free, local, private. Requires Ollama running." : "Paid, cloud. Requires API key."}
+                          onChange={(v) => setField("llmBackend", v as "ollama" | "openai" | "anthropic")}
+                        />
+                      </div>
+                      {(state.llmBackend === "openai" || state.llmBackend === "anthropic") && (
+                        <div className="max-w-sm">
+                          <label className="text-sm text-gray-400 block mb-1">API Key</label>
+                          <input
+                            type="password"
+                            value={state.llmApiKey || ""}
+                            placeholder={state.llmBackend === "openai" ? "sk-..." : "sk-ant-..."}
+                            onChange={(e) => setField("llmApiKey", e.target.value)}
+                            className="w-full rounded-md border border-gray-600 bg-gray-800 px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                      )}
+                      <div className="max-w-sm">
+                        <label className="text-sm text-gray-400 block mb-1">Model</label>
+                        <input
+                          type="text"
+                          value={state.llmModel}
+                          placeholder={state.llmBackend === "ollama" ? "llama3" : state.llmBackend === "openai" ? "gpt-4o-mini" : "claude-3-haiku-20240307"}
+                          onChange={(e) => setField("llmModel", e.target.value)}
+                          className="w-full rounded-md border border-gray-600 bg-gray-800 px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                      <div className="max-w-sm">
+                        <label className="text-sm text-gray-400 block mb-1">
+                          LLM Weight: {Number(state.llmWeight).toFixed(1)} vs VADER {(((1 - Number(state.llmWeight)) * 100)).toFixed(0)}%
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.1"
+                          value={state.llmWeight}
+                          onChange={(e) => setField("llmWeight", parseFloat(e.target.value))}
+                          className="w-full"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

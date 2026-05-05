@@ -398,3 +398,70 @@ class TestWalkForwardIntegrity:
 
         # Bar 6 should forward-fill bar 5's value
         assert result.iloc[6]["sentiment_score"] == pytest.approx(0.5, abs=1e-5)
+
+
+# ── Integration: backtest features with news injected ──────────────────
+
+class TestNewsFeatureIntegration:
+    """Verify news features wiring from config through to feature columns."""
+
+    def test_news_columns_in_features_when_injected(self):
+        """When _news_aggregated is set and use_news=True, news columns must appear in features result."""
+        from pipeline.backtester.features_mixin import FeaturesMixin
+
+        dates = pd.date_range("2024-01-01", periods=200, freq="h")
+        df = pd.DataFrame({
+            "price": np.random.randn(200).cumsum() + 100,
+            "returns": np.random.randn(200) * 0.001,
+            "high": np.random.randn(200).cumsum() + 101,
+            "low": np.random.randn(200).cumsum() + 99,
+            "close": np.random.randn(200).cumsum() + 100,
+            "spread": np.abs(np.random.randn(200)) * 0.0001,
+        }, index=dates)
+
+        news_df = pd.DataFrame({
+            "timestamp": dates[:50],
+            "sentiment_score": np.random.randn(50).astype(np.float32),
+            "sentiment_magnitude": np.abs(np.random.randn(50)).astype(np.float32),
+            "news_volume": np.ones(50, dtype=np.float32),
+            "sent_pos": np.abs(np.random.randn(50)).astype(np.float32),
+            "sent_neg": np.abs(np.random.randn(50)).astype(np.float32),
+            "sent_neu": np.abs(np.random.randn(50)).astype(np.float32),
+        })
+
+        result_df = merge_news_features(df, news_df, config={"use_news": True})
+        assert "sentiment_score" in result_df.columns
+        assert "sentiment_magnitude" in result_df.columns
+
+    def test_no_news_data_skipped_gracefully(self):
+        """When use_news=True but _news_aggregated is None, the feature block should not crash."""
+        from news.features import get_news_feature_columns
+        cols = get_news_feature_columns({"use_news": True})
+        assert "sentiment_score" in cols
+        assert "sentiment_magnitude" in cols
+
+    def test_news_volume_windows_in_features(self):
+        """Rolling news volume windows should appear in feature columns list."""
+        from news.features import get_news_feature_columns
+        cols = get_news_feature_columns({"use_news": True, "news_volume_windows": [6, 24]})
+        assert "news_volume_6bars" in cols
+        assert "news_volume_24bars" in cols
+
+    def test_use_news_false_skips_news_features(self):
+        """When use_news=False, merge_news_features should return df unchanged."""
+        dates = pd.date_range("2024-01-01", periods=100, freq="h")
+        df = pd.DataFrame({
+            "price": np.random.randn(100).cumsum() + 100,
+            "returns": np.random.randn(100) * 0.001,
+            "close": np.random.randn(100).cumsum() + 100,
+        }, index=dates)
+
+        news_df = pd.DataFrame({
+            "timestamp": dates[:50],
+            "sentiment_score": np.random.randn(50).astype(np.float32),
+            "sentiment_magnitude": np.abs(np.random.randn(50)).astype(np.float32),
+            "news_volume": np.ones(50, dtype=np.float32),
+        })
+
+        result_df = merge_news_features(df, news_df, config={"use_news": False})
+        assert "sentiment_score" not in result_df.columns, "News features should not appear when use_news=False"

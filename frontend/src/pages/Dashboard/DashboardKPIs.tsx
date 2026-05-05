@@ -2,44 +2,51 @@ import { useMemo } from "react";
 import type { JobResults } from "@/api/schemas";
 
 export interface DashboardKPIValues {
-  totalRuns: number;
-  bestSharpe: number | null;
+  avgSharpe: number | null;
   avgWinRate: number | null;
-  bestReturn: number | null;
+  profitableMonthsPct: number | null;
 }
 
 export function computeDashboardKPIs(allResults: JobResults[]): DashboardKPIValues {
   if (allResults.length === 0) {
-    return { totalRuns: 0, bestSharpe: null, avgWinRate: null, bestReturn: null };
+    return { avgSharpe: null, avgWinRate: null, profitableMonthsPct: null };
   }
 
-  let totalRuns = 0;
-  let bestSharpe: number | null = null;
+  let sharpeSum = 0;
+  let sharpeCount = 0;
   let winRateSum = 0;
   let winRateCount = 0;
-  let bestReturn: number | null = null;
+  let profitableMonths = 0;
+  let totalMonths = 0;
 
   for (const result of allResults) {
     for (const m of result.metrics ?? []) {
-      totalRuns++;
       if (m.sharpe != null) {
-        if (bestSharpe === null || m.sharpe > bestSharpe) bestSharpe = m.sharpe;
+        sharpeSum += m.sharpe;
+        sharpeCount++;
       }
       if (m.win_rate != null) {
         winRateSum += m.win_rate;
         winRateCount++;
       }
-      if (m.total_return_pct != null) {
-        if (bestReturn === null || m.total_return_pct > bestReturn) bestReturn = m.total_return_pct;
+    }
+    for (const m of result.metrics ?? []) {
+      const monthly = m.monthly_results;
+      if (monthly) {
+        for (const month of monthly) {
+          totalMonths++;
+          if (month.return_pct != null && month.return_pct > 0) {
+            profitableMonths++;
+          }
+        }
       }
     }
   }
 
   return {
-    totalRuns,
-    bestSharpe,
+    avgSharpe: sharpeCount > 0 ? sharpeSum / sharpeCount : null,
     avgWinRate: winRateCount > 0 ? winRateSum / winRateCount : null,
-    bestReturn,
+    profitableMonthsPct: totalMonths > 0 ? profitableMonths / totalMonths : null,
   };
 }
 

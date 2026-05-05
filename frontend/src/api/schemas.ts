@@ -116,6 +116,20 @@ export interface JobSummary {
   created_at: string;
 }
 
+export interface BacktestSummaryItem {
+  job_id: string;
+  created_at: string;
+  pair: string;
+  timeframe: string;
+  models: string[];
+  sharpe: number | null;
+  total_return_pct: number | null;
+  win_rate: number | null;
+  max_drawdown_pct: number | null;
+  total_trades: number | null;
+  status: string;
+}
+
 export interface JobStatus {
   job_id: string;
   type: string;

@@ -8,6 +8,9 @@ import { WelcomePage } from "./pages/Welcome/WelcomePage";
 const ResultsPage = lazy(() =>
   import("./pages/Results/ResultsPage").then((m) => ({ default: m.ResultsPage })),
 );
+const ResultsHistoryPage = lazy(() =>
+  import("./pages/Results/ResultsHistoryPage").then((m) => ({ default: m.ResultsHistoryPage })),
+);
 const ComparePage = lazy(() =>
   import("./pages/Compare/ComparePage").then((m) => ({ default: m.ComparePage })),
 );
@@ -53,7 +56,7 @@ export default function App() {
         <Route path="backtest" element={<BacktestPage />} />
         <Route
           path="results"
-          element={<Suspense fallback={<PageSpinner />}><ResultsPage /></Suspense>}
+          element={<Suspense fallback={<PageSpinner />}><ResultsHistoryPage /></Suspense>}
         />
         <Route
           path="results/:jobId"

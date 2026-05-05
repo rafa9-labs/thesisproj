@@ -719,13 +719,19 @@ class FeaturesMixin:
                             df_out[col] = df_out[col].ffill()
 
         # ---------- 8b) News & Sentiment features (optional) ----------
-        use_news = bool(cfg.get("use_news", False))
+        use_news = bool(cfg.get("use_news", True))
         if use_news and not base_only:
             try:
                 from news.features import merge_news_features, get_news_feature_columns
                 news_agg = getattr(self, "_news_aggregated", None)
                 econ_events = getattr(self, "_news_economic_events", None)
-                if news_agg is not None:
+                if news_agg is None:
+                    import logging as _logging
+                    _logging.getLogger(__name__).warning(
+                        "use_news=True but no news data injected into backtester — "
+                        "skipping news features. Ensure api/tasks.py fetches news before running."
+                    )
+                else:
                     df_out = merge_news_features(
                         df_out, news_agg,
                         events=econ_events,
@@ -738,6 +744,26 @@ class FeaturesMixin:
                             features.append(c)
             except Exception as _news_exc:
                 _debug_once("news_features", _news_exc)
+
+        # ---------- 8c) LLM Sentiment features (optional) ----------
+        use_llm = bool(cfg.get("llm_sentiment_enabled", True))
+        if use_llm and not base_only and use_news:
+            try:
+                from news.features import merge_llm_features, get_llm_feature_columns
+                llm_agg = getattr(self, "_llm_aggregated", None)
+                if llm_agg is None:
+                    import logging as _logging
+                    _logging.getLogger(__name__).info(
+                        "llm_sentiment_enabled=True but no LLM data injected — skipping LLM features."
+                    )
+                else:
+                    df_out = merge_llm_features(df_out, llm_agg, config=cfg)
+                    llm_feat_cols = get_llm_feature_columns(cfg)
+                    for c in llm_feat_cols:
+                        if c in df_out.columns and c not in features:
+                            features.append(c)
+            except Exception as _llm_exc:
+                _debug_once("llm_features", _llm_exc)
 
         dropna_subset = [f for f in features if f in df_out.columns]
         if dropna_subset:

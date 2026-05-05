@@ -18,6 +18,8 @@ from api.schemas.backtest import (
     BacktestResultMetrics,
     BacktestStatusResponse,
     BacktestSubmitResponse,
+    BacktestSummaryItem,
+    BacktestSummaryResponse,
     CrossPairCurve,
     CrossPairCurvesResponse,
     DateRangePreset,
@@ -212,10 +214,13 @@ def submit_backtest(req: BacktestRequest):
 
 
 @router.get("", response_model=BacktestListResponse)
-def list_backtests(limit: int = Query(50, ge=1, le=200)):
+def list_backtests(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
     store = get_data_store()
     jm = JobManager(store)
-    jobs = jm.list_jobs(job_type="backtest", limit=limit)
+    jobs, total = jm.list_jobs_paginated(job_type="backtest", limit=limit, offset=offset)
 
     items = []
     for j in jobs:
@@ -229,97 +234,7 @@ def list_backtests(limit: int = Query(50, ge=1, le=200)):
             created_at=j["created_at"],
         ))
 
-    return BacktestListResponse(jobs=items)
-
-
-@router.get("/{job_id}", response_model=BacktestStatusResponse)
-def get_backtest_status(job_id: str):
-    store = get_data_store()
-    jm = JobManager(store)
-    job = jm.get_job(job_id)
-    if job is None:
-        raise HTTPException(404, f"Job {job_id} not found")
-
-    return BacktestStatusResponse(
-        job_id=job["id"],
-        type=job["type"],
-        status=job["status"],
-        created_at=job["created_at"],
-        updated_at=job["updated_at"],
-        error=job.get("error"),
-        progress=job.get("result"),
-    )
-
-
-def _coerce_curve(raw):
-    if raw is None:
-        return None
-    if not isinstance(raw, list) or len(raw) == 0:
-        return raw if isinstance(raw, list) else None
-    first = raw[0]
-    if isinstance(first, dict):
-        return raw
-    if isinstance(first, (int, float)):
-        return [{"time": i, "value": float(v)} for i, v in enumerate(raw)]
-    return raw
-
-
-@router.get("/{job_id}/results", response_model=BacktestResultsResponse)
-def get_backtest_results(job_id: str):
-    store = get_data_store()
-    jm = JobManager(store)
-    job = jm.get_job(job_id)
-    if job is None:
-        raise HTTPException(404, f"Job {job_id} not found")
-    if job["status"] != "completed":
-        raise HTTPException(400, f"Job status is '{job['status']}', not 'completed'")
-
-    result = job.get("result", {})
-    cfg = job.get("config", {})
-    raw_metrics = result.get("metrics", [])
-
-    metrics = []
-    for m in raw_metrics:
-        metrics.append(BacktestResultMetrics(
-            model=m.get("model", ""),
-            sharpe=m.get("sharpe"),
-            sortino=m.get("sortino"),
-            max_drawdown=m.get("max_drawdown"),
-            total_return_pct=m.get("total_return_pct"),
-            cagr=m.get("cagr"),
-            calmar_ratio=m.get("calmar_ratio"),
-            win_rate=m.get("win_rate"),
-            total_trades=m.get("total_trades"),
-            profit_factor=m.get("profit_factor"),
-            avg_trade=m.get("avg_trade"),
-            active_rate=m.get("active_rate"),
-            directional_accuracy=m.get("directional_accuracy"),
-            precision_macro=m.get("precision_macro"),
-            f1_macro=m.get("f1_macro"),
-            equity_curve=_coerce_curve(m.get("equity_curve")),
-            buy_hold_curve=_coerce_curve(m.get("buy_hold_curve")),
-            drawdown_curve=_coerce_curve(m.get("drawdown_curve")),
-            monthly_results=m.get("monthly_results"),
-            trades=m.get("trades"),
-            hpo_param_importance=m.get("hpo_param_importance"),
-            hpo_trials=m.get("hpo_trials"),
-        ))
-
-    return BacktestResultsResponse(
-        job_id=job_id,
-        pair=result.get("pair", cfg.get("pair", "")),
-        models=result.get("models", cfg.get("models", [])),
-        config=cfg,
-        metrics=metrics,
-    )
-
-
-@router.delete("/{job_id}", status_code=204)
-def delete_backtest(job_id: str):
-    store = get_data_store()
-    jm = JobManager(store)
-    if not jm.delete_job(job_id):
-        raise HTTPException(404, f"Job {job_id} not found")
+    return BacktestListResponse(jobs=items, total=total, offset=offset, limit=limit)
 
 
 @router.get("/heatmap", response_model=HeatmapResponse)
@@ -414,3 +329,154 @@ def get_cross_pair_curves(
             )
 
     return CrossPairCurvesResponse(model=model, curves=curves)
+
+
+@router.get("/results/summary", response_model=BacktestSummaryResponse)
+def get_results_summary(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    pair: str = Query("", description="Filter by pair"),
+    model: str = Query("", description="Filter by model"),
+    sort_by: str = Query("created_at", description="Sort column: created_at, sharpe, total_return_pct, win_rate, max_drawdown_pct"),
+    sort_order: str = Query("desc", description="Sort order: asc or desc"),
+):
+    store = get_data_store()
+    jm = JobManager(store)
+
+    all_jobs, _ = jm.list_jobs_paginated(job_type="backtest", limit=2000, offset=0)
+
+    results = []
+    for job in all_jobs:
+        if job.get("status") != "completed":
+            continue
+        result = job.get("result", {})
+        cfg = job.get("config", {})
+        job_pair = result.get("pair") or cfg.get("pair", "")
+        job_models = result.get("models") or cfg.get("models", [])
+
+        if pair and job_pair != pair:
+            continue
+        if model and model not in job_models:
+            continue
+
+        raw_metrics = result.get("metrics", [])
+        for m in raw_metrics:
+            results.append(BacktestSummaryItem(
+                job_id=job["id"],
+                created_at=job["created_at"],
+                pair=job_pair,
+                timeframe=cfg.get("timeframe", ""),
+                models=job_models,
+                sharpe=m.get("sharpe"),
+                total_return_pct=m.get("total_return_pct"),
+                win_rate=m.get("win_rate"),
+                max_drawdown_pct=m.get("max_drawdown"),
+                total_trades=m.get("total_trades"),
+                status=job["status"],
+            ))
+
+    valid_sort_cols = {
+        "created_at": "created_at",
+        "sharpe": "sharpe",
+        "total_return_pct": "total_return_pct",
+        "win_rate": "win_rate",
+        "max_drawdown_pct": "max_drawdown_pct",
+    }
+    sort_col = valid_sort_cols.get(sort_by, "created_at")
+    reverse = sort_order == "desc"
+    results.sort(key=lambda x: getattr(x, sort_col) if getattr(x, sort_col) is not None else 0.0, reverse=reverse)
+
+    total = len(results)
+    paged = results[offset : offset + limit]
+
+    return BacktestSummaryResponse(results=paged, total=total, offset=offset, limit=limit)
+
+
+@router.get("/{job_id}", response_model=BacktestStatusResponse)
+def get_backtest_status(job_id: str):
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+
+    return BacktestStatusResponse(
+        job_id=job["id"],
+        type=job["type"],
+        status=job["status"],
+        created_at=job["created_at"],
+        updated_at=job["updated_at"],
+        error=job.get("error"),
+        progress=job.get("result"),
+    )
+
+
+def _coerce_curve(raw):
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or len(raw) == 0:
+        return raw if isinstance(raw, list) else None
+    first = raw[0]
+    if isinstance(first, dict):
+        return raw
+    if isinstance(first, (int, float)):
+        return [{"time": i, "value": float(v)} for i, v in enumerate(raw)]
+    return raw
+
+
+@router.get("/{job_id}/results", response_model=BacktestResultsResponse)
+def get_backtest_results(job_id: str):
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if job["status"] != "completed":
+        raise HTTPException(400, f"Job status is '{job['status']}', not 'completed'")
+
+    result = job.get("result", {})
+    cfg = job.get("config", {})
+    raw_metrics = result.get("metrics", [])
+
+    metrics = []
+    for m in raw_metrics:
+        metrics.append(BacktestResultMetrics(
+            model=m.get("model", ""),
+            sharpe=m.get("sharpe"),
+            sortino=m.get("sortino"),
+            max_drawdown=m.get("max_drawdown"),
+            total_return_pct=m.get("total_return_pct"),
+            cagr=m.get("cagr"),
+            calmar_ratio=m.get("calmar_ratio"),
+            win_rate=m.get("win_rate"),
+            total_trades=m.get("total_trades"),
+            profit_factor=m.get("profit_factor"),
+            avg_trade=m.get("avg_trade"),
+            active_rate=m.get("active_rate"),
+            directional_accuracy=m.get("directional_accuracy"),
+            precision_macro=m.get("precision_macro"),
+            f1_macro=m.get("f1_macro"),
+            equity_curve=_coerce_curve(m.get("equity_curve")),
+            buy_hold_curve=_coerce_curve(m.get("buy_hold_curve")),
+            drawdown_curve=_coerce_curve(m.get("drawdown_curve")),
+            monthly_results=m.get("monthly_results"),
+            trades=m.get("trades"),
+            hpo_param_importance=m.get("hpo_param_importance"),
+            hpo_trials=m.get("hpo_trials"),
+        ))
+
+    return BacktestResultsResponse(
+        job_id=job_id,
+        pair=result.get("pair", cfg.get("pair", "")),
+        models=result.get("models", cfg.get("models", [])),
+        config=cfg,
+        metrics=metrics,
+    )
+
+
+@router.delete("/{job_id}", status_code=204)
+def delete_backtest(job_id: str):
+    store = get_data_store()
+    jm = JobManager(store)
+    if not jm.delete_job(job_id):
+        raise HTTPException(404, f"Job {job_id} not found")
