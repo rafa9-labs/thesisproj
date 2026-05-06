@@ -8,6 +8,7 @@ import {
   Settings,
   PanelLeftOpen,
   PanelLeftClose,
+  Radio,
 } from "lucide-react";
 import { KodaLogo } from "@/components/shared/KodaLogo";
 import { layout } from "@/lib/tokens";
@@ -41,6 +42,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Intelligence",
     items: [
+      { icon: Radio, label: "Live Monitor", path: "/live" },
       { icon: Newspaper, label: "News", path: "/news" },
     ],
   },

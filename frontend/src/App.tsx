@@ -20,6 +20,9 @@ const NewsPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./pages/Settings/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
+const LiveMonitorPage = lazy(() =>
+  import("./pages/Live/LiveMonitorPage").then((m) => ({ default: m.LiveMonitorPage })),
+);
 
 function PageSpinner() {
   return (
@@ -73,6 +76,10 @@ export default function App() {
         <Route
           path="settings"
           element={<Suspense fallback={<PageSpinner />}><SettingsPage /></Suspense>}
+        />
+        <Route
+          path="live"
+          element={<Suspense fallback={<PageSpinner />}><LiveMonitorPage /></Suspense>}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
