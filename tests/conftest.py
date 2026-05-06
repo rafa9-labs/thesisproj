@@ -3,6 +3,8 @@ import gc
 import os
 import pytest
 
+os.environ.setdefault("SKLEARN_JOBS", "1")
+
 
 @pytest.fixture(scope="session")
 def pipeline_imports():

@@ -1,6 +1,8 @@
-import { Search, Bell, User, Menu, PanelLeftClose } from "lucide-react";
+import { Search, Bell, User, Menu, PanelLeftClose, Info } from "lucide-react";
+import { useState } from "react";
 import { KodaLogo } from "@/components/shared/KodaLogo";
 import { Breadcrumb } from "./Breadcrumb";
+import { AboutDialog } from "@/components/shared/AboutDialog";
 import { layout } from "@/lib/tokens";
 
 interface TopBarProps {
@@ -9,6 +11,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ sidebarCollapsed, onToggleSidebar }: TopBarProps) {
+  const [aboutOpen, setAboutOpen] = useState(false);
   const unreadCount = 0;
   return (
     <header
@@ -89,6 +92,16 @@ export function TopBar({ sidebarCollapsed, onToggleSidebar }: TopBarProps) {
             )}
           </button>
 
+          {/* About */}
+          <button
+            className="flex items-center justify-center rounded-md p-1.5 transition-colors duration-200 hover:bg-[var(--color-glass-hover)]"
+            style={{ color: "var(--color-text-muted)" }}
+            title="About KodaQuant"
+            onClick={() => setAboutOpen(true)}
+          >
+            <Info size={16} strokeWidth={1.5} />
+          </button>
+
           {/* User avatar */}
           <button
             className="flex items-center justify-center rounded-full border p-1 transition-all duration-200 hover:border-[var(--color-border-active)]"
@@ -103,6 +116,8 @@ export function TopBar({ sidebarCollapsed, onToggleSidebar }: TopBarProps) {
           </button>
         </div>
       </div>
+
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </header>
   );
 }

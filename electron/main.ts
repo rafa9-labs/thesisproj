@@ -44,7 +44,7 @@ function createWindow() {
     minWidth: 1280,
     minHeight: 800,
     title: "KodaQuant",
-    backgroundColor: "#131722",
+    backgroundColor: "#050608",
     show: false,
     webPreferences: {
       preload: path.resolve(__dirname, "preload.js"),
@@ -96,10 +96,16 @@ async function startBackend() {
   });
 
   updateSplashStatus(splashWindow!, "Finding available port...");
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.webContents.executeJavaScript(`document.getElementById('progress').style.width='20%';`).catch(() => {});
+  }
   backendPort = await pythonManager.start();
   console.log(`[Electron] Backend starting on port ${backendPort}`);
 
   updateSplashStatus(splashWindow!, "Waiting for backend...");
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.webContents.executeJavaScript(`document.getElementById('progress').style.width='60%';`).catch(() => {});
+  }
   const ok = await waitForBackend(backendPort, 30_000);
   if (!ok) {
     console.error("[Electron] Backend failed to start within 30s");
@@ -110,6 +116,10 @@ async function startBackend() {
     });
   } else {
     console.log("[Electron] Backend ready on port", backendPort);
+    updateSplashStatus(splashWindow!, "Ready!");
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.webContents.executeJavaScript(`document.getElementById('progress').style.width='100%';`).catch(() => {});
+    }
     mainWindow?.webContents.send("backend-status", {
       status: "ready",
       port: backendPort,

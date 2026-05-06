@@ -265,6 +265,7 @@ class ModelFactoryMixin:
             if calibrate_method not in ("sigmoid", "isotonic"):
                 calibrate_method = "isotonic"
             cal_jobs = int(params.get("svm_calib_n_jobs", 0)) or int(os.environ.get("SKLEARN_JOBS", -1))
+            cal_jobs = max(1, min(cal_jobs, 2))
             model = CalibratedClassifierCV(estimator=svc, cv=3, method=calibrate_method, n_jobs=cal_jobs)
 
         elif model_type == "random_forest":

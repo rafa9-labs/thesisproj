@@ -1,4 +1,4 @@
-# Forex ML Backtester — Walk-Forward FX Backtesting Platform
+# KodaQuant — Walk-Forward FX Backtesting Platform
 
 A commercial-grade walk-forward backtesting engine for Forex trading strategies. 8 ML models, 6 currency pairs, cost-aware execution, news sentiment, and a full REST API — all with zero data leakage guarantees.
 

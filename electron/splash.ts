@@ -16,8 +16,8 @@ const SPLASH_HTML = `<!DOCTYPE html>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       width: 480px;
-      height: 280px;
-      background: #131722;
+      height: 300px;
+      background: #050608;
       color: #E0E3EB;
       font-family: 'Segoe UI', -apple-system, sans-serif;
       display: flex;
@@ -27,39 +27,49 @@ const SPLASH_HTML = `<!DOCTYPE html>
       overflow: hidden;
       -webkit-app-region: drag;
     }
-    .logo {
-      font-size: 28px;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      margin-bottom: 24px;
-      color: #E0E3EB;
-    }
-    .logo span {
-      color: #089981;
-    }
-    .spinner {
-      width: 32px;
-      height: 32px;
-      border: 3px solid #2A2E39;
-      border-top: 3px solid #089981;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+    .logo-svg {
       margin-bottom: 16px;
     }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      margin-bottom: 24px;
+      color: #E8ECF1;
+    }
+    .title span {
+      color: #00E5FF;
+    }
+    .progress-track {
+      width: 220px;
+      height: 3px;
+      background: #1A1F2A;
+      border-radius: 2px;
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #00E5FF, #0099AA);
+      border-radius: 2px;
+      transition: width 0.4s ease;
     }
     .status {
-      font-size: 12px;
-      color: #787B86;
+      font-size: 11px;
+      color: #4A5568;
       font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
     }
   </style>
 </head>
 <body>
-  <div class="logo"><span>FX</span> ML Backtester</div>
-  <div class="spinner"></div>
+  <svg class="logo-svg" width="48" height="48" viewBox="0 0 32 32" fill="none">
+    <rect width="32" height="32" rx="6" fill="#050608"/>
+    <polygon points="16,4 28,16 16,28 4,16" fill="#00E5FF"/>
+    <polygon points="16,8 24,16 16,24 8,16" fill="#050608"/>
+  </svg>
+  <div class="title"><span>Koda</span>Quant</div>
+  <div class="progress-track"><div class="progress-fill" id="progress"></div></div>
   <div class="status" id="status">Starting backend...</div>
 </body>
 </html>`;
@@ -67,13 +77,13 @@ const SPLASH_HTML = `<!DOCTYPE html>
 export function createSplashWindow(): BrowserWindow {
   const splash = new BrowserWindow({
     width: 480,
-    height: 280,
+    height: 300,
     frame: false,
     transparent: false,
     resizable: false,
     center: true,
     show: false,
-    backgroundColor: "#131722",
+    backgroundColor: "#050608",
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

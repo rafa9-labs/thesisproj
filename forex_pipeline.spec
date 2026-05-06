@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""FX ML Backtester — PyInstaller spec for single-directory bundle.
+"""KodaQuant — PyInstaller spec for single-directory bundle.
 
 Build:
     pyinstaller forex_pipeline.spec

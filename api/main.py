@@ -1,4 +1,4 @@
-"""FX ML Pipeline -- FastAPI application."""
+"""KodaQuant — FastAPI application."""
 from contextlib import asynccontextmanager
 import os
 
