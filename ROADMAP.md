@@ -656,11 +656,11 @@
 
 ---
 
-## Sprint 12: Product Intelligence & UX Overhaul 🔄 IN PROGRESS
+## Sprint 12: Product Intelligence & UX Overhaul ✅ COMPLETE
 
-> **Goal**: Make news features actually work and matter for trading. Add LLM-driven sentiment as a first-class feature. Redesign Dashboard and Results into what a trader actually needs. Add live price monitor + candlestick charts.
-> **Branch**: `feature/s12-product-intelligence`
-> **Est**: 22-24h
+> **Goal**: Make news features actually work and matter for trading. Add LLM-driven sentiment as a first-class feature. Redesign Dashboard and Results into what a trader actually needs. Add live price monitor + candlestick charts + multi-pair live monitor page.
+> **Branch**: `feature/s12-product-intelligence`, `feature/s12.5-live-prices`, `feature/s12.6-live-monitor`
+> **Est**: 28-30h
 
 - [x] **S12.1** Fix broken news pipeline wiring ✅ DONE (2026-05-05)
   - `api/tasks.py`: before `_run_backtest_impl()`, call `NewsScraper().fetch_all()` → `SentimentAnalyzer(backend=cfg["news_sentiment_backend"]).score_articles()` → `aggregate_to_df()` → inject `bt._news_aggregated` and `bt._news_economic_events`
@@ -727,7 +727,7 @@
   - **Files**: `frontend/src/pages/Dashboard/DashboardPage.tsx` (restructure), new `Dashboard/QuickActions.tsx`, new `Dashboard/MarketPulsePanel.tsx`, `api/routers/news.py`, `DashboardKPIs.tsx`, `api/routers/backtest.py`, `api/tasks.py`
   - **Est**: 3h (actual: included 3 bug fixes)
 
-- [ ] **S12.5** Live price monitor + candlestick charts + backtest visualization ⬜ NOT STARTED
+- [x] **S12.5** Live price monitor + candlestick charts + backtest visualization ✅ DONE (2026-05-06)
   - **Data strategy**: SQLite candles table for historical OHLCV (instant, offline), OANDA PricingInfo for live bid/ask (REST poll, 3s), user's own OANDA key from encrypted Settings storage
   - `pipeline/data_sqlite.py`: new `get_latest_candles(pair, timeframe, limit)` method — indexed query, no date range needed
   - New `api/routers/prices.py`: `GET /prices/live?pairs=EURUSD,GBPUSD,USDJPY&lookback_bars=50` (bid/ask/mid from OANDA + sparkline from SQLite) + `GET /candles/{pair}/{tf}?limit=200` (OHLC bars from SQLite)
@@ -740,6 +740,15 @@
   - One-time M15 data download for EURUSD/GBPUSD/USDJPY
   - **Files**: `pipeline/data_sqlite.py`, new `api/routers/prices.py`, `api/routers/backtest.py`, `api/tasks.py`, `api/main.py`, new `PriceTicker.tsx`, new `CandlestickChart.tsx`, new `BacktestChart.tsx`, `DashboardPage.tsx`, `ResultsPage.tsx`, `frontend/src/api/queries.ts`, `frontend/src/api/schemas.ts`, `requirements.txt`
   - **Est**: 7h
+
+- [x] **S12.6** Multi-pair live monitor page ✅ DONE (2026-05-06)
+  - New `/live` route with 3-pair grid (EURUSD, GBPUSD, USDJPY) — each with live price header + sparkline + candlestick chart
+  - Pure SVG MiniCandlestickChart (no lightweight-charts dependency per cell, lightweight for 3 charts)
+  - Shared timeframe selector (M15/M30/H1/H2) syncs all 3 columns
+  - `key_required` and `unavailable` states with Settings link
+  - Sidebar: Radio icon in "Intelligence" group
+  - **Files**: new `frontend/src/pages/Live/LiveMonitorPage.tsx`, `frontend/src/App.tsx`, `frontend/src/components/layout/Sidebar.tsx`
+  - **Est**: 1.5h
 
 ---
 
@@ -1142,7 +1151,7 @@ cd frontend && npm run dev
 | **S9** | Electron Desktop Shell | 10-12h | ✅ COMPLETE (S9.1-9.5 all done) |
 | **S10** | Security & Licensing (Paddle) | 12-15h | ✅ DONE (2026-05-04) |
 | **S11** | Installer & Auto-Update | 6-8h | ✅ COMPLETE (2026-05-04) |
-| **S12** | Product Intelligence & UX Overhaul | 22-24h | 🔄 IN PROGRESS (S12.1-12.4 done, S12.5 next) |
+| **S12** | Product Intelligence & UX Overhaul | 28-30h | ✅ DONE (2026-05-06) |
 | **S13** | Beta & Launch | 6-8h | TODO |
 | **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
 | **S15** | KodaQuant Branding | 4-6h | 🔄 PARTIAL (S15.1 name update done, S15.2-4 remaining) |
@@ -1166,7 +1175,7 @@ cd frontend && npm run dev
 | S9 | Electron wraps React + Python into desktop app | ✅ COMPLETE (S9.1-9.5 all done) |
 | S10 | Code protected, Paddle licensing active, feature gating works | ✅ DONE
 | S11 | Windows installer + auto-update functional | ✅ COMPLETE (2026-05-04) |
-| S12 | News pipeline works, LLM sentiment is ML feature, Results shows all history, Dashboard has live price ticker + candlestick charts + Market Pulse, backtest trade visualization on Results detail |
+| S12 | News pipeline works, LLM sentiment is ML feature, Results shows all history, Dashboard has live price ticker + candlestick + Market Pulse, multi-pair live monitor page, backtest trade visualization on Results detail |
 | S13 | Beta tested, publicly launched, first sales |
 | S15 | All user-facing text says "KodaQuant", professional branding | 🔄 S15.1 done |
 | S16 | Overfitting detection works, backtest summary is human-readable, training is transparent |
