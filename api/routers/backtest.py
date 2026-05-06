@@ -474,6 +474,105 @@ def get_backtest_results(job_id: str):
     )
 
 
+@router.get("/{job_id}/trades/chart-data")
+def get_trade_chart_data(job_id: str, model: str = Query(..., description="Model name")):
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if job["status"] != "completed":
+        raise HTTPException(400, f"Job status is '{job['status']}', not 'completed'")
+
+    result = job.get("result", {})
+    cfg = job.get("config", {})
+    pair = result.get("pair") or cfg.get("pair", "")
+    timeframe = cfg.get("timeframe", "H1")
+
+    raw_metrics = result.get("metrics", [])
+    target_metric = None
+    for m in raw_metrics:
+        if m.get("model") == model:
+            target_metric = m
+            break
+    if target_metric is None:
+        raise HTTPException(404, f"Model '{model}' not found in job results")
+
+    start_date = cfg.get("start_date") or None
+    end_date = cfg.get("end_date") or None
+    candles_df = store.get_candles(pair, timeframe, start_date, end_date)
+    candles = []
+    if not candles_df.empty:
+        for _, row in candles_df.iterrows():
+            t_val = row["time"]
+            t_epoch = int(t_val.timestamp()) if hasattr(t_val, "timestamp") else 0
+            candles.append({
+                "t": t_epoch,
+                "o": round(float(row["mid_open"]), 10),
+                "h": round(float(row["mid_high"]), 10),
+                "l": round(float(row["mid_low"]), 10),
+                "c": round(float(row["mid_close"]), 10),
+                "volume": int(row.get("volume", 0) or 0),
+            })
+
+    candle_lookup = {}
+    for c in candles:
+        candle_lookup[c["t"]] = c
+
+    trades = []
+    raw_trades = target_metric.get("trades", [])
+    if raw_trades:
+        for t in raw_trades:
+            try:
+                entry_raw = t.get("entry_time") or t.get("entry_date") or ""
+                exit_raw = t.get("exit_time") or t.get("exit_date") or ""
+                if isinstance(entry_raw, str):
+                    entry_dt = pd.to_datetime(entry_raw)
+                    entry_epoch = int(entry_dt.timestamp())
+                else:
+                    entry_epoch = int(entry_raw) if entry_raw else 0
+                if isinstance(exit_raw, str):
+                    exit_dt = pd.to_datetime(exit_raw)
+                    exit_epoch = int(exit_dt.timestamp())
+                else:
+                    exit_epoch = int(exit_raw) if exit_raw else 0
+
+                side = t.get("side", "")
+                direction = "BUY" if side in ("long", "buy", "BUY", 1, 1.0) else "SELL"
+
+                entry_c = candle_lookup.get(entry_epoch, None)
+                exit_c = candle_lookup.get(exit_epoch, None)
+
+                trades.append({
+                    "trade_id": t.get("trade_id", 0),
+                    "entry_time": entry_epoch,
+                    "exit_time": exit_epoch,
+                    "direction": direction,
+                    "entry_price": round(entry_c["c"], 10) if entry_c else None,
+                    "exit_price": round(exit_c["c"], 10) if exit_c else None,
+                    "pnl_pct": t.get("pnl_pct") or t.get("return_pct") or 0,
+                })
+            except Exception:
+                pass
+
+    equity_curve = target_metric.get("equity_curve", [])
+    if isinstance(equity_curve, list) and len(equity_curve) > 0:
+        equity_curve = [
+            {"time": e.get("time", 0), "value": e.get("value", 0)}
+            for e in equity_curve if isinstance(e, dict)
+        ]
+    else:
+        equity_curve = []
+
+    return {
+        "pair": pair,
+        "timeframe": timeframe,
+        "candles": candles,
+        "trades": trades,
+        "equity_curve": equity_curve,
+    }
+
+
 @router.delete("/{job_id}", status_code=204)
 def delete_backtest(job_id: str):
     store = get_data_store()

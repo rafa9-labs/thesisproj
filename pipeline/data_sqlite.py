@@ -251,3 +251,24 @@ class DataStore:
     def vacuum(self):
         with self._connect() as conn:
             conn.execute("VACUUM")
+
+    def get_latest_candles(self, pair: str, timeframe: str, limit: int = 100) -> pd.DataFrame:
+        """Return the most recent N candles for a pair+timeframe, oldest first."""
+        with self._cursor() as (conn, cur):
+            cur.execute(
+                "SELECT ts, mid_open, mid_high, mid_low, mid_close, "
+                "bid_open, bid_close, ask_open, ask_close, spread, volume "
+                "FROM candles WHERE pair=? AND timeframe=? ORDER BY ts DESC LIMIT ?",
+                (pair.upper(), timeframe, limit),
+            )
+            cols = [d[0] for d in cur.description]
+            rows = cur.fetchall()
+            if not rows:
+                return pd.DataFrame(columns=cols)
+            df = pd.DataFrame(rows, columns=cols)
+            df.rename(columns={"ts": "time"}, inplace=True)
+            df["time"] = pd.to_datetime(df["time"], utc=True)
+            for c in ("mid_open","mid_high","mid_low","mid_close","bid_open","bid_close","ask_open","ask_close","spread"):
+                if c in df.columns:
+                    df[c] = df[c].astype("float32")
+            return df.sort_values("time").reset_index(drop=True)

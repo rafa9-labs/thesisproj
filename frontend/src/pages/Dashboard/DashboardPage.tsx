@@ -12,6 +12,8 @@ import { useDashboardKPIs } from "./DashboardKPIs";
 import { RecentJobsTable } from "./RecentJobsTable";
 import { QuickActions } from "./QuickActions";
 import { MarketPulsePanel } from "./MarketPulsePanel";
+import { PriceTicker } from "./PriceTicker";
+import { CandlestickChart } from "@/components/charts/CandlestickChart";
 
 function DashboardSkeleton() {
   return (
@@ -116,6 +118,10 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+
+      <PriceTicker pairs={availablePairs.length > 0 ? [activePair, ...availablePairs.filter((p) => p !== activePair).slice(0, 2)] : ["EURUSD", "GBPUSD", "USDJPY"]} />
+
+      <CandlestickChart pair={activePair} timeframe="M30" limit={150} height={360} />
 
       <div>
         <h3

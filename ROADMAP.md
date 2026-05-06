@@ -656,13 +656,13 @@
 
 ---
 
-## Sprint 12: Product Intelligence & UX Overhaul ⬜ NOT STARTED
+## Sprint 12: Product Intelligence & UX Overhaul 🔄 IN PROGRESS
 
-> **Goal**: Make news features actually work and matter for trading. Add LLM-driven sentiment as a first-class feature. Redesign Dashboard and Results into what a trader actually needs.
+> **Goal**: Make news features actually work and matter for trading. Add LLM-driven sentiment as a first-class feature. Redesign Dashboard and Results into what a trader actually needs. Add live price monitor + candlestick charts.
 > **Branch**: `feature/s12-product-intelligence`
-> **Est**: 15-16h
+> **Est**: 22-24h
 
-- [ ] **S12.1** Fix broken news pipeline wiring
+- [x] **S12.1** Fix broken news pipeline wiring ✅ DONE (2026-05-05)
   - `api/tasks.py`: before `_run_backtest_impl()`, call `NewsScraper().fetch_all()` → `SentimentAnalyzer(backend=cfg["news_sentiment_backend"]).score_articles()` → `aggregate_to_df()` → inject `bt._news_aggregated` and `bt._news_economic_events`
   - `pipeline/backtester/features_mixin.py`: when `use_news=True` and no data injected, log warning instead of silently skipping; default ON when data available
   - `config.py`: change `use_news` default to `True`; thread `news_sentiment_backend` through to `SentimentAnalyzer`
@@ -670,7 +670,7 @@
   - **Files**: `api/tasks.py`, `pipeline/backtester/features_mixin.py`, `config.py`, `news/features.py`
   - **Est**: 2h
 
-- [ ] **S12.2a** LLM sentiment engine — core module
+- [x] **S12.2a** LLM sentiment engine — core module ✅ DONE (2026-05-05)
   - New `pipeline/llm/` package (`__init__.py`, `sentiment.py`, `prompts.py`)
   - Abstract `LLMSentimentBackend` with `OllamaBackend` (default), `OpenAIBackend`, `AnthropicBackend`
   - Structured prompt per article → JSON output: `{direction: float[-1,1], confidence: float[0,1], volatility: float[0,1], currencies: [str]}`
@@ -680,7 +680,7 @@
   - **Files**: `pipeline/llm/__init__.py`, `pipeline/llm/sentiment.py`, `pipeline/llm/prompts.py`, `config.py`
   - **Est**: 3h
 
-- [ ] **S12.2b** LLM sentiment — feature integration + blending
+- [x] **S12.2b** LLM sentiment — feature integration + blending ✅ DONE (2026-05-05)
   - Extend `news/features.py`: new `merge_llm_features()` that left-joins LLM sentiment columns onto OHLC bars
   - New feature columns: `llm_sentiment`, `llm_confidence`, `llm_volatility`, `llm_sentiment_ma_6`, `llm_sentiment_ma_24`
   - Blending formula: `final_sentiment = llm_weight * llm_sentiment + (1 - llm_weight) * vader_sentiment`
@@ -689,7 +689,7 @@
   - **Files**: `news/features.py`, `pipeline/backtester/features_mixin.py`, `api/tasks.py`
   - **Est**: 2h
 
-- [ ] **S12.2c** LLM sentiment — frontend config + API endpoints
+- [x] **S12.2c** LLM sentiment — frontend config + API endpoints ✅ DONE (2026-05-05)
   - `frontend/src/pages/Backtest/FeaturesPanel.tsx`: add LLM toggle, backend dropdown (Ollama/OpenAI/Anthropic), model name input, weight slider (0-1)
   - `api/routers/news.py`: add `GET /news/sentiment/live` endpoint returning current aggregate sentiment per pair
   - `api/schemas/backtest.py`: add LLM config fields
@@ -698,13 +698,13 @@
   - **Files**: `frontend/src/pages/Backtest/FeaturesPanel.tsx`, `api/routers/news.py`, `api/schemas/backtest.py`, `frontend/src/api/queries.ts`, `frontend/src/lib/constants.ts`
   - **Est**: 2h
 
-- [ ] **S12.2d** LLM sentiment — tests
+- [x] **S12.2d** LLM sentiment — tests ✅ DONE (2026-05-05)
   - `tests/test_llm_sentiment.py`: mock Ollama responses, test caching, test blending, test fallback to VADER
   - Test per-article scoring, batch aggregation, walk-forward integrity
   - **Files**: `tests/test_llm_sentiment.py`
   - **Est**: 1h
 
-- [ ] **S12.3** Results history browser
+- [x] **S12.3** Results history browser ✅ DONE (2026-05-05)
   - New `ResultsHistoryPage` component at `/results` route: full-width table of ALL completed backtests
   - Columns: Date, Pair, Models, Sharpe, Return %, Win Rate, Max DD, Status, Actions
   - Sortable by any column, filterable (pair, model, status), searchable
@@ -715,13 +715,31 @@
   - **Files**: new `frontend/src/pages/Results/ResultsHistoryPage.tsx`, `api/routers/backtest.py`, `api/schemas/backtest.py`, `frontend/src/App.tsx`, `frontend/src/api/queries.ts`
   - **Est**: 3h
 
-- [ ] **S12.4** Dashboard redesign — live command center
-  - New `QuickActions` component: 2-3 buttons (Quick Run with last-used config, Re-run Last)
-  - New `MarketPulsePanel` component: live sentiment gauge (VADER + LLM blended), last 5 high-impact news with LLM scores, next 7 days economic calendar
-  - Restructure `DashboardPage`: Quick Actions → KPI Bar → Recent Activity + Market Pulse (side-by-side) → Performance Heatmap
-  - Move config-heavy controls to Backtest page; Dashboard becomes info-first, action-light
-  - **Files**: `frontend/src/pages/Dashboard/DashboardPage.tsx` (restructure), new `Dashboard/QuickActions.tsx`, new `Dashboard/MarketPulsePanel.tsx`, `api/routers/news.py` (live sentiment endpoint)
-  - **Est**: 3h
+- [x] **S12.4** Dashboard redesign — live command center ✅ DONE (2026-05-05)
+  - New `QuickActions` component: 2-3 buttons (New Backtest, Re-run Last)
+  - New `MarketPulsePanel` component: live sentiment gauge (VADER + LLM blended), real article feed with VADER scores, cache status
+  - Pair selector dropdown: user picks active pair, MarketPulse + PriceTicker respond
+  - Restructure `DashboardPage`: Quick Actions + Pair Selector → Price Ticker → Candlestick Chart → Market Pulse → KPIs → Recent Activity
+  - Replaced KPIs: Avg Sharpe, Avg Win Rate, Profitable Months % (with per-card explanation text)
+  - Moved Heatmap from Dashboard to `/results` page
+  - Fixed VADER crash (`s.direction` → `s.score`), added `top_articles` to live sentiment API
+  - Fixed heatmap 404 (route shadowing), Celery `bind=True` error, emit_event duplicate kwarg
+  - **Files**: `frontend/src/pages/Dashboard/DashboardPage.tsx` (restructure), new `Dashboard/QuickActions.tsx`, new `Dashboard/MarketPulsePanel.tsx`, `api/routers/news.py`, `DashboardKPIs.tsx`, `api/routers/backtest.py`, `api/tasks.py`
+  - **Est**: 3h (actual: included 3 bug fixes)
+
+- [ ] **S12.5** Live price monitor + candlestick charts + backtest visualization ⬜ NOT STARTED
+  - **Data strategy**: SQLite candles table for historical OHLCV (instant, offline), OANDA PricingInfo for live bid/ask (REST poll, 3s), user's own OANDA key from encrypted Settings storage
+  - `pipeline/data_sqlite.py`: new `get_latest_candles(pair, timeframe, limit)` method — indexed query, no date range needed
+  - New `api/routers/prices.py`: `GET /prices/live?pairs=EURUSD,GBPUSD,USDJPY&lookback_bars=50` (bid/ask/mid from OANDA + sparkline from SQLite) + `GET /candles/{pair}/{tf}?limit=200` (OHLC bars from SQLite)
+  - `api/routers/backtest.py`: new `GET /backtest/{job_id}/trades/chart-data?model=...` — candle OHLCV + trade markers with entry/exit prices (joined from candles) + equity curve
+  - `api/tasks.py`: enrich trade log with `entry_price`/`exit_price` by joining timestamps with candle closes
+  - New `frontend/src/pages/Dashboard/PriceTicker.tsx`: 3-pair horizontal strip (bid/ask/mid/change%/sparkline), loading skeleton, "Add OANDA key" empty state
+  - New `frontend/src/components/charts/CandlestickChart.tsx`: lightweight-charts CandlestickSeries + volume HistogramSeries, M15/M30/H1/H2 toggle, dark theme
+  - New `frontend/src/pages/Results/BacktestChart.tsx`: CandlestickSeries + trade markers (▲ buy ▼ sell) + equity overlay + barrier labels
+  - Frontend hooks: `useLivePrices()`, `useCandles()`, `useTradeChartData()`
+  - One-time M15 data download for EURUSD/GBPUSD/USDJPY
+  - **Files**: `pipeline/data_sqlite.py`, new `api/routers/prices.py`, `api/routers/backtest.py`, `api/tasks.py`, `api/main.py`, new `PriceTicker.tsx`, new `CandlestickChart.tsx`, new `BacktestChart.tsx`, `DashboardPage.tsx`, `ResultsPage.tsx`, `frontend/src/api/queries.ts`, `frontend/src/api/schemas.ts`, `requirements.txt`
+  - **Est**: 7h
 
 ---
 
@@ -1124,7 +1142,7 @@ cd frontend && npm run dev
 | **S9** | Electron Desktop Shell | 10-12h | ✅ COMPLETE (S9.1-9.5 all done) |
 | **S10** | Security & Licensing (Paddle) | 12-15h | ✅ DONE (2026-05-04) |
 | **S11** | Installer & Auto-Update | 6-8h | ✅ COMPLETE (2026-05-04) |
-| **S12** | Product Intelligence & UX Overhaul | 15-16h | TODO |
+| **S12** | Product Intelligence & UX Overhaul | 22-24h | 🔄 IN PROGRESS (S12.1-12.4 done, S12.5 next) |
 | **S13** | Beta & Launch | 6-8h | TODO |
 | **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
 | **S15** | KodaQuant Branding | 4-6h | 🔄 PARTIAL (S15.1 name update done, S15.2-4 remaining) |
@@ -1148,7 +1166,7 @@ cd frontend && npm run dev
 | S9 | Electron wraps React + Python into desktop app | ✅ COMPLETE (S9.1-9.5 all done) |
 | S10 | Code protected, Paddle licensing active, feature gating works | ✅ DONE
 | S11 | Windows installer + auto-update functional | ✅ COMPLETE (2026-05-04) |
-| S12 | News pipeline works end-to-end, LLM sentiment produces ML features, Results shows all history, Dashboard is a live command center |
+| S12 | News pipeline works, LLM sentiment is ML feature, Results shows all history, Dashboard has live price ticker + candlestick charts + Market Pulse, backtest trade visualization on Results detail |
 | S13 | Beta tested, publicly launched, first sales |
 | S15 | All user-facing text says "KodaQuant", professional branding | 🔄 S15.1 done |
 | S16 | Overfitting detection works, backtest summary is human-readable, training is transparent |

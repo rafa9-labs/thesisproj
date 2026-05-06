@@ -258,3 +258,59 @@ export interface LicenseStatusResponse {
   available_models: string[];
   locked_models: string[];
 }
+
+export interface SparklinePoint {
+  t: number;
+  v: number;
+}
+
+export interface LivePrice {
+  symbol: string;
+  bid: number | null;
+  ask: number | null;
+  mid: number | null;
+  spread_pips: number | null;
+  change_pct: number | null;
+  timestamp: string;
+  sparkline: SparklinePoint[];
+}
+
+export interface LivePricesResponse {
+  prices: LivePrice[];
+  source: "oanda" | "key_required" | "unavailable";
+  message?: string;
+  error?: string;
+}
+
+export interface OHLCBar {
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  volume: number;
+}
+
+export interface CandlesResponse {
+  pair: string;
+  timeframe: string;
+  candles: OHLCBar[];
+}
+
+export interface TradeChartMarker {
+  trade_id: number;
+  entry_time: number;
+  exit_time: number;
+  direction: "BUY" | "SELL";
+  entry_price: number;
+  exit_price: number;
+  pnl_pct: number;
+}
+
+export interface TradeChartData {
+  pair: string;
+  timeframe: string;
+  candles: OHLCBar[];
+  trades: TradeChartMarker[];
+  equity_curve: EquityPoint[];
+}

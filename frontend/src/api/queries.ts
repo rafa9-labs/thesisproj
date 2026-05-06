@@ -309,3 +309,46 @@ export function useResultsHistory(params: { limit?: number; offset?: number; pai
     staleTime: 10_000,
   });
 }
+
+export function useLivePrices(pairs: string[], lookbackBars = 50) {
+  return useQuery({
+    queryKey: ["live-prices", ...pairs, lookbackBars],
+    queryFn: async () => {
+      const { data } = await apiClient.get<import("./schemas").LivePricesResponse>("/prices/live", {
+        params: { pairs: pairs.join(","), lookback_bars: lookbackBars },
+      });
+      return data;
+    },
+    refetchInterval: 3_000,
+    staleTime: 2_000,
+    retry: 1,
+  });
+}
+
+export function useCandles(pair: string, timeframe: string, limit = 200) {
+  return useQuery({
+    queryKey: ["candles", pair, timeframe, limit],
+    queryFn: async () => {
+      const { data } = await apiClient.get<import("./schemas").CandlesResponse>(`/candles/${pair}/${timeframe}`, {
+        params: { limit },
+      });
+      return data;
+    },
+    staleTime: 15_000,
+    enabled: !!pair && !!timeframe,
+  });
+}
+
+export function useTradeChartData(jobId: string, model: string) {
+  return useQuery({
+    queryKey: ["trade-chart-data", jobId, model],
+    queryFn: async () => {
+      const { data } = await apiClient.get<import("./schemas").TradeChartData>(`/backtest/${jobId}/trades/chart-data`, {
+        params: { model },
+      });
+      return data;
+    },
+    enabled: !!jobId && !!model,
+    staleTime: Infinity,
+  });
+}

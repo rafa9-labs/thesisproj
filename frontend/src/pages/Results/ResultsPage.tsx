@@ -17,6 +17,7 @@ import { RollingMetricsChart } from "@/components/charts/RollingMetricsChart";
 import { CumulativePnlChart } from "@/components/charts/CumulativePnlChart";
 import { ParameterSensitivityChart } from "@/components/charts/ParameterSensitivityChart";
 import { normalizeEquityCurve } from "@/lib/chartUtils";
+import { BacktestChart } from "./BacktestChart";
 import type { TradeRecord } from "@/api/schemas";
 import type { EquityCurveChartHandle } from "@/components/charts/EquityCurveChart";
 
@@ -198,6 +199,10 @@ export function ResultsPage() {
             </button>
           ))}
         </div>
+      )}
+
+      {jobId && activeMetric?.model && (
+        <BacktestChart jobId={jobId} model={activeMetric.model} />
       )}
 
       <EquitySection
