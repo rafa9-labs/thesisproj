@@ -21,5 +21,12 @@ select = ["E", "F"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "api: marks tests needing local data/backend (deselect with '-m \"not api\"')",
+    "benchmark: marks benchmark/timing tests",
+    "deep: marks deep learning model tests (TF/Keras, high memory)",
 ]
-addopts = "-x --tb=short"
+addopts = "--tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::FutureWarning",
+    "ignore::UserWarning",
+]

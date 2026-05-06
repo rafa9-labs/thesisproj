@@ -210,6 +210,7 @@ class TestXGBoost:
 # Deep models (Keras) — require TensorFlow
 # ═══════════════════════════════════════════════════════════════════
 
+@pytest.mark.deep
 class TestCNN:
     @tf_skip
     def test_build(self):
@@ -241,6 +242,7 @@ class TestCNN:
         assert np.allclose(proba.sum(axis=1), 1.0, atol=1e-4)
 
 
+@pytest.mark.deep
 class TestLSTM:
     @tf_skip
     def test_build(self):
@@ -277,6 +279,7 @@ class TestLSTM:
             build_model("lstm", seed=_RNG_SEED, input_shape=(5,))
 
 
+@pytest.mark.deep
 class TestTransformer:
     @tf_skip
     def test_build(self):
@@ -301,6 +304,7 @@ class TestTransformer:
 # DQN (RL) — requires rl module
 # ═══════════════════════════════════════════════════════════════════
 
+@pytest.mark.deep
 class TestDQN:
     @rl_skip
     def test_build(self):
@@ -321,6 +325,7 @@ class TestDQN:
 # Ensemble models
 # ═══════════════════════════════════════════════════════════════════
 
+@pytest.mark.deep
 class TestEnsembleAdaptiveRegime:
     @tf_skip
     def test_build(self):
@@ -370,6 +375,7 @@ class TestEnsembleAdaptiveRegime:
             assert proba.shape[0] == 5
 
 
+@pytest.mark.deep
 class TestEnsembleCNNLSTMXGBoost:
     @tf_skip
     def test_build(self):

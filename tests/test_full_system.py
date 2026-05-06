@@ -385,41 +385,9 @@ def test_hac_std():
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 10. UI IMPORTS — Streamlit app must be loadable
+# 10. UI IMPORTS — removed (Streamlit deleted in Sprint 8B)
 # ═══════════════════════════════════════════════════════════════════════
-
-@unittest.skip("Streamlit UI removed (S8 — React is the product UI)")
-def test_ui_package_imports():
-    """UI package must not crash on import."""
-    import ui
-    assert ui is not None
-
-
-@unittest.skip("Streamlit UI removed (S8 — React is the product UI)")
-def test_ui_controls_imports():
-    """UI controls must export expected symbols."""
-    from ui.controls import render_nav_bar, render_tab_content, get_all_params, DEFAULTS, TABS
-    assert len(TABS) == 6
-    assert len(DEFAULTS) > 20
-
-
-@unittest.skip("Streamlit UI removed (S8 — React is the product UI)")
-def test_ui_state_imports():
-    """UI state must export AppState and DATA_FILES."""
-    from ui.state import AppState, DATA_FILES
-    assert isinstance(DATA_FILES, dict)
-    assert len(DATA_FILES) >= 1
-
-
-@unittest.skip("Streamlit UI removed (S8 — React is the product UI)")
-def test_app_imports():
-    """app.py must be importable (no ImportError)."""
-    import importlib
-    # Don't actually run the app, just verify the module can be found
-    spec = importlib.util.find_spec("app")
-    # app.py is at root level; just verify file exists
-    assert os.path.exists("app.py"), "app.py not found"
-
+# React frontend is the product UI. See frontend/src/ for all UI code.
 
 # ═══════════════════════════════════════════════════════════════════════
 # 11. OPTUNA UTILITIES
