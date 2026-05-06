@@ -91,9 +91,15 @@ export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
             </div>
           ) : (
             <>
-              <SentimentGauge value={blended} label={sentiment?.backend === "vader" ? "VADER" : `LLM (${sentiment?.model ?? "?"})`} pair={pair} />
+               <SentimentGauge value={blended} label={sentiment?.backend === "vader" ? "VADER" : `LLM (${sentiment?.model ?? "?"})`} pair={pair} />
 
-              <div className="flex flex-col gap-1">
+               {sentiment?.backend === "vader" && (
+                 <span className="text-[9px]" style={{ color: "var(--color-accent-warning)" }}>
+                   LLM unavailable — using VADER fallback. Start Ollama or configure an API key.
+                 </span>
+               )}
+
+               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>Sentiment Details</span>
                 <div className="flex justify-between text-[10px]" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-secondary)" }}>
                   <span>LLM</span>

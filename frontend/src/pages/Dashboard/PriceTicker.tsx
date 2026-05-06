@@ -100,6 +100,7 @@ function SkeletonCard() {
 
 export function PriceTicker({ pairs }: { pairs: string[] }) {
   const navigate = useNavigate();
+  if (!pairs || pairs.length === 0) return null;
   const displayPairs = pairs.slice(0, 3);
   const { data, isLoading } = useLivePrices(displayPairs);
 

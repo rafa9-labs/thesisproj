@@ -119,7 +119,7 @@ export function CandlestickChart({ pair, timeframe = "M30", limit = 200, height 
       chart.remove();
       chartRef.current = null;
     };
-  }, [data, isLoading, height]);
+  }, [data, isLoading, height, pair]);
 
   return (
     <div className="flex flex-col gap-2">

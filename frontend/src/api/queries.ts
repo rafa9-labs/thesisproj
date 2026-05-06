@@ -319,6 +319,7 @@ export function useLivePrices(pairs: string[], lookbackBars = 50) {
       });
       return data;
     },
+    enabled: pairs.length > 0,
     refetchInterval: 3_000,
     staleTime: 2_000,
     retry: 1,
