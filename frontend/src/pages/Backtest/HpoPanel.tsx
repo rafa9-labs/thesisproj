@@ -3,6 +3,7 @@ import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamToggle } from "@/components/shared/ParamToggle";
 import { ParamSelect } from "@/components/shared/ParamSelect";
 import { RANGES, SELECT_OPTIONS } from "@/lib/constants";
+import { ModelHyperparamsPanel } from "./ModelHyperparamsPanel";
 
 const sectionClass = "rounded-xl border p-6";
 const sectionStyle: React.CSSProperties = {
@@ -24,7 +25,6 @@ export function HpoPanel({ advancedMode, onToggleAdvanced }: HpoPanelProps) {
   const s = useBacktestStore.getState();
   const selectedModels = useBacktestStore((s) => s.selectedModels);
   const hpoIntensity = useBacktestStore((s) => s.hpoIntensity);
-  const showLogistic = selectedModels.includes("logistic");
 
   return (
     <div
@@ -256,69 +256,8 @@ export function HpoPanel({ advancedMode, onToggleAdvanced }: HpoPanelProps) {
         </div>
       </section>
 
-      {/* ── Logistic Hyperparameters ── */}
-      {showLogistic && (
-        <div className="rounded-xl border p-6" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "rgba(255,255,255,0.02)" }}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-classical)" }} />
-            <h4 className="text-[11px] font-medium uppercase tracking-[0.12em]" style={{ color: "var(--color-accent-classical)" }}>
-              Logistic Regression — Hyperparameters
-            </h4>
-          </div>
-          <p className={explainerClass} style={explainerStyle}>
-            Fine-tune the classical baseline. These only appear when Logistic Regression is selected in your model pool.
-          </p>
-
-          <div className="flex flex-col gap-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
-              <ParamSelect
-                label="Solver"
-                value={s.logitSolver}
-                options={[...SELECT_OPTIONS.logitSolver]}
-                description="Optimization algorithm. lbfgs is stable; saga handles elastic-net."
-                onChange={(v) => setField("logitSolver", v as typeof s.logitSolver)}
-              />
-              <ParamSelect
-                label="Penalty"
-                value={s.logitPenalty}
-                options={[...SELECT_OPTIONS.logitPenalty]}
-                description="Regularization type. L2 = standard ridge; elasticnet mixes L1 + L2."
-                onChange={(v) => setField("logitPenalty", v as typeof s.logitPenalty)}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-6">
-              <ParamSlider
-                label="C (Regularization)"
-                value={s.logitC}
-                min={0.001}
-                max={10000}
-                step={s.logitC < 1 ? 0.01 : s.logitC < 100 ? 1 : 100}
-                description="Inverse regularization strength. Lower C = stronger penalty, simpler model."
-                onChange={(v) => setField("logitC", v)}
-              />
-              <ParamSlider
-                label="Max Iterations"
-                value={s.logitMaxIter}
-                min={100}
-                max={5000}
-                step={100}
-                description="Solver convergence limit. Increase if convergence warnings appear."
-                onChange={(v) => setField("logitMaxIter", v)}
-              />
-              <ParamSlider
-                label="Tolerance"
-                value={s.logitTol}
-                min={0.00001}
-                max={0.01}
-                step={0.00001}
-                description="Stopping criteria. Smaller = stricter convergence, longer training."
-                onChange={(v) => setField("logitTol", v)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Per-Model Hyperparameters ── */}
+      <ModelHyperparamsPanel />
     </div>
   );
 }

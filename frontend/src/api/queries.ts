@@ -3,6 +3,7 @@ import apiClient from "./client";
 import type {
   PairInfo,
   ModelInfo,
+  ModelHyperparamsResponse,
   JobSummary,
   JobStatus,
   JobResults,
@@ -46,6 +47,17 @@ export function useModels() {
     queryKey: ["models"],
     queryFn: async () => {
       const { data } = await apiClient.get<{ models: ModelInfo[] }>("/models");
+      return data.models;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useModelHyperparams() {
+  return useQuery({
+    queryKey: ["model-hyperparams"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<ModelHyperparamsResponse>("/models/hyperparams");
       return data.models;
     },
     staleTime: 5 * 60_000,

@@ -314,3 +314,37 @@ export interface TradeChartData {
   trades: TradeChartMarker[];
   equity_curve: EquityPoint[];
 }
+
+export type HyperparamRange = {
+  type: "float_range" | "int_range";
+  low: number;
+  high: number;
+  step?: number;
+  log_scale: boolean;
+  default?: number;
+};
+
+export type HyperparamChoice = {
+  type: "choice";
+  values: (string | number)[];
+  default?: string | number;
+};
+
+export type HyperparamFixed = {
+  type: "fixed";
+  value: string | number | boolean | null;
+};
+
+export type HyperparamSpec = HyperparamRange | HyperparamChoice | HyperparamFixed;
+
+export interface ModelHyperparams {
+  model: string;
+  display_name: string;
+  category: string;
+  tunable: boolean;
+  params: Record<string, HyperparamSpec>;
+}
+
+export interface ModelHyperparamsResponse {
+  models: ModelHyperparams[];
+}

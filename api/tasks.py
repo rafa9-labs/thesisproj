@@ -18,6 +18,79 @@ import numpy as np
 import pandas as pd
 
 from api.config import settings
+
+HYPERPARAM_ALIASES: Dict[str, Dict[str, str]] = {
+    "logistic": {
+        "C": "logit_C",
+        "solver": "logit_solver",
+        "penalty": "logit_penalty",
+        "max_iter": "logit_max_iter",
+        "tol": "logit_tol",
+        "class_weight": "logit_class_weight",
+    },
+    "xgboost": {
+        "n_estimators": "xgb_n_estimators",
+        "max_depth": "xgb_max_depth",
+        "learning_rate": "xgb_learning_rate",
+        "subsample": "xgb_subsample",
+        "colsample_bytree": "xgb_colsample_bytree",
+    },
+    "svm": {
+        "C": "svm_C",
+        "gamma": "svm_gamma",
+        "kernel": "svm_kernel",
+        "class_weight": "svm_class_weight",
+    },
+    "random_forest": {
+        "n_estimators": "rf_n_estimators",
+        "max_depth": "rf_max_depth",
+        "min_samples_leaf": "rf_min_samples_leaf",
+        "max_features": "rf_max_features",
+    },
+    "decision_tree": {
+        "max_depth": "dt_max_depth",
+        "min_samples_leaf": "dt_min_samples_leaf",
+        "max_features": "dt_max_features",
+        "ccp_alpha": "dt_ccp_alpha",
+    },
+    "lstm": {
+        "units": "lstm_units",
+        "num_layers": "lstm_num_layers",
+        "dropout_rate": "lstm_dropout_rate",
+        "learning_rate": "lstm_learning_rate",
+    },
+    "cnn": {
+        "filters": "cnn_filters",
+        "kernel_size": "cnn_kernel_size",
+        "learning_rate": "cnn_learning_rate",
+    },
+    "transformer": {
+        "d_model": "transformer_d_model",
+        "num_heads": "transformer_num_heads",
+        "dropout_rate": "transformer_dropout_rate",
+        "learning_rate": "transformer_learning_rate",
+    },
+}
+
+
+def _convert_model_overrides(overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert model__param keys (e.g. 'logistic__C') to internal names (e.g. 'logit_C')."""
+    converted: Dict[str, Any] = {}
+    consumed: set = set()
+    for key, value in overrides.items():
+        if "__" not in key:
+            continue
+        parts = key.split("__", 1)
+        if len(parts) != 2:
+            continue
+        model, param = parts
+        aliases = HYPERPARAM_ALIASES.get(model, {})
+        internal_key = aliases.get(param, f"{model}_{param}")
+        converted[internal_key] = value
+        consumed.add(key)
+    result = {k: v for k, v in overrides.items() if k not in consumed}
+    result.update(converted)
+    return result
 from api.schemas.backtest import HPO_TRIAL_MAPS
 from logging_config import emit_event
 
@@ -220,7 +293,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             from pipeline.backtester.composed import MLBacktester
 
             feat_cfg = deepcopy(CLASS_DEFAULTS["features"])
-            feat_cfg.update(config.get("config_overrides", {}))
+            feat_cfg.update(_convert_model_overrides(config.get("config_overrides", {})))
 
             tc = _get_trial_counts(hpo_intensity, model_type)
             n_trials_hdr = max(tc.get("random", 3) + tc.get("bayes", 3), 10)
@@ -290,7 +363,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             base_cfg["n_startup_trials"] = tc.get("random", 3)
             base_cfg["seed"] = seed
             base_cfg["period_unit"] = period_unit
-            base_cfg.update(config.get("config_overrides", {}))
+            base_cfg.update(_convert_model_overrides(config.get("config_overrides", {})))
 
             df_sim = bt.real_trading_simulation(
                 base_cfg,

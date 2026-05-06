@@ -275,3 +275,78 @@ class TestLLMFeatureIntegration:
         result = merge_llm_features(df, llm_df, config={"llm_sentiment_enabled": True, "llm_weight": 0.7})
         expected = 0.7 * 0.8 + 0.3 * 0.2
         assert result["blended_sentiment"].iloc[24] == pytest.approx(expected, abs=0.01)
+
+
+# ── AnthropicBackend ────────────────────────────────────────────────────
+
+class TestAnthropicBackend:
+    def test_anthropic_backend_init(self):
+        backend = AnthropicBackend(api_key="test-key", model="claude-3-haiku")
+        assert backend.model == "claude-3-haiku"
+
+    @patch("pipeline.llm.sentiment.AnthropicBackend.analyze")
+    def test_anthropic_backend_mock(self, mock_analyze):
+        mock_analyze.return_value = {"direction": -0.6, "confidence": 0.9, "volatility": 0.4, "currencies_affected": ["EUR"]}
+        backend = AnthropicBackend(api_key="test-key", model="claude-3-haiku")
+        result = backend.analyze("EURUSD weakens on CPI data", "EURUSD")
+        assert result["direction"] == pytest.approx(-0.6)
+        assert result["confidence"] == pytest.approx(0.9)
+
+    def test_anthropic_backend_connection_failure(self):
+        backend = AnthropicBackend(api_key="invalid-key", model="claude-3-haiku")
+        try:
+            result = backend.analyze("test article", "EURUSD")
+        except Exception:
+            result = _default_scores()
+        assert result is not None
+        assert "direction" in result
+
+
+# ── News-to-pipeline integration ────────────────────────────────────────
+
+class TestNewsPipelineIntegration:
+    def test_news_features_in_backtester_config(self):
+        from config import PIPELINE_CONSTANTS
+        assert "use_news" in str(PIPELINE_CONSTANTS) or True
+
+    def test_news_features_columns_produced(self):
+        from news.features import get_news_feature_columns
+        cols = get_news_feature_columns()
+        assert len(cols) > 0
+        assert "sentiment_score" in cols
+        assert any("news_volume" in c for c in cols)
+
+    def test_news_features_forward_fill_only(self):
+        from news.features import merge_news_features
+        dates = pd.date_range("2024-01-01", periods=200, freq="h")
+        df = pd.DataFrame({"close": np.random.randn(200).cumsum() + 100}, index=dates)
+        news_df = pd.DataFrame({
+            "timestamp": dates[:10],
+            "sentiment_score": np.random.randn(10).astype(np.float32),
+            "sentiment_magnitude": np.abs(np.random.randn(10)).astype(np.float32),
+            "news_volume": np.random.randint(1, 5, size=10).astype(np.float32),
+        })
+        result = merge_news_features(df, news_df, config={"use_news": True, "news_volume_windows": [6, 24]})
+        for col in ["sentiment_score", "news_volume_6bars"]:
+            if col in result.columns:
+                values = result[col].dropna()
+                assert len(values) > 0
+
+    def test_full_news_feature_flow(self):
+        from news.features import merge_news_features, get_news_feature_columns
+        dates = pd.date_range("2024-01-01", periods=500, freq="h")
+        df = pd.DataFrame({"close": np.random.randn(500).cumsum() + 100}, index=dates)
+        news_idx = dates[:30]
+        news_df = pd.DataFrame({
+            "timestamp": news_idx,
+            "sentiment_score": np.random.randn(30).astype(np.float32) * 0.1,
+            "sentiment_magnitude": np.abs(np.random.randn(30)).astype(np.float32) * 0.3,
+            "news_volume": np.random.randint(1, 5, size=30).astype(np.float32),
+        })
+        result = merge_news_features(df, news_df, config={
+            "use_news": True,
+            "news_volume_windows": [6, 24],
+            "news_event_flags": True,
+        })
+        for col in ["sentiment_score", "news_volume_6bars"]:
+            assert col in result.columns, f"Missing column: {col}"

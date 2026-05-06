@@ -21,6 +21,9 @@ sys.path.insert(0, _project_root)
 # ── All registered model types ──
 ALL_MODELS = [
     "logistic",
+    "svm",
+    "random_forest",
+    "decision_tree",
     "xgboost",
     "cnn",
     "lstm",
@@ -165,7 +168,7 @@ def main():
     
     print(SEPARATOR)
     print("MODEL VALIDATION — All Model Types Smoke Test")
-    print(f"Mode: {'QUICK (logistic + xgboost)' if quick else 'FULL (all 8 models)'}")
+    print(f"Mode: {'QUICK (logistic + xgboost)' if quick else 'FULL (all 11 models)'}")
     print(f"Python: {sys.version.split()[0]}")
     print(f"CWD: {os.getcwd()}")
     print(SEPARATOR)
