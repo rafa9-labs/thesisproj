@@ -316,14 +316,16 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
 
                     scraper = NewsScraper()
                     articles = scraper.fetch_all()
+                    pair_val = pair or "EURUSD"
+                    filtered = NewsScraper.filter_by_pair(articles, pair_val)
                     backend = feat_cfg.get("news_sentiment_backend", "vader")
                     analyzer = SentimentAnalyzer(backend=backend)
-                    scored = analyzer.score_articles(articles)
+                    scored = analyzer.score_articles(filtered)
                     news_aggregated = analyzer.aggregate_to_df(scored, freq="1h")
                     econ_events = scraper.economic_calendar_events()
                     bt._news_aggregated = news_aggregated
                     bt._news_economic_events = econ_events
-                    _pub("news_loaded", job_id, {"articles": len(articles), "backend": backend})
+                    _pub("news_loaded", job_id, {"articles": len(filtered), "backend": backend})
                 except Exception as _news_err:
                     _pub("news_skip", job_id, {"reason": str(_news_err)[:200]})
 
@@ -343,11 +345,12 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                             pass
 
                     pair_val = pair or "EURUSD"
-                    scored_llm = llm_engine.score_articles(llm_articles, pair=pair_val)
+                    llm_filtered = NewsScraper.filter_by_pair(llm_articles, pair_val)
+                    scored_llm = llm_engine.score_articles(llm_filtered, pair=pair_val)
                     llm_aggregated = llm_engine.aggregate_to_df(scored_llm, freq="1h")
                     bt._llm_aggregated = llm_aggregated
                     _pub("llm_loaded", job_id, {
-                        "articles": len(llm_articles),
+                        "articles": len(llm_filtered),
                         "backend": feat_cfg.get("llm_backend", "ollama"),
                     })
                     llm_engine.close()

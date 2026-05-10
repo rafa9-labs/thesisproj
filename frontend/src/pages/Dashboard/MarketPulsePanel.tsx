@@ -50,6 +50,41 @@ function SentimentGauge({ value, label, pair }: { value: number | null; label: s
   );
 }
 
+function PositionBar({ position, confidence, articleCount }: { position: number; confidence: number; articleCount: number }) {
+  const clamped = Math.max(-1, Math.min(1, position));
+  const pct = ((clamped + 1) / 2) * 100;
+  const isLong = clamped > 0;
+  const color = isLong ? "var(--color-accent-success)" : clamped < 0 ? "var(--color-accent-danger)" : "var(--color-text-muted)";
+  const label = isLong ? `+${(clamped * 100).toFixed(0)}% Long` : clamped < 0 ? `${(clamped * 100).toFixed(0)}% Short` : "Neutral";
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>Recommended Position</span>
+        <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>{articleCount} articles</span>
+      </div>
+      <div className="relative h-2 w-full rounded-full overflow-hidden" style={{ backgroundColor: "var(--color-glass-hover)" }}>
+        <div
+          className="absolute top-0 h-full rounded-full transition-all duration-500"
+          style={{
+            left: clamped >= 0 ? "50%" : `${pct}%`,
+            width: `${Math.abs(clamped) * 50}%`,
+            backgroundColor: color,
+          }}
+        />
+        <div
+          className="absolute top-0 h-full w-[1px]"
+          style={{ left: "50%", backgroundColor: "var(--color-text-muted)" }}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
+        <span className="text-[10px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>Confidence {formatPercent(confidence)}</span>
+      </div>
+    </div>
+  );
+}
+
 function ArticleFeedItem({ article }: { article: ArticleItem }) {
   const isPositive = article.sentiment_score > 0;
   const color = isPositive ? "var(--color-accent-success)" : article.sentiment_score < 0 ? "var(--color-accent-danger)" : "var(--color-text-muted)";
@@ -73,6 +108,9 @@ export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
   const pairData = sentiment?.pairs?.[pair];
   const blended = pairData?.blended_sentiment ?? pairData?.vader_sentiment ?? 0;
   const topArticles: ArticleItem[] = sentiment?.top_articles ?? [];
+  const recommendedPosition = pairData?.recommended_position ?? 0;
+  const positionConfidence = pairData?.position_confidence ?? 0;
+  const articleCount = pairData?.article_count ?? 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -98,6 +136,8 @@ export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
                    LLM unavailable — using VADER fallback. Start Ollama or configure an API key.
                  </span>
                )}
+
+               <PositionBar position={recommendedPosition} confidence={positionConfidence} articleCount={articleCount} />
 
                <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>Sentiment Details</span>

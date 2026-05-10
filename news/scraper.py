@@ -466,3 +466,23 @@ class NewsScraper:
                 if tag not in found:
                     found.append(tag)
         return found
+
+    @staticmethod
+    def filter_by_pair(articles: List[NewsArticle], pair: str) -> List[NewsArticle]:
+        """Return articles relevant to a currency pair.
+
+        Matches articles whose pair_tags include:
+        - the full pair symbol (e.g. EURUSD)
+        - either individual currency (e.g. EUR or USD)
+        """
+        pair = pair.upper().replace("/", "").replace("-", "")
+        if not pair or len(pair) < 6:
+            return articles
+        base = pair[:3]
+        quote = pair[3:]
+        relevant = []
+        for article in articles:
+            tags = [t.upper() for t in article.pair_tags]
+            if pair in tags or base in tags or quote in tags:
+                relevant.append(article)
+        return relevant

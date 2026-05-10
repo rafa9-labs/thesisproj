@@ -277,7 +277,7 @@ export function useLiveSentiment(pair: string = "EURUSD") {
   return useQuery({
     queryKey: ["live-sentiment", pair],
     queryFn: async () => {
-      const { data } = await apiClient.get<Record<string, unknown>>("/news/sentiment/live", {
+      const { data } = await apiClient.get<import("./schemas").LiveSentimentResponse>("/news/sentiment/live", {
         params: { pair },
       });
       return data;

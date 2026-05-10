@@ -348,3 +348,58 @@ export interface ModelHyperparams {
 export interface ModelHyperparamsResponse {
   models: ModelHyperparams[];
 }
+
+export interface LiveSessionInfo {
+  session_id: string;
+  pair: string;
+  model: string;
+  timeframe: string;
+  status: string;
+  equity: number;
+  position: string;
+  signal_count: number;
+  created_at: string;
+}
+
+export interface LiveSignalEvent {
+  event: "signal" | "heartbeat" | "stopped" | "error";
+  session_id?: string;
+  time: number;
+  direction?: string;
+  confidence?: number;
+  price?: number;
+  equity?: number;
+  pnl?: number;
+  position?: string;
+  message?: string;
+}
+
+export interface LiveSentimentPairData {
+  vader_sentiment: number;
+  vader_magnitude: number;
+  blended_sentiment: number;
+  article_count: number;
+  last_updated: string;
+  recommended_position: number;
+  position_confidence: number;
+  llm_sentiment?: number | null;
+  llm_confidence?: number | null;
+  llm_volatility?: number | null;
+  llm_weight?: number;
+  currencies_affected?: string[];
+}
+
+export interface LiveSentimentArticle {
+  title: string;
+  source: string;
+  sentiment_score: number;
+  timestamp: string;
+}
+
+export interface LiveSentimentResponse {
+  pairs: Record<string, LiveSentimentPairData>;
+  top_articles: LiveSentimentArticle[];
+  backend: string;
+  model: string;
+  error?: string;
+}

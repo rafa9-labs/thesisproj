@@ -107,8 +107,10 @@ def get_live_sentiment(
         from news.sentiment import SentimentAnalyzer
         scraper = NewsScraper()
         articles = scraper.fetch_all()
+        filtered = NewsScraper.filter_by_pair(articles, pair)
+
         vader_analyzer = SentimentAnalyzer(backend="vader")
-        scored_vader = vader_analyzer.score_articles(articles)
+        scored_vader = vader_analyzer.score_articles(filtered)
 
         vader_directions = [s.score for _, s in scored_vader]
         vader_magnitudes = [s.magnitude for _, s in scored_vader]
@@ -125,14 +127,21 @@ def get_live_sentiment(
                 "timestamp": article.timestamp.isoformat() if hasattr(article.timestamp, "isoformat") else str(article.timestamp),
             })
 
+        # Continuous position mapping
+        blended = round(vader_avg, 4)
+        recommended_position = max(-1.0, min(1.0, blended))
+        position_confidence = abs(recommended_position)
+
         result = {
             "pairs": {
                 pair: {
                     "vader_sentiment": round(vader_avg, 4),
                     "vader_magnitude": round(vader_mag, 4),
-                    "blended_sentiment": round(vader_avg, 4),
-                    "article_count": len(articles),
+                    "blended_sentiment": blended,
+                    "article_count": len(filtered),
                     "last_updated": datetime.now(tz=timezone.utc).isoformat(),
+                    "recommended_position": round(recommended_position, 4),
+                    "position_confidence": round(position_confidence, 4),
                 }
             },
             "top_articles": top_articles,
@@ -152,21 +161,26 @@ def get_live_sentiment(
                 "llm_ollama_url": PIPELINE_CONSTANTS.get("llm_ollama_url", "http://localhost:11434"),
             }
             engine = LLMSentimentEngine(config=llm_config)
-            scored_llm = engine.score_articles(articles[:5], pair=pair)
-            live = engine.get_live_sentiment(pair, articles[:5])
+            llm_articles = filtered[:10] if len(filtered) >= 10 else filtered
+            scored_llm = engine.score_articles(llm_articles, pair=pair)
+            live = engine.get_live_sentiment(pair, llm_articles)
             engine.close()
 
             llm_w = llm_config["llm_weight"]
             llm_dir = live.get("direction", 0.0)
-            blended = llm_w * llm_dir + (1 - llm_w) * vader_avg
+            blended_llm = llm_w * llm_dir + (1 - llm_w) * vader_avg
+            blended_llm = round(blended_llm, 4)
+            recommended_position_llm = max(-1.0, min(1.0, blended_llm))
 
             result["pairs"][pair].update({
                 "llm_sentiment": round(llm_dir, 4),
                 "llm_confidence": round(live.get("confidence", 0.0), 4),
                 "llm_volatility": round(live.get("volatility", 0.3), 4),
-                "blended_sentiment": round(blended, 4),
+                "blended_sentiment": blended_llm,
                 "llm_weight": llm_w,
                 "currencies_affected": live.get("currencies_affected", []),
+                "recommended_position": round(recommended_position_llm, 4),
+                "position_confidence": round(abs(recommended_position_llm), 4),
             })
             result["backend"] = llm_config["llm_backend"]
             result["model"] = llm_config["llm_model"]
