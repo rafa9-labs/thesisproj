@@ -13,7 +13,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
-import { useConfig, useSaveConfig } from "@/api/queries";
+import { useConfig, useSaveConfig, useStoreApiKey } from "@/api/queries";
 
 interface SectionProps {
   icon: React.ReactNode;
@@ -270,6 +270,8 @@ export function SettingsPage() {
   const store = useSettingsStore();
   const { data: remoteConfig } = useConfig();
   const saveConfig = useSaveConfig();
+  const storeApiKey = useStoreApiKey();
+  const [apiKeySaved, setApiKeySaved] = useState(false);
   const synced = useRef(false);
 
   useEffect(() => {
@@ -284,6 +286,18 @@ export function SettingsPage() {
 
   const syncToBackend = (key: string, value: unknown) => {
     saveConfig.mutate({ [key]: value, ...store });
+  };
+
+  const handleOandaBlur = () => {
+    const key = store.oandaApiKey;
+    if (key) {
+      storeApiKey.mutate({ name: "oanda", value: key }, {
+        onSuccess: () => {
+          setApiKeySaved(true);
+          setTimeout(() => setApiKeySaved(false), 2000);
+        },
+      });
+    }
   };
 
   return (
@@ -368,21 +382,29 @@ export function SettingsPage() {
 
       <Section icon={<Database size={18} />} title="Data Sources">
         <FieldRow label="OANDA API Key">
-          <input
-            type="password"
-            value={store.oandaApiKey ?? ""}
-            onChange={(e) => store.setField("oandaApiKey", e.target.value || null)}
-            placeholder="Enter API key…"
-            className="rounded-md border px-3 py-1.5 text-xs transition-all duration-200 focus:outline-none"
-            style={{
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "var(--color-glass)",
-              color: "var(--color-text-primary)",
-              fontFamily: "var(--font-mono)",
-              width: 240,
-              backdropFilter: "blur(8px)",
-            }}
-          />
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={store.oandaApiKey ?? ""}
+              onChange={(e) => store.setField("oandaApiKey", e.target.value || null)}
+              onBlur={handleOandaBlur}
+              placeholder="Enter API key…"
+              className="rounded-md border px-3 py-1.5 text-xs transition-all duration-200 focus:outline-none"
+              style={{
+                borderColor: "var(--color-glass-border)",
+                backgroundColor: "var(--color-glass)",
+                color: "var(--color-text-primary)",
+                fontFamily: "var(--font-mono)",
+                width: 240,
+                backdropFilter: "blur(8px)",
+              }}
+            />
+            {apiKeySaved && (
+              <span className="text-[10px] font-medium" style={{ color: "var(--color-accent-success)" }}>
+                Saved
+              </span>
+            )}
+          </div>
         </FieldRow>
         <FieldRow label="Data Directory">
           <span

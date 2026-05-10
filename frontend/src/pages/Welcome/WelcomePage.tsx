@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useBacktestStore } from "@/stores/useBacktestStore";
+import { useStoreApiKey } from "@/api/queries";
 
 const PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "XAUUSD"] as const;
 const TIMEFRAMES = ["M30", "H1", "H4"] as const;
@@ -10,6 +11,7 @@ type Step = "pair" | "apikey" | "done";
 export function WelcomePage({ onComplete }: { onComplete: () => void }) {
   const { setField } = useSettingsStore();
   const setBacktestField = useBacktestStore((s) => s.setField);
+  const storeApiKey = useStoreApiKey();
 
   const [step, setStep] = useState<Step>("pair");
   const [pair, setPair] = useState("EURUSD");
@@ -19,6 +21,9 @@ export function WelcomePage({ onComplete }: { onComplete: () => void }) {
 
   const handleFinish = () => {
     setField("oandaApiKey", apiKey || null);
+    if (apiKey) {
+      storeApiKey.mutate({ name: "oanda", value: apiKey });
+    }
     if (dataPath) setField("dataDir", dataPath);
     setBacktestField("pair", pair);
     setBacktestField("timeframe", timeframe);

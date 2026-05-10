@@ -1,5 +1,6 @@
-import { useEffect } from "react";
-import { usePairs } from "@/api/queries";
+import { useEffect, useRef, useState } from "react";
+import { Upload } from "lucide-react";
+import { usePairs, useUploadCsv } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 
 export function AssetSelector() {
@@ -9,6 +10,33 @@ export function AssetSelector() {
   const startDate = useBacktestStore((s) => s.startDate);
   const endDate = useBacktestStore((s) => s.endDate);
   const setField = useBacktestStore((s) => s.setField);
+  const uploadCsv = useUploadCsv();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadStatus, setUploadStatus] = useState<">("idle" | "uploading" | "success" | "error")>("idle");
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadStatus("uploading");
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("pair", pair);
+    formData.append("timeframe", timeframe);
+    try {
+      await uploadCsv.mutateAsync(formData);
+      setUploadStatus("success");
+      setTimeout(() => setUploadStatus("idle"), 3000);
+    } catch {
+      setUploadStatus("error");
+      setTimeout(() => setUploadStatus("idle"), 3000);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const selected = pairs?.find((p) => p.pair.symbol === pair);
   const tfData = selected?.timeframes.find((t) => t.timeframe === timeframe);
@@ -148,6 +176,40 @@ export function AssetSelector() {
             <p className="text-[11px] font-light" style={{ color: "var(--color-text-muted)" }}>
               {startDate || endDate ? "Custom range" : "Full range"}
             </p>
+          </div>
+
+          <div className="mt-3 flex items-center gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <button
+              onClick={handleImportClick}
+              disabled={uploadStatus === "uploading"}
+              className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider transition-all hover:border-[var(--color-border-active)]"
+              style={{
+                borderColor: "var(--color-glass-border)",
+                backgroundColor: "var(--color-glass-hover)",
+                color: "var(--color-text-secondary)",
+                cursor: uploadStatus === "uploading" ? "not-allowed" : "pointer",
+                opacity: uploadStatus === "uploading" ? 0.6 : 1,
+              }}
+            >
+              <Upload size={12} strokeWidth={2} />
+              Import CSV
+            </button>
+            {uploadStatus === "uploading" && (
+              <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Uploading…</span>
+            )}
+            {uploadStatus === "success" && (
+              <span className="text-[10px] font-medium" style={{ color: "var(--color-accent-success)" }}>Imported</span>
+            )}
+            {uploadStatus === "error" && (
+              <span className="text-[10px] font-medium" style={{ color: "var(--color-accent-danger)" }}>Upload failed</span>
+            )}
           </div>
         </>
       )}

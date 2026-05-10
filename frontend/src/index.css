@@ -108,6 +108,12 @@ input[type="number"]::-webkit-outer-spin-button {
   opacity: 1;
 }
 
+/* Ensure native select dropdown options are readable on all OS themes */
+select option {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
 /* Skeleton shimmer */
 @keyframes pulse-skeleton {
   0%,

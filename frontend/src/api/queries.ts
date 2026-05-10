@@ -157,6 +157,34 @@ export function useSaveConfig() {
   });
 }
 
+export function useStoreApiKey() {
+  return useMutation({
+    mutationFn: async ({ name, value }: { name: string; value: string }) => {
+      await apiClient.post("/config/api-key", { name, value });
+    },
+  });
+}
+
+export function useUploadCsv() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (formData: FormData) => {
+      const { data } = await apiClient.post<{
+        status: string;
+        filename: string;
+        pair: string;
+        timeframe: string;
+      }>("/data/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pairs"] });
+    },
+  });
+}
+
 export interface NewsStatus {
   sentiment_backend: string;
   cached_articles: number;
@@ -249,7 +277,7 @@ export function useLiveSentiment(pair: string = "EURUSD") {
   return useQuery({
     queryKey: ["live-sentiment", pair],
     queryFn: async () => {
-      const { data } = await apiClient.get<Record<string, any>>("/news/sentiment/live", {
+      const { data } = await apiClient.get<Record<string, unknown>>("/news/sentiment/live", {
         params: { pair },
       });
       return data;
@@ -323,15 +351,16 @@ export function useResultsHistory(params: { limit?: number; offset?: number; pai
 }
 
 export function useLivePrices(pairs: string[], lookbackBars = 50) {
+  const validPairs = pairs.filter((p) => p && p.trim() !== "");
   return useQuery({
-    queryKey: ["live-prices", ...pairs, lookbackBars],
+    queryKey: ["live-prices", ...validPairs, lookbackBars],
     queryFn: async () => {
       const { data } = await apiClient.get<import("./schemas").LivePricesResponse>("/prices/live", {
-        params: { pairs: pairs.join(","), lookback_bars: lookbackBars },
+        params: { pairs: validPairs.join(","), lookback_bars: lookbackBars },
       });
       return data;
     },
-    enabled: pairs.length > 0,
+    enabled: validPairs.length > 0,
     refetchInterval: 3_000,
     staleTime: 2_000,
     retry: 1,
@@ -363,5 +392,60 @@ export function useTradeChartData(jobId: string, model: string) {
     },
     enabled: !!jobId && !!model,
     staleTime: Infinity,
+  });
+}
+
+export function useDeployLiveSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { pair: string; model: string; timeframe: string; initial_equity?: number }) => {
+      const { data } = await apiClient.post<import("./schemas").LiveSessionInfo>("/live/deploy", payload);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["live-sessions"] });
+    },
+  });
+}
+
+export function useStopLiveSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (sessionId: string) => {
+      const { data } = await apiClient.post<{
+        session_id: string;
+        status: string;
+        equity: number;
+        signal_count: number;
+      }>(`/live/${sessionId}/stop`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["live-sessions"] });
+    },
+  });
+}
+
+export function useLiveSessionStatus(sessionId: string | null) {
+  return useQuery({
+    queryKey: ["live-session", sessionId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<import("./schemas").LiveSessionInfo>(`/live/${sessionId}/status`);
+      return data;
+    },
+    enabled: !!sessionId,
+    refetchInterval: 5_000,
+  });
+}
+
+export function useLiveSessions() {
+  return useQuery({
+    queryKey: ["live-sessions"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<import("./schemas").LiveSessionInfo[]>("/live/sessions");
+      return data;
+    },
+    refetchInterval: 10_000,
+    staleTime: 5_000,
   });
 }
