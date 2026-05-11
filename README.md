@@ -6,7 +6,7 @@ A commercial-grade walk-forward backtesting engine for Forex trading strategies.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    FOREX ML BACKTESTER PIPELINE                      │
+│                              KODAQUANT                                │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  Data Layer                                                          │
@@ -60,9 +60,8 @@ A commercial-grade walk-forward backtesting engine for Forex trading strategies.
 │  ├─ GET  /api/v1/data/download     — data management                 │
 │  └─ Background jobs via Celery + Redis                               │
 │                                                                      │
-│  UI Layer                                                            │
-│  ├─ Streamlit (interim dev UI): app.py on port 8501                  │
-│  └─ React Frontend (Sprint 8): Vite + TS + TailwindCSS + shadcn/ui  │
+  │  UI Layer                                                            │
+  │  └─ React Frontend: Vite + TS + TailwindCSS + shadcn/ui              │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 
@@ -147,8 +146,7 @@ A commercial-grade walk-forward backtesting engine for Forex trading strategies.
 ## Project Structure
 
 ```
-forex-pipeline/
-├── app.py                          # Streamlit dev UI entry point
+KodaQuant/
 ├── config.py                       # Global config + PIPELINE_CONSTANTS + ExecutionConfig
 │
 ├── pipeline/                       # Core backtesting engine
@@ -208,17 +206,9 @@ forex-pipeline/
 │   │   └── health.py               # Health check
 │   └── tasks.py                    # Celery background tasks
 │
-├── ui/                             # Streamlit UI components
-│   ├── controls.py                 # Sidebar nav + 6-tab layout
-│   ├── state.py                    # AppState + backtest adapter
-│   ├── results.py                  # Results display + export
-│   ├── dashboard.py                # Dashboard renderer
-│   ├── charts.py                   # Plotly chart builders
-│   └── validators.py               # Input validation
-│
 ├── schemas/                        # Pydantic-like config validators
-│   ├── backtest.py, features.py, hpo.py, settings.py
-│
+|   ├── backtest.py, features.py, hpo.py, settings.py
+|
 ├── csv_data/                       # Historical FX data (18 files)
 │   ├── EURUSD_10_years_{M30,H1,H4}_OANDA.csv
 │   ├── GBPUSD_10_years_{M30,H1,H4}_OANDA.csv
@@ -230,7 +220,6 @@ forex-pipeline/
 ├── hpo/                            # Best HPO configs per model
 ├── tests/                          # 436 tests across 23 test files
 │
-├── launch_ui.bat                   # Streamlit UI launcher (Windows → WSL)
 ├── run_smoke.bat                   # Smoke test (all models, 1 trial)
 ├── run_all_tests.bat               # Full test suite (20-60 min)
 ├── run_comparison.bat              # Multi-model comparison runner
@@ -277,27 +266,23 @@ pip install celery[redis] redis
 
 ## Usage
 
-### Running the Streamlit UI
+### Running the Desktop App (Electron)
 
 ```powershell
-# Option 1: Double-click launch_ui.bat
+# Development mode
+cd frontend; npm run dev:electron
 
-# Option 2: PowerShell
-.\launch_ui.bat
-
-# Option 3: Manual (if not using WSL)
-streamlit run app.py
-
-# Then open: http://localhost:8501
+# Production build
+.\scripts\build_electron.bat
 ```
 
-The Streamlit UI provides 6 tabs:
-1. **Dashboard** — KPI overview, recent backtests
+The React UI provides pages for:
+1. **Dashboard** — Live price ticker, candlestick charts, Market Pulse sentiment, KPIs
 2. **Backtest** — Configure and run backtests (model, pair, features, execution)
-3. **Results** — Equity curves, metrics, trade log, export
-4. **Model Comparison** — Side-by-side model leaderboard
-5. **News & Sentiment** — Sentiment features, event flags
-6. **Settings** — GPU config, data sources, pipeline constants
+3. **Results** — Equity curves, trade visualization, metrics, export
+4. **Compare** — Model leaderboard, significance, cross-pair overlay
+5. **News** — Event markers, sentiment analysis, live news feed
+6. **Settings** — App config, licensing, data sources
 
 ### Running via CLI (Headless)
 
@@ -484,16 +469,25 @@ Per-model HPO search spaces in `SEARCH_SPACE`:
 | **S1** | Model Comparison & Leaderboard | DONE |
 | **S2** | Advanced Execution Models | DONE |
 | **S3** | Multi-Currency Expansion | DONE |
-| **S4** | Docker + CI/CD | PARTIAL (RAM opt done) |
-| **S5** | Comprehensive Tests + Benchmarks | IN PROGRESS (436 tests) |
+| **S4** | Docker + CI/CD | PARTIAL |
+| **S5** | Comprehensive Tests + Benchmarks | DONE |
 | **S6** | News & Sentiment Features | DONE |
 | **S7** | FastAPI Backend | DONE |
-| **S8** | React Frontend | NEXT |
-| **S9** | Electron Desktop Shell | TODO |
-| **S10** | Security & Licensing (Paddle) | TODO |
-| **S11** | Installer & Auto-Update | TODO |
-| **S12** | Commercial Infrastructure | TODO |
+| **S8** | React Frontend | DONE |
+| **S9** | Electron Desktop Shell | DONE |
+| **S10** | Security & Licensing (Paddle) | DONE |
+| **S11** | Installer & Auto-Update | DONE |
+| **S12** | Product Intelligence & UX | DONE |
 | **S13** | Beta & Launch | TODO |
+| **S14** | Pipeline Enhancements | DONE |
+| **S15** | KodaQuant Branding | IN PROGRESS |
+| **S16** | Overfitting & Transparency | TODO |
+| **S17** | UI Polish & Search | TODO |
+| **S18** | Live News & Market Data | TODO |
+| **S19** | Ensemble Models | TODO |
+| **S20** | LLM AI Integration | TODO |
+| **S21** | Live Trading (OANDA) | TODO |
+| **S22** | Commercial Infrastructure | TODO |
 
 **Product target**: Commercial Electron desktop app (React + FastAPI + Python), sold via Paddle.
 **Pricing**: Hybrid — one-time purchase + annual updates subscription.
@@ -504,9 +498,8 @@ See `ROADMAP.md` for full sprint details with sub-tasks and file references.
 
 | Layer | Technology |
 |-------|-----------|
-| **UI (dev)** | Streamlit |
-| **UI (product)** | React 18 + TypeScript + TailwindCSS + shadcn/ui |
-| **Desktop** | Electron (Sprint 9) |
+| **UI** | React 18 + TypeScript + TailwindCSS + shadcn/ui |
+| **Desktop** | Electron |
 | **API** | FastAPI + Uvicorn |
 | **Task Queue** | Celery + Redis |
 | **Data** | Pandas + NumPy + SQLite + Parquet |
@@ -514,9 +507,9 @@ See `ROADMAP.md` for full sprint details with sub-tasks and file references.
 | **ML (deep)** | TensorFlow / Keras |
 | **ML (RL)** | PyTorch |
 | **HPO** | Optuna |
-| **Charts** | Plotly + Matplotlib |
+| **Charts** | light-weight charts + Recharts + Plotly |
 | **News** | feedparser + VADER / HuggingFace Transformers |
-| **Testing** | pytest + 436 tests |
+| **Testing** | pytest + 496+ tests |
 
 ## License
 

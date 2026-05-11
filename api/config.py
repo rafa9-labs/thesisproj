@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_prefix": "API_", "extra": "ignore"}
 
-    app_name: str = "FX ML Pipeline API"
+    app_name: str = "KodaQuant API"
     version: str = "1.0.0"
     debug: bool = False
 

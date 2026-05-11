@@ -50,16 +50,20 @@ cd /d "%PROJECT_ROOT%"
 echo       React build complete.
 
 echo [3/7] Compiling Electron TypeScript...
-call npx tsc -p electron/tsconfig.json
+cd /d "%PROJECT_ROOT%\frontend"
+call npx tsc -p ..\electron\tsconfig.json --outDir electron-dist
 if errorlevel 1 (
     echo [ERROR] Electron TypeScript compilation failed!
+    cd /d "%PROJECT_ROOT%"
     exit /b 1
 )
-if not exist "frontend\electron-dist\main.js" (
+if not exist "electron-dist\main.js" (
     echo [ERROR] Electron main.js not found in frontend\electron-dist\!
+    cd /d "%PROJECT_ROOT%"
     exit /b 1
 )
 echo       Electron TS compile complete. Output: frontend\electron-dist\
+cd /d "%PROJECT_ROOT%"
 
 echo [4/7] Building Python backend (PyInstaller)...
 call scripts\build_python.bat
@@ -78,11 +82,10 @@ for /f "tokens=3" %%a in ('dir /s "dist\fx_backend" ^| findstr /c:"File(s)"') do
 echo       Bundle size: !BUILD_SIZE! bytes
 
 echo [6/7] Generating app icons...
-if not exist "build\icon.ico" (
-    echo [INFO] Generating placeholder icons...
-    node scripts\generate_icon.mjs
+if exist "scripts\generate_icons.py" (
+    python scripts\generate_icons.py
     if errorlevel 1 (
-        echo [WARN] Icon generation failed, using fallback.
+        echo [WARN] Icon generation failed, using existing icons if any.
     )
 ) else (
     echo       Icons already exist.

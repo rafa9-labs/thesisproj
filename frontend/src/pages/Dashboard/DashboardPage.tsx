@@ -34,7 +34,7 @@ export function DashboardPage() {
   const { data: jobs, isLoading: jobsLoading } = useJobHistory(50);
 
   const availablePairs = useMemo(
-    () => (pairs ?? []).map((p) => p.symbol),
+    () => (pairs ?? []).map((p) => p.pair?.symbol ?? "").filter((s) => s !== ""),
     [pairs],
   );
 
@@ -101,28 +101,26 @@ export function DashboardPage() {
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <QuickActions />
-        {availablePairs.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>
-              Pair
-            </span>
-            <select
-              value={activePair}
-              onChange={(e) => setActivePair(e.target.value)}
-              className="rounded-md border px-2.5 py-1 text-xs transition focus:outline-none"
-              style={{
-                borderColor: "var(--color-glass-border)",
-                backgroundColor: "var(--color-glass)",
-                color: "var(--color-text-primary)",
-                fontFamily: "var(--font-mono)",
-              }}
-            >
-              {availablePairs.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>
-        )}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>
+          Pair
+        </span>
+        <select
+          value={activePair}
+          onChange={(e) => setActivePair(e.target.value)}
+          className="rounded-md border px-2.5 py-1 text-xs transition focus:outline-none"
+          style={{
+            borderColor: "var(--color-glass-border)",
+            backgroundColor: "var(--color-glass)",
+            color: "var(--color-text-primary)",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          {(availablePairs.length > 0 ? availablePairs : ["EURUSD", "GBPUSD", "USDJPY"]).map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+      </div>
       </div>
 
       <PriceTicker pairs={availablePairs.length > 0 ? [activePair, ...availablePairs.filter((p) => p !== activePair).slice(0, 2)] : ["EURUSD", "GBPUSD", "USDJPY"]} />

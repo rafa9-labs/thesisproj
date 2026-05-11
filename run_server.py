@@ -1,4 +1,4 @@
-"""FX ML Backtester -- PyInstaller entry point.
+"""KodaQuant -- PyInstaller entry point.
 
 This file is the production entry point for the bundled application.
 It starts the FastAPI backend, serving both the API and the React frontend.
@@ -78,7 +78,7 @@ def _serve_static(app, frontend_dist: str | None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="FX ML Backtester Server")
+    parser = argparse.ArgumentParser(description="KodaQuant Server")
     parser.add_argument("--host", default=os.environ.get("API_HOST", "127.0.0.1"), help="Bind host")
     parser.add_argument("--port", type=int, default=int(os.environ.get("API_PORT", "8001")), help="Bind port")
     parser.add_argument("--data-dir", default=None, help="Data directory override")
@@ -101,9 +101,9 @@ def main():
     host = args.host
     port = args.port
 
-    print(f"[FX Backtester] Starting server on {host}:{port}")
-    print(f"[FX Backtester] Frontend dist: {frontend_dist}")
-    print(f"[FX Backtester] Data dir: {os.environ.get('API_DB_PATH', 'default')}")
+    print(f"[KodaQuant] Starting server on {host}:{port}")
+    print(f"[KodaQuant] Frontend dist: {frontend_dist}")
+    print(f"[KodaQuant] Data dir: {os.environ.get('API_DB_PATH', 'default')}")
 
     uvicorn.run(
         app,

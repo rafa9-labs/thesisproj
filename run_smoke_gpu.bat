@@ -5,7 +5,7 @@ REM   model: logistic, xgboost, cnn, lstm, transformer, ensemble_cnn_lstm_xgboos
 REM   If no model specified, runs ALL models (warning: slow even on GPU for DQN).
 
 echo ============================================
-echo   FX ML Backtester - GPU Smoke Test Runner
+echo   KodaQuant - GPU Smoke Test Runner
 echo ============================================
 echo.
 

@@ -22,7 +22,7 @@ export function createTray(mainWindow: BrowserWindow): Tray {
   const tray = new Tray(icon);
 
   const contextMenu = Menu.buildFromTemplate([
-    { label: "FX ML Backtester", enabled: false },
+    { label: "KodaQuant", enabled: false },
     { type: "separator" },
     {
       label: "Show Window",
@@ -42,7 +42,7 @@ export function createTray(mainWindow: BrowserWindow): Tray {
     { label: "Quit", click: () => app.quit() },
   ]);
 
-  tray.setToolTip("FX ML Backtester");
+  tray.setToolTip("KodaQuant");
   tray.setContextMenu(contextMenu);
 
   tray.on("double-click", () => {

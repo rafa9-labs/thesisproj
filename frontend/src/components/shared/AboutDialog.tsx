@@ -70,7 +70,7 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
 
         <div className="flex flex-col gap-2 pt-4" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
           <a
-            href="https://github.com/rafa9-labs/thesisproj"
+             href="https://github.com/rafa9-labs/kodaquant"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-xs transition hover:opacity-80"

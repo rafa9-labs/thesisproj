@@ -1,5 +1,5 @@
 """
-Comprehensive system test suite for FX ML Backtester.
+Comprehensive system test suite for KodaQuant.
 
 Tests:
 1. Module wiring — all 12 re-export modules import correctly

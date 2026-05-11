@@ -1,4 +1,4 @@
-"""News & Sentiment package for the FX ML Backtester.
+"""News & Sentiment package for KodaQuant.
 
 Provides:
 - NewsScraper: RSS + NewsAPI + economic calendar fetching with disk cache

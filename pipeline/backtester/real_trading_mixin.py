@@ -390,18 +390,24 @@ class RealTradingMixin:
             # Keep the cross-month curve continuous even in a flat-month fallback.
             # NOTE: test_bars is raw market data; we want the evaluated *_cont curves.
             try:
-                all_dfs.append(df_flat[["cstrategy_cont", "creturns_cont"]].copy())
+                _month_df = df_flat[["cstrategy_cont", "creturns_cont"]].copy()
+                if self._monthly_all_dfs_concat is None:
+                    self._monthly_all_dfs_concat = _month_df
+                else:
+                    self._monthly_all_dfs_concat = pd.concat([self._monthly_all_dfs_concat, _month_df])
+                del _month_df
             except Exception:
-                try:
-                    import pandas as _pd
-                    all_dfs.append(_pd.DataFrame(columns=["cstrategy_cont", "creturns_cont"]))
-                except Exception:
-                    pass
+                pass
 
             try:
-                trade_dfs.append(build_trade_log_from_df(df_flat))
+                _month_trade = build_trade_log_from_df(df_flat)
+                if self._monthly_trade_dfs_concat is None:
+                    self._monthly_trade_dfs_concat = _month_trade
+                else:
+                    self._monthly_trade_dfs_concat = pd.concat([self._monthly_trade_dfs_concat, _month_trade], ignore_index=True)
+                del _month_trade
             except Exception:
-                trade_dfs.append(pd.DataFrame())
+                pass
 
             print(
                 f"[FLAT] Month {period_idx}: logged FLAT month "
@@ -571,6 +577,8 @@ class RealTradingMixin:
                     hpo_cfg["n_startup_trials"] = 5
 
                 # IMPORTANT: for HPO we want the full dataset available, not the per-month slice
+                if hasattr(self, "data"):
+                    del self.data
                 self.data = full_data.copy()
 
                 # We only need params for this model_type
@@ -627,6 +635,9 @@ class RealTradingMixin:
         results = []
         all_dfs = []
         trade_dfs = []   # per-month trade DataFrames (aligned with all_dfs / results)
+        self._monthly_all_dfs_concat = None
+        self._monthly_trade_dfs_concat = None
+        _month_ix = 0
 
         _progress_cb = getattr(self, "_progress_callback", None)
 
@@ -892,6 +903,10 @@ class RealTradingMixin:
                     
                 # -- DQN short-circuit: evaluate directly (no Optuna) --
                 if model_type == "dqn":
+                    try:
+                        del self.data
+                    except Exception:
+                        pass
                     self.data = data_slice
 
                     lags_val = int(
@@ -998,6 +1013,10 @@ class RealTradingMixin:
                     if not wfo_ok:
                         # ----------- Legacy Optuna WFO fallback -----------
                         try:
+                            try:
+                                del self.data
+                            except Exception:
+                                pass
                             self.data = data_slice
                             config["use_proba"] = config.get("use_proba", True)
 
@@ -1053,6 +1072,10 @@ class RealTradingMixin:
                             )
 
                     # Restore full_data slice before either evaluation or flat-month fallback
+                    try:
+                        del self.data
+                    except Exception:
+                        pass
                     self.data = full_data.loc[train_start - period_offset(_pad_p, unit=_pu):test_end].copy()
 
                     # Metrics placeholder for this month/model (filled by consensus / Top-3 / single-best)
@@ -2363,9 +2386,22 @@ class RealTradingMixin:
                             print(f"[WARN] Could not build trade log for month {i + 1}: {_e}")
                             trade_df_month = None
 
-                        # save continuous curves for the cross-month plot
-                        all_dfs.append(eval_df_cont[["cstrategy_cont", "creturns_cont"]].copy())
-                        trade_dfs.append(trade_df_month)
+                        # save continuous curves for the cross-month plot (incremental to avoid list growth)
+                        _month_df = eval_df_cont[["cstrategy_cont", "creturns_cont"]].copy()
+                        if self._monthly_all_dfs_concat is None:
+                            self._monthly_all_dfs_concat = _month_df
+                        else:
+                            self._monthly_all_dfs_concat = pd.concat([self._monthly_all_dfs_concat, _month_df])
+                        del _month_df
+
+                        if trade_df_month is not None:
+                            if self._monthly_trade_dfs_concat is None:
+                                self._monthly_trade_dfs_concat = trade_df_month
+                            else:
+                                self._monthly_trade_dfs_concat = pd.concat(
+                                    [self._monthly_trade_dfs_concat, trade_df_month], ignore_index=True
+                                )
+                            del trade_df_month
                         
                     else:
                         print("[WARN] results DataFrame missing required columns -- skipping bar concat.")
@@ -2642,6 +2678,20 @@ class RealTradingMixin:
 
                 # Also clear feature cache after each month to avoid accumulation
                 self._clear_feature_cache()
+
+                # Periodic deep-pool restart to prevent worker RSS from growing across months.
+                # The ProcessPoolExecutor worker builds TF models each month and accumulates
+                # residual allocations even after clear_session(). Restarting every 6 months
+                # (configurable via MLB_DEEP_POOL_RESTART_INTERVAL) gives the worker a clean
+                # process memory footprint.
+                _restart_interval = int(os.environ.get("MLB_DEEP_POOL_RESTART_INTERVAL", "6"))
+                if _restart_interval > 0 and (_month_ix > 0) and (_month_ix % _restart_interval == 0):
+                    try:
+                        from pipeline.backtester.deep_mixin import DeepMixin
+                        DeepMixin._shutdown_deep_pool()
+                    except Exception:
+                        pass
+                _month_ix += 1
         
         # ---------------------------------------------------------------------
         # Wrap-up: aggregate results, save artifacts into this run's out_dir
@@ -2943,18 +2993,16 @@ class RealTradingMixin:
 
         # Per-bar comparison CSV/PNG -- run ONCE (single model vs BH)
         try:
-            if all_dfs:
-                bar_concat = pd.concat(all_dfs).sort_index()
+            _bar_concat = getattr(self, "_monthly_all_dfs_concat", None)
+            if _bar_concat is not None and not getattr(_bar_concat, "empty", True):
+                bar_concat = _bar_concat.sort_index()
                 bar_concat.columns = ["cstrategy_cont", "creturns_cont"]
                 self.bar_concat = bar_concat
 
-                try:
-                    valid_trade_dfs = [tdf for tdf in trade_dfs if tdf is not None and not tdf.empty]
-                    if valid_trade_dfs:
-                        self.trade_log = pd.concat(valid_trade_dfs, ignore_index=True)
-                    else:
-                        self.trade_log = pd.DataFrame()
-                except Exception:
+                _trades = getattr(self, "_monthly_trade_dfs_concat", None)
+                if _trades is not None and not getattr(_trades, "empty", True):
+                    self.trade_log = _trades
+                else:
                     self.trade_log = pd.DataFrame()
 
                 bt_dict = {

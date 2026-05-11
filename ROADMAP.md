@@ -1,7 +1,7 @@
 # KodaQuant — Product Roadmap
 
-> **Last Updated**: 2026-05-04
-> **Branch**: `fix/s11-update-progress-heatmap`
+> **Last Updated**: 2026-05-10
+> **Branch**: `feature/phase2-api-bridge`
 > **Revenue Target**: £500–2K/month within 3 months of launch
 > **Philosophy**: Optimize → Feature Parity → Polish → Secure → Deploy → Scale → Enrich → Automate
 
@@ -779,38 +779,44 @@
 
 ---
 
-## Sprint 15: KodaQuant Branding 🔄 PARTIAL
+## Sprint 15: KodaQuant Branding ✅ COMPLETE (2026-05-10)
 
 > **Goal**: Rename and rebrand from "FX ML Backtester / thesisproj" to "KodaQuant" for commercial launch.
 > **Est**: 4-6h
 
-- [x] **S15.1** App name update — PARTIAL ✅ DONE (2026-05-04)
-  - `electron/main.ts` title → "KodaQuant", `electron-builder.yml` productName/shortcutName → "KodaQuant"
-  - `electron/utils.ts` user data dir → `%APPDATA%/KodaQuant/data/`
-  - `scripts/build_python.bat` entry point → "KodaQuant"
-  - `frontend/package.json` name → "kodaquant", description → "KodaQuant"
-  - **Remaining**: `forex_pipeline.spec` docstring, API startup banner, README, internal references
-  - **Files**: partially done in S11.1a
+- [x] **S15.1** Source code name cleanup ✅ DONE (2026-05-10)
+  - 12 files updated: `electron/tray.ts`, `forex_pipeline.spec`, `scripts/dev.bat`, `run_smoke_gpu.bat`, `api/config.py`, `run_server.py`, `news/__init__.py`, `schemas/__init__.py`, `tests/test_full_system.py`, `tests/test_electron_build.py`, `CLAUDE.md`, `README.md`
+  - Removed stale `ui/` __pycache__ directory
+  - 25 automated tests verify zero stale "FX ML Backtester" references across all file types
+  - **Files**: `tests/test_branding.py`
 
-- [ ] **S15.2** UI theme & color scheme
-  - Define KodaQuant color palette (primary, accent, background)
-  - Update TailwindCSS theme config with KodaQuant branding colors
-  - Update logo SVG and favicon
-  - Dark mode as default (professional trading aesthetic)
-  - **Files**: `frontend/tailwind.config.ts`, `frontend/src/index.css`, `frontend/public/favicon.svg`, `frontend/public/favicon.ico`
-  - **Est**: 2h
+- [x] **S15.2** Icon set ✅ DONE (2026-05-10)
+  - Redesigned `build/icon.svg`: geometric diamond on dark background with cyan (`#00E5FF`), zero text
+  - New `scripts/generate_icons.py`: PIL ImageDraw renders PNG (1024x1024) and multi-res ICO (8 resolutions: 16-256px) via binary ICO format builder
+  - Generated: `build/icon.png`, `build/icon.ico`, `frontend/public/favicon.ico`
+  - Colors already defined in `index.css` as `--color-koda-*` CSS custom properties (Tailwind v4, no config file needed)
+  - Dark mode already default
+  - 12 automated tests verify icon content, colors, resolutions, and electron-builder references
+  - **Files**: `build/icon.svg`, `scripts/generate_icons.py`, `tests/test_branding.py`
 
-- [ ] **S15.3** Splash screen & installer branding
-  - Custom splash screen with KodaQuant logo + progress bar
-  - NSIS installer welcome/finish pages with branding
-  - App icon set (desktop, taskbar, installer)
-  - **Files**: `electron/main.ts` (splash), `electron-builder.yml`, `build/icon.*`
-  - **Est**: 1h
+- [x] **S15.3** Splash screen & installer branding ✅ DONE
+  - Splash screen (`electron/splash.ts`) already says "KodaQuant" with diamond logo + progress bar
+  - Installer header/sidebar BMPs exist in `build/` (generated S11.1b with KodaQuant dark + cyan theme)
+  - App icons (ico, png) generated via `scripts/generate_icons.py`
+  - **Verification**: manual build + run required to confirm visual quality
+  - **Files**: `electron/splash.ts`, `build/installer-header.bmp`, `build/installer-sidebar.bmp`, `build/icon.*`
 
-- [ ] **S15.4** Documentation & about screen
-  - About dialog with version, license info, links
-  - README update with KodaQuant branding
-  - **Est**: 1h
+- [x] **S15.4** Documentation & about screen ✅ DONE (2026-05-10)
+  - `AboutDialog.tsx`: GitHub link updated from `thesisproj` to `kodaquant`
+  - `SETUP.md`: full rewrite — KodaQuant branding, removed all Streamlit content, proper markdown tables
+  - `PROJECT_PLAN.md`: marked as superseded, updated header to KodaQuant
+  - `ROADMAP.md`: S15 status section updated (this section)
+  - `CLAUDE.md`: updated S15 status
+  - 4 automated tests verify docs
+  - **Files**: `frontend/src/components/shared/AboutDialog.tsx`, `SETUP.md`, `PROJECT_PLAN.md`, `ROADMAP.md`
+
+**Sprint 15 complete**: 37 automated branding tests pass. All source code, icons, docs use KodaQuant.
+**Test file**: `tests/test_branding.py`
 
 ---
 
@@ -1145,7 +1151,7 @@ cd frontend && npm run dev
 | **S12** | Product Intelligence & UX Overhaul | 22-24h | ✅ COMPLETE (7 sub-tasks all done, 3 bug fixes applied) |
 | **S13** | Beta & Launch | 6-8h | TODO |
 | **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
-| **S15** | KodaQuant Branding | 4-6h | 🔄 PARTIAL (S15.1 name update done, S15.2-4 remaining) |
+| **S15** | KodaQuant Branding | 4-6h | ✅ COMPLETE (2026-05-10, 37 tests) |
 | **S16** | Trading Logic, Overfitting & Backtest Transparency | 12-16h | TODO |
 | **S17** | UI Polish, Tabs Flow & Search | 8-10h | TODO |
 | **S18** | Live News & Market Data Integration | 10-14h | TODO |
@@ -1168,7 +1174,7 @@ cd frontend && npm run dev
 | S11 | Windows installer + auto-update functional | ✅ COMPLETE (2026-05-04) |
 | S12 | News pipeline works, LLM sentiment is ML feature, Results shows all history, Dashboard has live price ticker + candlestick charts + Market Pulse, backtest trade visualization on Results detail, live monitor with multi-pair grid |
 | S13 | Beta tested, publicly launched, first sales |
-| S15 | All user-facing text says "KodaQuant", professional branding | 🔄 S15.1 done |
+| S15 | All user-facing text says "KodaQuant", professional branding | ✅ DONE — 37 tests, 12 files cleaned, icons regenerated |
 | S16 | Overfitting detection works, backtest summary is human-readable, training is transparent |
 | S17 | Cmd+K search, tab-style navigation, consistent UI, no dead code |
 | S18 | Live news feed + live OANDA prices feed into backtesting + dashboard |

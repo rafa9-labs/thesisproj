@@ -12,7 +12,7 @@ description: Run the full PyInstaller + electron-builder production build pipeli
 **Protocol:**
 
 1. **Pre-flight checks:**
-   - Kill any running `fx_backend` or `FX ML Backtester` processes.
+   - Kill any running `fx_backend` or `KodaQuant` processes.
    - Verify `forex_pipeline.spec` exists and is readable.
    - Verify `electron-builder.yml` exists.
    - Check `frontend/electron-dist/` has all 8 expected JS files (main, python, preload, tray, utils, splash, updater, ipc).
@@ -41,12 +41,12 @@ description: Run the full PyInstaller + electron-builder production build pipeli
    cd frontend; npx electron-builder --config ..\electron-builder.yml --win 2>&1
    ```
    - Must be run from `frontend/` directory (electron-builder.yml references `../dist/fx_backend`).
-   - Check `release/FX ML Backtester-Setup-1.0.0.exe` exists and is >400MB.
+    - Check `release/KodaQuant-Setup-1.0.0.exe` exists and is >400MB.
    - Check `release/win-unpacked/` directory exists with app contents.
 
 5. **Validation:**
    - Run `python -m pytest tests/test_build_validation.py -x -q` to verify 46 hidden import checks pass.
-   - Optionally launch `release/win-unpacked/FX ML Backtester.exe` and verify splash screen appears and backend starts (health check on port).
+   - Optionally launch `release/win-unpacked/KodaQuant.exe` and verify splash screen appears and backend starts (health check on port).
 
 6. **Output format:**
    ```
@@ -63,8 +63,8 @@ description: Run the full PyInstaller + electron-builder production build pipeli
 
    Artifacts:
    - `dist/fx_backend/fx_backend.exe` (1.66GB)
-   - `release/FX ML Backtester-Setup-1.0.0.exe` (514MB)
-   - `release/win-unpacked/FX ML Backtester.exe`
+   - `release/KodaQuant-Setup-1.0.0.exe` (514MB)
+   - `release/win-unpacked/KodaQuant.exe`
    ```
 
 7. **Failure handling:**

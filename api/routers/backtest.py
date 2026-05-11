@@ -516,8 +516,32 @@ def get_trade_chart_data(job_id: str, model: str = Query(..., description="Model
             })
 
     candle_lookup = {}
+    sorted_epochs = []
     for c in candles:
         candle_lookup[c["t"]] = c
+        sorted_epochs.append(c["t"])
+    sorted_epochs.sort()
+
+    import bisect
+
+    def find_nearest_candle(epoch: int, tolerance_sec: int = 1800):
+        exact = candle_lookup.get(epoch)
+        if exact is not None:
+            return exact
+        idx = bisect.bisect_left(sorted_epochs, epoch)
+        best = None
+        best_diff = tolerance_sec + 1
+        for candidate_idx in (idx - 1, idx):
+            if 0 <= candidate_idx < len(sorted_epochs):
+                cand_epoch = sorted_epochs[candidate_idx]
+                diff = abs(cand_epoch - epoch)
+                if diff <= tolerance_sec and diff < best_diff:
+                    best = candle_lookup[cand_epoch]
+                    best_diff = diff
+        return best
+
+    import logging
+    logger = logging.getLogger(__name__)
 
     trades = []
     raw_trades = target_metric.get("trades", [])
@@ -540,20 +564,28 @@ def get_trade_chart_data(job_id: str, model: str = Query(..., description="Model
                 side = t.get("side", "")
                 direction = "BUY" if side in ("long", "buy", "BUY", 1, 1.0) else "SELL"
 
-                entry_c = candle_lookup.get(entry_epoch, None)
-                exit_c = candle_lookup.get(exit_epoch, None)
+                entry_c = find_nearest_candle(entry_epoch)
+                exit_c = find_nearest_candle(exit_epoch)
+
+                entry_price = round(entry_c["c"], 10) if entry_c else (
+                    round(float(t["entry_price"]), 10) if t.get("entry_price") else None
+                )
+                exit_price = round(exit_c["c"], 10) if exit_c else (
+                    round(float(t["exit_price"]), 10) if t.get("exit_price") else None
+                )
 
                 trades.append({
                     "trade_id": t.get("trade_id", 0),
                     "entry_time": entry_epoch,
                     "exit_time": exit_epoch,
                     "direction": direction,
-                    "entry_price": round(entry_c["c"], 10) if entry_c else None,
-                    "exit_price": round(exit_c["c"], 10) if exit_c else None,
+                    "entry_price": entry_price,
+                    "exit_price": exit_price,
                     "pnl_pct": t.get("pnl_pct") or t.get("return_pct") or 0,
                 })
             except Exception:
-                pass
+                logger.exception("Failed to process trade entry: %s", t)
+                continue
 
     equity_curve = target_metric.get("equity_curve", [])
     if isinstance(equity_curve, list) and len(equity_curve) > 0:

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { createChart, type IChartApi, CandlestickSeries, HistogramSeries, ColorType } from "lightweight-charts";
+import { createChart, type IChartApi, CandlestickSeries, HistogramSeries, LineSeries, ColorType } from "lightweight-charts";
 import { useCandles } from "@/api/queries";
+import { TIMEFRAMES } from "@/lib/constants";
 
-const TIMEFRAMES = [
-  { key: "M15", label: "M15" },
-  { key: "M30", label: "M30" },
-  { key: "H1", label: "H1" },
-  { key: "H2", label: "H2" },
-];
+export interface OverlayLine {
+  data: { time: number; value: number }[];
+  color: string;
+  label?: string;
+}
 
 interface CandlestickChartProps {
   pair: string;
@@ -15,9 +15,21 @@ interface CandlestickChartProps {
   limit?: number;
   height?: number;
   onTimeframeChange?: (tf: string) => void;
+  overlayLines?: OverlayLine[];
+  showVolume?: boolean;
+  showToolbar?: boolean;
 }
 
-export function CandlestickChart({ pair, timeframe = "M30", limit = 200, height = 460, onTimeframeChange }: CandlestickChartProps) {
+export function CandlestickChart({
+  pair,
+  timeframe = "M30",
+  limit = 200,
+  height = 460,
+  onTimeframeChange,
+  overlayLines,
+  showVolume = true,
+  showToolbar = true,
+}: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [activeTf, setActiveTf] = useState(timeframe);
@@ -84,24 +96,39 @@ export function CandlestickChart({ pair, timeframe = "M30", limit = 200, height 
       })),
     );
 
-    const volSeries = chart.addSeries(HistogramSeries, {
-      color: "#26a69a60",
-      priceFormat: { type: "volume" },
-      priceScaleId: "volume",
-    });
+    if (overlayLines && overlayLines.length > 0) {
+      for (const line of overlayLines) {
+        const lineSeries = chart.addSeries(LineSeries, {
+          color: line.color,
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        lineSeries.setData(line.data);
+      }
+    }
 
-    chart.priceScale("volume").applyOptions({
-      scaleMargins: { top: 0.8, bottom: 0 },
-      visible: false,
-    });
+    if (showVolume) {
+      const volSeries = chart.addSeries(HistogramSeries, {
+        color: "#26a69a60",
+        priceFormat: { type: "volume" },
+        priceScaleId: "volume",
+      });
 
-    volSeries.setData(
-      candles.map((c) => ({
-        time: c.t as number,
-        value: c.volume || 0,
-        color: c.c >= c.o ? "#26a69a40" : "#ef535040",
-      })),
-    );
+      chart.priceScale("volume").applyOptions({
+        scaleMargins: { top: 0.8, bottom: 0 },
+        visible: false,
+      });
+
+      volSeries.setData(
+        candles.map((c) => ({
+          time: c.t as number,
+          value: c.volume || 0,
+          color: c.c >= c.o ? "#26a69a40" : "#ef535040",
+        })),
+      );
+    }
 
     chart.timeScale().fitContent();
 
@@ -119,30 +146,32 @@ export function CandlestickChart({ pair, timeframe = "M30", limit = 200, height 
       chart.remove();
       chartRef.current = null;
     };
-  }, [data, isLoading, height, pair]);
+  }, [data, isLoading, height, pair, overlayLines, showVolume]);
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-1.5">
-        {TIMEFRAMES.map((tf) => (
-          <button
-            key={tf.key}
-            onClick={() => handleTimeframeChange(tf.key)}
-            className="rounded-md border px-2.5 py-0.5 text-[10px] font-medium uppercase transition-all duration-200"
-            style={{
-              borderColor: activeTf === tf.key ? "var(--color-brand)" : "var(--color-glass-border)",
-              backgroundColor: activeTf === tf.key ? "var(--color-brand-glow)" : "transparent",
-              color: activeTf === tf.key ? "var(--color-brand)" : "var(--color-text-muted)",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            {tf.label}
-          </button>
-        ))}
-        <span className="text-[10px] ml-2" style={{ color: "var(--color-text-muted)" }}>
-          {pair} {activeTf}
-        </span>
-      </div>
+      {showToolbar && (
+        <div className="flex items-center gap-1.5">
+          {TIMEFRAMES.map((tf) => (
+            <button
+              key={tf.key}
+              onClick={() => handleTimeframeChange(tf.key)}
+              className="rounded-md border px-2.5 py-0.5 text-[10px] font-medium uppercase transition-all duration-200"
+              style={{
+                borderColor: activeTf === tf.key ? "var(--color-brand)" : "var(--color-glass-border)",
+                backgroundColor: activeTf === tf.key ? "var(--color-brand-glow)" : "transparent",
+                color: activeTf === tf.key ? "var(--color-brand)" : "var(--color-text-muted)",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              {tf.label}
+            </button>
+          ))}
+          <span className="text-[10px] ml-2" style={{ color: "var(--color-text-muted)" }}>
+            {pair} {activeTf}
+          </span>
+        </div>
+      )}
 
       <div
         ref={containerRef}

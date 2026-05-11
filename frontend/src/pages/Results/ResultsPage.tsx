@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useRef } from "react";
-import { BarChart3, ArrowLeft } from "lucide-react";
-import { useJobResults } from "@/api/queries";
+import { BarChart3, ArrowLeft, Play } from "lucide-react";
+import { useJobResults, useTradeChartData } from "@/api/queries";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ExportBar } from "@/components/shared/ExportBar";
 import { StatusDot } from "@/components/shared/StatusDot";
@@ -18,6 +18,7 @@ import { CumulativePnlChart } from "@/components/charts/CumulativePnlChart";
 import { ParameterSensitivityChart } from "@/components/charts/ParameterSensitivityChart";
 import { normalizeEquityCurve } from "@/lib/chartUtils";
 import { BacktestChart } from "./BacktestChart";
+import { BacktestPlayback } from "./BacktestPlayback";
 import type { TradeRecord } from "@/api/schemas";
 import type { EquityCurveChartHandle } from "@/components/charts/EquityCurveChart";
 
@@ -42,9 +43,13 @@ export function ResultsPage() {
   const navigate = useNavigate();
   const [activeModelIdx, setActiveModelIdx] = useState(0);
   const [selectedTrade, setSelectedTrade] = useState<TradeRecord | null>(null);
+  const [showPlayback, setShowPlayback] = useState(false);
 
   const { data: results, isLoading, isError } = useJobResults(jobId ?? null);
   const equityChartRef = useRef<EquityCurveChartHandle>(null);
+
+  const activeMetric = results?.metrics?.length ? results.metrics[Math.min(activeModelIdx, results.metrics.length - 1)] : null;
+  const { data: tradeChartData } = useTradeChartData(jobId ?? "", activeMetric?.model ?? "");
 
   const handleExportPng = () => {
     equityChartRef.current?.takeScreenshot();
@@ -112,8 +117,7 @@ export function ResultsPage() {
     );
   }
 
-  const metrics = results.metrics ?? [];
-  const activeMetric = metrics.length > 0 ? metrics[Math.min(activeModelIdx, metrics.length - 1)] : null;
+  const metrics = results?.metrics ?? [];
 
   const handleExportCsv = () => {
     if (!activeMetric?.trades?.length) return;
@@ -172,7 +176,23 @@ export function ResultsPage() {
           </span>
           <StatusDot color="var(--color-brand)" />
         </div>
-        <ExportBar onExportCsv={handleExportCsv} onExportPng={handleExportPng} onExportJson={handleExportJson} />
+        <div className="flex items-center gap-2">
+          <ExportBar onExportCsv={handleExportCsv} onExportPng={handleExportPng} onExportJson={handleExportJson} />
+          {jobId && activeMetric?.model && (
+            <button
+              onClick={() => setShowPlayback(true)}
+              className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[11px] font-semibold uppercase transition-all duration-200"
+              style={{
+                borderColor: "var(--color-accent-success)",
+                backgroundColor: "rgba(34,197,94,0.1)",
+                color: "var(--color-accent-success)",
+              }}
+              title="Replay backtest bar-by-bar"
+            >
+              <Play size={12} /> Replay
+            </button>
+          )}
+        </div>
       </div>
 
       {activeMetric && (
@@ -274,6 +294,20 @@ export function ResultsPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {showPlayback && jobId && activeMetric?.model && tradeChartData && (
+        <BacktestPlayback
+          candles={tradeChartData.candles ?? []}
+          trades={tradeChartData.trades ?? []}
+          equityCurve={tradeChartData.equity_curve ?? []}
+          monthlyResults={activeMetric.monthly_results ?? null}
+          hpoTrials={activeMetric.hpo_trials ?? null}
+          pair={results?.pair ?? ""}
+          model={activeMetric.model}
+          timeframe={results?.config?.timeframe ?? "M30"}
+          onClose={() => setShowPlayback(false)}
+        />
       )}
     </div>
   );

@@ -8,7 +8,7 @@ import {
   Settings,
   PanelLeftOpen,
   PanelLeftClose,
-  Radio,
+  Zap,
 } from "lucide-react";
 import { KodaLogo } from "@/components/shared/KodaLogo";
 import { layout } from "@/lib/tokens";
@@ -42,7 +42,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Intelligence",
     items: [
-      { icon: Radio, label: "Live Monitor", path: "/live" },
+      { icon: Zap, label: "Live", path: "/live-trading" },
       { icon: Newspaper, label: "News", path: "/news" },
     ],
   },
@@ -104,7 +104,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               const isActive =
                 item.path === "/"
                   ? location.pathname === "/"
-                  : location.pathname.startsWith(item.path);
+                  : location.pathname === item.path || location.pathname.startsWith(item.path + "/");
               return (
                 <button
                   key={item.path}

@@ -1,5 +1,5 @@
 """
-schemas — Pydantic data models for the FX ML Backtester.
+schemas — Pydantic data models for KodaQuant.
 
 ═══════════════════════════════════════════════════════════════════════════════
 WHY PYDANTIC? (The Educational Bit)

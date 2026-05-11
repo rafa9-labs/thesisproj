@@ -979,20 +979,21 @@ class StrategyMixin:
                         y_cal = y_seq_train
 
                         pred_fn = lambda X: self.model.predict(X, verbose=0, batch_size=batch_size)
-                        if X_cal is not None and callable(pred_fn):
-                            self._fit_deep_calibration_and_coverage(
-                                X_cal=X_cal, y_cal=y_cal, pred_fn=pred_fn,
-                                model_type=model_type, in_cv=in_cv
-                            )
-                            
-                        # IMPORTANT: X_seq_train is a view over X2d_train (sliding_window_view),
-                        # so free the base arrays too once training+calibration is done.
                         try:
-                            del X2d_train, y1d_train, _df_tr
-                        except Exception:
-                            pass
-
-                        del X_seq_train, y_seq_train, X_cal, y_cal, pred_fn
+                            if X_cal is not None and callable(pred_fn):
+                                self._fit_deep_calibration_and_coverage(
+                                    X_cal=X_cal, y_cal=y_cal, pred_fn=pred_fn,
+                                    model_type=model_type, in_cv=in_cv
+                                )
+                                
+                            # IMPORTANT: X_seq_train is a view over X2d_train (sliding_window_view),
+                            # so free the base arrays too once training+calibration is done.
+                            try:
+                                del X2d_train, y1d_train, _df_tr
+                            except Exception:
+                                pass
+                        finally:
+                            del X_seq_train, y_seq_train, X_cal, y_cal, pred_fn
                         _gc.collect()
 
                 elif model_type == "lstm":
@@ -1076,21 +1077,22 @@ class StrategyMixin:
                         y_cal = y_seq_train
 
                         pred_fn = lambda X: self.model.predict(X, verbose=0, batch_size=batch_size)
-                        if X_cal is not None and callable(pred_fn):
-                            self._fit_deep_calibration_and_coverage(
-                                X_cal=X_cal, y_cal=y_cal, pred_fn=pred_fn,
-                                model_type=model_type, in_cv=in_cv
-                            )
-                            
-                        # cleanup (seq only)
-                        # IMPORTANT: X_seq_train is a view over X2d (sliding_window_view).
-                        # Free base arrays/DF slice too to reduce RSS growth.
                         try:
-                            del X2d, y1d, _df_tr
-                        except Exception:
-                            pass
-                        
-                        del X_seq_train, y_seq_train, X_cal, y_cal, pred_fn
+                            if X_cal is not None and callable(pred_fn):
+                                self._fit_deep_calibration_and_coverage(
+                                    X_cal=X_cal, y_cal=y_cal, pred_fn=pred_fn,
+                                    model_type=model_type, in_cv=in_cv
+                                )
+                                
+                            # cleanup (seq only)
+                            # IMPORTANT: X_seq_train is a view over X2d (sliding_window_view).
+                            # Free base arrays/DF slice too to reduce RSS growth.
+                            try:
+                                del X2d, y1d, _df_tr
+                            except Exception:
+                                pass
+                        finally:
+                            del X_seq_train, y_seq_train, X_cal, y_cal, pred_fn
                         _gc.collect()
 
                     # ---------------------------------------------
@@ -1153,18 +1155,21 @@ class StrategyMixin:
                         X_cal  = X_train_3d
                         y_cal  = y_train_eff
                         pred_fn = lambda X: self.model.predict(X, verbose=0, batch_size=batch_size)
-
-                        self._fit_deep_calibration_and_coverage(
-                            X_cal=X_cal, y_cal=y_cal, pred_fn=pred_fn,
-                            model_type=model_type, in_cv=in_cv
-                        )
+                        try:
+                            if X_cal is not None and callable(pred_fn):
+                                self._fit_deep_calibration_and_coverage(
+                                    X_cal=X_cal, y_cal=y_cal, pred_fn=pred_fn,
+                                    model_type=model_type, in_cv=in_cv
+                                )
+                        finally:
+                            del X_cal, y_cal, pred_fn
                         
                         # Free intermediate bases too (can be large)
                         try:
                             del X_tr2, y_tr2
                         except Exception:
                             pass
-                        del X_train_3d, y_train_eff, X_cal, y_cal, pred_fn
+                        del X_train_3d, y_train_eff
                         
                         _gc.collect()
 
@@ -1293,32 +1298,32 @@ class StrategyMixin:
                         pred_fn = lambda X: self.model.predict(X, verbose=0, batch_size=batch_size)
 
 
-                    if X_cal is not None and callable(pred_fn):
-                        self._fit_deep_calibration_and_coverage(
-                            X_cal=X_cal, y_cal=y_cal, pred_fn=pred_fn,
-                            model_type=model_type, in_cv=in_cv
-                        )
                     try:
-                        if cnn_use_seq:
-                            # IMPORTANT: X_seq_train is a view over X2d (sliding_window_view).
-                            # Free base arrays/DF slice too to reduce RSS growth.
-                            try:
-                                del X2d, y1d, _df_tr
-                            except Exception:
-                                pass
-                            del X_seq_train, y_seq_train
-                        else:
-                            try:
-                                del X_tr2, y_tr2
-                            except Exception:
-                                pass
-                            del X_train_3d, y_train_eff
-                    except Exception:
-                        pass
-                    try:
-                        del X_cal, y_cal, pred_fn
-                    except Exception:
-                        pass
+                        if X_cal is not None and callable(pred_fn):
+                            self._fit_deep_calibration_and_coverage(
+                                X_cal=X_cal, y_cal=y_cal, pred_fn=pred_fn,
+                                model_type=model_type, in_cv=in_cv
+                            )
+                    finally:
+                        try:
+                            if cnn_use_seq:
+                                try:
+                                    del X2d, y1d, _df_tr
+                                except Exception:
+                                    pass
+                                del X_seq_train, y_seq_train
+                            else:
+                                try:
+                                    del X_tr2, y_tr2
+                                except Exception:
+                                    pass
+                                del X_train_3d, y_train_eff
+                        except Exception:
+                            pass
+                        try:
+                            del X_cal, y_cal, pred_fn
+                        except Exception:
+                            pass
                     _gc.collect()
 
 
@@ -3226,6 +3231,23 @@ class StrategyMixin:
                 self.results_full = _full_df.copy() if _full_df is not None else None
                 # clear any CV scratch storage
                 self._cv_last_eval_df = None
+
+                # Free deep model/TF-graph immediately after results are captured,
+                # before the caller proceeds to store large frames like all_dfs / trade_log.
+                if model_type in deep_models:
+                    try:
+                        if getattr(self, "model", None) is not None:
+                            self.model = None
+                    except Exception:
+                        pass
+                    try:
+                        tf.keras.backend.clear_session()
+                    except Exception:
+                        pass
+                    try:
+                        self._clear_feature_cache()
+                    except Exception:
+                        pass
             else:
                 # CV run -- expose a lightweight copy for the tuner/CV aggregator
                 # Keep only execution + PnL columns to avoid retaining the full feature matrix in RAM.

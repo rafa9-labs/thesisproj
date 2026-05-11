@@ -12,7 +12,7 @@ export function AssetSelector() {
   const setField = useBacktestStore((s) => s.setField);
   const uploadCsv = useUploadCsv();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadStatus, setUploadStatus] = useState<">("idle" | "uploading" | "success" | "error")>("idle");
+  const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
 
   const handleImportClick = () => {
     fileInputRef.current?.click();

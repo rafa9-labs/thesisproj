@@ -1,15 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Settings, AlertTriangle } from "lucide-react";
-import { useLivePrices, useCandles } from "@/api/queries";
-import type { LivePrice, OHLCBar } from "@/api/schemas";
-
-const TIMEFRAMES = [
-  { key: "M15", label: "M15" },
-  { key: "M30", label: "M30" },
-  { key: "H1", label: "H1" },
-  { key: "H2", label: "H2" },
-];
+import { AlertTriangle } from "lucide-react";
+import { useLivePrices } from "@/api/queries";
+import { CandlestickChart } from "@/components/charts/CandlestickChart";
+import { TIMEFRAMES } from "@/lib/constants";
+import type { LivePrice } from "@/api/schemas";
 
 const DEFAULT_PAIRS = ["EURUSD", "GBPUSD", "USDJPY"];
 
@@ -75,71 +70,6 @@ function PriceHeader({ price }: { price: LivePrice }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function LiveCandlestickChart({ pair, timeframe, limit = 100 }: { pair: string; timeframe: string; limit?: number }) {
-  const { data, isLoading } = useCandles(pair, timeframe, limit);
-  const candles = data?.candles ?? [];
-
-  if (isLoading) {
-    return <div className="h-[220px] rounded-lg animate-pulse" style={{ backgroundColor: "var(--color-glass-hover)" }} />;
-  }
-
-  if (candles.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-[220px] rounded-lg" style={{ backgroundColor: "#131722", border: "1px solid var(--color-glass-border)" }}>
-        <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>No data</span>
-      </div>
-    );
-  }
-
-  return <MiniCandlestickChart candles={candles} />;
-}
-
-function MiniCandlestickChart({ candles }: { candles: OHLCBar[] }) {
-  const width = 360;
-  const height = 220;
-  const padding = { top: 20, bottom: 30, left: 40, right: 10 };
-  const chartW = width - padding.left - padding.right;
-  const chartH = height - padding.top - padding.bottom;
-
-  const allValues = candles.flatMap((c) => [c.h, c.l]);
-  const min = Math.min(...allValues);
-  const max = Math.max(...allValues);
-  const range = max - min || 1;
-
-  const toX = (i: number) => padding.left + (i / Math.max(candles.length - 1, 1)) * chartW;
-  const toY = (v: number) => padding.top + chartH - ((v - min) / range) * chartH;
-
-  const bodies = candles.map((c, i) => {
-    const x = toX(i);
-    const openY = toY(c.o);
-    const closeY = toY(c.c);
-    const highY = toY(c.h);
-    const lowY = toY(c.l);
-    const isUp = c.c >= c.o;
-    const bodyTop = Math.min(openY, closeY);
-    const bodyH = Math.max(Math.abs(closeY - openY), 0.5);
-    const barW = Math.max(0.8, chartW / candles.length * 0.6);
-    return { x, openY, closeY, highY, lowY, bodyTop, bodyH, barW, isUp };
-  });
-
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet"
-      style={{ backgroundColor: "#131722" }}>
-      <line x1={padding.left} y1={0} x2={padding.left} y2={height} stroke="#2A2E39" strokeWidth={0.5} />
-      <line x1={0} y1={padding.top} x2={width} y2={padding.top} stroke="#2A2E39" strokeWidth={0.5} />
-      <text x={15} y={padding.top + 4} fill="#80899F" fontSize={9} fontFamily="JetBrains Mono">{max.toFixed(4)}</text>
-      <text x={15} y={height - padding.bottom + 14} fill="#80899F" fontSize={9} fontFamily="JetBrains Mono">{min.toFixed(4)}</text>
-      {bodies.map((b, i) => (
-        <g key={i}>
-          <line x1={b.x} y1={b.highY} x2={b.x} y2={b.lowY} stroke={b.isUp ? "#26a69a" : "#ef5350"} strokeWidth={1} />
-          <rect x={b.x - b.barW / 2} y={b.bodyTop} width={b.barW} height={b.bodyH}
-            fill={b.isUp ? "#26a69a" : "#ef5350"} opacity={0.9} rx={0.5} />
-        </g>
-      ))}
-    </svg>
   );
 }
 
@@ -224,7 +154,7 @@ export function LiveMonitorPage() {
                 style={{ backgroundColor: "var(--color-glass)", border: "1px solid var(--color-glass-border)", borderRadius: 10, backdropFilter: "blur(12px)", padding: 12 }}>
                 <PriceHeader price={price} />
                 <Sparkline points={price.sparkline} />
-                <LiveCandlestickChart pair={price.symbol} timeframe={timeframe} limit={100} />
+                <CandlestickChart pair={price.symbol} timeframe={timeframe} limit={100} height={220} showVolume={false} showToolbar={false} />
               </div>
             ))}
       </div>

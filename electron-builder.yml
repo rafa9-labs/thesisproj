@@ -56,8 +56,8 @@ nsis:
   installerLanguages:
     - en_US
   language: 1033
-  installerHeader: build/installer-header.bmp
-  installerSidebar: build/installer-sidebar.bmp
+  installerHeader: installer-header.bmp
+  installerSidebar: installer-sidebar.bmp
 
 # File type associations
 fileAssociations:

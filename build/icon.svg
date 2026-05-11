@@ -1,10 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="80" fill="#131722"/>
-  <rect x="16" y="16" width="480" height="480" rx="64" fill="#1E222D" stroke="#2A2E39" stroke-width="2"/>
-  <polyline points="76,340 128,310 179,290 230,250 282,270 333,200 385,180 436,112"
-    fill="none" stroke="#089981" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="380" y="420" font-family="Consolas, monospace" font-size="80" font-weight="bold" fill="#E0E3EB">FX</text>
-  <circle cx="333" cy="200" r="6" fill="#089981"/>
-  <circle cx="436" cy="112" r="6" fill="#2962FF"/>
-  <line x1="76" y1="380" x2="436" y2="380" stroke="#363A45" stroke-width="1"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" fill="none" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#050608"/>
+  <polygon points="256,64 448,256 256,448 64,256" fill="#00E5FF"/>
+  <polygon points="256,128 384,256 256,384 128,256" fill="#050608"/>
 </svg>

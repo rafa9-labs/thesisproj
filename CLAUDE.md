@@ -7,9 +7,9 @@
 
 ## Project Identity
 
-- This is a **Forex ML Backtesting Pipeline** — a commercial-grade walk-forward FX backtesting platform.
+- This is **KodaQuant** — a commercial-grade walk-forward FX backtesting platform.
 - The repo name "thesisproj" is misleading — this has **NOTHING to do with any thesis or academic work**.
-- Refer to it as "forex pipeline" or "the pipeline" in all conversations and documentation.
+- Refer to it as "KodaQuant" or "the pipeline" in all conversations and documentation.
 - **Never use the word "thesis"** in any context related to this project.
 
 ## Terminal & Shell Rules

@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ============================================
-echo  FX ML Backtester - Development Launcher
+echo  KodaQuant - Development Launcher
 echo ============================================
 echo.
 

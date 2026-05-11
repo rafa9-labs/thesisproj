@@ -6,7 +6,7 @@ interface HpoDiagnosticsProps {
   trials: HpoTrial[] | null;
 }
 
-function OptimizationTrace({ trials }: { trials: HpoTrial[] }) {
+export function OptimizationTrace({ trials }: { trials: HpoTrial[] }) {
   if (trials.length === 0) return null;
 
   const maxTrial = trials.length;

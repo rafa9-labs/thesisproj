@@ -1,15 +1,14 @@
-# FX ML Backtester — Commercial Product Roadmap
+# KodaQuant — Original Product Plan (Superseded)
 
-> **Last Updated**: 2026-04-08
-> **Strategy**: Option C — Web App (Streamlit) + Python SDK (pip-installable)
-> **Current Phase**: Phase 3 (Simplification) → Phase 4 (Streamlit Web App)
-> **Revenue Target**: £500-2K/month within 3 months of launch
+> **This document is superseded by [ROADMAP.md](ROADMAP.md)** — the project is now an Electron desktop app, not a Streamlit/PyPI product.
+> **Last Updated**: 2026-04-08 | **Superseded**: 2026-05-04
+> **Current state**: See ROADMAP.md for live sprint tracker.
 
 ---
 
 ## 1. Product Vision
 
-**FX ML Backtester** is a professional-grade, walk-forward FX backtesting platform that lets traders and quants compare 10+ ML model families — from XGBoost to Deep Reinforcement Learning — with realistic cost-aware execution.
+**KodaQuant** is a professional-grade, walk-forward FX backtesting platform that lets traders and quants compare 10+ ML model families — from XGBoost to Deep Reinforcement Learning — with realistic cost-aware execution.
 
 **Tagline**: *"The first backtesting engine built for ML model comparison."*
 

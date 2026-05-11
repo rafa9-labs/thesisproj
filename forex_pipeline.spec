@@ -15,7 +15,7 @@ The bundle includes:
 - HPO configs and reference data (csv_data)
 - React frontend as static assets (served by FastAPI in desktop mode)
 
-User data (DB, results, cache) stored in %APPDATA%/FX ML Backtester/.
+User data (DB, results, cache) stored in %APPDATA%/KodaQuant/.
 
 NOTE: PyInstaller spec files run in a special namespace where
 Analysis, PYZ, EXE, and COLLECT are injected by the bootloader.

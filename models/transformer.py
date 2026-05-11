@@ -174,8 +174,6 @@ def build_transformer(input_shape, config=None):
 
     model = Model(inputs=inputs, outputs=outputs)
 
-    model = Model(inputs=inputs, outputs=outputs)
-
     # --- Optimizer ---
     opt_name = str(g("transformer_optimizer", "optimizer", "adam")).lower()
     if use_adamw and (opt_name == "adamw") and (AdamW is not None):

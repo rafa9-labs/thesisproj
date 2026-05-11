@@ -205,7 +205,7 @@ class TestReleaseArtifacts:
         unpacked = os.path.join(self.RELEASE_DIR, "win-unpacked")
         if not os.path.isdir(unpacked):
             pytest.skip("Run 'npm run electron:pack' first")
-        exe = os.path.join(unpacked, "FX ML Backtester.exe")
+        exe = os.path.join(unpacked, "KodaQuant.exe")
         assert os.path.isfile(exe), f"Missing unpacked exe: {exe}"
 
     def test_asar_contains_entry_point(self):

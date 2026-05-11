@@ -76,9 +76,9 @@ def get_live_prices(
     pairs: str = Query("EURUSD,GBPUSD,USDJPY", description="Comma-separated pair symbols"),
     lookback_bars: int = Query(50, ge=1, le=500, description="Candles for sparkline"),
 ):
-    pair_list = [p.strip().upper() for p in pairs.split(",") if p.strip()][:5]
+    pair_list = [p.strip().upper() for p in pairs.split(",") if p.strip() and len(p.strip()) >= 6][:5]
     if not pair_list:
-        raise HTTPException(400, "At least one pair required")
+        raise HTTPException(400, "At least one valid pair required (e.g. EURUSD)")
 
     instruments = []
     for sym in pair_list:
