@@ -35,6 +35,11 @@ _archive/
 # Virtual environments
 .venv/
 .venv-wsl/
+venv/
+
+# Build artifacts
+electron-dist/
+tests/ui_screenshots/
 
 # GPU test helpers (not needed in repo)
 test_gpu_wsl.py

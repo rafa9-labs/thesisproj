@@ -4,7 +4,7 @@ Statistical metrics -- Sharpe, PSR, DSR, temperature scaling, CV gates.
 Extracted from MLBacktesterNoWFO.py lines 805-919.
 """
 
-from pipeline._imports import *  # noqa: F401,F403
+import numpy as np
 
 def _apply_temperature_to_proba(proba: np.ndarray, T: float) -> np.ndarray:
     T = float(max(1e-3, T))

@@ -61,11 +61,11 @@ def test_tuning_module_imports(mod_name):
     assert mod is not None
 
 
-def test_compat_shim_tuningnowfo():
-    """tuningNoWFO compat shim must expose expected symbols."""
-    import tuningNoWFO
-    assert hasattr(tuningNoWFO, "run_optuna_tuning")
-    assert hasattr(tuningNoWFO, "optuna_objective")
+def test_pipeline_tuning_exposes_expected_symbols():
+    """pipeline.tuning must expose expected tuning symbols."""
+    from pipeline.tuning import run_optuna_tuning, optuna_objective
+    assert callable(run_optuna_tuning)
+    assert callable(optuna_objective)
 
 
 def test_utilsnowfo_imports():

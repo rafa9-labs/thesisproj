@@ -12,5 +12,73 @@ services:
       timeout: 3s
       retries: 5
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./csv_data:/app/csv_data:ro
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./models:/app/models:ro
+      - ./pipeline:/app/pipeline:ro
+      - ./api:/app/api:ro
+      - ./config.py:/app/config.py:ro
+      - ./schemas:/app/schemas:ro
+      - ./hpo:/app/hpo:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - API_REDIS_URL=redis://redis:6379/0
+      - API_CELERY_BROKER_URL=redis://redis:6379/0
+      - API_CELERY_RESULT_BACKEND=redis://redis:6379/1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["celery", "-A", "api.tasks.celery_app", "worker", "--loglevel=info", "--concurrency=1", "-E"]
+    volumes:
+      - ./csv_data:/app/csv_data:ro
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./models:/app/models:ro
+      - ./pipeline:/app/pipeline:ro
+      - ./api:/app/api:ro
+      - ./config.py:/app/config.py:ro
+      - ./schemas:/app/schemas:ro
+      - ./hpo:/app/hpo:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - API_REDIS_URL=redis://redis:6379/0
+      - API_CELERY_BROKER_URL=redis://redis:6379/0
+      - API_CELERY_RESULT_BACKEND=redis://redis:6379/1
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5173:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   redis_data:
