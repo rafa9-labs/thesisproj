@@ -2551,6 +2551,8 @@ class RealTradingMixin:
 
 
                 result = {
+                    "train_start": train_start,
+                    "train_end": train_end,
                     "test_start": test_start,
                     "test_end": test_end,
                     "train_months": train_months,
@@ -2632,6 +2634,43 @@ class RealTradingMixin:
                     # trace features actually used this month
                     "features_used": features_used,
                 }
+
+                # --- S16.2: Walk-forward transparency data ---
+                # Signal counts: how many bars had predictions vs passed confidence gate
+                _signals_raw = 0
+                _signals_passed = 0
+                try:
+                    _res_df = getattr(self, "results", None)
+                    if _res_df is not None and isinstance(_res_df, pd.DataFrame) and not _res_df.empty:
+                        if "pred" in _res_df.columns:
+                            _preds = _res_df["pred"].dropna()
+                            _signals_raw = int((_preds != 0).sum())
+                        if "position_exec" in _res_df.columns:
+                            _positions = _res_df["position_exec"].dropna()
+                            _signals_passed = int((_positions != 0).sum())
+                except Exception:
+                    pass
+                result["signals_raw"] = _signals_raw
+                result["signals_passed_gate"] = _signals_passed
+
+                # Regime distribution: percentage of bars in sideways/trend/volatile
+                _pct_sideways = float("nan")
+                _pct_trend = float("nan")
+                _pct_volatile = float("nan")
+                try:
+                    _res_df = getattr(self, "results", None)
+                    if _res_df is not None and isinstance(_res_df, pd.DataFrame) and not _res_df.empty and "regime_id" in _res_df.columns:
+                        _rid = _res_df["regime_id"].dropna()
+                        if len(_rid) > 0:
+                            _vc = _rid.value_counts(normalize=True)
+                            _pct_sideways = float(_vc.get(0, 0.0))
+                            _pct_trend = float(_vc.get(1, 0.0))
+                            _pct_volatile = float(_vc.get(2, 0.0))
+                except Exception:
+                    pass
+                result["pct_sideways"] = _pct_sideways
+                result["pct_trend"] = _pct_trend
+                result["pct_volatile"] = _pct_volatile
 
                 # Only try to serialize sub-configs if best_combo is a dict
                 if isinstance(best_combo, dict):

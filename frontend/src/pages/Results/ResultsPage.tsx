@@ -10,6 +10,9 @@ import { EquitySection } from "./EquitySection";
 import { TradeLogTable } from "./TradeLogTable";
 import { MonthlySection } from "./MonthlySection";
 import { HpoDiagnostics } from "./HpoDiagnostics";
+import { OverfittingPanel } from "./OverfittingPanel";
+import { WalkForwardPanel } from "./WalkForwardPanel";
+import { TrainingDiagnosticsPanel } from "./TrainingDiagnostics";
 import { ConfigViewer } from "./ConfigViewer";
 import { DrawdownChart } from "@/components/charts/DrawdownChart";
 import { TradeDistributionChart } from "@/components/charts/TradeDistributionChart";
@@ -197,6 +200,18 @@ export function ResultsPage() {
 
       {activeMetric && (
         <MetricsGrid metrics={activeMetric} modelName={activeMetric.model} monthlyResults={activeMetric.monthly_results} />
+      )}
+
+      {activeMetric && (
+        <OverfittingPanel data={activeMetric.overfitting ?? null} modelName={activeMetric.model} />
+      )}
+
+      {activeMetric && (
+        <WalkForwardPanel periods={activeMetric.walkforward_periods ?? null} modelName={activeMetric.model} />
+      )}
+
+      {activeMetric && (
+        <TrainingDiagnosticsPanel data={activeMetric.diagnostics ?? null} modelName={activeMetric.model} />
       )}
 
       {metrics.length > 1 && (

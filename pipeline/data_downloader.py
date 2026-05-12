@@ -1,20 +1,18 @@
 """
 OANDA candle data downloader.
-
 Refactored from CSVDownloadOanda.py into a reusable module.
 Reads credentials from .env file (never from committed config).
+Inserts directly into SQLite via DataStore -- no intermediate CSV files.
 
 Usage as module::
 
     from pipeline.data_downloader import download_pair
-
     download_pair("GBP_USD", granularities=["M30", "H1", "H4"])
 
 Usage as CLI::
 
     python -m pipeline.data_downloader --instrument GBP_USD --years 10
 """
-
 from __future__ import annotations
 
 import os
@@ -145,32 +143,66 @@ def _fetch_candles(
     return pd.DataFrame(all_data)
 
 
+def _df_to_rows(df: pd.DataFrame, pair: str, timeframe: str) -> list[tuple]:
+    """Convert a fetched DataFrame into (pair, tf, ts, o, h, l, c, ...) tuples."""
+    rows = []
+    for _, r in df.iterrows():
+        rows.append((
+            pair,
+            timeframe,
+            str(r["time"]),
+            float(r.get("mid_open", 0) or 0),
+            float(r.get("mid_high", 0) or 0),
+            float(r.get("mid_low", 0) or 0),
+            float(r.get("mid_close", 0) or 0),
+            float(r.get("bid_open", 0) or 0),
+            float(r.get("bid_close", 0) or 0),
+            float(r.get("ask_open", 0) or 0),
+            float(r.get("ask_close", 0) or 0),
+            float(r.get("spread", 0) or 0),
+            int(r.get("volume", 0) or 0),
+        ))
+    return rows
+
+
+BATCH_SIZE = 50_000
+
+
 def download_pair(
     instrument: str,
+    store = None,
     granularities: Optional[List[str]] = None,
     years: int = 10,
     output_dir: str = "csv_data",
     end_date: Optional[datetime] = None,
-) -> dict[str, str]:
+    pair_symbol: Optional[str] = None,
+) -> dict[str, int]:
     """Download candle data for a single OANDA instrument across multiple timeframes.
+
+    Inserts directly into SQLite via DataStore.
 
     Parameters
     ----------
     instrument : str
-        OANDA instrument name, e.g. ``"GBP_USD"``, ``"USD_JPY"``.
+        OANDA instrument name, e.g. ``"GBP_USD"``.
+    store : DataStore
+        DataStore instance for direct SQLite insert.
     granularities : list[str], optional
         Timeframes to download. Defaults to ``["M30", "H1", "H4"]``.
     years : int
         How many years of history to fetch.
     output_dir : str
-        Directory to save CSV files.
+        Unused -- kept for backward compatibility.
     end_date : datetime, optional
         End date for the data. Defaults to now.
+    pair_symbol : str, optional
+        Symbol like ``"EURUSD"``. When ``store`` is provided, used directly.
+        Defaults to ``instrument.replace("_","")``.
 
     Returns
     -------
-    dict[str, str]
-        Mapping of granularity -> saved file path.
+    dict[str, int]
+        Mapping of granularity -> number of rows inserted.
     """
     from oandapyV20 import API
 
@@ -185,8 +217,10 @@ def download_pair(
 
     start_date = end_date - relativedelta(years=years)
 
-    pair_symbol = instrument.replace("_", "")
-    saved: dict[str, str] = {}
+    if pair_symbol is None:
+        pair_symbol = instrument.replace("_", "")
+
+    saved: dict[str, int] = {}
 
     for gran in granularities:
         print(f"\n{'='*60}")
@@ -213,27 +247,43 @@ def download_pair(
         df = df.sort_values("time")
         df = df.reset_index(drop=True)
 
-        filename = f"{output_dir}/{pair_symbol}_{years}_years_{gran}_OANDA.csv"
-        df.to_csv(filename, index=False)
-        saved[gran] = filename
-        print(f"  Saved: {filename} ({len(df)} rows)")
+        rows = _df_to_rows(df, pair_symbol, gran)
+        print(f"  Prepared {len(rows)} rows for {pair_symbol} {gran}")
+
+        if store is not None:
+            t0 = time.time()
+            for i in range(0, len(rows), BATCH_SIZE):
+                batch = rows[i : i + BATCH_SIZE]
+                store.insert_candles_batch(batch)
+            t_ins = time.time() - t0
+            rate = len(rows) / max(t_ins, 0.001)
+            print(f"  Inserted {len(rows)} rows into DB in {t_ins:.1f}s ({rate:.0f} rows/s)")
+
+        saved[gran] = len(rows)
 
     return saved
 
 
 if __name__ == "__main__":
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(description="Download OANDA candle data")
     parser.add_argument("--instrument", default="EUR_USD", help="OANDA instrument name (e.g. GBP_USD)")
+    parser.add_argument("--pair", default=None, help="Pair symbol for DB (e.g. EURUSD). Defaults to instrument without _")
     parser.add_argument("--years", type=int, default=10)
     parser.add_argument("--granularities", nargs="+", default=["M30", "H1", "H4"])
-    parser.add_argument("--output-dir", default="csv_data")
+    parser.add_argument("--output-dir", default="csv_data", help="(unused, kept for compat)")
+    parser.add_argument("--db", default="data/forex.db", help="SQLite database path")
     args = parser.parse_args()
 
+    from pipeline.data_sqlite import DataStore
+    store = DataStore(args.db)
+    pair_sym = args.pair or args.instrument.replace("_", "")
     download_pair(
         instrument=args.instrument,
+        store=store,
         granularities=args.granularities,
         years=args.years,
-        output_dir=args.output_dir,
+        pair_symbol=pair_sym,
     )

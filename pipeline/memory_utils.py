@@ -4,7 +4,8 @@ Memory management utilities.
 Extracted from MLBacktesterNoWFO.py lines 505-540.
 """
 
-from pipeline._imports import *  # noqa: F401,F403
+import gc
+import time
 
 def _hard_free():
     try:

@@ -70,6 +70,10 @@ CREATE TABLE IF NOT EXISTS jobs (
 """
 
 
+class DataNotAvailableError(Exception):
+    """Raised when required timeframe data is missing for a pair."""
+
+
 class DataStore:
     """SQLite-backed market data store."""
 

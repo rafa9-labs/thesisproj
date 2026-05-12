@@ -304,7 +304,7 @@ class EvaluationMixin:
 
     def _record_wfo_monthly_result(self, result: dict) -> None:
         """
-        Append a compact monthly record for PBO/MCS analysis.
+        Append a compact monthly record for PBO/MCS and walk-forward analysis.
 
         Parameters
         ----------
@@ -312,7 +312,9 @@ class EvaluationMixin:
             The per-month result dict built inside real_trading_simulation.
             Expected keys (if present): 'model_type', 'strategy_type',
             'test_start', 'test_end', 'strategy_return', 'cum_return',
-            'sharpe', 'trades'.
+            'sharpe', 'trades'. Optional: 'train_sharpe', 'train_start',
+            'train_end', 'signals_raw', 'signals_passed_gate',
+            'pct_sideways', 'pct_trend', 'pct_volatile'.
         """
         try:
             import pandas as _pd
@@ -326,15 +328,20 @@ class EvaluationMixin:
                 "strategy_type": st,
                 "test_start": _pd.to_datetime(result.get("test_start")),
                 "test_end": _pd.to_datetime(result.get("test_end")),
-                # monthly returns (continuous): strategy vs BH
+                "train_start": _pd.to_datetime(result.get("train_start")) if result.get("train_start") is not None else float("nan"),
+                "train_end": _pd.to_datetime(result.get("train_end")) if result.get("train_end") is not None else float("nan"),
                 "strategy_return": float(result.get("strategy_return", float("nan"))),
                 "bh_return": float(result.get("cum_return", float("nan"))),
-                # diagnostics
                 "sharpe": float(result.get("sharpe", float("nan"))),
                 "trades": int(result.get("trades", 0) or 0),
+                "train_sharpe": float(result.get("train_sharpe", float("nan"))),
+                "signals_raw": int(result.get("signals_raw", 0) or 0),
+                "signals_passed_gate": int(result.get("signals_passed_gate", 0) or 0),
+                "pct_sideways": float(result.get("pct_sideways", float("nan"))),
+                "pct_trend": float(result.get("pct_trend", float("nan"))),
+                "pct_volatile": float(result.get("pct_volatile", float("nan"))),
             }
         except Exception as _e:
-            # Never let analysis bookkeeping affect the main pipeline
             if self._is_debug():
                 print(f"[PBO/MCS] Failed to build monthly record: {_e}")
             return

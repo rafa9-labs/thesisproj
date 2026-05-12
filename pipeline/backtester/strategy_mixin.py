@@ -152,6 +152,7 @@ class StrategyMixin:
                 pass
         
             self.model = None
+            self._diagnostics_feature_importance = []
 
             # Clear any sticky feature cache from previous evals
             self._clear_feature_cache()
@@ -1339,6 +1340,18 @@ class StrategyMixin:
             
                 # Fit FIRST (required for sklearn Pipelines / predict_proba).
                 self.model.fit(X_train, y_train)
+
+                # --- S16.3: Capture feature importance for classical models ---
+                try:
+                    from pipeline.diagnostics import compute_feature_importance
+                    _feat_names = list(features) if isinstance(features, (list, tuple)) else None
+                    _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_names)
+                    if _fi:
+                        self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi]
+                    else:
+                        self._diagnostics_feature_importance = []
+                except Exception:
+                    self._diagnostics_feature_importance = []
 
                 # ------------------------------------------------------------
                 # Classical coverage-threshold (train-anchored, causal)

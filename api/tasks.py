@@ -305,6 +305,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 trading_costs=trading_costs,
                 model_type=model_type,
                 features_config=feat_cfg,
+                db_path=settings.db_full_path,
             )
             bt._progress_callback = _progress_cb
 
@@ -534,6 +535,117 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             except Exception:
                 pass
 
+            try:
+                from pipeline.overfitting import compute_overfitting_report, compute_period_breakdown
+                wfo_records = getattr(bt, "_wfo_monthly_records", [])
+                hpo_best = None
+                if hasattr(bt, "_optuna_study") and bt._optuna_study is not None:
+                    hpo_best = float(bt._optuna_study.best_value)
+                overfit = compute_overfitting_report(wfo_records, model_type, hpo_best_value=hpo_best)
+                metrics_row["overfitting"] = {
+                    "overfit_score": overfit.overfit_score,
+                    "risk_level": overfit.risk_level,
+                    "risk_color": overfit.risk_color,
+                    "train_oos_gap_pct": overfit.train_oos_gap_pct,
+                    "temporal_degradation_pct": overfit.temporal_degradation_pct,
+                    "sharpe_ci": overfit.sharpe_ci,
+                    "return_ci": overfit.return_ci,
+                    "maxdd_ci": overfit.maxdd_ci,
+                    "cv_sharpe_mean": overfit.cv_sharpe_mean,
+                    "cv_sharpe_std": overfit.cv_sharpe_std,
+                    "cv_return_mean": overfit.cv_return_mean,
+                    "cv_return_std": overfit.cv_return_std,
+                    "min_trl_trades": overfit.min_trl_trades,
+                    "sufficient_trades": overfit.sufficient_trades,
+                    "n_periods": overfit.n_periods,
+                    "n_signal_periods": overfit.n_signal_periods,
+                    "signal_gap_pct": overfit.signal_gap_pct,
+                    "is_mean_sharpe": overfit.is_mean_sharpe,
+                    "oos_mean_sharpe": overfit.oos_mean_sharpe,
+                }
+                metrics_row["walkforward_periods"] = compute_period_breakdown(wfo_records)
+            except Exception as _overfit_err:
+                if _dbg:
+                    print(f"[overfitting] compute failed for {model_type}: {_overfit_err}")
+                metrics_row["overfitting"] = None
+                metrics_row["walkforward_periods"] = []
+
+            # S16.3: Training diagnostics (feature importance, confusion matrix, confidence bands)
+            try:
+                from pipeline.diagnostics import (
+                    compute_feature_importance,
+                    compute_prediction_histogram,
+                    compute_confidence_bands,
+                    aggregate_confusion_matrices,
+                    TrainingDiagnosticsData,
+                )
+                _diag = {}
+                # Feature importance from per-period capture
+                _fi_tuples = getattr(bt, "_diagnostics_feature_importance", [])
+                if _fi_tuples:
+                    from pipeline.diagnostics import FeatureImportanceEntry
+                    _diag["feature_importance"] = [
+                        {"feature": f, "importance": float(i)} for f, i in _fi_tuples
+                    ]
+                else:
+                    _diag["feature_importance"] = []
+
+                # Confusion matrix from results attrs
+                _cm = None
+                try:
+                    _res = getattr(bt, "results", None)
+                    if _res is not None and hasattr(_res, "attrs") and "confusion_matrix" in _res.attrs:
+                        _cm_raw = _res.attrs["confusion_matrix"]
+                        _cm = aggregate_confusion_matrices([_cm_raw]).matrix if _cm_raw is not None else None
+                except Exception:
+                    pass
+                _diag["confusion_matrix"] = _cm
+
+                # Prediction histogram & confidence bands from max_conf
+                _conf = getattr(bt, "_last_conf_stats_max_conf", None)
+                _res = getattr(bt, "results", None)
+                if _conf is not None and len(_conf) > 0 and _res is not None and hasattr(_res, "columns"):
+                    _hist = compute_prediction_histogram([_conf])
+                    _diag["prediction_histogram"] = [
+                        {"bin_start": b.bin_start, "bin_end": b.bin_end, "bin_center": b.bin_center, "count": b.count}
+                        for b in _hist
+                    ]
+                    # Confidence bands: need outcome_arrays and return_arrays
+                    _outcome_arr = None
+                    _ret_arr = None
+                    try:
+                        if "pred" in _res.columns and "true_direction" in _res.columns:
+                            _pred_dir = _res["pred"].fillna(0).values
+                            _true_dir = _res["true_direction"].fillna(0).values
+                            _outcome_arr = ((_pred_dir * _true_dir) > 0).astype(float)
+                        if "returns" in _res.columns:
+                            _ret_arr = _res["returns"].fillna(0).values
+                    except Exception:
+                        pass
+                    if _outcome_arr is not None and _ret_arr is not None:
+                        _min_len = min(len(_conf), len(_outcome_arr), len(_ret_arr))
+                        _bands = compute_confidence_bands(
+                            [_conf[:_min_len]],
+                            [_outcome_arr[:_min_len]],
+                            [_ret_arr[:_min_len]],
+                        )
+                        _diag["confidence_bands"] = [
+                            {"band_min": b.band_min, "band_max": b.band_max, "count": b.count,
+                             "accuracy": b.accuracy, "mean_return": b.mean_return}
+                            for b in _bands
+                        ]
+                    else:
+                        _diag["confidence_bands"] = []
+                else:
+                    _diag["prediction_histogram"] = []
+                    _diag["confidence_bands"] = []
+
+                metrics_row["diagnostics"] = _diag
+            except Exception as _diag_err:
+                if _dbg:
+                    print(f"[diagnostics] compute failed for {model_type}: {_diag_err}")
+                metrics_row["diagnostics"] = None
+
             all_metrics.append(metrics_row)
             _pub("model_training", job_id, {"model": model_type, "status": "complete", "metrics": metrics_row})
 
@@ -570,6 +682,7 @@ def _download_data_impl(job_id: str, pair: str, years: int = 10):
 
     from api.services import JobManager
     from pipeline.data_sqlite import DataStore
+    from pipeline.pair_config import get_pair_config, PAIR_REGISTRY
 
     store = DataStore(settings.db_full_path)
     jm = JobManager(store)
@@ -579,25 +692,44 @@ def _download_data_impl(job_id: str, pair: str, years: int = 10):
 
     try:
         from pipeline.data_downloader import download_pair
-        from pipeline.pair_config import get_pair_config
 
-        cfg = get_pair_config(pair)
+        try:
+            cfg = get_pair_config(pair)
+        except ValueError:
+            db_pair = store.get_pair(pair)
+            if db_pair is None:
+                raise
+            class _PairCfg:
+                symbol = db_pair["symbol"]
+                oanda_name = db_pair["oanda_name"]
+                pip_value = db_pair["pip_value"]
+                lot_size = db_pair.get("lot_size", 100000.0)
+                base_currency = db_pair.get("base_currency", pair[:3])
+                quote_currency = db_pair.get("quote_currency", pair[3:])
+                typical_spread_bps = db_pair.get("typical_spread_bps", 1.0)
+            cfg = _PairCfg()
+
+        store.insert_pairs([{
+            "symbol": cfg.symbol,
+            "oanda_name": cfg.oanda_name,
+            "pip_value": cfg.pip_value,
+            "lot_size": cfg.lot_size,
+            "base_currency": cfg.base_currency,
+            "quote_currency": cfg.quote_currency,
+            "typical_spread_bps": cfg.typical_spread_bps,
+        }])
+
         saved = download_pair(
             instrument=cfg.oanda_name,
+            store=store,
             granularities=["M30", "H1", "H4"],
             years=years,
-            output_dir=settings.csv_data_dir,
+            pair_symbol=cfg.symbol,
         )
 
-        from pipeline.data_migrator import migrate_pair
-        for gran in ["M30", "H1", "H4"]:
-            csv_key = f"{gran}"
-            if csv_key in saved:
-                migrate_pair(store, saved[csv_key], pair, gran, force=True)
-
-        jm.update_status(job_id, "completed", result={"pair": pair, "files": list(saved.keys())})
+        jm.update_status(job_id, "completed", result={"pair": pair, "granularities": saved})
         _pub("download_complete", job_id, {"pair": pair})
-        return {"pair": pair, "files": list(saved.keys())}
+        return {"pair": pair, "granularities": saved}
 
     except Exception as e:
         jm.update_status(job_id, "failed", error=str(e))

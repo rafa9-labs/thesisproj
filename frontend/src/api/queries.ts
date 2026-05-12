@@ -17,6 +17,9 @@ import type {
   HeatmapResponse,
   NewsEvent,
   LicenseStatusResponse,
+  DataStatusResponse,
+  DefinePairRequest,
+  DefinePairResponse,
 } from "./schemas";
 
 export function useHealth() {
@@ -447,5 +450,65 @@ export function useLiveSessions() {
     },
     refetchInterval: 10_000,
     staleTime: 5_000,
+  });
+}
+
+export function useDataStatus(pair: string) {
+  return useQuery({
+    queryKey: ["data-status", pair],
+    queryFn: async () => {
+      const { data } = await apiClient.get<DataStatusResponse>(`/pairs/${pair}/data-status`);
+      return data;
+    },
+    enabled: !!pair && pair.length === 6,
+    staleTime: 30_000,
+  });
+}
+
+export function useDefinePair() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: DefinePairRequest) => {
+      const { data } = await apiClient.post<DefinePairResponse>("/pairs/define", req);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pairs"] });
+      queryClient.invalidateQueries({ queryKey: ["data-status"] });
+    },
+  });
+}
+
+export function useDownloadData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ pair, years = 10 }: { pair: string; years?: number }) => {
+      const { data } = await apiClient.post<{
+        job_id: string;
+        pair: string;
+        status: string;
+      }>("/data/download", { pair, years });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pairs"] });
+      queryClient.invalidateQueries({ queryKey: ["data-status"] });
+    },
+  });
+}
+
+export function useDownloadJobStatus(jobId: string | null) {
+  return useQuery({
+    queryKey: ["download-job", jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<JobStatus>(`/backtest/${jobId}`);
+      return data;
+    },
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === "pending" || status === "running") return 2_000;
+      return false;
+    },
   });
 }

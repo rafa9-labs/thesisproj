@@ -424,6 +424,45 @@ def _coerce_curve(raw):
     return raw
 
 
+def _parse_diagnostics(raw):
+    if raw is None or not isinstance(raw, dict):
+        return None
+    from api.schemas.backtest import (
+        TrainingDiagnostics, FeatureImportanceEntry,
+        PredictionHistogramBin, ConfusionMatrixData, ConfidenceBand,
+    )
+    fi = None
+    if "feature_importance" in raw and raw["feature_importance"]:
+        try:
+            fi = [FeatureImportanceEntry(**e) for e in raw["feature_importance"]]
+        except Exception:
+            fi = None
+    hist = None
+    if "prediction_histogram" in raw and raw["prediction_histogram"]:
+        try:
+            hist = [PredictionHistogramBin(**e) for e in raw["prediction_histogram"]]
+        except Exception:
+            hist = None
+    cm = None
+    if "confusion_matrix" in raw and raw["confusion_matrix"]:
+        try:
+            cm = ConfusionMatrixData(**raw["confusion_matrix"])
+        except Exception:
+            cm = None
+    bands = None
+    if "confidence_bands" in raw and raw["confidence_bands"]:
+        try:
+            bands = [ConfidenceBand(**e) for e in raw["confidence_bands"]]
+        except Exception:
+            bands = None
+    return TrainingDiagnostics(
+        feature_importance=fi,
+        prediction_histogram=hist,
+        confusion_matrix=cm,
+        confidence_bands=bands,
+    )
+
+
 @router.get("/{job_id}/results", response_model=BacktestResultsResponse)
 def get_backtest_results(job_id: str):
     store = get_data_store()
@@ -440,6 +479,62 @@ def get_backtest_results(job_id: str):
 
     metrics = []
     for m in raw_metrics:
+        overfit_data = m.get("overfitting")
+        overfit = None
+        if overfit_data and isinstance(overfit_data, dict):
+            from api.schemas.backtest import OverfittingReport as OFReport, OverfittingCI
+            sharpe_ci = None
+            if overfit_data.get("sharpe_ci"):
+                sharpe_ci = OverfittingCI(**overfit_data["sharpe_ci"])
+            return_ci = None
+            if overfit_data.get("return_ci"):
+                return_ci = OverfittingCI(**overfit_data["return_ci"])
+            maxdd_ci = None
+            if overfit_data.get("maxdd_ci"):
+                maxdd_ci = OverfittingCI(**overfit_data["maxdd_ci"])
+            overfit = OFReport(
+                overfit_score=overfit_data.get("overfit_score", 0.0),
+                risk_level=overfit_data.get("risk_level", "low"),
+                risk_color=overfit_data.get("risk_color", "green"),
+                train_oos_gap_pct=overfit_data.get("train_oos_gap_pct", 0.0),
+                temporal_degradation_pct=overfit_data.get("temporal_degradation_pct", 0.0),
+                sharpe_ci=sharpe_ci,
+                return_ci=return_ci,
+                maxdd_ci=maxdd_ci,
+                cv_sharpe_mean=overfit_data.get("cv_sharpe_mean"),
+                cv_sharpe_std=overfit_data.get("cv_sharpe_std"),
+                cv_return_mean=overfit_data.get("cv_return_mean"),
+                cv_return_std=overfit_data.get("cv_return_std"),
+                min_trl_trades=overfit_data.get("min_trl_trades", 10),
+                sufficient_trades=overfit_data.get("sufficient_trades", False),
+                n_periods=overfit_data.get("n_periods", 0),
+                n_signal_periods=overfit_data.get("n_signal_periods", 0),
+                signal_gap_pct=overfit_data.get("signal_gap_pct", 0.0),
+                is_mean_sharpe=overfit_data.get("is_mean_sharpe"),
+                oos_mean_sharpe=overfit_data.get("oos_mean_sharpe"),
+            )
+
+        wf_periods_raw = m.get("walkforward_periods", [])
+        wf_periods = []
+        for wp in (wf_periods_raw or []):
+            from api.schemas.backtest import WalkForwardPeriod
+            wf_periods.append(WalkForwardPeriod(
+                period_start=str(wp.get("period_start", "")),
+                period_end=str(wp.get("period_end", "")),
+                train_start=wp.get("train_start"),
+                train_end=wp.get("train_end"),
+                test_sharpe=wp.get("test_sharpe"),
+                train_sharpe=wp.get("train_sharpe"),
+                strategy_return=wp.get("strategy_return"),
+                bh_return=wp.get("bh_return"),
+                trades=int(wp.get("trades", 0) or 0),
+                signals_raw=int(wp.get("signals_raw", 0) or 0),
+                signals_passed_gate=int(wp.get("signals_passed_gate", 0) or 0),
+                pct_sideways=wp.get("pct_sideways"),
+                pct_trend=wp.get("pct_trend"),
+                pct_volatile=wp.get("pct_volatile"),
+            ))
+
         metrics.append(BacktestResultMetrics(
             model=m.get("model", ""),
             sharpe=m.get("sharpe"),
@@ -463,6 +558,9 @@ def get_backtest_results(job_id: str):
             trades=m.get("trades"),
             hpo_param_importance=m.get("hpo_param_importance"),
             hpo_trials=m.get("hpo_trials"),
+            overfitting=overfit,
+            walkforward_periods=wf_periods,
+            diagnostics=_parse_diagnostics(m.get("diagnostics")),
         ))
 
     return BacktestResultsResponse(

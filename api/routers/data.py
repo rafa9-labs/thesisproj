@@ -2,32 +2,42 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile, BackgroundTasks
 
 from api.dependencies import get_data_store
 from api.schemas.pairs import DownloadRequest, DownloadResponse
 from api.services import JobManager
-from api.tasks import download_data_task
 from pipeline.pair_config import VALID_PAIRS, PAIR_REGISTRY, PairConfig
 
 router = APIRouter(prefix="/data", tags=["data"])
 
 
 @router.post("/download", response_model=DownloadResponse, status_code=202)
-def trigger_download(req: DownloadRequest):
+def trigger_download(req: DownloadRequest, background_tasks: BackgroundTasks):
     pair = req.pair.upper()
-    if pair not in VALID_PAIRS:
-        raise HTTPException(400, f"Unknown pair: {pair}. Available: {VALID_PAIRS}")
 
     store = get_data_store()
     jm = JobManager(store)
 
+    # Allow registry pairs OR previously-defined custom pairs
+    if pair not in VALID_PAIRS:
+        db_pair = store.get_pair(pair)
+        if db_pair is None:
+            raise HTTPException(
+                400,
+                f"Unknown pair: '{pair}'. "
+                f"Use /pairs/define to register it first, "
+                f"or pick from: {VALID_PAIRS}"
+            )
+
     job_id = str(uuid.uuid4())
     jm.create_job(job_id, "download", {"pair": pair, "years": req.years})
 
-    download_data_task.delay(job_id, pair, req.years)
+    # Run synchronously in-process (no Celery dependency)
+    from api.tasks import _download_data_impl
+    background_tasks.add_task(_download_data_impl, job_id, pair, req.years)
 
-    return DownloadResponse(job_id=job_id, pair=pair, status="pending")
+    return DownloadResponse(job_id=job_id, pair=pair, status="running")
 
 
 @router.post("/upload")
@@ -36,13 +46,9 @@ def upload_csv(
     pair: str | None = None,
     timeframe: str | None = None,
 ):
-    from api.config import settings
-    from pipeline.data_migrator import migrate_pair
-
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(400, "Only CSV files are accepted")
 
-    # Derive pair/timeframe from filename if not provided
     filename = file.filename
     inferred_pair = pair
     inferred_tf = timeframe
@@ -64,44 +70,35 @@ def upload_csv(
     pair = inferred_pair.upper()
     timeframe = inferred_tf.upper()
 
-    target_dir = Path(settings.csv_data_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
-    dest = target_dir / filename
-    with dest.open("wb") as f:
-        f.write(file.file.read())
-
+    import pandas as pd
     store = get_data_store()
 
-    # Register custom pair if unknown
-    if pair not in PAIR_REGISTRY:
-        from pipeline.pair_config import PAIR_REGISTRY as _reg, VALID_PAIRS as _vp
-        _reg[pair] = PairConfig(
-            symbol=pair,
-            oanda_name=pair[:3] + "_" + pair[3:],
-            pip_value=0.0001,
-            lot_size=100_000.0,
-            base_currency=pair[:3],
-            quote_currency=pair[3:],
-            typical_spread_bps=1.0,
-        )
-        if pair not in _vp:
-            _vp.append(pair)
-        store.insert_pairs([
-            {
-                "symbol": pair,
-                "oanda_name": pair[:3] + "_" + pair[3:],
-                "pip_value": 0.0001,
-                "lot_size": 100_000.0,
-                "base_currency": pair[:3],
-                "quote_currency": pair[3:],
-                "typical_spread_bps": 1.0,
-            }
-        ])
+    df = pd.read_csv(file.file)
+    rows = []
+    for _, r in df.iterrows():
+        rows.append((
+            pair,
+            timeframe,
+            str(r["time"]),
+            float(r.get("mid_open", 0) or 0),
+            float(r.get("mid_high", 0) or 0),
+            float(r.get("mid_low", 0) or 0),
+            float(r.get("mid_close", 0) or 0),
+            float(r.get("bid_open", 0) or 0),
+            float(r.get("bid_close", 0) or 0),
+            float(r.get("ask_open", 0) or 0),
+            float(r.get("ask_close", 0) or 0),
+            float(r.get("spread", 0) or 0),
+            int(r.get("volume", 0) or 0),
+        ))
 
-    migrate_pair(store, str(dest), pair, timeframe, force=True)
+    BATCH_SIZE = 50_000
+    for i in range(0, len(rows), BATCH_SIZE):
+        store.insert_candles_batch(rows[i : i + BATCH_SIZE])
+
     return {
         "status": "ok",
-        "filename": str(dest),
         "pair": pair,
         "timeframe": timeframe,
+        "rows": len(rows),
     }

@@ -191,7 +191,7 @@ def _macro_prec_f1_from_confusion(y_true, y_pred, labels=(-1,0,1)):
         f1_per_class = 2 * prec_per_class * rec_per_class / (prec_per_class + rec_per_class)
     prec = np.nanmean(np.where(np.isfinite(prec_per_class), prec_per_class, np.nan))
     f1   = np.nanmean(np.where(np.isfinite(f1_per_class), f1_per_class, np.nan))
-    return float(np.nan_to_num(prec, nan=0.0)), float(np.nan_to_num(f1, nan=0.0))
+    return float(np.nan_to_num(prec, nan=0.0)), float(np.nan_to_num(f1, nan=0.0)), cm
 
 def compute_full_evaluation_metrics(
     df,
@@ -946,7 +946,8 @@ def compute_full_evaluation_metrics(
     y_true = _coerce_direction_labels(df["true_direction"].values, deadzone=deadzone)
     y_pred = _coerce_direction_labels(df["pred_direction"].values, deadzone=deadzone)
     pred_lbl = pd.Series(y_pred, index=df.index)
-    precision_macro, f1_macro = _macro_prec_f1_from_confusion(y_true, y_pred)
+    precision_macro, f1_macro, _cm = _macro_prec_f1_from_confusion(y_true, y_pred)
+    df.attrs["confusion_matrix"] = _cm
     
     # Trade-intent precision: P(correct direction | model chose to trade).
     # This avoids the "precision looks good because we stayed flat" trap.

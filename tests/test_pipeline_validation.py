@@ -143,9 +143,11 @@ def _validate_df_months(df_months):
 
 
 def _skip_if_no_csv():
-    csv_path = os.path.join(_project_root, "csv_data", "EURUSD_10_years_H1_OANDA.csv")
-    if not os.path.exists(csv_path):
-        pytest.skip("EURUSD H1 CSV not found")
+    from pipeline.data_sqlite import DataStore
+    store = DataStore(os.path.join(_project_root, "data", "forex.db"))
+    tfs = store.list_timeframes("EURUSD")
+    if not {"M30", "H1", "H4"}.issubset(set(tfs)):
+        pytest.skip("EURUSD timeframes (M30,H1,H4) not found in DB. Run download first.")
 
 
 # ═══════════════════════════════════════════════════════════════════════

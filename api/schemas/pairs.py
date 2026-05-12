@@ -46,3 +46,23 @@ class DownloadResponse(BaseModel):
     job_id: str
     pair: str
     status: str
+
+
+class DefinePairRequest(BaseModel):
+    symbol: str
+    pip_value: float
+    decimal_places: int = 4
+
+
+class DataStatusSingle(BaseModel):
+    available: bool
+    start: Optional[str] = None
+    end: Optional[str] = None
+    bars: int = 0
+
+
+class DataStatusResponse(BaseModel):
+    symbol: str
+    timeframes: Dict[str, DataStatusSingle]
+    ready: bool
+    missing: List[str] = []

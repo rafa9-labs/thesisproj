@@ -1083,6 +1083,17 @@ class EnsembleMixin:
                 proba = self.model.predict_proba(X_seq_test, X_flat_test)
 
             finally:
+                # S16.3: Capture XGB feature importance before freeing model
+                try:
+                    from pipeline.diagnostics import compute_feature_importance
+                    _feat_names = list(features) if isinstance(features, (list, tuple)) else None
+                    _fi = compute_feature_importance(self.model, str(model_type or ""), feature_names=_feat_names)
+                    if _fi:
+                        self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi]
+                    else:
+                        self._diagnostics_feature_importance = []
+                except Exception:
+                    self._diagnostics_feature_importance = []
                 try:
                     if hasattr(self.model, "free"):
                         self.model.free()
@@ -1472,6 +1483,16 @@ class EnsembleMixin:
                     X_seq_test, X_flat_test, regime_source=regime_source_test
                 )
             finally:
+                # S16.3: Capture feature importance for adaptive regime (RF+Logit)
+                try:
+                    from pipeline.diagnostics import compute_feature_importance
+                    _fi_adapt = compute_feature_importance(self.model, "ensemble_adaptive_regime", feature_names=list(features) if isinstance(features, (list, tuple)) else None)
+                    if _fi_adapt:
+                        self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi_adapt]
+                    else:
+                        self._diagnostics_feature_importance = []
+                except Exception:
+                    self._diagnostics_feature_importance = []
                 try:
                     import gc as _gc
                     tf.keras.backend.clear_session()

@@ -25,6 +25,113 @@ export interface ModelInfo {
   description: string;
 }
 
+export interface OverfittingCI {
+  low: number | null;
+  high: number | null;
+  mean: number | null;
+}
+
+export interface OverfittingReportData {
+  overfit_score: number;
+  risk_level: "low" | "medium" | "high";
+  risk_color: "green" | "yellow" | "red";
+  train_oos_gap_pct: number;
+  temporal_degradation_pct: number;
+  sharpe_ci: OverfittingCI | null;
+  return_ci: OverfittingCI | null;
+  maxdd_ci: OverfittingCI | null;
+  cv_sharpe_mean: number | null;
+  cv_sharpe_std: number | null;
+  cv_return_mean: number | null;
+  cv_return_std: number | null;
+  min_trl_trades: number;
+  sufficient_trades: boolean;
+  n_periods: number;
+  n_signal_periods: number;
+  signal_gap_pct: number;
+  is_mean_sharpe: number | null;
+  oos_mean_sharpe: number | null;
+}
+
+export interface WalkForwardPeriod {
+  period_start: string;
+  period_end: string;
+  train_start: string | null;
+  train_end: string | null;
+  test_sharpe: number | null;
+  train_sharpe: number | null;
+  strategy_return: number | null;
+  bh_return: number | null;
+  trades: number;
+  signals_raw: number;
+  signals_passed_gate: number;
+  pct_sideways: number | null;
+  pct_trend: number | null;
+  pct_volatile: number | null;
+}
+
+export interface FeatureImportanceEntry {
+  feature: string;
+  importance: number;
+}
+
+export interface PredictionHistogramBin {
+  bin_start: number;
+  bin_end: number;
+  bin_center: number;
+  count: number;
+}
+
+export interface ConfusionMatrixData {
+  matrix: number[][] | null;
+  labels: string[];
+}
+
+export interface ConfidenceBand {
+  band_min: number;
+  band_max: number;
+  count: number;
+  accuracy: number;
+  mean_return: number;
+}
+
+export interface TrainingDiagnostics {
+  feature_importance: FeatureImportanceEntry[] | null;
+  prediction_histogram: PredictionHistogramBin[] | null;
+  confusion_matrix: ConfusionMatrixData | null;
+  confidence_bands: ConfidenceBand[] | null;
+}
+
+export interface DataStatusSingle {
+  available: boolean;
+  start: string | null;
+  end: string | null;
+  bars: number;
+}
+
+export interface DataStatusResponse {
+  symbol: string;
+  timeframes: Record<string, DataStatusSingle>;
+  ready: boolean;
+  missing: string[];
+}
+
+export interface DefinePairRequest {
+  symbol: string;
+  pip_value: number;
+  decimal_places: number;
+}
+
+export interface DefinePairResponse {
+  symbol: string;
+  oanda_name: string;
+  pip_value: number;
+  lot_size: number;
+  base_currency: string;
+  quote_currency: string;
+  typical_spread_bps: number;
+}
+
 export interface Metrics {
   model: string;
   sharpe: number | null;
@@ -48,6 +155,9 @@ export interface Metrics {
   trades: TradeRecord[] | null;
   hpo_param_importance: HpoParamImportance[] | null;
   hpo_trials: HpoTrial[] | null;
+  overfitting: OverfittingReportData | null;
+  walkforward_periods: WalkForwardPeriod[] | null;
+  diagnostics: TrainingDiagnostics | null;
 }
 
 export interface BacktestRequest {

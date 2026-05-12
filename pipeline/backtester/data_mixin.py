@@ -10,7 +10,7 @@ class DataMixin:
     """
     def get_data(self) -> None:
         """
-        Load and preprocess raw market data for the specified window.
+        Load and preprocess raw market data from SQLite for the specified window.
 
         - 30m data -> index=time (tz-aware), rename to price/high/low, compute log returns.
         - 1H / 4H data -> loaded for multi-timeframe (MTF) features.
@@ -18,8 +18,10 @@ class DataMixin:
         Uses tuned windows from features_config['indicator_windows'] and prefers precomputed columns if present.
         """
         # ---- 30m base data ----
-        _base_csv = self._csv_paths.get("base", BASE_CSV)
-        raw = _load_csv_cached(_base_csv, parse_dates=["time"], index_col="time")
+        raw = self._store.get_candles(self.symbol, "M30", self.start, self.end)
+        if raw.empty:
+            raise RuntimeError(f"No M30 data for {self.symbol} in [{self.start}, {self.end}]")
+        raw.set_index("time", inplace=True)
 
         # normalize column names expected downstream
         raw.rename(columns={"mid_close": "price", "mid_high": "high", "mid_low": "low"}, inplace=True)
@@ -73,18 +75,17 @@ class DataMixin:
             print(f"[WARN] Failed to precompute NY session mask: {_e}")
             self._ny_mask = pd.Series(True, index=self.data.index)  # safe fallback
 
-        # ---- 1H and 4H for MTF features (cached) ----
-        _csv_1h = self._csv_paths.get("H1", CSV_1H)
-        _csv_4h = self._csv_paths.get("H4", CSV_4H)
-        self.df_1h = _load_csv_cached(_csv_1h, parse_dates=["time"], index_col="time")
-        self.df_4h = _load_csv_cached(_csv_4h, parse_dates=["time"], index_col="time")
+        # ---- 1H and 4H for MTF features ----
+        self.df_1h = self._store.get_candles(self.symbol, "H1", self.start, self.end)
+        self.df_4h = self._store.get_candles(self.symbol, "H4", self.start, self.end)
 
-        # Slice H1/H4 to actual date range (don't keep full 10-year history)
-        try:
-            self.df_1h = self.df_1h.loc[self.start:self.end]
-            self.df_4h = self.df_4h.loc[self.start:self.end]
-        except Exception:
-            pass
+        # Set time as index for H1/H4 (required for MTF MA computation below)
+        if not self.df_1h.empty:
+            self.df_1h.set_index("time", inplace=True)
+        if not self.df_4h.empty:
+            self.df_4h.set_index("time", inplace=True)
+
+        # H1/H4 already filtered by date range from DataStore
 
         # [DOWN] Downcast numeric columns in 1H / 4H to float32 as well
         for _df in (self.df_1h, self.df_4h):
@@ -114,7 +115,7 @@ class DataMixin:
 
             if col_fast is None:
                 if "mid_close" not in df1:
-                    raise KeyError("1H CSV missing 'mid_close' for MTF compute")
+                    raise KeyError("1H data missing 'mid_close' for MTF compute")
                 df1["mtf_1h_ma_fast"] = (
                     df1["mid_close"]
                     .rolling(fast_w, min_periods=fast_w)
@@ -125,7 +126,7 @@ class DataMixin:
 
             if col_slow is None:
                 if "mid_close" not in df4:
-                    raise KeyError("4H CSV missing 'mid_close' for MTF compute")
+                    raise KeyError("4H data missing 'mid_close' for MTF compute")
                 df4["mtf_4h_ma_slow"] = (
                     df4["mid_close"]
                     .rolling(slow_w, min_periods=slow_w)

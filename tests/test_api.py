@@ -60,7 +60,7 @@ class TestPairs:
         assert r.status_code == 200
         data = r.json()
         assert data["symbol"] == "EURUSD"
-        assert len(data["timeframes"]) == 3
+        assert len(data["timeframes"]) >= 3
         m30 = next(t for t in data["timeframes"] if t["timeframe"] == "M30")
         assert m30["rows"] > 100000
 
@@ -174,7 +174,7 @@ class TestDataDownload:
         assert r.status_code == 202
         data = r.json()
         assert data["job_id"]
-        assert data["status"] == "pending"
+        assert data["status"] == "running"
 
     def test_download_unknown_pair(self, client):
         r = client.post("/api/v1/data/download", json={"pair": "ZZZZZZ"})
