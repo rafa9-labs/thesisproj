@@ -9,10 +9,11 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import traceback
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -163,16 +164,93 @@ if not IS_DESKTOP:
         _celery_available = False
 
 
-def _pub(event: str, job_id: str, data: Dict[str, Any]):
-    """Publish a progress event to Redis pub/sub."""
-    try:
-        import redis as _redis
+_redis_client = None
+_redis_available: bool | None = None
 
-        r = _redis.from_url(settings.redis_url)
-        msg = json.dumps({"event": event, "job_id": job_id, **data})
-        r.publish(f"job:{job_id}", msg)
+
+def _get_redis():
+    global _redis_client, _redis_available
+    if _redis_available is False:
+        raise ConnectionError("Redis unavailable")
+    if _redis_client is None:
+        import redis as _redis_mod
+        _redis_client = _redis_mod.from_url(settings.redis_url, socket_connect_timeout=2)
+        try:
+            _redis_client.ping()
+            _redis_available = True
+        except Exception:
+            _redis_available = False
+            _redis_client = None
+            raise
+    return _redis_client
+
+
+_job_events: Dict[str, List[Dict]] = {}
+_job_events_lock = threading.Lock()
+_JOB_EVENTS_MAX = 5000
+
+
+def _append_event(job_id: str, event: Dict):
+    with _job_events_lock:
+        if job_id not in _job_events:
+            _job_events[job_id] = []
+        lst = _job_events[job_id]
+        lst.append(event)
+        if len(lst) > _JOB_EVENTS_MAX:
+            _job_events[job_id] = lst[-_JOB_EVENTS_MAX:]
+    # Push to Redis list so Celery worker events are visible to the API server
+    try:
+        r = _get_redis()
+        r.rpush(f"job_events:{job_id}", json.dumps(event))
+        r.ltrim(f"job_events:{job_id}", -_JOB_EVENTS_MAX, -1)
+        r.expire(f"job_events:{job_id}", 86400)
     except Exception:
-        pass
+        global _redis_client, _redis_available
+        _redis_client = None
+        _redis_available = False
+
+
+def get_job_events(job_id: str, after: int = 0) -> List[Dict]:
+    # Prefer Redis so worker events are visible cross-process
+    try:
+        r = _get_redis()
+        raw = r.lrange(f"job_events:{job_id}", 0, -1)
+        if raw:
+            events = [json.loads(item) for item in raw]
+            return events[after:]
+    except Exception:
+        global _redis_client, _redis_available
+        _redis_client = None
+        _redis_available = False
+    # Fallback to in-memory (desktop mode / Redis unavailable)
+    with _job_events_lock:
+        lst = _job_events.get(job_id, [])
+        return lst[after:]
+
+
+def clear_job_events(job_id: str):
+    with _job_events_lock:
+        _job_events.pop(job_id, None)
+    try:
+        r = _get_redis()
+        r.delete(f"job_events:{job_id}")
+    except Exception:
+        global _redis_client, _redis_available
+        _redis_client = None
+        _redis_available = False
+
+
+def _pub(event: str, job_id: str, data: Dict[str, Any]):
+    """Publish a progress event to Redis pub/sub and in-memory buffer."""
+    msg = {"event": event, "job_id": job_id, **data}
+    _append_event(job_id, msg)
+    try:
+        r = _get_redis()
+        r.publish(f"job:{job_id}", json.dumps(msg))
+    except Exception:
+        global _redis_client, _redis_available
+        _redis_client = None
+        _redis_available = False
 
 
 def _sanitize_metrics(metrics_list: list) -> list:
@@ -280,6 +358,34 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             evt_name = "model_phase"
         _pub(evt_name, job_id, data)
         emit_event(evt_name, job_id=job_id, pct=pct, **data)
+
+        if phase == "hpo_trial" and detail:
+            _pub("hpo_trial_result", job_id, {
+                "model": model,
+                "trial_number": detail.get("trial", 0),
+                "score": detail.get("score"),
+                "params": detail.get("params", {}),
+                "best_score_so_far": detail.get("best_score_so_far"),
+                "trial_state": detail.get("trial_state", "COMPLETE"),
+            })
+
+        elif phase in ("month", "period") and detail:
+            _pub("oos_result", job_id, {
+                "model": model,
+                "period": detail.get("period", 0),
+                "total_periods": detail.get("total_periods", 0),
+                "equity": detail.get("equity_strategy"),
+                "equity_bh": detail.get("equity_bh"),
+                "sharpe": detail.get("sharpe"),
+                "return_pct": detail.get("return_pct"),
+                "trades": detail.get("trades"),
+                "drawdown": detail.get("drawdown"),
+                "win_rate": detail.get("win_rate"),
+                "precision": detail.get("precision_macro"),
+                "f1": detail.get("f1_macro"),
+                "directional_accuracy": detail.get("directional_accuracy"),
+                "active_rate": detail.get("active_rate"),
+            })
 
     all_metrics = []
 
@@ -565,7 +671,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 }
                 metrics_row["walkforward_periods"] = compute_period_breakdown(wfo_records)
             except Exception as _overfit_err:
-                if _dbg:
+                if settings.debug:
                     print(f"[overfitting] compute failed for {model_type}: {_overfit_err}")
                 metrics_row["overfitting"] = None
                 metrics_row["walkforward_periods"] = []
