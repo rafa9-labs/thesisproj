@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "./client";
+import { useJobStore } from "@/stores/useJobStore";
 import type {
   PairInfo,
   ModelInfo,
@@ -20,6 +21,7 @@ import type {
   DataStatusResponse,
   DefinePairRequest,
   DefinePairResponse,
+  WsEvent,
 } from "./schemas";
 
 export function useHealth() {
@@ -111,6 +113,33 @@ export function useJobResults(jobId: string | null) {
   });
 }
 
+export function useActiveBacktests() {
+  return useQuery({
+    queryKey: ["active-backtests"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ jobs: JobSummary[]; total: number }>("/backtest/active");
+      return data;
+    },
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+}
+
+export function useForceStopJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (jobId: string) => {
+      const { data } = await apiClient.post<{ job_id: string; status: string }>(`/backtest/${jobId}/force-stop`);
+      return data;
+    },
+    onSuccess: (_, jobId) => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["active-backtests"] });
+      queryClient.invalidateQueries({ queryKey: ["job", jobId] });
+    },
+  });
+}
+
 export function useSubmitBacktest() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -125,6 +154,7 @@ export function useSubmitBacktest() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["active-backtests"] });
     },
   });
 }
@@ -510,5 +540,35 @@ export function useDownloadJobStatus(jobId: string | null) {
       if (status === "pending" || status === "running") return 2_000;
       return false;
     },
+  });
+}
+
+const _progressCursors = new Map<string, number>();
+
+export function useBacktestProgress(jobId: string | null) {
+  const handleWsEvent = useJobStore((s) => s.handleWsEvent);
+  const activeJobs = useJobStore((s) => s.activeJobs);
+
+  return useQuery({
+    queryKey: ["backtest-progress", jobId],
+    queryFn: async () => {
+      if (!jobId) return null;
+      const cursor = _progressCursors.get(jobId) ?? 0;
+      const { data } = await apiClient.get<{ events: WsEvent[]; total: number }>(
+        `/backtest/${jobId}/events?after=${cursor}`,
+      );
+      if (data.events && data.events.length > 0) {
+        for (const evt of data.events) {
+          handleWsEvent(evt as WsEvent);
+        }
+        _progressCursors.set(jobId, data.total);
+      }
+      return data;
+    },
+    enabled:
+      !!jobId &&
+      activeJobs.has(jobId) &&
+      (activeJobs.get(jobId)?.status === "pending" || activeJobs.get(jobId)?.status === "running"),
+    refetchInterval: 2_000,
   });
 }

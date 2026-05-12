@@ -88,6 +88,14 @@ class TestModels:
 
 
 class TestBacktestSubmit:
+    def setup_method(self):
+        from api.dependencies import get_data_store
+        from api.services import JobManager
+        store = get_data_store()
+        jm = JobManager(store)
+        for job in jm.list_jobs(job_type="backtest", limit=1000):
+            jm.delete_job(job["id"])
+
     def test_submit_valid_backtest(self, client):
         r = client.post("/api/v1/backtest", json={
             "pair": "EURUSD",
@@ -154,6 +162,14 @@ class TestBacktestSubmit:
 
 
 class TestBacktestResults:
+    def setup_method(self):
+        from api.dependencies import get_data_store
+        from api.services import JobManager
+        store = get_data_store()
+        jm = JobManager(store)
+        for job in jm.list_jobs(job_type="backtest", limit=1000):
+            jm.delete_job(job["id"])
+
     def test_results_for_pending_job(self, client):
         r = client.post("/api/v1/backtest", json={
             "pair": "EURUSD",

@@ -316,12 +316,37 @@ export type WsEvent =
   | { event: "model_training"; job_id: string; model: string; status: "complete"; metrics: Partial<Metrics> }
   | { event: "model_phase"; job_id: string; model: string; phase: "hpo" | "simulation"; total_work?: number }
   | { event: "hpo_progress"; job_id: string; model: string; trial?: number; total_trials?: number; n_trials?: number; cv_blocks: number; completed_work: number; total_work: number; progress_pct: number }
+  | { event: "hpo_trial_result"; job_id: string; model: string; trial_number: number; score: number | null; params: Record<string, unknown>; best_score_so_far: number | null; trial_state: string }
   | { event: "month_progress"; job_id: string; model: string; month?: number; total_months?: number; period?: number; total_periods?: number; sharpe?: number; trades?: number; completed_work: number; total_work: number; progress_pct: number }
+  | { event: "oos_result"; job_id: string; model: string; period: number; total_periods: number; equity: number | null; equity_bh: number | null; sharpe: number | null; return_pct: number | null; trades: number | null; drawdown: number | null; win_rate: number | null; precision: number | null; f1: number | null; directional_accuracy: number | null; active_rate: number | null; flat?: boolean }
   | { event: "job_complete"; job_id: string; metrics: Partial<Metrics>[] }
   | { event: "job_failed"; job_id: string; error: string }
   | { event: "download_started"; job_id: string; pair: string }
   | { event: "download_complete"; job_id: string; pair: string }
   | { event: "download_failed"; job_id: string; error: string };
+
+export interface HpoTrialRow {
+  trial_number: number;
+  score: number | null;
+  params: Record<string, unknown>;
+  best_score_so_far: number | null;
+  trial_state: string;
+}
+
+export interface OosPeriodResult {
+  period: number;
+  total_periods: number;
+  equity: number | null;
+  equity_bh: number | null;
+  sharpe: number | null;
+  return_pct: number | null;
+  trades: number | null;
+  drawdown: number | null;
+  win_rate: number | null;
+  precision: number | null;
+  f1: number | null;
+  flat?: boolean;
+}
 
 export interface HealthResponse {
   status: string;

@@ -17,6 +17,7 @@ class JobManager:
         return datetime.now(timezone.utc).isoformat()
 
     def create_job(self, job_id: str, job_type: str, config: Dict[str, Any]) -> Dict:
+        """Backward-compatible wrapper that bypasses the concurrency limit."""
         now = self._now()
         with self.store._cursor() as (conn, cur):
             cur.execute(
@@ -24,6 +25,49 @@ class JobManager:
                 (job_id, job_type, "pending", json.dumps(config), now, now),
             )
         return {"id": job_id, "type": job_type, "status": "pending", "created_at": now}
+
+    def create_job_atomic(self, job_id: str, job_type: str, config: Dict[str, Any], max_active: int = 1) -> Dict:
+        now = self._now()
+        with self.store._cursor() as (conn, cur):
+            cur.execute(
+                "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running')",
+                (job_type,),
+            )
+            active_count = cur.fetchone()[0]
+            if active_count >= max_active:
+                raise RuntimeError("Maximum concurrent backtest jobs reached")
+            cur.execute(
+                "INSERT INTO jobs (id, type, status, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (job_id, job_type, "pending", json.dumps(config), now, now),
+            )
+        return {"id": job_id, "type": job_type, "status": "pending", "created_at": now}
+
+    def get_active_jobs(self, job_type: Optional[str] = None) -> List[Dict]:
+        sql = "SELECT * FROM jobs WHERE status IN ('pending', 'running')"
+        params: list = []
+        if job_type:
+            sql += " AND type = ?"
+            params.append(job_type)
+        sql += " ORDER BY created_at DESC"
+        with self.store._cursor() as (conn, cur):
+            cur.execute(sql, params)
+            cols = [d[0] for d in cur.description]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+        for r in rows:
+            if r.get("config"):
+                r["config"] = json.loads(r["config"])
+            if r.get("result"):
+                r["result"] = json.loads(r["result"])
+        return rows
+
+    def force_stop_job(self, job_id: str) -> bool:
+        now = self._now()
+        with self.store._cursor() as (conn, cur):
+            cur.execute(
+                "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'running')",
+                ("failed", "Force stopped by user", now, job_id),
+            )
+            return cur.rowcount > 0
 
     def update_status(self, job_id: str, status: str, result: Optional[Dict] = None, error: Optional[str] = None):
         now = self._now()

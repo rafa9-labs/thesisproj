@@ -33,7 +33,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app: FastAPI,
-        general_limit: int = 60,
+        general_limit: int = 600,
         general_window: int = 60,
         activation_limit: int = 5,
         activation_window: int = 300,

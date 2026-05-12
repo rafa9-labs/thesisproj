@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Metrics, WsEvent } from "@/api/schemas";
+import type { Metrics, WsEvent, HpoTrialRow, OosPeriodResult } from "@/api/schemas";
 
 interface ModelProgress {
   phase: "pending" | "hpo" | "simulation" | "complete" | "failed";
@@ -9,6 +9,8 @@ interface ModelProgress {
   simMonth: number;
   simTotalMonths: number;
 }
+
+type ActiveTab = "hpo-and-results" | "trade";
 
 interface JobState {
   jobId: string;
@@ -26,6 +28,11 @@ interface JobState {
   totalWork: number;
   completedWork: number;
   modelPhases: Map<string, ModelProgress>;
+  hpoTrials: HpoTrialRow[];
+  bestTrial: HpoTrialRow | null;
+  oosPeriods: OosPeriodResult[];
+  oosEquity: { time: number; model: number; bh: number }[];
+  activeTab: ActiveTab;
 }
 
 interface JobStore {
@@ -37,6 +44,7 @@ interface JobStore {
   selectJob: (jobId: string | null) => void;
   removeJob: (jobId: string) => void;
   getJob: (jobId: string) => JobState | undefined;
+  setActiveTab: (jobId: string, tab: ActiveTab) => void;
 }
 
 export const useJobStore = create<JobStore>()((set, get) => ({
@@ -62,6 +70,11 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         totalWork: 0,
         completedWork: 0,
         modelPhases: new Map(),
+        hpoTrials: [],
+        bestTrial: null,
+        oosPeriods: [],
+        oosEquity: [],
+        activeTab: "hpo-and-results",
       });
       return { activeJobs: next, selectedJobId: jobId };
     }),
@@ -81,12 +94,14 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         updated.status = "running";
         updated.progressText = "Backtest running...";
         updated.totalWork = event.total_work ?? 0;
+        updated.activeTab = "hpo-and-results";
       }
 
       if (event.event === "model_training") {
         if (event.status === "starting") {
           updated.currentModel = event.model;
           updated.progressText = `Training ${event.model}...`;
+          updated.activeTab = "hpo-and-results";
         }
         if (event.status === "complete") {
           updated.completedModels = [...updated.completedModels, event.model];
@@ -133,6 +148,20 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         updated.progressText = `HPO: trial ${trial}/${totalTrials} (${m})`;
       }
 
+      if (event.event === "hpo_trial_result") {
+        const row: HpoTrialRow = {
+          trial_number: event.trial_number,
+          score: event.score,
+          params: event.params ?? {},
+          best_score_so_far: event.best_score_so_far,
+          trial_state: event.trial_state ?? "COMPLETE",
+        };
+        updated.hpoTrials = [...updated.hpoTrials, row];
+        if (row.score != null && (updated.bestTrial == null || row.score > (updated.bestTrial.score ?? -Infinity))) {
+          updated.bestTrial = row;
+        }
+      }
+
       if (event.event === "month_progress") {
         const m = event.model;
         const month = event.month ?? event.period ?? 0;
@@ -145,6 +174,30 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         updated.totalWork = event.total_work ?? updated.totalWork;
         updated.progress = event.progress_pct ?? updated.progress;
         updated.progressText = `${m}: month ${month}/${totalMonths}`;
+      }
+
+      if (event.event === "oos_result") {
+        const periodResult: OosPeriodResult = {
+          period: event.period,
+          total_periods: event.total_periods,
+          equity: event.equity,
+          equity_bh: event.equity_bh,
+          sharpe: event.sharpe,
+          return_pct: event.return_pct,
+          trades: event.trades,
+          drawdown: event.drawdown,
+          win_rate: event.win_rate,
+          precision: event.precision,
+          f1: event.f1,
+          flat: event.flat,
+        };
+        updated.oosPeriods = [...updated.oosPeriods, periodResult];
+        if (event.equity != null && event.equity_bh != null) {
+          updated.oosEquity = [
+            ...updated.oosEquity,
+            { time: event.period, model: event.equity, bh: event.equity_bh },
+          ];
+        }
       }
 
       if (event.event === "job_complete") {
@@ -187,4 +240,14 @@ export const useJobStore = create<JobStore>()((set, get) => ({
     }),
 
   getJob: (jobId) => get().activeJobs.get(jobId),
+
+  setActiveTab: (jobId, tab) =>
+    set((state) => {
+      const next = new Map(state.activeJobs);
+      const job = next.get(jobId);
+      if (job) {
+        next.set(jobId, { ...job, activeTab: tab });
+      }
+      return { activeJobs: next };
+    }),
 }));

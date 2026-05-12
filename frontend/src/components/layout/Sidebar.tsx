@@ -34,7 +34,7 @@ const navGroups: NavGroup[] = [
     label: "Analyze",
     items: [
       { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-      { icon: FlaskConical, label: "Backtest", path: "/backtest" },
+      { icon: FlaskConical, label: "Backtest Setup", path: "/backtest" },
       { icon: BarChart3, label: "Results", path: "/results" },
       { icon: GitCompare, label: "Compare", path: "/compare" },
     ],

@@ -200,6 +200,11 @@ class BacktestStatusResponse(BaseModel):
     progress: Optional[Dict[str, Any]] = None
 
 
+class BacktestEventsResponse(BaseModel):
+    events: list
+    total: int
+
+
 class OverfittingCI(BaseModel):
     low: Optional[float] = None
     high: Optional[float] = None

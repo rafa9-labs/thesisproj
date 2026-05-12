@@ -299,11 +299,19 @@ def run_optuna_tuning(
         _trial_counter[0] += 1
         if _progress_cb:
             try:
+                best_so_far = None
+                try:
+                    best_so_far = float(study.best_value)
+                except Exception:
+                    pass
                 _progress_cb("hpo_trial", _model_name_for_cb, {
                     "trial": _trial_counter[0],
                     "total_trials": _n_trials_for_cb,
                     "cv_blocks": _cv_blocks_for_cb,
                     "score": result,
+                    "params": dict(trial.params) if trial.params else {},
+                    "best_score_so_far": best_so_far,
+                    "trial_state": str(trial.state) if hasattr(trial, "state") else "COMPLETE",
                 })
             except Exception:
                 pass

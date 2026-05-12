@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from api.config import settings
 from api.dependencies import get_data_store
 from api.schemas.backtest import (
     CLASSIC_QUICK_TEST,
@@ -184,7 +185,10 @@ def submit_backtest(req: BacktestRequest):
         "config_overrides": req.config_overrides,
     }
 
-    jm.create_job(job_id, "backtest", config)
+    try:
+        jm.create_job_atomic(job_id, "backtest", config, max_active=settings.max_concurrent_backtests)
+    except RuntimeError:
+        raise HTTPException(status_code=409, detail="A backtest is already running. Please wait for completion.")
 
     if IS_DESKTOP:
         # Desktop mode: run synchronously, return completed result
@@ -392,6 +396,47 @@ def get_results_summary(
     return BacktestSummaryResponse(results=paged, total=total, offset=offset, limit=limit)
 
 
+@router.get("/active", response_model=BacktestListResponse)
+def get_active_backtests():
+    store = get_data_store()
+    jm = JobManager(store)
+    jobs = jm.get_active_jobs("backtest")
+    items = []
+    for j in jobs:
+        cfg = j.get("config", {})
+        items.append(BacktestListItem(
+            job_id=j["id"],
+            type=j["type"],
+            status=j["status"],
+            pair=cfg.get("pair", ""),
+            models=cfg.get("models", []),
+            created_at=j["created_at"],
+        ))
+    return BacktestListResponse(jobs=items, total=len(items), offset=0, limit=len(items))
+
+
+@router.post("/{job_id}/force-stop", response_model=BacktestStatusResponse)
+def force_stop_backtest(job_id: str):
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if job["status"] not in ("pending", "running"):
+        raise HTTPException(400, f"Job status is '{job['status']}', not pending or running")
+    jm.force_stop_job(job_id)
+    updated = jm.get_job(job_id)
+    return BacktestStatusResponse(
+        job_id=updated["id"],
+        type=updated["type"],
+        status=updated["status"],
+        created_at=updated["created_at"],
+        updated_at=updated["updated_at"],
+        error=updated.get("error"),
+        progress=updated.get("result"),
+    )
+
+
 @router.get("/{job_id}", response_model=BacktestStatusResponse)
 def get_backtest_status(job_id: str):
     store = get_data_store()
@@ -409,6 +454,13 @@ def get_backtest_status(job_id: str):
         error=job.get("error"),
         progress=job.get("result"),
     )
+
+
+@router.get("/{job_id}/events")
+def get_backtest_events(job_id: str, after: int = 0):
+    from api.tasks import get_job_events
+    events = get_job_events(job_id, after=after)
+    return {"events": events, "total": after + len(events)}
 
 
 def _coerce_curve(raw):

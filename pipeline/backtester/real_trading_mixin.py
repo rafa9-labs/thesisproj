@@ -2220,6 +2220,25 @@ class RealTradingMixin:
                         prev_eq_strategy=prev_eq_strategy,
                         prev_eq_bh=prev_eq_bh,
                     )
+                    _progress_cb = getattr(self, "_progress_callback", None)
+                    if _progress_cb:
+                        phase = "month" if period_unit == "months" else "period"
+                        _progress_cb(phase, model_type, {
+                            "period": period_idx + 1,
+                            "total_periods": n_periods,
+                            "sharpe": 0.0,
+                            "trades": 0,
+                            "equity_strategy": prev_eq_strategy,
+                            "equity_bh": prev_eq_bh,
+                            "drawdown": 0.0,
+                            "win_rate": 0.0,
+                            "precision_macro": 0.0,
+                            "f1_macro": 0.0,
+                            "return_pct": 0.0,
+                            "directional_accuracy": 0.0,
+                            "active_rate": 0.0,
+                            "flat": True,
+                        })
                     continue
 
 
@@ -2700,7 +2719,21 @@ class RealTradingMixin:
                 _progress_cb = getattr(self, "_progress_callback", None)
                 if _progress_cb:
                     phase = "month" if period_unit == "months" else "period"
-                    _progress_cb(phase, model_type, {"period": i + 1, "total_periods": n_periods, "sharpe": result.get("sharpe", None), "trades": result.get("trades", None)})
+                    _progress_cb(phase, model_type, {
+                        "period": i + 1,
+                        "total_periods": n_periods,
+                        "sharpe": result.get("sharpe"),
+                        "trades": result.get("trades"),
+                        "equity_strategy": result.get("equity_strategy"),
+                        "equity_bh": result.get("equity_bh"),
+                        "drawdown": result.get("drawdown"),
+                        "win_rate": result.get("win_rate"),
+                        "precision_macro": result.get("precision_macro"),
+                        "f1_macro": result.get("f1_macro"),
+                        "return_pct": result.get("cstrategy"),
+                        "directional_accuracy": result.get("directional_accuracy"),
+                        "active_rate": result.get("active_rate"),
+                    })
                 
                 # PBO/MCS monthly bookkeeping (does not affect trading logic)
                 try:
