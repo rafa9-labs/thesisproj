@@ -117,7 +117,8 @@ def run_optuna_tuning(
     if "cv_n_jobs" not in cv_config:
         import os
         import multiprocessing
-        cv_config["cv_n_jobs"] = int(os.getenv("CV_JOBS", str(multiprocessing.cpu_count() or 16)))
+        _cv_jobs_raw = os.getenv("CV_JOBS", "")
+        cv_config["cv_n_jobs"] = int(_cv_jobs_raw) if _cv_jobs_raw.strip() else (multiprocessing.cpu_count() or 16)
         
     # ------------------------------------------------------------
     # Fast path: n_trials <= 0 => load cached HPO config (no Optuna)

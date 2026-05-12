@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { useJobStore } from "@/stores/useJobStore";
 import { useValidation } from "@/hooks/useValidation";
@@ -18,7 +17,6 @@ import { ValidationAlert } from "@/components/shared/ValidationAlert";
 import { RuntimeEstimate } from "@/components/shared/RuntimeEstimate";
 
 export function BacktestPage() {
-  const navigate = useNavigate();
   const selectedModels = useBacktestStore((s) => s.selectedModels);
   const toPayload = useBacktestStore((s) => s.toRequestPayload);
   const startJob = useJobStore((s) => s.startJob);
@@ -41,12 +39,7 @@ export function BacktestPage() {
     activeJob?.status === "pending" ||
     activeJob?.status === "running";
 
-  useEffect(() => {
-    if (activeJob?.status === "completed" && activeJobId) {
-      const timer = setTimeout(() => navigate(`/results/${activeJobId}`), 800);
-      return () => clearTimeout(timer);
-    }
-  }, [activeJob?.status, activeJobId, navigate]);
+  // Keep user on Backtest Setup page when job completes (results stay visible in HPO and Results tab)
 
   const handleDeploy = async () => {
     try {

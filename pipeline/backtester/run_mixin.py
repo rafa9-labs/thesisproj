@@ -185,7 +185,8 @@ class RunMixin:
         if min_train_window_first + val_window_first > len(first_train_df):
             val_window_first = len(first_train_df) - min_train_window_first
         cv_config_first = {"min_train_window": min_train_window_first, "val_window": val_window_first}
-        cv_config_first["cv_n_jobs"] = int(os.environ.get("CV_JOBS", os.cpu_count() or 1))
+        _cv_jobs_raw = os.environ.get("CV_JOBS", "")
+        cv_config_first["cv_n_jobs"] = int(_cv_jobs_raw) if _cv_jobs_raw.strip() else (os.cpu_count() or 1)
         cv_config_first["score_for_no_trades"] = -1.0
 
         # [POINT] Make CV knobs visible to the nested _single_study_cv via self.config
