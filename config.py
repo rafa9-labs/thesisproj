@@ -241,14 +241,14 @@ SEARCH_SPACE = {
     # -- SVM --
     "svm": {
         "C": (1e-2, 1e2, True),            # narrowed from [1e-3, 1e3]
-        "gamma": (1e-4, 1e1, True),         # narrowed from [1e-5, 10]
+        "gamma": [1e-4, 1e-3, 1e-2, 0.1, 0.5],  # categorical from literature; removes degenerate high-gamma noise-memorization
         "kernel": "rbf",                    # fixed: standard for FX
         "class_weight": "balanced",         # fixed: standard for imbalanced FX
     },
     # -- Random Forest --
     "random_forest": {
         "n_estimators": (300, 1000, 100),
-        "max_depth": [None, 8, 12, 16],
+        "max_depth": [8, 12, 16, 20],         # removed None (unconstrained -> perfect IS fit -> coverage rejection)
         "min_samples_leaf": (1, 10),
         "max_features": ["sqrt", 0.33, 0.5],
         # Fixed: bootstrap=True, class_weight=None, n_jobs=-1

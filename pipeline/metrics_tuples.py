@@ -579,7 +579,7 @@ CLASS_DEFAULTS = {
         "cv_cscv_min_rank_corr": 0.20,
         "cv_cscv_disqualify": False,
         "cv_strict_pruning": False,
-        "cv_prune_relax": 0.50,
+        "cv_prune_relax": 0.75,                # was 0.50 — raised to reduce degenerate CV passes
 
         "cv_prune_precision_intent": False,
 

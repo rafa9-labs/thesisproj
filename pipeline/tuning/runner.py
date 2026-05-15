@@ -379,7 +379,7 @@ def run_optuna_tuning(
         # Stop if best_value hasn't improved by >= plateau_delta for
         # plateau_patience consecutive trials.
         # ------------------------------------------------------------
-        plateau_patience = int(cv_config.get("plateau_patience", 0) or 0)
+        plateau_patience = int(cv_config.get("plateau_patience", 15) or 15)
         plateau_delta = float(cv_config.get("plateau_delta", 0.0) or 0.0)
         plateau_min_trials = int(cv_config.get("plateau_min_trials", 0) or 0)
 
