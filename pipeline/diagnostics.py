@@ -327,7 +327,7 @@ def compute_feature_importance(
                 try:
                     X_sub = X_val[:500] if len(X_val) > 500 else X_val
                     y_sub = y_val[:500] if len(y_val) > 500 else y_val
-                    perm = _skperm(model, X_sub, y_sub, n_repeats=3, random_state=42, n_jobs=1)
+                    perm = _skperm(model, X_sub, y_sub, n_repeats=5, random_state=42, n_jobs=1)
                     importances = perm.importances_mean
                 except Exception:
                     pass
@@ -381,7 +381,10 @@ def _deep_gradient_importance(model, X_val: Optional[np.ndarray], n_feats: int) 
         with tf.GradientTape() as tape:
             tape.watch(inp)
             out = model(inp, training=False)
-            loss = tf.reduce_mean(tf.abs(out))
+            _pred_class = tf.argmax(out, axis=-1, output_type=tf.int32)
+            loss = tf.reduce_mean(
+                tf.keras.losses.sparse_categorical_crossentropy(_pred_class, out, from_logits=False)
+            )
         grads = tape.gradient(loss, inp)
         if grads is None:
             return None
