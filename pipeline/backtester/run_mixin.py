@@ -314,11 +314,12 @@ class RunMixin:
 
             # Suppress verbose per-fold block summaries unless KODAQUANT_VERBOSE
             _block_verbose = getattr(self, "_progress", None) and self._progress.verbose
-            if not _block_verbose:
-                def print_pruned_block_summary(*a, **kw):
-                    pass
-                def print_block_summary(*a, **kw):
-                    pass
+            if _block_verbose:
+                _print_pruned_summary = print_pruned_block_summary
+                _print_block_summary = print_block_summary
+            else:
+                _print_pruned_summary = lambda *a, **kw: None
+                _print_block_summary = lambda *a, **kw: None
 
             # ---- Minimal pretty table helper ----
             def _fmt_table(headers, rows, title=None):
@@ -1284,7 +1285,7 @@ class RunMixin:
                                 pass
 
                             # Pretty debug card for this invalid fold
-                            print_pruned_block_summary(
+                            _print_pruned_summary(
                                 block_id=j,
                                 reason="MiniBlockCV reject split (insufficient rows)",
                                 rows=rows_i,
@@ -1361,7 +1362,7 @@ class RunMixin:
                                 block_all_hold.append(True)
                                 block_reasons.append("BadMetrics")
 
-                                print_pruned_block_summary(
+                                _print_pruned_summary(
                                     block_id=j,
                                     reason="MiniBlockCV metrics malformed",
                                     rows=rows_i,
@@ -1444,7 +1445,7 @@ class RunMixin:
                                 reason_tag = "NoTrades" if trades_int <= 0 else "InvalidSR"
                                 
                                 try:
-                                    print_pruned_block_summary(
+                                    _print_pruned_summary(
                                         block_id=j,
                                         reason=reason_tag,
                                         rows=rows_i,
@@ -1680,7 +1681,7 @@ class RunMixin:
                             block_neff.append(float("nan"))
 
                             # Pretty card for this invalid/pruned fold
-                            print_pruned_block_summary(
+                            _print_pruned_summary(
                                 block_id=j,
                                 reason=reason,
                                 rows=rows_i,
@@ -1793,7 +1794,7 @@ class RunMixin:
                             block_reasons.append(reason_tag)
                             
 
-                            print_pruned_block_summary(
+                            _print_pruned_summary(
                                 block_id=j,
                                 reason=reason_tag,
                                 rows=rows_i,
@@ -2131,7 +2132,7 @@ class RunMixin:
                                 )
 
                                 # Pretty card explaining *why* this fold was hard-pruned
-                                print_pruned_block_summary(
+                                _print_pruned_summary(
                                     block_id=j,
                                     reason=reason,
                                     rows=rows_i,
@@ -2615,7 +2616,7 @@ class RunMixin:
  
 
                             if getattr(self, "_progress", None) and self._progress.verbose:
-                                print_block_summary(
+                                _print_block_summary(
                                     block_id=j,
                                     calib_info=calib_info,
                                     gate_info=gate_info,
