@@ -321,9 +321,11 @@ export type WsEvent =
   | { event: "oos_result"; job_id: string; model: string; period: number; total_periods: number; equity: number | null; equity_bh: number | null; sharpe: number | null; return_pct: number | null; trades: number | null; drawdown: number | null; win_rate: number | null; precision: number | null; f1: number | null; directional_accuracy: number | null; active_rate: number | null; flat?: boolean }
   | { event: "job_complete"; job_id: string; metrics: Partial<Metrics>[] }
   | { event: "job_failed"; job_id: string; error: string }
+  | { event: "cycle_started"; job_id: string; model: string; cycle_number: number; total_cycles: number }
   | { event: "download_started"; job_id: string; pair: string }
   | { event: "download_complete"; job_id: string; pair: string }
-  | { event: "download_failed"; job_id: string; error: string };
+  | { event: "download_failed"; job_id: string; error: string }
+  | { event: "simulation_started"; job_id: string; model: string; n_periods: number; bh_curve: { period: number; bh: number }[] };
 
 export interface HpoTrialRow {
   trial_number: number;
@@ -336,6 +338,7 @@ export interface HpoTrialRow {
 export interface OosPeriodResult {
   period: number;
   total_periods: number;
+  model?: string;
   equity: number | null;
   equity_bh: number | null;
   sharpe: number | null;

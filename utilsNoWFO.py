@@ -2793,7 +2793,7 @@ def select_topk_by_mutual_info(X: pd.DataFrame, y: pd.Series, top_k: int = 64, r
         return list(range(X.shape[1]))
     Xv = X.values if isinstance(X, pd.DataFrame) else X
     yv = y.values if isinstance(y, pd.Series) else y
-    mi = mutual_info_classif(Xv, yv, random_state=random_state)
+    mi = mutual_info_classif(Xv, yv, random_state=random_state, n_jobs=1)
     order = np.argsort(mi)[::-1][:top_k]
     return order.tolist()
 

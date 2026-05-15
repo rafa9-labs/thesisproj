@@ -1,6 +1,6 @@
 # KodaQuant — Product Roadmap
 
-> **Last Updated**: 2026-05-10
+> **Last Updated**: 2026-05-14
 > **Branch**: `feature/phase2-api-bridge`
 > **Revenue Target**: £500–2K/month within 3 months of launch
 > **Philosophy**: Optimize → Feature Parity → Polish → Secure → Deploy → Scale → Enrich → Automate
@@ -1159,6 +1159,7 @@ cd frontend && npm run dev
 | **S20** | LLM / AI Integration & Intelligent Trading | 10-14h | TODO |
 | **S21** | Live Trading with OANDA | 12-16h | TODO |
 | **S22** | Commercial Infrastructure (deferred from S12) | 8-10h | TODO |
+| **S23** | Pipeline Stability & Live Monitor UX | 6-8h | ✅ DONE (2026-05-14) |
 
 ## Completion Criteria Summary
 
@@ -1182,6 +1183,53 @@ cd frontend && npm run dev
 | S20 | LLM commentary, strategy suggestions, AI-augmented features |
 | S21 | Paper trading on OANDA demo, live trading with risk controls |
 | S22 | Product listed on Paddle, landing page live, docs published, legal complete, analytics active |
+| S23 | Log noise reduced 98%, live equity chart shows BH from origin with model grouping, no double-submit, no TypeError crash |
+
+---
+
+## Sprint 23: Pipeline Stability & Live Monitor UX ✅ COMPLETE (2026-05-14)
+
+> **Goal**: Eliminate log noise, fix live monitor equity chart, prevent double-submission bugs.
+> **Branch**: `feature/phase2-api-bridge`
+> **Est**: 6-8h
+
+- [x] **S23.1** Double-submission guard ✅ DONE (2026-05-14)
+  - RunSummary deploy button was `disabled={errors > 0}` but didn't check `isSubmitting`
+  - `isSubmitting` was never passed from BacktestPage to RunSummary (TS prop was added to interface but not destructured)
+  - Fixed: pass `isSubmitting` prop + gate button + show "Submitting..." text
+  - **Files**: `frontend/src/pages/Backtest/RunSummary.tsx`, `frontend/src/pages/Backtest/BacktestPage.tsx`
+
+- [x] **S23.2** Structured HPO progress display ✅ DONE (2026-05-14)
+  - New `pipeline/printer.py` — `HPOProgress` class replaces 550 lines of per-trial noise with ~10 structured lines
+  - Progress bar with `\r` in TTY mode, compact fold summaries in Celery (non-TTY) mode
+  - `KODAQUANT_VERBOSE=1` re-enables the full firehose for debugging
+  - **Files**: `pipeline/printer.py`, `pipeline/backtester/run_mixin.py`
+
+- [x] **S23.3** Per-fold/per-trial noise suppression ✅ DONE (2026-05-14)
+  - Suppressed `print_pruned_block_summary` (8-line boxes × 6 call sites)
+  - Suppressed `print_block_summary` (per-fold tables), `print_trial_header_table` (50+ param table)
+  - Gated `[Eligibility]`, `[Calib][Coverage]`, `[DEBUG][Costs]` behind `KODAQUANT_VERBOSE`
+  - Suppressed `[WARN] Skipping fold: Not enough samples` per-trial
+  - Gated news/LLM warnings (`use_news=True but no data`) to fire once per instance
+  - Suppressed Optuna default `[I ...] Trial N finished` log lines
+  - **Files**: `pipeline/backtester/run_mixin.py`, `pipeline/backtester/strategy_mixin.py`, `pipeline/backtester/features_mixin.py`
+
+- [x] **S23.4** `cv_config_override` TypeError fix ✅ DONE (2026-05-14)
+  - `_progress_tracking_objective` wrapper didn't accept `cv_config_override` kwarg
+  - Every HPO trial crashed with `TypeError: got an unexpected keyword argument 'cv_config_override'`
+  - All 10 trials were pruned → "Global HPO failed: No completed Optuna trials"
+  - Fixed: add `cv_config_override=None` parameter + forward it to the wrapped objective
+  - **Files**: `pipeline/backtester/run_mixin.py`
+
+- [x] **S23.5** Walk-forward equity chart fixes ✅ DONE (2026-05-14)
+  - **Scale mismatch**: BH values stored as raw cumulative equity (1.05) while strategy lines converted to percentage (5) — plotted on different Y scales. Fixed: BH goes through same `toChartVal()` conversion.
+  - **Zero-height SVG**: `minHeight: 320` doesn't give `ResponsiveContainer` a measurable height → SVG rendered at 0px. Fixed: explicit `height: 320` on wrapper + `height={320}` on `ResponsiveContainer`.
+  - **Period-0 origin**: Chart now starts at 0% before period M1 (synthetic origin point added to chartData).
+  - **Model grouping**: Per-month summary table now groups by model with 6px separators and model name in brand-colored first column. Added `model` field to `OosPeriodResult`.
+  - **Stale-job 404 loop**: `useJobStatus` polled every 2s for stale job IDs from React Query cache. Fixed: return `false` from `refetchInterval` when error is 404.
+  - **Files**: `frontend/src/pages/Monitor/EquityChart.tsx`, `frontend/src/api/schemas.ts`, `frontend/src/stores/useJobStore.ts`, `frontend/src/api/queries.ts`
+
+**Sprint 23 complete**: All 127 tests pass (39 backend + 88 frontend). Log noise reduced ~98% during HPO. Live monitor chart shows BH line from period 0, grouped by model with separators.
 
 ---
 

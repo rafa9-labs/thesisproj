@@ -572,9 +572,10 @@ class StrategyMixin:
             class_counts = dict(zip(unique, counts))
             too_few = [cls for cls, count in class_counts.items() if count < MIN_CLASS_SAMPLES]
             if len(too_few) > 0 or len(class_counts) < 2:
-                msg = (f"[WARN] Skipping fold: Not enough samples for classes {too_few} "
-                       f"or only one class present: {class_counts}")
-                print(msg)
+                if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                    msg = (f"[WARN] Skipping fold: Not enough samples for classes {too_few} "
+                           f"or only one class present: {class_counts}")
+                    print(msg)
 
                 # Early prune (CV only): don't waste compute on a broken label regime
                 _in_cv_mode = bool(getattr(self, "_in_optuna_cv", False) or getattr(self, "_in_cv", False))
@@ -696,24 +697,23 @@ class StrategyMixin:
 
                 self._last_eligibility_diag = _diag_pf
                 # ------------------------------------------------------------
-                # Explicit eligibility audit log (no behavior change)
-                # Confirms: post-feature denominator, warmup dropped, eval anchor.
+                # Explicit eligibility audit log (KODAQUANT_VERBOSE only)
                 # ------------------------------------------------------------
                 try:
-                    _ctx = "eval"
-                    if bool(getattr(self, "_in_optuna_cv", False)):
-                        _ctx = "cv"
-                    elif bool(getattr(self, "_in_real_sim", False)):
-                        _mx = getattr(self, "_rt_month_idx", None)
-                        _ctx = f"real_m{int(_mx)}" if _mx is not None else "real"
-
-                    print(
-                        f"[Eligibility] post_feature_bars_total={int(bars_total)} "
-                        f"eligible={int(eligible_bars_pf)} "
-                        f"warmup_dropped={int(warmup_dropped_pf)} "
-                        f"anchor={str(eval_anchor_ts)} "
-                        f"ctx={_ctx}"
-                    )
+                    if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                        _ctx = "eval"
+                        if bool(getattr(self, "_in_optuna_cv", False)):
+                            _ctx = "cv"
+                        elif bool(getattr(self, "_in_real_sim", False)):
+                            _mx = getattr(self, "_rt_month_idx", None)
+                            _ctx = f"real_m{int(_mx)}" if _mx is not None else "real"
+                        print(
+                            f"[Eligibility] post_feature_bars_total={int(bars_total)} "
+                            f"eligible={int(eligible_bars_pf)} "
+                            f"warmup_dropped={int(warmup_dropped_pf)} "
+                            f"anchor={str(eval_anchor_ts)} "
+                            f"ctx={_ctx}"
+                        )
                 except Exception:
                     pass
             except Exception as _e:
@@ -1392,12 +1392,13 @@ class StrategyMixin:
                                         _ctx = f"real_m{mx}"
                                 except Exception:
                                     pass
-                            print(
-                                f"[Calib][Coverage] conf_thr={float(self._coverage_conf_thr):.6f} "
-                                f"target_active_rate={float(tgt):.6f} cal_rows={int(ncal)} ctx={_ctx}"
-                            )
+                            if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                                print(
+                                    f"[Calib][Coverage] conf_thr={float(self._coverage_conf_thr):.6f} "
+                                    f"target_active_rate={float(tgt):.6f} cal_rows={int(ncal)} ctx={_ctx}"
+                                )
                 except Exception as _e:
-                    if self._is_debug():
+                    if self._is_debug() and bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
                         print(f"[WARN] [Calib][Classical] Coverage fit skipped: {_e}")
 
 
@@ -2836,15 +2837,18 @@ class StrategyMixin:
                                         _ctx = f"real_m{mx}"
                                 except Exception:
                                     pass
-                            print(
-                                f"[Calib][Coverage] conf_thr={float(coverage_thr):.6f} "
-                                f"target_active_rate={float(_tgt):.6f} "
-                                f"cal_rows={int(getattr(cal_X, 'shape', [0])[0])} ctx={_ctx}"
-                            )
+                            if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                                print(
+                                    f"[Calib][Coverage] conf_thr={float(coverage_thr):.6f} "
+                                    f"target_active_rate={float(_tgt):.6f} "
+                                    f"cal_rows={int(getattr(cal_X, 'shape', [0])[0])} ctx={_ctx}"
+                                )
                         except Exception as _ee:
-                            print(f"[WARN] Coverage threshold fit skipped in CV: {_ee}")
+                            if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                                print(f"[WARN] Coverage threshold fit skipped in CV: {_ee}")
                 except Exception as _e:
-                    print(f"[Calib] Classical coverage threshold skipped: {_e}")
+                    if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                        print(f"[Calib] Classical coverage threshold skipped: {_e}")
 
                 # Coverage should be based on **trade intent**, not certainty about "flat".
                 if proba.shape[1] >= 3:
@@ -2870,7 +2874,8 @@ class StrategyMixin:
                 base_thr = float(self._resolve_conf_thr(conf0))
                 self._last_conf_thr_init = float(conf0)
 
-                print(f"[DEBUG][Costs] high_vol_thr_train={high_vol_thr_train} | cfg_high_vol_thr={cfg_f.get('high_vol_thr')}")
+                if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                    print(f"[DEBUG][Costs] high_vol_thr_train={high_vol_thr_train} | cfg_high_vol_thr={cfg_f.get('high_vol_thr')}")
                 
                 # Persist for *all* downstream paths this month (TopN, consensus, cont-metrics)
                 try:

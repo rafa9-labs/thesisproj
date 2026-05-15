@@ -459,7 +459,9 @@ def get_backtest_status(job_id: str):
 @router.get("/{job_id}/events")
 def get_backtest_events(job_id: str, after: int = 0):
     from api.tasks import get_job_events
+    import logging as _logging
     events = get_job_events(job_id, after=after)
+    _logging.info(f"[EVENTS-API] job={job_id[:8]} after={after} returned={len(events)} total={after + len(events)}")
     return {"events": events, "total": after + len(events)}
 
 
@@ -752,6 +754,60 @@ def get_trade_chart_data(job_id: str, model: str = Query(..., description="Model
         "candles": candles,
         "trades": trades,
         "equity_curve": equity_curve,
+    }
+
+
+@router.get("/{job_id}/debug/events")
+def debug_job_events(job_id: str, limit: int = Query(50, ge=1, le=500)):
+    """Debug endpoint: return raw events from SQLite for a job, with metadata."""
+    from api.dependencies import get_data_store
+    from pipeline.data_sqlite import DataStore
+    import logging
+
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    job_exists = job is not None
+
+    sqlite_available = False
+    sqlite_count = 0
+    sqlite_events = []
+    try:
+        ds = DataStore(store.db_path)
+        sqlite_count = ds.get_job_event_count(job_id)
+        raw = ds.get_job_events(job_id, after=0)
+        sqlite_events = raw[-limit:]
+        sqlite_available = True
+    except Exception as e:
+        logging.warning(f"[debug] SQLite read failed for {job_id}: {e}")
+
+    in_memory_events = []
+    in_memory_count = 0
+    try:
+        from api.tasks import _job_events
+        buf = _job_events.get(job_id, [])
+        in_memory_count = len(buf)
+        in_memory_events = list(buf)
+    except Exception:
+        pass
+
+    from api.routers.ws import _get_ws_connections
+    ws_connections = _get_ws_connections(job_id)
+
+    return {
+        "job_id": job_id,
+        "job_exists": job_exists,
+        "job_status": job.get("status") if job else None,
+        "sqlite": {
+            "available": sqlite_available,
+            "total_count": sqlite_count,
+            "recent_events": sqlite_events,
+        },
+        "in_memory": {
+            "total_count": in_memory_count,
+            "recent_events": in_memory_events[-limit:],
+        },
+        "websocket_connections": ws_connections,
     }
 
 

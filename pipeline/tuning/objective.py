@@ -644,8 +644,11 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
 
 
         # CV_JOBS pulled EXACTLY like in your logging / threading code.
-        _cv_jobs_raw = os.getenv("CV_JOBS", "")
-        cv_jobs = int(_cv_jobs_raw) if _cv_jobs_raw.strip() else 1
+        _cv_jobs_raw = (os.getenv("CV_JOBS", "") or "").strip()
+        try:
+            cv_jobs = int(_cv_jobs_raw) if _cv_jobs_raw else 1
+        except (ValueError, TypeError):
+            cv_jobs = 1
 
         try:
             # Decide serial vs parallel using .env CV_JOBS

@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from api.config import settings
+from pipeline.data_sqlite import DataStore
 
 HYPERPARAM_ALIASES: Dict[str, Dict[str, str]] = {
     "logistic": {
@@ -191,6 +192,10 @@ _JOB_EVENTS_MAX = 5000
 
 
 def _append_event(job_id: str, event: Dict):
+    evt_name = event.get("event", "unknown")
+    model = event.get("model", "-")
+    import logging as _logging
+    _logging.info(f"[EVENT-WRITE] job={job_id[:8]} event={evt_name} model={model}")
     with _job_events_lock:
         if job_id not in _job_events:
             _job_events[job_id] = []
@@ -198,10 +203,17 @@ def _append_event(job_id: str, event: Dict):
         lst.append(event)
         if len(lst) > _JOB_EVENTS_MAX:
             _job_events[job_id] = lst[-_JOB_EVENTS_MAX:]
-    # Push to Redis list so Celery worker events are visible to the API server
+    # Persist to SQLite so events are visible cross-process (API server <-> Celery worker)
+    try:
+        store = DataStore(settings.db_full_path)
+        store.append_job_event(job_id, json.dumps(_sanitize_for_json(event)))
+        store.trim_job_events(job_id, _JOB_EVENTS_MAX)
+    except Exception as _e:
+        _logging.warning(f"[event-store] SQLite append failed for {job_id}: {_e}")
+    # Also push to Redis list as a fast-path optimization when Redis is up
     try:
         r = _get_redis()
-        r.rpush(f"job_events:{job_id}", json.dumps(event))
+        r.rpush(f"job_events:{job_id}", json.dumps(_sanitize_for_json(event)))
         r.ltrim(f"job_events:{job_id}", -_JOB_EVENTS_MAX, -1)
         r.expire(f"job_events:{job_id}", 86400)
     except Exception:
@@ -211,18 +223,17 @@ def _append_event(job_id: str, event: Dict):
 
 
 def get_job_events(job_id: str, after: int = 0) -> List[Dict]:
-    # Prefer Redis so worker events are visible cross-process
+    # SQLite is the authoritative cross-process store
     try:
-        r = _get_redis()
-        raw = r.lrange(f"job_events:{job_id}", 0, -1)
-        if raw:
-            events = [json.loads(item) for item in raw]
-            return events[after:]
-    except Exception:
-        global _redis_client, _redis_available
-        _redis_client = None
-        _redis_available = False
-    # Fallback to in-memory (desktop mode / Redis unavailable)
+        store = DataStore(settings.db_full_path)
+        events = store.get_job_events(job_id, after=after)
+        import logging as _logging
+        _logging.info(f"[EVENT-READ] job={job_id[:8]} after={after} count={len(events)}")
+        return events
+    except Exception as _e:
+        import logging as _logging
+        _logging.warning(f"[event-store] SQLite read failed for {job_id} after={after}: {_e}")
+    # Fallback to in-memory (desktop mode / SQLite unavailable)
     with _job_events_lock:
         lst = _job_events.get(job_id, [])
         return lst[after:]
@@ -232,6 +243,11 @@ def clear_job_events(job_id: str):
     with _job_events_lock:
         _job_events.pop(job_id, None)
     try:
+        store = DataStore(settings.db_full_path)
+        store.clear_job_events(job_id)
+    except Exception:
+        pass
+    try:
         r = _get_redis()
         r.delete(f"job_events:{job_id}")
     except Exception:
@@ -240,9 +256,27 @@ def clear_job_events(job_id: str):
         _redis_available = False
 
 
+def _sanitize_for_json(obj):
+    """Recursively replace NaN/Inf with null for valid JSON serialization."""
+    if isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
+        return None
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    return obj
+
+
 def _pub(event: str, job_id: str, data: Dict[str, Any]):
     """Publish a progress event to Redis pub/sub and in-memory buffer."""
     msg = {"event": event, "job_id": job_id, **data}
+    msg = _sanitize_for_json(msg)
     _append_event(job_id, msg)
     try:
         r = _get_redis()
@@ -289,6 +323,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
         sys.path.insert(0, project_root)
 
     os.chdir(project_root)
+    _dbg = settings.debug
 
     from api.services import JobManager
     from pipeline.data_sqlite import DataStore
@@ -359,7 +394,14 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
         _pub(evt_name, job_id, data)
         emit_event(evt_name, job_id=job_id, pct=pct, **data)
 
-        if phase == "hpo_trial" and detail:
+        if phase == "simulation_started" and detail:
+            _pub("simulation_started", job_id, {
+                "model": model,
+                "n_periods": detail["n_periods"],
+                "bh_curve": detail["bh_curve"],
+            })
+
+        elif phase == "hpo_trial" and detail:
             _pub("hpo_trial_result", job_id, {
                 "model": model,
                 "trial_number": detail.get("trial", 0),
@@ -390,7 +432,12 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     all_metrics = []
 
     try:
-        for model_type in models:
+        for cycle_idx, model_type in enumerate(models):
+            _pub("cycle_started", job_id, {
+                "model": model_type,
+                "cycle_number": cycle_idx + 1,
+                "total_cycles": len(models),
+            })
             _pub("model_training", job_id, {"model": model_type, "status": "starting"})
             _pub("model_phase", job_id, {"model": model_type, "phase": "hpo", "total_work": total_work})
 
@@ -471,6 +518,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             base_cfg["trading_costs"] = trading_costs
             base_cfg["n_trials"] = n_trials_hdr
             base_cfg["n_startup_trials"] = tc.get("random", 3)
+            base_cfg["use_cached_global_hpo"] = (n_trials_hdr <= 0)
             base_cfg["seed"] = seed
             base_cfg["period_unit"] = period_unit
             base_cfg.update(_convert_model_overrides(config.get("config_overrides", {})))
@@ -775,6 +823,11 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
         jm.update_status(job_id, "failed", error=f"{e}\n{tb}")
         _pub("job_failed", job_id, {"error": str(e)})
         emit_event("job_failed", job_id=job_id, error=str(e)[:200])
+        raise
+    except BaseException:
+        jm.update_status(job_id, "failed", error="Task killed or interrupted")
+        _pub("job_failed", job_id, {"error": "Task killed or interrupted"})
+        emit_event("job_failed", job_id=job_id, error="Task killed or interrupted")
         raise
 
 

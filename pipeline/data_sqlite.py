@@ -15,6 +15,7 @@ Usage::
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -67,7 +68,22 @@ CREATE TABLE IF NOT EXISTS jobs (
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS job_events (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id        TEXT    NOT NULL,
+    event_index   INTEGER NOT NULL,
+    event_data    TEXT    NOT NULL,
+    created_at    TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_events_job_id
+    ON job_events (job_id);
+
+CREATE INDEX IF NOT EXISTS idx_job_events_job_id_event_index
+    ON job_events (job_id, event_index);
 """
+
 
 
 class DataNotAvailableError(Exception):
@@ -80,7 +96,7 @@ class DataStore:
     def __init__(self, db_path: str = "data/forex.db"):
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._init_schema()
+        self._ensure_schema()
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30)
@@ -102,9 +118,14 @@ class DataStore:
         finally:
             conn.close()
 
-    def _init_schema(self):
+    def _ensure_schema(self):
         with self._cursor() as (conn, cur):
-            cur.executescript(SCHEMA_SQL)
+            expected = {"candles", "pairs", "jobs", "job_events"}
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            existing = {row[0] for row in cur.fetchall()}
+            missing = expected - existing
+            if missing:
+                cur.executescript(SCHEMA_SQL)
 
     def _normalize_ts(self, ts: str) -> str:
         """Normalize a timestamp string for SQLite comparison.
@@ -276,3 +297,50 @@ class DataStore:
                 if c in df.columns:
                     df[c] = df[c].astype("float32")
             return df.sort_values("time").reset_index(drop=True)
+
+    def append_job_event(self, job_id: str, event_data: str) -> int:
+        with self._cursor() as (conn, cur):
+            cur.execute(
+                "INSERT INTO job_events (job_id, event_index, event_data, created_at) "
+                "VALUES (?, COALESCE((SELECT MAX(event_index) FROM job_events WHERE job_id = ?), -1) + 1, ?, ?)",
+                (job_id, job_id, event_data, datetime.utcnow().isoformat()),
+            )
+            return cur.lastrowid
+
+    def get_job_events(self, job_id: str, after: int = 0) -> List[Dict]:
+        with self._cursor() as (conn, cur):
+            cur.execute(
+                "SELECT event_index, event_data FROM job_events WHERE job_id = ? AND event_index >= ? ORDER BY event_index",
+                (job_id, after),
+            )
+            rows = cur.fetchall()
+            return [{"_idx": row[0], **json.loads(row[1])} for row in rows]
+
+    def get_job_event_count(self, job_id: str) -> int:
+        with self._cursor() as (conn, cur):
+            cur.execute("SELECT COUNT(*) FROM job_events WHERE job_id = ?", (job_id,))
+            return cur.fetchone()[0]
+
+    def clear_job_events(self, job_id: str) -> None:
+        with self._cursor() as (conn, cur):
+            cur.execute("DELETE FROM job_events WHERE job_id = ?", (job_id,))
+
+    def trim_job_events(self, job_id: str, max_count: int) -> None:
+        with self._cursor() as (conn, cur):
+            cur.execute("SELECT COUNT(*) FROM job_events WHERE job_id = ?", (job_id,))
+            count = cur.fetchone()[0]
+            to_delete = count - max_count
+            if to_delete > 0:
+                cur.execute(
+                    "DELETE FROM job_events WHERE job_id = ? AND rowid IN ("
+                    "  SELECT rowid FROM job_events WHERE job_id = ? ORDER BY event_index ASC LIMIT ?"
+                    ")",
+                    (job_id, job_id, to_delete),
+                )
+
+    def prune_job_events(self, hours: int = 24) -> int:
+        from datetime import timedelta
+        with self._cursor() as (conn, cur):
+            cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+            cur.execute("DELETE FROM job_events WHERE created_at < ?", (cutoff,))
+            return cur.rowcount

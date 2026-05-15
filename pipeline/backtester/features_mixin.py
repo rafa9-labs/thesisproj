@@ -154,7 +154,7 @@ class FeaturesMixin:
                     hit_rate = (hits / denom) if denom > 0 else 0.0
                     cur_bytes = int(getattr(self, "_feat_cache_cur_bytes", 0))
                     do_print = (LOG_MODE == "DEBUG") or (self._feat_cache_hits % 25 == 0)
-                    if do_print:
+                    if do_print and bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
                         print(
                             f"[FEAT_CACHE] HIT  entries={n_entries} "
                             f"hits={hits} misses={misses} hit_rate={hit_rate:.2%} "
@@ -185,7 +185,8 @@ class FeaturesMixin:
                     if cache_enabled:
                         self._feat_cache[cache_key] = (df_out, tuple(features))
                     if LOG_MODE in {"COMPACT", "DEBUG"}:
-                        print(f"[DISK_CACHE] HIT key={_disk_key[:8]} rows={len(df_out)} feats={len(features)}")
+                        if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                            print(f"[DISK_CACHE] HIT key={_disk_key[:8]} rows={len(df_out)} feats={len(features)}")
                     return df_out, list(features)
             except Exception as _e:
                 if debug:
@@ -726,11 +727,13 @@ class FeaturesMixin:
                 news_agg = getattr(self, "_news_aggregated", None)
                 econ_events = getattr(self, "_news_economic_events", None)
                 if news_agg is None:
-                    import logging as _logging
-                    _logging.getLogger(__name__).warning(
-                        "use_news=True but no news data injected into backtester — "
-                        "skipping news features. Ensure api/tasks.py fetches news before running."
-                    )
+                    if not getattr(self, "_news_warned", False):
+                        import logging as _logging
+                        _logging.getLogger(__name__).warning(
+                            "use_news=True but no news data injected into backtester — "
+                            "skipping news features. Ensure api/tasks.py fetches news before running."
+                        )
+                        self._news_warned = True
                 else:
                     df_out = merge_news_features(
                         df_out, news_agg,
@@ -752,10 +755,12 @@ class FeaturesMixin:
                 from news.features import merge_llm_features, get_llm_feature_columns
                 llm_agg = getattr(self, "_llm_aggregated", None)
                 if llm_agg is None:
-                    import logging as _logging
-                    _logging.getLogger(__name__).info(
-                        "llm_sentiment_enabled=True but no LLM data injected — skipping LLM features."
-                    )
+                    if not getattr(self, "_llm_warned", False):
+                        import logging as _logging
+                        _logging.getLogger(__name__).info(
+                            "llm_sentiment_enabled=True but no LLM data injected — skipping LLM features."
+                        )
+                        self._llm_warned = True
                 else:
                     df_out = merge_llm_features(df_out, llm_agg, config=cfg)
                     llm_feat_cols = get_llm_feature_columns(cfg)
@@ -841,7 +846,7 @@ class FeaturesMixin:
 
                     if evicted:
                         self._feat_cache_evictions = int(getattr(self, "_feat_cache_evictions", 0)) + int(evicted)
-                        if LOG_MODE in {"COMPACT", "DEBUG"}:
+                        if LOG_MODE in {"COMPACT", "DEBUG"} and bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
                             try:
                                 cur_bytes = int(getattr(self, "_feat_cache_cur_bytes", 0))
                                 print(
@@ -889,7 +894,7 @@ class FeaturesMixin:
                         or (self._feat_cache_misses in {1, 2, 5, 10, 20, 50, 100})
                         or (self._feat_cache_misses % 25 == 0)
                     )
-                    if do_print:
+                    if do_print and bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
                         print(
                             f"[FEAT_CACHE] MISS entries={n_entries} "
                             f"hits={hits} misses={misses} hit_rate={hit_rate:.2%} "

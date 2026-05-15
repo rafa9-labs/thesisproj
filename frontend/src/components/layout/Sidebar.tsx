@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   FlaskConical,
+  Eye,
   BarChart3,
   GitCompare,
   Newspaper,
@@ -35,6 +36,7 @@ const navGroups: NavGroup[] = [
     items: [
       { icon: LayoutDashboard, label: "Dashboard", path: "/" },
       { icon: FlaskConical, label: "Backtest Setup", path: "/backtest" },
+      { icon: Eye, label: "Monitor", path: "/monitor" },
       { icon: BarChart3, label: "Results", path: "/results" },
       { icon: GitCompare, label: "Compare", path: "/compare" },
     ],

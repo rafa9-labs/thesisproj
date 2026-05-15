@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { DashboardPage } from "./pages/Dashboard/DashboardPage";
 import { BacktestPage } from "./pages/Backtest/BacktestPage";
+import { MonitorPage } from "./pages/Monitor/MonitorPage";
 import { WelcomePage } from "./pages/Welcome/WelcomePage";
 
 const ResultsPage = lazy(() =>
@@ -57,6 +58,7 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route index element={<DashboardPage />} />
         <Route path="backtest" element={<BacktestPage />} />
+        <Route path="monitor" element={<MonitorPage />} />
         <Route
           path="results"
           element={<Suspense fallback={<PageSpinner />}><ResultsHistoryPage /></Suspense>}

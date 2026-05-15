@@ -10,15 +10,25 @@ export function useBacktestWebSocket(jobId: string | null) {
 
   useEffect(() => {
     if (!jobId) return;
+    if (import.meta.env.DEV) console.log("[WS-HOOK] connecting for job:", jobId.slice(0, 8));
 
-    wsManager.connect(jobId);
+    const timer = setTimeout(() => {
+      wsManager.connect(jobId);
+    }, 0);
 
     const unsub = wsManager.subscribe((event: unknown) => {
+      if (import.meta.env.DEV) {
+        const e = event as { event?: string; job_id?: string };
+        console.log("[WS] event:", e.event, "job:", e.job_id?.slice(0, 8));
+      }
       handlerRef.current(event as WsEvent);
     });
 
     return () => {
+      if (import.meta.env.DEV) console.log("[WS-HOOK] cleaning up for job:", jobId.slice(0, 8));
+      clearTimeout(timer);
       unsub();
+      wsManager.disconnect();
     };
   }, [jobId]);
 

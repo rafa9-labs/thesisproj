@@ -496,6 +496,44 @@ class RealTradingMixin:
             # Hard-fail would be silly; the system can always fall back to per-slice TA.
             pass
 
+        # Pre-compute BH curve and fire simulation_started BEFORE HPO
+        # so the frontend can show the buy-and-hold line immediately
+        try:
+            _mt_for_bh = model_type
+            _train_m = get_first(config.get("train_months"), TRAIN_TEST_MONTHS[_mt_for_bh]["train"][0])
+            _test_m = get_first(config.get("test_months"), TRAIN_TEST_MONTHS[_mt_for_bh]["test"][0])
+            _pu_bh = config.get("period_unit", "months")
+            from config import convert_month_count_to_periods as _cvt_bh, period_offset as _po_bh
+            _np_bh = _cvt_bh(months, _pu_bh)
+            if _np_bh > 0:
+                bh_curve = []
+                _start_dt_bh = pd.to_datetime(self.start) if self.start is not None else self.data.index[0]
+                _warmup_bh = _cvt_bh(37, _pu_bh)  # same conversion as month loop
+                _test_p_bh = _cvt_bh(_test_m, _pu_bh)
+                cum_bh = 1.0
+                for i in range(_np_bh):
+                    test_s = _start_dt_bh + _po_bh(_warmup_bh + i, unit=_pu_bh)
+                    test_e = test_s + _po_bh(_test_p_bh, unit=_pu_bh)
+                    td = full_data.loc[(full_data.index >= test_s) & (full_data.index < test_e)]
+                    if len(td) > 1 and "mid_close" in td.columns:
+                        cum_bh *= float((1 + td["mid_close"].pct_change().dropna()).prod())
+                    elif len(td) > 1 and "close" in td.columns:
+                        cum_bh *= float((1 + td["close"].pct_change().dropna()).prod())
+                    bh_curve.append({"period": i + 1, "bh": round(float(cum_bh), 6)})
+                _progress_cb_pre = getattr(self, "_progress_callback", None)
+                if _progress_cb_pre:
+                    _progress_cb_pre("simulation_started", _mt_for_bh, {
+                        "n_periods": _np_bh,
+                        "bh_curve": bh_curve,
+                    })
+                if _np_bh > 0:
+                    log_print(
+                        f"[BH] Pre-computed {_np_bh} BH points for {_mt_for_bh} "
+                        f"(last_bh={bh_curve[-1]['bh']})",
+                        level="COMPACT",
+                    )
+        except Exception as _bh_err:
+            log_print(f"[BH] Pre-computation skipped for {model_type}: {_bh_err}", level="COMPACT")
 
         # --- Global HPO: tune once per run, reuse hyperparameters every month (non-DQN only) ---
         global_hpo_best = None
@@ -2407,6 +2445,10 @@ class RealTradingMixin:
 
                         # save continuous curves for the cross-month plot (incremental to avoid list growth)
                         _month_df = eval_df_cont[["cstrategy_cont", "creturns_cont"]].copy()
+                        try:
+                            _month_df.attrs = {}
+                        except Exception:
+                            pass
                         if self._monthly_all_dfs_concat is None:
                             self._monthly_all_dfs_concat = _month_df
                         else:
@@ -2417,6 +2459,10 @@ class RealTradingMixin:
                             if self._monthly_trade_dfs_concat is None:
                                 self._monthly_trade_dfs_concat = trade_df_month
                             else:
+                                try:
+                                    trade_df_month.attrs = {}
+                                except Exception:
+                                    pass
                                 self._monthly_trade_dfs_concat = pd.concat(
                                     [self._monthly_trade_dfs_concat, trade_df_month], ignore_index=True
                                 )

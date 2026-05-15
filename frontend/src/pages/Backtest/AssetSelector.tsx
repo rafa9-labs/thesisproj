@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { Upload, Download, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
-import { usePairs, useUploadCsv, useDataStatus, useDownloadData, useDownloadJobStatus, useDefinePair } from "@/api/queries";
+import { useEffect, useState } from "react";
+import { Download, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { usePairs, useDataStatus, useDownloadData, useDownloadJobStatus, useDefinePair } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 
 export function AssetSelector() {
@@ -10,9 +10,6 @@ export function AssetSelector() {
   const startDate = useBacktestStore((s) => s.startDate);
   const endDate = useBacktestStore((s) => s.endDate);
   const setField = useBacktestStore((s) => s.setField);
-  const uploadCsv = useUploadCsv();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
 
   const { data: dataStatus, isLoading: dsLoading } = useDataStatus(pair);
   const downloadData = useDownloadData();
@@ -31,30 +28,6 @@ export function AssetSelector() {
       setDownloadJobId(null);
     }
   }, [dlJobStatus?.status]);
-
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadStatus("uploading");
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("pair", pair);
-    formData.append("timeframe", timeframe);
-    try {
-      await uploadCsv.mutateAsync(formData);
-      setUploadStatus("success");
-      setTimeout(() => setUploadStatus("idle"), 3000);
-    } catch {
-      setUploadStatus("error");
-      setTimeout(() => setUploadStatus("idle"), 3000);
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
 
   const handleDownload = async () => {
     try {
@@ -307,38 +280,6 @@ export function AssetSelector() {
                 <Download size={12} strokeWidth={2} />
                 Download History {downloadData.isPending ? "…" : `(${pair})`}
               </button>
-            )}
-
-            <button
-              onClick={handleImportClick}
-              disabled={uploadStatus === "uploading"}
-              className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider transition-all"
-              style={{
-                borderColor: "var(--color-glass-border)",
-                backgroundColor: "var(--color-glass-hover)",
-                color: "var(--color-text-secondary)",
-                cursor: uploadStatus === "uploading" ? "not-allowed" : "pointer",
-                opacity: uploadStatus === "uploading" ? 0.6 : 1,
-              }}
-            >
-              <Upload size={12} strokeWidth={2} />
-              Import CSV
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            {uploadStatus === "uploading" && (
-              <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Uploading…</span>
-            )}
-            {uploadStatus === "success" && (
-              <span className="text-[10px] font-medium" style={{ color: "var(--color-accent-success)" }}>Imported</span>
-            )}
-            {uploadStatus === "error" && (
-              <span className="text-[10px] font-medium" style={{ color: "var(--color-accent-danger)" }}>Upload failed</span>
             )}
           </div>
         </>

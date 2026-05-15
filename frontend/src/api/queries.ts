@@ -90,7 +90,12 @@ export function useJobStatus(jobId: string | null) {
       return data;
     },
     enabled: !!jobId,
+    retry: 1,
     refetchInterval: (query) => {
+      const error = query.state.error;
+      if (error && (error as { response?: { status?: number } })?.response?.status === 404) {
+        return false;
+      }
       const status = query.state.data?.status;
       if (status === "pending" || status === "running") return 2_000;
       return false;
@@ -558,6 +563,9 @@ export function useBacktestProgress(jobId: string | null) {
         `/backtest/${jobId}/events?after=${cursor}`,
       );
       if (data.events && data.events.length > 0) {
+        if (import.meta.env.DEV) {
+          console.log("[POLL] events:", data.events.length, "total:", data.total, "cursor:", cursor);
+        }
         for (const evt of data.events) {
           handleWsEvent(evt as WsEvent);
         }
@@ -570,5 +578,7 @@ export function useBacktestProgress(jobId: string | null) {
       activeJobs.has(jobId) &&
       (activeJobs.get(jobId)?.status === "pending" || activeJobs.get(jobId)?.status === "running"),
     refetchInterval: 2_000,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 }
