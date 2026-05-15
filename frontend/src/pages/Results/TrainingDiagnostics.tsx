@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { BarChart3, Grid3X3, TrendingUp, Layers } from "lucide-react";
+import { BarChart3, Grid3X3, TrendingUp, Layers, Activity } from "lucide-react";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { formatMetric, formatPercent } from "@/lib/formatters";
 import type { TrainingDiagnostics as TrainingDiagnosticsType } from "@/api/schemas";
@@ -99,6 +99,67 @@ function ConfusionMatrix({ matrix, labels }: { matrix: number[][]; labels: strin
   );
 }
 
+function PredictionHistogram({ bins }: { bins: { bin_start: number; bin_end: number; bin_center: number; count: number }[] }) {
+  if (!bins || bins.length === 0) return null;
+
+  const total = bins.reduce((s, b) => s + b.count, 0);
+  const above07 = bins.filter((b) => b.bin_center >= 0.7).reduce((s, b) => s + b.count, 0);
+  const above08 = bins.filter((b) => b.bin_center >= 0.8).reduce((s, b) => s + b.count, 0);
+  const pct07 = total > 0 ? ((above07 / total) * 100).toFixed(0) : "0";
+  const pct08 = total > 0 ? ((above08 / total) * 100).toFixed(0) : "0";
+
+  return (
+    <div>
+      <ChartCard title="" subtitle="" height={160}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={bins} margin={{ top: 4, right: 8, left: 0, bottom: 24 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-glass-border)" />
+            <XAxis
+              dataKey="bin_center"
+              tickFormatter={(v: number) => v.toFixed(2)}
+              tick={{ fill: "var(--color-text-muted)", fontSize: 9, fontFamily: "var(--font-mono)" }}
+            />
+            <YAxis tick={{ fill: "var(--color-text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" }} hide />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "var(--color-elevated)",
+                border: "1px solid var(--color-glass-border)",
+                borderRadius: 6,
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+              }}
+              formatter={(v: number) => [v, "Predictions"]}
+              labelFormatter={(v: number) => `Confidence: ${v.toFixed(2)}–${(v + 0.033).toFixed(2)}`}
+            />
+            <Bar dataKey="count" radius={[2, 2, 0, 0]} maxBarSize={24}>
+              {bins.map((b) => (
+                <Cell
+                  key={b.bin_center}
+                  fill={
+                    b.bin_center >= 0.8
+                      ? "var(--color-accent-success)"
+                      : b.bin_center >= 0.65
+                        ? "var(--color-brand)"
+                        : "rgba(245,158,11,0.6)"
+                  }
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
+      <div className="flex items-center gap-4 mt-1.5">
+        <span className="text-[10px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+          {pct07}% above 0.7 confidence
+        </span>
+        <span className="text-[10px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+          {pct08}% above 0.8 confidence
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function ConfidenceBandTable({ bands }: { bands: { band_min: number; band_max: number; count: number; accuracy: number; mean_return: number }[] }) {
   if (!bands || bands.length === 0) return null;
   return (
@@ -151,6 +212,7 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
   }
 
   const hasFeatures = data.feature_importance && data.feature_importance.length > 0;
+  const hasHist = data.prediction_histogram && data.prediction_histogram.length > 0;
   const hasCm = data.confusion_matrix && data.confusion_matrix.matrix && data.confusion_matrix.matrix.length > 0;
   const hasBands = data.confidence_bands && data.confidence_bands.length > 0;
 
@@ -176,6 +238,20 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
           </div>
           <div className="rounded-lg p-3" style={{ backgroundColor: "var(--color-elevated)" }}>
             <ImportanceChart features={data.feature_importance!} />
+          </div>
+        </div>
+      )}
+
+      {hasHist && (
+        <div className="mb-5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Activity size={12} style={{ color: "var(--color-text-muted)" }} />
+            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
+              Prediction Confidence Distribution
+            </span>
+          </div>
+          <div className="rounded-lg p-3" style={{ backgroundColor: "var(--color-elevated)" }}>
+            <PredictionHistogram bins={data.prediction_histogram!} />
           </div>
         </div>
       )}
@@ -208,7 +284,7 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
         </div>
       )}
 
-      {!hasFeatures && !hasCm && !hasBands && (
+      {!hasFeatures && !hasHist && !hasCm && !hasBands && (
         <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
           No diagnostics data available for {modelName}. Deep learning models (CNN, LSTM, Transformer) do not produce feature importance.
         </p>

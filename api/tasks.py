@@ -757,7 +757,10 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                         _cm = aggregate_confusion_matrices([_cm_raw]).matrix if _cm_raw is not None else None
                 except Exception:
                     pass
-                _diag["confusion_matrix"] = _cm
+                _diag["confusion_matrix"] = {
+                    "matrix": _cm,
+                    "labels": ["Short", "Flat", "Long"],
+                } if _cm is not None else None
 
                 # Prediction histogram & confidence bands from max_conf
                 _conf = getattr(bt, "_last_conf_stats_max_conf", None)
