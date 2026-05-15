@@ -1,4 +1,4 @@
-import { TriangleAlert, Info } from "lucide-react";
+import { TriangleAlert, Info, Bookmark } from "lucide-react";
 
 interface Props {
   warnings: number;
@@ -9,9 +9,10 @@ interface Props {
   hasPair: boolean;
   hasDates: boolean;
   onDeploy: () => void;
+  onSavePreset?: () => void;
 }
 
-export function ValidationBar({ warnings, errors, canDeploy, isSubmitting, hasModels, hasPair, hasDates, onDeploy }: Props) {
+export function ValidationBar({ warnings, errors, canDeploy, isSubmitting, hasModels, hasPair, hasDates, onDeploy, onSavePreset }: Props) {
   const missingItems: string[] = [];
   if (!hasPair) missingItems.push("a currency pair");
   if (!hasModels) missingItems.push("at least one model");
@@ -69,22 +70,34 @@ export function ValidationBar({ warnings, errors, canDeploy, isSubmitting, hasMo
         )}
       </div>
 
-      <button
-        onClick={onDeploy}
-        disabled={!canDeploy || isSubmitting}
-        className="rounded-md px-6 py-2 text-xs font-bold uppercase transition-all duration-300 hover:brightness-110"
-        style={{
-          background: canDeploy
-            ? "linear-gradient(135deg, #00E5FF 0%, #22D3EE 100%)"
-            : "var(--color-glass-border)",
-          color: canDeploy ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-          letterSpacing: "0.08em",
-          cursor: canDeploy ? "pointer" : "not-allowed",
-          opacity: isSubmitting ? 0.7 : 1,
-        }}
-      >
-        {isSubmitting ? "Submitting..." : "Deploy Backtest"}
-      </button>
+      <div className="flex items-center gap-2">
+        {onSavePreset && canDeploy && (
+          <button
+            onClick={onSavePreset}
+            className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-[10px] font-semibold uppercase transition-all"
+            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)", cursor: "pointer" }}
+          >
+            <Bookmark size={11} />
+            Save Preset
+          </button>
+        )}
+        <button
+          onClick={onDeploy}
+          disabled={!canDeploy || isSubmitting}
+          className="rounded-md px-6 py-2 text-xs font-bold uppercase transition-all duration-300 hover:brightness-110"
+          style={{
+            background: canDeploy
+              ? "linear-gradient(135deg, #00E5FF 0%, #22D3EE 100%)"
+              : "var(--color-glass-border)",
+            color: canDeploy ? "var(--color-text-inverse)" : "var(--color-text-muted)",
+            letterSpacing: "0.08em",
+            cursor: canDeploy ? "pointer" : "not-allowed",
+            opacity: isSubmitting ? 0.7 : 1,
+          }}
+        >
+          {isSubmitting ? "Submitting..." : "Deploy Backtest"}
+        </button>
+      </div>
     </div>
   );
 }

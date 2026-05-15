@@ -10,11 +10,11 @@ import { ValidationBar } from "@/components/shared/ValidationBar";
 import { RuntimeEstimate } from "@/components/shared/RuntimeEstimate";
 import { AssetSelector } from "./AssetSelector";
 import { ModelSelector } from "./ModelSelector";
-import { QuickTestBar } from "./QuickTestBar";
 import { HpoPanel } from "./HpoPanel";
 import { FeaturesPanel } from "./FeaturesPanel";
 import { LabelsPanel } from "./LabelsPanel";
 import { ExecutionPanel } from "./ExecutionPanel";
+import { QuickStartTab } from "./QuickStartTab";
 import { RunSummary } from "./RunSummary";
 
 const TABS = [
@@ -27,9 +27,9 @@ const TABS = [
 
 export function BacktestPage() {
   const navigate = useNavigate();
-  const s = useBacktestStore.getState();
   const selectedModels = useBacktestStore((s) => s.selectedModels);
   const toPayload = useBacktestStore((s) => s.toRequestPayload);
+  const saveCustomPreset = useBacktestStore((s) => s.saveCustomPreset);
   const startJob = useJobStore((s) => s.startJob);
   const { warnings, errors, ok } = useValidation();
   const submit = useSubmitBacktest();
@@ -37,6 +37,8 @@ export function BacktestPage() {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("quickstart");
   const [advancedHpo, setAdvancedHpo] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  const [showSavePreset, setShowSavePreset] = useState(false);
 
   const isSubmitting = submit.isPending;
   const hasModels = selectedModels.length > 0;
@@ -54,50 +56,34 @@ export function BacktestPage() {
     }
   };
 
+  const handleSavePreset = () => {
+    if (!presetName.trim()) return;
+    saveCustomPreset(presetName.trim(), "");
+    setPresetName("");
+    setShowSavePreset(false);
+  };
+
   return (
     <div className="flex flex-col gap-5">
-      {/* Header with runtime estimate */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <RuntimeEstimate />
       </div>
 
-      {/* Config summary bar — always visible above tabs */}
       <ConfigSummaryBar />
 
-      {/* Tab navigation */}
       <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {/* ── Quick Start ── */}
+      {/* Quick Start */}
       {activeTab === "quickstart" && (
-        <div className="flex flex-col gap-5 pt-1">
-          <QuickTestBar />
-          <ModelSelector />
-
-          {hasModels && (
-            <div className="flex justify-end pt-1">
-              <button
-                onClick={() => setSummaryOpen(true)}
-                disabled={!canDeploy || isSubmitting}
-                className="rounded-md px-8 py-3 text-sm font-bold uppercase transition-all duration-300 hover:brightness-110"
-                style={{
-                  background: canDeploy
-                    ? "linear-gradient(135deg, #00E5FF 0%, #22D3EE 100%)"
-                    : "var(--color-glass-border)",
-                  color: canDeploy ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-                  letterSpacing: "0.08em",
-                  cursor: canDeploy ? "pointer" : "not-allowed",
-                  boxShadow: canDeploy ? "0 0 24px rgba(0,229,255,0.2)" : "none",
-                  opacity: isSubmitting ? 0.7 : 1,
-                }}
-              >
-                {isSubmitting ? "Submitting..." : "Deploy Backtest"}
-              </button>
-            </div>
-          )}
-        </div>
+        <QuickStartTab
+          onDeploy={() => setSummaryOpen(true)}
+          canDeploy={canDeploy}
+          isSubmitting={isSubmitting}
+        />
       )}
 
-      {/* ── Asset & Model ── */}
+      {/* Asset & Model */}
       {activeTab === "asset" && (
         <div className="flex flex-col gap-5 pt-1">
           <AssetSelector />
@@ -105,14 +91,14 @@ export function BacktestPage() {
         </div>
       )}
 
-      {/* ── Study & HPO ── */}
+      {/* Study & HPO */}
       {activeTab === "study" && (
         <div className="flex flex-col gap-5 pt-1">
           <HpoPanel advancedMode={advancedHpo} onToggleAdvanced={() => setAdvancedHpo(!advancedHpo)} />
         </div>
       )}
 
-      {/* ── Features ── */}
+      {/* Features */}
       {activeTab === "features" && (
         <div className="flex flex-col gap-5 pt-1">
           <FeaturesPanel />
@@ -120,14 +106,14 @@ export function BacktestPage() {
         </div>
       )}
 
-      {/* ── Execution ── */}
+      {/* Execution */}
       {activeTab === "execution" && (
         <div className="flex flex-col gap-5 pt-1">
           <ExecutionPanel defaultOpen={true} />
         </div>
       )}
 
-      {/* Sticky validation bar */}
+      {/* Validation bar */}
       <ValidationBar
         warnings={warnings.length}
         errors={errors.length}
@@ -137,7 +123,56 @@ export function BacktestPage() {
         hasPair={true}
         hasDates={true}
         onDeploy={() => setSummaryOpen(true)}
+        onSavePreset={hasModels ? () => setShowSavePreset(true) : undefined}
       />
+
+      {/* Save Preset dialog */}
+      {showSavePreset && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
+          onClick={() => setShowSavePreset(false)}
+        >
+          <div
+            className="flex w-[400px] flex-col gap-4 rounded-lg border p-5"
+            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
+              Save as Quick Start Preset
+            </h3>
+            <input
+              placeholder="Preset name"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSavePreset()}
+              className="rounded-md border px-3 py-2 text-xs w-full"
+              style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-elevated)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", outline: "none" }}
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowSavePreset(false)}
+                className="rounded-md px-4 py-1.5 text-xs font-semibold uppercase"
+                style={{ border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSavePreset}
+                disabled={!presetName.trim()}
+                className="rounded-md px-4 py-1.5 text-xs font-semibold uppercase"
+                style={{
+                  backgroundColor: presetName.trim() ? "var(--color-brand)" : "var(--color-border)",
+                  color: presetName.trim() ? "var(--color-text-inverse)" : "var(--color-text-muted)",
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <RunSummary
         open={summaryOpen}

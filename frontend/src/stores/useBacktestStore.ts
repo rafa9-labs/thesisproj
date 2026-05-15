@@ -1,11 +1,23 @@
 import { create } from "zustand";
-import { DEFAULTS, STUDY_PRESETS } from "@/lib/constants";
+import { DEFAULTS, STUDY_PRESETS, QUICK_START_PRESETS } from "@/lib/constants";
 import type { BacktestRequest, HpoIntensity } from "@/api/schemas";
+
+const _CUSTOM_PRESETS_KEY = "kodaquant-custom-presets";
+
+function _loadCustomPresets(): Record<string, { name: string; subtitle: string; date: string }> {
+  try {
+    return JSON.parse(localStorage.getItem(_CUSTOM_PRESETS_KEY) || "{}");
+  } catch { return {}; }
+}
+function _saveCustomPresets(data: Record<string, { name: string; subtitle: string; date: string }>) {
+  try { localStorage.setItem(_CUSTOM_PRESETS_KEY, JSON.stringify(data)); } catch {}
+}
 
 type Widen<T> = T extends boolean ? boolean : T extends string ? string : T extends number ? number : T;
 type BacktestState = { -readonly [K in keyof typeof DEFAULTS]: Widen<(typeof DEFAULTS)[K]> } & {
   hpoIntensity: HpoIntensity;
   activePreset: string | null;
+  customPresets: Record<string, { name: string; subtitle: string; date: string }>;
 };
 type BacktestActions = {
   setField: <K extends keyof BacktestState>(key: K, value: BacktestState[K]) => void;
@@ -13,6 +25,9 @@ type BacktestActions = {
   resetToDefaults: () => void;
   applyPreset: (preset: { pair?: string; timeframe?: string; models?: string[]; months?: number; hpo_intensity?: HpoIntensity; seed?: number; start_date?: string; end_date?: string }) => void;
   applyStudyPreset: (presetKey: string) => void;
+  applyQuickPreset: (presetKey: string) => void;
+  saveCustomPreset: (name: string, subtitle: string) => void;
+  removeCustomPreset: (key: string) => void;
   toRequestPayload: () => BacktestRequest;
 };
 
@@ -22,6 +37,7 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
   ...structuredClone(DEFAULTS) as BacktestState,
   hpoIntensity: DEFAULT_HPO_INTENSITY,
   activePreset: null,
+  customPresets: _loadCustomPresets(),
 
   setField: (key, value) => set({ [key]: value } as Partial<BacktestState>),
 
@@ -66,6 +82,38 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
         targetCoverage: p.targetCoverage,
         activePreset: presetKey,
       };
+    }),
+
+  applyQuickPreset: (presetKey) =>
+    set((state) => {
+      const p = QUICK_START_PRESETS.find((x) => x.key === presetKey);
+      if (!p) return { selectedModels: [] };
+      return {
+        selectedModels: p.models,
+        hpoIntensity: p.hpoIntensity,
+        nTrials: p.nTrials,
+        repeats: p.repeats,
+        trainMonths: p.trainMonths,
+        testMonths: p.testMonths,
+        confidenceThreshold: p.confidenceThreshold,
+        activePreset: null,
+      };
+    }),
+
+  saveCustomPreset: (name, subtitle) =>
+    set((state) => {
+      const key = `custom-${Date.now()}`;
+      const next = { ...state.customPresets, [key]: { name, subtitle, date: new Date().toISOString().slice(0, 10) } };
+      _saveCustomPresets(next);
+      return { customPresets: next };
+    }),
+
+  removeCustomPreset: (key) =>
+    set((state) => {
+      const next = { ...state.customPresets };
+      delete next[key];
+      _saveCustomPresets(next);
+      return { customPresets: next };
     }),
 
   toRequestPayload: () => {
