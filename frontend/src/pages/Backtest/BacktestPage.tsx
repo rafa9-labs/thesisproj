@@ -4,6 +4,7 @@ import { useBacktestStore } from "@/stores/useBacktestStore";
 import { useJobStore } from "@/stores/useJobStore";
 import { useValidation } from "@/hooks/useValidation";
 import { useSubmitBacktest } from "@/api/queries";
+import { ConfigSummaryBar } from "@/components/shared/ConfigSummaryBar";
 import { TabBar } from "@/components/shared/TabBar";
 import { ValidationBar } from "@/components/shared/ValidationBar";
 import { RuntimeEstimate } from "@/components/shared/RuntimeEstimate";
@@ -15,7 +16,6 @@ import { FeaturesPanel } from "./FeaturesPanel";
 import { LabelsPanel } from "./LabelsPanel";
 import { ExecutionPanel } from "./ExecutionPanel";
 import { RunSummary } from "./RunSummary";
-import { STUDY_PRESETS } from "@/lib/constants";
 
 const TABS = [
   { key: "quickstart", label: "Quick Start" },
@@ -54,60 +54,27 @@ export function BacktestPage() {
     }
   };
 
-  const activePreset = s.activePreset;
-  const presetInfo = activePreset ? STUDY_PRESETS[activePreset as keyof typeof STUDY_PRESETS] : null;
-  const presetLabel = presetInfo?.label ?? s.hpoIntensity;
-
-  // Build Quick Start summary string
-  const summaryParts: string[] = [s.pair ?? "EURUSD", s.timeframe ?? "H1"];
-  if (hasModels) {
-    summaryParts.push(`${selectedModels.length} model${selectedModels.length > 1 ? "s" : ""}`);
-  }
-  if (presetLabel) {
-    summaryParts.push(`${presetLabel} preset`);
-  }
-  const summaryText = summaryParts.join(" · ");
-
   return (
     <div className="flex flex-col gap-5">
-      {/* Header */}
+      {/* Header with runtime estimate */}
       <div className="flex items-center justify-between">
         <RuntimeEstimate />
       </div>
+
+      {/* Config summary bar — always visible above tabs */}
+      <ConfigSummaryBar />
 
       {/* Tab navigation */}
       <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* ── Quick Start ── */}
       {activeTab === "quickstart" && (
-        <div className="flex flex-col gap-5 pt-2">
-          {/* Config summary */}
-          <div
-            className="rounded-xl border p-4"
-            style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color: "var(--color-text-muted)" }}>
-                Configuration
-              </span>
-            </div>
-            <span
-              className="text-sm font-mono"
-              style={{ color: "var(--color-text-primary)" }}
-            >
-              {summaryText}
-            </span>
-          </div>
-
-          {/* Quick presets */}
+        <div className="flex flex-col gap-5 pt-1">
           <QuickTestBar />
-
-          {/* Model selection */}
           <ModelSelector />
 
-          {/* Deploy button */}
           {hasModels && (
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end pt-1">
               <button
                 onClick={() => setSummaryOpen(true)}
                 disabled={!canDeploy || isSubmitting}
@@ -132,7 +99,7 @@ export function BacktestPage() {
 
       {/* ── Asset & Model ── */}
       {activeTab === "asset" && (
-        <div className="flex flex-col gap-5 pt-2">
+        <div className="flex flex-col gap-5 pt-1">
           <AssetSelector />
           <ModelSelector />
         </div>
@@ -140,14 +107,14 @@ export function BacktestPage() {
 
       {/* ── Study & HPO ── */}
       {activeTab === "study" && (
-        <div className="flex flex-col gap-5 pt-2">
+        <div className="flex flex-col gap-5 pt-1">
           <HpoPanel advancedMode={advancedHpo} onToggleAdvanced={() => setAdvancedHpo(!advancedHpo)} />
         </div>
       )}
 
       {/* ── Features ── */}
       {activeTab === "features" && (
-        <div className="flex flex-col gap-5 pt-2">
+        <div className="flex flex-col gap-5 pt-1">
           <FeaturesPanel />
           <LabelsPanel />
         </div>
@@ -155,7 +122,7 @@ export function BacktestPage() {
 
       {/* ── Execution ── */}
       {activeTab === "execution" && (
-        <div className="flex flex-col gap-5 pt-2">
+        <div className="flex flex-col gap-5 pt-1">
           <ExecutionPanel defaultOpen={true} />
         </div>
       )}
