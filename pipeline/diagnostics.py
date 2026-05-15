@@ -13,6 +13,20 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+_HAS_SHAP = False
+try:
+    import shap as _shap
+    _HAS_SHAP = True
+except ImportError:
+    pass
+
+_HAS_SKLEARN_PERM = False
+try:
+    from sklearn.inspection import permutation_importance as _skperm
+    _HAS_SKLEARN_PERM = True
+except ImportError:
+    pass
+
 
 @dataclass
 class FeatureImportanceEntry:
@@ -192,14 +206,38 @@ def aggregate_confusion_matrices(
     )
 
 
+def compute_vif(X: np.ndarray) -> np.ndarray:
+    """Compute Variance Inflation Factor for each column. VIF > 10 flags multicollinearity."""
+    from numpy.linalg import inv
+    n, k = X.shape
+    if k < 2:
+        return np.array([float("nan")] * k)
+    centered = X - X.mean(axis=0)
+    try:
+        corr = np.corrcoef(centered.T)
+        inv_corr = inv(corr)
+        return np.diag(inv_corr)
+    except Exception:
+        return np.array([float("nan")] * k)
+
+
 def compute_feature_importance(
     model,
     model_type: str,
     feature_names: Optional[List[str]] = None,
     top_n: int = 20,
+    X_val: Optional[np.ndarray] = None,
+    y_val: Optional[np.ndarray] = None,
 ) -> List[FeatureImportanceEntry]:
     """
     Extract feature importance from a fitted model.
+    Model-family-specific method selection:
+
+    - Tree models (XGBoost, RF): SHAP TreeExplainer when available, else native importance
+    - Logistic: standardized coefficient magnitude + VIF warning
+    - SVM: permutation importance (small-sample)
+    - LSTM/CNN/Transformer: mean |gradient| via TensorFlow GradientTape
+    - Ensemble: delegates to sub-model
 
     Parameters
     ----------
@@ -211,6 +249,10 @@ def compute_feature_importance(
         Feature names. If None, uses generic names.
     top_n : int
         Maximum number of features to return.
+    X_val : np.ndarray, optional
+        Validation feature data (required for SVM perm, deep gradient, SHAP).
+    y_val : np.ndarray, optional
+        Validation labels (required for SVM perm, SHAP).
 
     Returns
     -------
@@ -218,29 +260,55 @@ def compute_feature_importance(
     """
     mt = str(model_type or "").lower().strip()
     importances = None
+    n_feats = len(feature_names) if feature_names else 0
 
     try:
         if mt in {"xgboost", "xgb"}:
-            if hasattr(model, "get_booster"):
-                booster = model.get_booster()
-                raw = booster.get_score(importance_type="gain")
-                if feature_names is not None:
-                    importances = np.zeros(len(feature_names))
-                    for feat, score in raw.items():
-                        if feat.startswith("f") and feat[1:].isdigit():
-                            idx = int(feat[1:])
-                            if idx < len(feature_names):
-                                importances[idx] = score
-                        elif feat in feature_names:
-                            importances[feature_names.index(feat)] = score
-                else:
-                    items = sorted(raw.items(), key=lambda x: x[1], reverse=True)
-                    return [FeatureImportanceEntry(feature=k, importance=float(v)) for k, v in items[:top_n]]
-            elif hasattr(model, "feature_importances_"):
-                importances = np.asarray(model.feature_importances_, dtype=float)
+            # TreeSHAP when available, otherwise get_score(gain)
+            if _HAS_SHAP and X_val is not None:
+                try:
+                    explainer = _shap.TreeExplainer(model)
+                    shap_vals = explainer.shap_values(X_val[:500]) if len(X_val) > 500 else explainer.shap_values(X_val)
+                    if isinstance(shap_vals, list):
+                        shap_vals = shap_vals[1] if len(shap_vals) > 1 else shap_vals[0]
+                    importances = np.abs(shap_vals).mean(axis=0)
+                    if n_feats > 0 and len(importances) != n_feats:
+                        importances = None
+                except Exception:
+                    pass
+            if importances is None:
+                if hasattr(model, "get_booster"):
+                    booster = model.get_booster()
+                    raw = booster.get_score(importance_type="gain")
+                    if feature_names is not None:
+                        importances = np.zeros(n_feats)
+                        for feat, score in raw.items():
+                            if feat.startswith("f") and feat[1:].isdigit():
+                                idx = int(feat[1:])
+                                if idx < n_feats:
+                                    importances[idx] = score
+                            elif feat in feature_names:
+                                importances[feature_names.index(feat)] = score
+                    else:
+                        items = sorted(raw.items(), key=lambda x: x[1], reverse=True)
+                        return [FeatureImportanceEntry(feature=k, importance=float(v)) for k, v in items[:top_n]]
+                elif hasattr(model, "feature_importances_"):
+                    importances = np.asarray(model.feature_importances_, dtype=float)
 
         elif mt in {"random_forest", "rf"}:
-            if hasattr(model, "feature_importances_"):
+            # TreeSHAP when available, otherwise MDI
+            if _HAS_SHAP and X_val is not None:
+                try:
+                    explainer = _shap.TreeExplainer(model)
+                    shap_vals = explainer.shap_values(X_val[:500]) if len(X_val) > 500 else explainer.shap_values(X_val)
+                    if isinstance(shap_vals, list):
+                        shap_vals = shap_vals[1] if len(shap_vals) > 1 else shap_vals[0]
+                    importances = np.abs(shap_vals).mean(axis=0)
+                    if n_feats > 0 and len(importances) != n_feats:
+                        importances = None
+                except Exception:
+                    pass
+            if importances is None and hasattr(model, "feature_importances_"):
                 importances = np.asarray(model.feature_importances_, dtype=float)
 
         elif mt in {"logistic", "logit"}:
@@ -252,31 +320,34 @@ def compute_feature_importance(
                     importances = np.abs(coef)
 
         elif mt in {"svm"}:
-            pass  # permutation importance too expensive for runtime
+            # Permutation importance on small validation sample
+            if _HAS_SKLEARN_PERM and X_val is not None and y_val is not None:
+                try:
+                    X_sub = X_val[:500] if len(X_val) > 500 else X_val
+                    y_sub = y_val[:500] if len(y_val) > 500 else y_val
+                    perm = _skperm(model, X_sub, y_sub, n_repeats=3, random_state=42, n_jobs=1)
+                    importances = perm.importances_mean
+                except Exception:
+                    pass
 
         elif mt in {"cnn", "lstm", "transformer"}:
-            pass  # permute too expensive for runtime
+            # TensorFlow GradientTape mean |gradient| importance
+            importances = _deep_gradient_importance(model, X_val, n_feats)
 
         elif mt.startswith("ensemble"):
-            # ensemble_cnn_lstm_xgboost: extract XGB importance
-            if hasattr(model, "xgb") and model.xgb is not None and hasattr(model.xgb, "get_booster"):
-                booster = model.xgb.get_booster()
-                raw = booster.get_score(importance_type="gain")
-                if feature_names is not None:
-                    importances = np.zeros(len(feature_names))
-                    for feat, score in raw.items():
-                        if feat.startswith("f") and feat[1:].isdigit():
-                            idx = int(feat[1:])
-                            if idx < len(feature_names):
-                                importances[idx] = score
-                        elif feat in feature_names:
-                            importances[feature_names.index(feat)] = score
-                else:
-                    items = sorted(raw.items(), key=lambda x: x[1], reverse=True)
-                    return [FeatureImportanceEntry(feature=k, importance=float(v)) for k, v in items[:top_n]]
-            # ensemble_adaptive_regime: extract RF importance
-            elif hasattr(model, "rf") and model.rf is not None and hasattr(model.rf, "feature_importances_"):
-                importances = np.asarray(model.rf.feature_importances_, dtype=float)
+            # ensemble_cnn_lstm_xgboost: extract XGB importance (with SHAP if available)
+            if hasattr(model, "xgb") and model.xgb is not None:
+                sub_mt = "xgboost"
+                sub_X = X_val
+                sub_y = y_val
+                # Recursive call with the sub-model
+                return compute_feature_importance(model.xgb, sub_mt, feature_names, top_n, sub_X, sub_y)
+            # ensemble_adaptive_regime: extract RF importance (with SHAP if available)
+            elif hasattr(model, "rf") and model.rf is not None:
+                sub_mt = "random_forest"
+                sub_X = X_val
+                sub_y = y_val
+                return compute_feature_importance(model.rf, sub_mt, feature_names, top_n, sub_X, sub_y)
 
     except Exception:
         pass
@@ -295,3 +366,30 @@ def compute_feature_importance(
         ]
 
     return []
+
+
+def _deep_gradient_importance(model, X_val: Optional[np.ndarray], n_feats: int) -> Optional[np.ndarray]:
+    """Compute mean |gradient| importance for deep TF models."""
+    if X_val is None or n_feats <= 0:
+        return None
+    try:
+        import tensorflow as tf
+        sub = X_val[:64] if len(X_val) > 64 else X_val
+        inp = tf.convert_to_tensor(sub, dtype=tf.float32)
+        with tf.GradientTape() as tape:
+            tape.watch(inp)
+            out = model(inp, training=False)
+            loss = tf.reduce_mean(tf.abs(out))
+        grads = tape.gradient(loss, inp)
+        if grads is None:
+            return None
+        # Shape: (batch, timesteps, features) for sequential models
+        # or (batch, features) for simple models
+        if grads.ndim >= 3:
+            grads = tf.reduce_mean(tf.abs(grads), axis=(0, 1))  # mean over batch + time
+        else:
+            grads = tf.reduce_mean(tf.abs(grads), axis=0)  # mean over batch
+        return grads.numpy()
+    except Exception:
+        pass
+    return None

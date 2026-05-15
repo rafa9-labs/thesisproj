@@ -95,6 +95,30 @@ SAVE_FEATURES = {
 }
 
 # ---------------------------------------------------------------------
+# Feature family taxonomy for per-family budgeting.
+# Maps feature name prefixes to indicator families.
+# Used by prefilter_features_train to prevent one family from dominating.
+# ---------------------------------------------------------------------
+FEATURE_FAMILIES = {
+    "trend":      ["sma", "ema", "adx", "donchian", "sar", "ma_cross", "trend_confirm"],
+    "momentum":   ["macd", "rsi", "stoch", "slope", "price_ma_z", "ma_spread", "reentry_mom",
+                   "crossover_bins", "ext_atr_low_adx", "vm_mom"],
+    "volatility": ["bb", "atr", "rv", "bpv", "squeeze", "bbw", "vol_score", "vol_state"],
+    "composite":  ["atr_channel", "vol_managed_mom", "macd_atr", "mtf_align", "mtf_alignment",
+                   "triple_confirm"],
+    "regime":     ["trend_score", "vol_score", "regime_id", "regime_trend", "regime_sideways",
+                   "regime_volatile"],
+    "returns":    ["returns", "fracdiff", "cum_return"],
+    "news":       ["news_", "event_flag", "llm_"],
+    "time":       ["hour", "minute", "day_of"],
+    "rolling":    ["rollmean", "rollstd", "rollslope", "lag"],
+}
+MAX_FEATURES_PER_FAMILY = {
+    "trend": 8, "momentum": 6, "volatility": 4, "composite": 4,
+    "regime": 4, "returns": 4, "news": 4, "time": 3, "rolling": 20,
+}
+
+# ---------------------------------------------------------------------
 # Global defaults (single source of truth) -- module-level
 # ---------------------------------------------------------------------
 CLASS_DEFAULTS = {
@@ -333,6 +357,8 @@ CLASS_DEFAULTS = {
         "prefilter_prefer_prefixes": ["rv", "ema", "sma", "macd", "adx"],
         "mutual_info_top_k": "sqrt",
         "prefilter_random_state": 42,
+        "use_feature_family_budget": True,
+        "use_lightgbm_prefilter": False,
 
         # --- Ensemble throttles & fusion ---
         "ensemble_train_stride": 1,

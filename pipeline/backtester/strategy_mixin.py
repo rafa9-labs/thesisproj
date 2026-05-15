@@ -399,8 +399,29 @@ class StrategyMixin:
                     y_pref = y_pre.loc[common_idx]
 
                     # 3-stage prefilter (near-constant -> high-corr collapse -> MI top-K)
+                    # Optional LightGBM SHAP pre-filter (stage 0) — reduces features before the 3-stage pipeline
+                    _use_lgbm = bool(cfg.get("use_lightgbm_prefilter", False))
+                    if _use_lgbm and len(features) > 40:
+                        try:
+                            from pipeline.lightgbm_proxy import LightGBMProxy
+                            _lg_proxy = LightGBMProxy(top_k=40, n_estimators=200)
+                            _pref = _lg_proxy.select(X_pref, y_pref)
+                            if _pref and len(_pref) < len(features):
+                                if self._is_debug():
+                                    print(f"[LightGBM Proxy] Reduced {len(features)} -> {len(_pref)} features via SHAP")
+                                X_pref = X_pref[_pref]
+                                features_subset = _pref
+                            else:
+                                features_subset = features
+                        except Exception as _lgbm_err:
+                            if self._is_debug():
+                                print(f"[LightGBM Proxy] Skipped: {_lgbm_err}")
+                            features_subset = features
+                    else:
+                        features_subset = features
+
                     keep = prefilter_features_train(
-                        X=X_pref,
+                        X=X_pref[features_subset],
                         y=y_pref,
                         cfg=(self.features_config or {}),
                     )
@@ -1345,7 +1366,19 @@ class StrategyMixin:
                 try:
                     from pipeline.diagnostics import compute_feature_importance
                     _feat_names = list(features) if isinstance(features, (list, tuple)) else None
-                    _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_names)
+                    _X_val = None
+                    _y_val = None
+                    try:
+                        _X_val = np.asarray(self.data[_feat_names][:500]) if _feat_names is not None and hasattr(self, "data") else None
+                        _y_val = np.asarray(y_train[:500]) if y_train is not None else None
+                    except Exception:
+                        pass
+                    _fi = compute_feature_importance(
+                        self.model, model_type,
+                        feature_names=_feat_names,
+                        X_val=_X_val,
+                        y_val=_y_val,
+                    )
                     if _fi:
                         self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi]
                     else:
