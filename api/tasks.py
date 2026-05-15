@@ -139,6 +139,37 @@ def _compute_total_work(models: list[str], months: int, hpo_intensity: str | Non
 celery_app = None
 _celery_available = False
 
+# In-memory mapping of job_id → celery_task_id for force-stop revocation
+_JOB_TASK_IDS: Dict[str, str] = {}
+
+
+def revoke_task(job_id: str) -> bool:
+    """Revoke the Celery task associated with a job_id (force stop)."""
+    task_id = _JOB_TASK_IDS.pop(job_id, None)
+    if task_id and _celery_available and celery_app is not None:
+        try:
+            celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
+            return True
+        except Exception:
+            pass
+    return False
+
+
+def _check_force_stopped(job_id: str):
+    """Check if the job has been force-stopped. Raises SystemExit if stopped."""
+    try:
+        store = DataStore(settings.db_full_path)
+        from api.services import JobManager as _JM
+        jm = _JM(store)
+        job = jm.get_job(job_id)
+        if job and job.get("status") == "failed" and "stopped" in str(job.get("error", "")).lower():
+            import sys as _sys
+            _sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception:
+        pass
+
 if not IS_DESKTOP:
     try:
         from celery import Celery
@@ -331,6 +362,12 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     store = DataStore(settings.db_full_path)
     jm = JobManager(store)
 
+    # Track this task for force-stop revocation
+    _current_task_id = getattr(_run_backtest_impl, "request", None)
+    if _current_task_id and hasattr(_current_task_id, "id"):
+        _JOB_TASK_IDS[job_id] = _current_task_id.id
+    jm.update_status(job_id, "running", error=None)
+
     pair = config.get("pair", "EURUSD")
     models = config.get("models", ["logistic"])
     start = config.get("start_date") or None
@@ -437,6 +474,8 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
 
     try:
         for cycle_idx, model_type in enumerate(models):
+            _check_force_stopped(job_id)
+
             _pub("cycle_started", job_id, {
                 "model": model_type,
                 "cycle_number": cycle_idx + 1,
@@ -652,6 +691,11 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 metrics_row["buy_hold_curve"] = []
                 metrics_row["drawdown_curve"] = []
                 metrics_row["monthly_results"] = []
+                metrics_row["total_return_pct"] = 0.0
+                metrics_row["max_drawdown"] = 0.0
+                metrics_row["sharpe"] = 0.0
+                metrics_row["total_trades"] = 0
+                metrics_row["win_rate"] = 0.0
 
             if trade_log is not None and not trade_log.empty:
                 safe_trades = trade_log.reset_index(drop=True)
@@ -870,17 +914,26 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
         emit_event("job_complete", job_id=job_id, n_models=len(all_metrics))
         return result
 
-    except Exception as e:
+    except (Exception, KeyboardInterrupt) as e:
+        if isinstance(e, KeyboardInterrupt):
+            _JOB_TASK_IDS.pop(job_id, None)
+            jm.update_status(job_id, "failed", error="Force stopped by user")
+            _pub("job_failed", job_id, {"error": "Stopped by user"})
+            emit_event("job_failed", job_id=job_id, error="Stopped by user")
+            return
         tb = traceback.format_exc()
         jm.update_status(job_id, "failed", error=f"{e}\n{tb}")
         _pub("job_failed", job_id, {"error": str(e)})
         emit_event("job_failed", job_id=job_id, error=str(e)[:200])
         raise
     except BaseException:
+        _JOB_TASK_IDS.pop(job_id, None)
         jm.update_status(job_id, "failed", error="Task killed or interrupted")
         _pub("job_failed", job_id, {"error": "Task killed or interrupted"})
         emit_event("job_failed", job_id=job_id, error="Task killed or interrupted")
         raise
+    finally:
+        _JOB_TASK_IDS.pop(job_id, None)
 
 
 def _download_data_impl(job_id: str, pair: str, years: int = 10):

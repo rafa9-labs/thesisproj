@@ -425,6 +425,12 @@ def force_stop_backtest(job_id: str):
     if job["status"] not in ("pending", "running"):
         raise HTTPException(400, f"Job status is '{job['status']}', not pending or running")
     jm.force_stop_job(job_id)
+    # Revoke the running Celery task
+    try:
+        from api.tasks import revoke_task
+        revoke_task(job_id)
+    except Exception:
+        pass
     updated = jm.get_job(job_id)
     return BacktestStatusResponse(
         job_id=updated["id"],

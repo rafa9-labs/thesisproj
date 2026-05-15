@@ -141,6 +141,10 @@ export function useForceStopJob() {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
       queryClient.invalidateQueries({ queryKey: ["active-backtests"] });
       queryClient.invalidateQueries({ queryKey: ["job", jobId] });
+      // Allow DB update to propagate, then refetch to clear any stale 409 state
+      setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: ["active-backtests"] });
+      }, 800);
     },
   });
 }

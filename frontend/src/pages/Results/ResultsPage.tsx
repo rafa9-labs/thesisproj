@@ -199,6 +199,17 @@ export function ResultsPage() {
         </div>
       </div>
 
+      {activeMetric && (activeMetric.total_trades ?? 0) === 0 && (
+        <div
+          className="rounded-xl border p-4"
+          style={{ borderColor: "var(--color-accent-warning)", backgroundColor: "rgba(245,158,11,0.05)" }}
+        >
+          <p className="text-xs" style={{ color: "var(--color-accent-warning)" }}>
+            This backtest produced no trades. All walk-forward months were flat — the model did not find enough signal to enter any positions. Try increasing HPO trials, tightening the search bounds, or selecting a different model.
+          </p>
+        </div>
+      )}
+
       {activeMetric && (
         <MetricsGrid metrics={activeMetric} modelName={activeMetric.model} monthlyResults={activeMetric.monthly_results} />
       )}
