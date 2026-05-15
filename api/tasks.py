@@ -429,6 +429,8 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 "active_rate": detail.get("active_rate"),
                 "train_sharpe": detail.get("train_sharpe"),
                 "sharpe_gap_pct": detail.get("sharpe_gap_pct"),
+                "signals_raw": detail.get("signals_raw"),
+                "signals_passed_gate": detail.get("signals_passed_gate"),
             })
 
     all_metrics = []

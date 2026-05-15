@@ -211,9 +211,7 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
               <div
                 key={i}
                 className="flex-1 rounded-sm overflow-hidden flex"
-                style={{ minWidth: 4, cursor: "pointer", opacity: hoveredIdx === null || hoveredIdx === i ? 1 : 0.4 }}
-                onMouseEnter={() => setHoveredIdx(i)}
-                onMouseLeave={() => setHoveredIdx(null)}
+                style={{ minWidth: 4 }}
                 title={`${d.label}: sideways=${formatPercent(d.pctSideways)} trend=${formatPercent(d.pctTrend)} volatile=${formatPercent(d.pctVolatile)}`}
               >
                 <div style={{ width: `${(d.pctSideways ?? 0) * 100}%`, backgroundColor: REGIME_COLORS.sideways }} />

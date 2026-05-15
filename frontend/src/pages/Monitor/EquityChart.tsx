@@ -219,6 +219,12 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
                     className="px-2 py-1.5 text-center text-[10px] font-medium uppercase tracking-[0.06em]"
                     style={{ color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)" }}
                   >
+                    Gate
+                  </th>
+                  <th
+                    className="px-2 py-1.5 text-center text-[10px] font-medium uppercase tracking-[0.06em]"
+                    style={{ color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)" }}
+                  >
                     Risk
                   </th>
                 </tr>
@@ -237,7 +243,7 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
                     if (!first) {
                       rows.push(
                         <tr key={`sep-${modelName}`}>
-                          <td colSpan={8} style={{ padding: 0 }}>
+                          <td colSpan={9} style={{ padding: 0 }}>
                             <div style={{ height: 6 }} />
                           </td>
                         </tr>
@@ -263,6 +269,7 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
                           <td
                             className="px-2 py-1 text-right text-[10px]"
                             style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}
+                            title={`Train: ${p.train_sharpe?.toFixed(2) ?? "?"} | Test: ${p.sharpe?.toFixed(2) ?? "?"} | Gap: ${(p.sharpe_gap_pct ?? 0).toFixed(0)}%`}
                           >
                             {p.sharpe?.toFixed(2) ?? "-"}
                           </td>
@@ -289,6 +296,15 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
                             style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}
                           >
                             {p.win_rate != null ? `${(p.win_rate * 100).toFixed(1)}%` : "-"}
+                          </td>
+                          <td
+                            className="px-2 py-1 text-center text-[10px]"
+                            style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}
+                            title={`Signals: ${p.signals_passed_gate ?? 0} passed / ${p.signals_raw ?? 0} raw`}
+                          >
+                            {(p.signals_raw ?? 0) > 0
+                              ? `${Math.round(((p.signals_passed_gate ?? 0) / (p.signals_raw ?? 1)) * 100)}%`
+                              : "-"}
                           </td>
                           <td className="px-2 py-1 text-center text-[10px]">
                             {p.sharpe_gap_pct != null ? (

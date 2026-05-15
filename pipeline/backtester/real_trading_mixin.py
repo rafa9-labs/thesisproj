@@ -2831,6 +2831,8 @@ class RealTradingMixin:
                         "active_rate": result.get("active_rate"),
                         "train_sharpe": result.get("train_sharpe"),
                         "sharpe_gap_pct": result.get("sharpe_gap_pct"),
+                        "signals_raw": result.get("signals_raw"),
+                        "signals_passed_gate": result.get("signals_passed_gate"),
                     })
                 
                 # PBO/MCS monthly bookkeeping (does not affect trading logic)

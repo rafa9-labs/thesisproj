@@ -320,7 +320,7 @@ export type WsEvent =
   | { event: "hpo_progress"; job_id: string; model: string; trial?: number; total_trials?: number; n_trials?: number; cv_blocks: number; completed_work: number; total_work: number; progress_pct: number }
   | { event: "hpo_trial_result"; job_id: string; model: string; trial_number: number; score: number | null; params: Record<string, unknown>; best_score_so_far: number | null; trial_state: string }
   | { event: "month_progress"; job_id: string; model: string; month?: number; total_months?: number; period?: number; total_periods?: number; sharpe?: number; trades?: number; completed_work: number; total_work: number; progress_pct: number }
-  | { event: "oos_result"; job_id: string; model: string; period: number; total_periods: number; equity: number | null; equity_bh: number | null; sharpe: number | null; return_pct: number | null; trades: number | null; drawdown: number | null; win_rate: number | null; precision: number | null; f1: number | null; directional_accuracy: number | null; active_rate: number | null; flat?: boolean }
+  | { event: "oos_result"; job_id: string; model: string; period: number; total_periods: number; equity: number | null; equity_bh: number | null; sharpe: number | null; return_pct: number | null; trades: number | null; drawdown: number | null; win_rate: number | null; precision: number | null; f1: number | null; directional_accuracy: number | null; active_rate: number | null; flat?: boolean; train_sharpe?: number | null; sharpe_gap_pct?: number | null; signals_raw?: number; signals_passed_gate?: number }
   | { event: "job_complete"; job_id: string; metrics: Partial<Metrics>[] }
   | { event: "job_failed"; job_id: string; error: string }
   | { event: "cycle_started"; job_id: string; model: string; cycle_number: number; total_cycles: number }
@@ -351,7 +351,10 @@ export interface OosPeriodResult {
   precision: number | null;
   f1: number | null;
   flat?: boolean;
+  train_sharpe?: number | null;
   sharpe_gap_pct?: number | null;
+  signals_raw?: number;
+  signals_passed_gate?: number;
 }
 
 export interface HealthResponse {
