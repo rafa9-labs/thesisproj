@@ -728,6 +728,13 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 metrics_row["overfitting"] = None
                 metrics_row["walkforward_periods"] = []
 
+            # S16.4: Plain-English backtest summary
+            try:
+                from pipeline.summary_generator import generate_summary
+                metrics_row["summary_text"] = generate_summary(metrics_row, config)
+            except Exception:
+                metrics_row["summary_text"] = None
+
             # S16.3: Training diagnostics (feature importance, confusion matrix, confidence bands)
             try:
                 from pipeline.diagnostics import (

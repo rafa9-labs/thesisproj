@@ -310,6 +310,7 @@ class BacktestResultMetrics(BaseModel):
     overfitting: Optional[OverfittingReport] = None
     walkforward_periods: Optional[List[WalkForwardPeriod]] = None
     diagnostics: Optional[TrainingDiagnostics] = None
+    summary_text: Optional[str] = None
 
 
 class BacktestResultsResponse(BaseModel):

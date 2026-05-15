@@ -615,6 +615,7 @@ def get_backtest_results(job_id: str):
             overfitting=overfit,
             walkforward_periods=wf_periods,
             diagnostics=_parse_diagnostics(m.get("diagnostics")),
+            summary_text=m.get("summary_text"),
         ))
 
     return BacktestResultsResponse(

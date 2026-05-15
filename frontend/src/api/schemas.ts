@@ -160,6 +160,7 @@ export interface Metrics {
   overfitting: OverfittingReportData | null;
   walkforward_periods: WalkForwardPeriod[] | null;
   diagnostics: TrainingDiagnostics | null;
+  summary_text: string | null;
 }
 
 export interface BacktestRequest {

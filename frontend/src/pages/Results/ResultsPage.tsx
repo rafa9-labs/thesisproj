@@ -11,6 +11,7 @@ import { TradeLogTable } from "./TradeLogTable";
 import { MonthlySection } from "./MonthlySection";
 import { HpoDiagnostics } from "./HpoDiagnostics";
 import { OverfittingPanel } from "./OverfittingPanel";
+import { BacktestSummary } from "./BacktestSummary";
 import { WalkForwardPanel } from "./WalkForwardPanel";
 import { TrainingDiagnosticsPanel } from "./TrainingDiagnostics";
 import { ConfigViewer } from "./ConfigViewer";
@@ -200,6 +201,10 @@ export function ResultsPage() {
 
       {activeMetric && (
         <MetricsGrid metrics={activeMetric} modelName={activeMetric.model} monthlyResults={activeMetric.monthly_results} />
+      )}
+
+      {activeMetric && (
+        <BacktestSummary text={activeMetric.summary_text ?? null} />
       )}
 
       {activeMetric && (
