@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { DEFAULTS, STUDY_PRESETS, QUICK_START_PRESETS } from "@/lib/constants";
+import { DEFAULTS, STUDY_PRESETS, QUICK_START_CATEGORIES } from "@/lib/constants";
 import type { BacktestRequest, HpoIntensity } from "@/api/schemas";
 
 const _CUSTOM_PRESETS_KEY = "kodaquant-custom-presets";
@@ -86,18 +86,23 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
 
   applyQuickPreset: (presetKey) =>
     set((state) => {
-      const p = QUICK_START_PRESETS.find((x) => x.key === presetKey);
-      if (!p) return { selectedModels: [] };
-      return {
-        selectedModels: p.models,
-        hpoIntensity: p.hpoIntensity,
-        nTrials: p.nTrials,
-        repeats: p.repeats,
-        trainMonths: p.trainMonths,
-        testMonths: p.testMonths,
-        confidenceThreshold: p.confidenceThreshold,
-        activePreset: null,
-      };
+      for (const cat of QUICK_START_CATEGORIES) {
+        for (const opt of cat.options) {
+          if (opt.key === presetKey) {
+            return {
+              selectedModels: opt.models,
+              hpoIntensity: opt.hpoIntensity,
+              nTrials: opt.nTrials,
+              repeats: opt.repeats,
+              trainMonths: opt.trainMonths,
+              testMonths: opt.testMonths,
+              confidenceThreshold: opt.confidenceThreshold,
+              activePreset: null,
+            };
+          }
+        }
+      }
+      return { selectedModels: [] };
     }),
 
   saveCustomPreset: (name, subtitle) =>
