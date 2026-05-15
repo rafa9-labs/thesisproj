@@ -45,13 +45,109 @@ class OverfittingReport:
     oos_mean_sharpe: float | None = None
 
 
-def _bootstrap_ci(
+def _optimal_block_length(values: np.ndarray) -> int:
+    """
+    Politis & White (2004) automatic block length selection.
+    Returns the optimal mean block length for stationary bootstrap.
+    Minimum result is 3 for very short series; capped at n//3.
+    """
+    n = len(values)
+    if n < 6:
+        return 3
+    try:
+        acf1 = float(np.corrcoef(values[:-1], values[1:])[0, 1])
+    except (ValueError, IndexError):
+        acf1 = 0.0
+    if np.isnan(acf1):
+        acf1 = 0.0
+    acf1 = abs(acf1)
+    b_hat = max(3, min(int(n / 3), int(round(n ** (1.0 / 3.0) * (2.0 * acf1 / (1.0 - acf1 ** 2)) ** (2.0 / 3.0)))))
+    return max(3, min(b_hat, n // 3))
+
+
+def _block_bootstrap_ci(
     values: np.ndarray,
     stat_fn=None,
     n_boot: int = 2000,
     alpha: float = 0.10,
     seed: int = 42,
 ) -> Tuple[float, float, float]:
+    """
+    Stationary block bootstrap confidence interval for time-series data.
+    Preserves within-block serial correlation via randomly-sized contiguous
+    blocks drawn from a geometric distribution.
+
+    Parameters
+    ----------
+    values : np.ndarray
+        Time-series values (e.g., monthly Sharpe ratios, returns).
+    stat_fn : callable, optional
+        Statistic function (default: mean).
+    n_boot : int
+        Number of bootstrap replicates.
+    alpha : float
+        Significance level (0.10 = 90% CI).
+    seed : int
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    (low, high, mean) : tuple of float
+    """
+    if stat_fn is None:
+        stat_fn = lambda x: float(np.nanmean(x))
+
+    n = len(values)
+    if n < 6:
+        # Fall back to i.i.d. for very short series
+        return _iid_bootstrap_ci(values, stat_fn, n_boot, alpha, seed)
+
+    mean_block = _optimal_block_length(values)
+    rng = np.random.default_rng(seed)
+
+    stats = []
+    for _ in range(n_boot):
+        sample = _stationary_block_sample(values, n, mean_block, rng)
+        stats.append(stat_fn(sample))
+
+    stats = np.asarray(stats, dtype=float)
+    stats = stats[np.isfinite(stats)]
+    if len(stats) < 10:
+        m = stat_fn(values)
+        return (m, m, m)
+
+    lo = float(np.percentile(stats, alpha / 2 * 100))
+    hi = float(np.percentile(stats, (1 - alpha / 2) * 100))
+    mean_val = float(np.mean(stats))
+    return (lo, hi, mean_val)
+
+
+def _stationary_block_sample(values: np.ndarray, n: int, mean_block: int, rng: np.random.Generator) -> np.ndarray:
+    """
+    Draw a stationary bootstrap sample of length n.
+    Blocks are drawn from a geometric distribution p = 1/mean_block.
+    """
+    p = 1.0 / max(mean_block, 1)
+    sample = []
+    while len(sample) < n:
+        start = rng.integers(0, len(values))
+        length = max(1, int(rng.geometric(p)))
+        for k in range(length):
+            if len(sample) >= n:
+                break
+            idx = (start + k) % len(values)
+            sample.append(values[idx])
+    return np.array(sample, dtype=float)
+
+
+def _iid_bootstrap_ci(
+    values: np.ndarray,
+    stat_fn=None,
+    n_boot: int = 2000,
+    alpha: float = 0.10,
+    seed: int = 42,
+) -> Tuple[float, float, float]:
+    """I.i.d. bootstrap fallback for very short series (< 6 periods)."""
     if stat_fn is None:
         stat_fn = lambda x: float(np.nanmean(x))
     rng = np.random.default_rng(seed)
@@ -154,16 +250,16 @@ def compute_overfitting_report(
     report.n_signal_periods = int(np.sum(trades_arr > 0))
     report.sufficient_trades = bool(np.sum(trades_arr) >= report.min_trl_trades)
 
-    # --- Bootstrap CIs ---
+    # --- Block bootstrap CIs (time-series aware) ---
     if len(sharpes_finite) >= 3:
-        slo, shi, smean = _bootstrap_ci(sharpes_finite)
+        slo, shi, smean = _block_bootstrap_ci(sharpes_finite)
         report.sharpe_ci = {"low": slo, "high": shi, "mean": smean}
     else:
         report.sharpe_ci = {"low": None, "high": None, "mean": None}
 
     if len(returns_finite) >= 3:
         total_ret = lambda x: float(np.sum(x))
-        rlo, rhi, rmean = _bootstrap_ci(returns_finite, stat_fn=total_ret)
+        rlo, rhi, rmean = _block_bootstrap_ci(returns_finite, stat_fn=total_ret)
         report.return_ci = {"low": rlo, "high": rhi, "mean": rmean}
     else:
         report.return_ci = {"low": None, "high": None, "mean": None}
@@ -185,7 +281,7 @@ def compute_overfitting_report(
             return float(np.mean(dds)) if dds else 0.0
 
         maxdd = lambda x: maxdd_stat(x)
-        dlo, dhi, dmean = _bootstrap_ci(returns_finite, stat_fn=maxdd)
+        dlo, dhi, dmean = _block_bootstrap_ci(returns_finite, stat_fn=maxdd)
         report.maxdd_ci = {"low": dlo, "high": dhi, "mean": dmean}
     else:
         report.maxdd_ci = {"low": None, "high": None, "mean": None}
@@ -215,8 +311,19 @@ def compute_overfitting_report(
     # --- Temporal degradation ---
     report.temporal_degradation_pct = _temporal_degradation(sharpes_arr)
 
-    # --- CV stability ---
-    if len(sharpes_finite) >= 3:
+    # --- CV stability (prefer IS fold Sharpes from CV when available) ---
+    cv_fold_all = []
+    for r in monthly_records:
+        cf = r.get("cv_fold_sharpes")
+        if isinstance(cf, (list, np.ndarray)) and len(cf) > 0:
+            cv_fold_all.extend([float(v) for v in cf if np.isfinite(float(v))])
+    cv_fold_arr = np.array(cv_fold_all, dtype=float) if cv_fold_all else np.array([])
+
+    if len(cv_fold_arr) >= 3:
+        report.cv_sharpe_mean = float(np.nanmean(cv_fold_arr))
+        report.cv_sharpe_std = float(np.nanstd(cv_fold_arr, ddof=1))
+    elif len(sharpes_finite) >= 3:
+        # Fallback: use OOS monthly Sharpes
         report.cv_sharpe_mean = float(np.nanmean(sharpes_finite))
         report.cv_sharpe_std = float(np.nanstd(sharpes_finite, ddof=1))
     if len(returns_finite) >= 3:
@@ -280,6 +387,9 @@ def compute_period_breakdown(monthly_records: List[dict]) -> List[dict]:
             "pct_sideways": float(r.get("pct_sideways", float("nan"))),
             "pct_trend": float(r.get("pct_trend", float("nan"))),
             "pct_volatile": float(r.get("pct_volatile", float("nan"))),
+            "sharpe_gap_pct": float(r.get("sharpe_gap_pct", float("nan"))),
+            "return_gap_pct": float(r.get("return_gap_pct", float("nan"))),
+            "cv_fold_sharpes": r.get("cv_fold_sharpes", []),
         }
         out.append(entry)
     return out

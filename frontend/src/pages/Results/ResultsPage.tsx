@@ -203,7 +203,10 @@ export function ResultsPage() {
       )}
 
       {activeMetric && (
-        <OverfittingPanel data={activeMetric.overfitting ?? null} modelName={activeMetric.model} />
+        <OverfittingPanel
+          overfitting={activeMetric.overfitting ?? null}
+          walkforwardPeriods={activeMetric.walkforward_periods ?? null}
+        />
       )}
 
       {activeMetric && (

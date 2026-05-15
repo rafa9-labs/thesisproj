@@ -215,6 +215,12 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
                   >
                     Win Rate
                   </th>
+                  <th
+                    className="px-2 py-1.5 text-center text-[10px] font-medium uppercase tracking-[0.06em]"
+                    style={{ color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)" }}
+                  >
+                    Risk
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -231,7 +237,7 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
                     if (!first) {
                       rows.push(
                         <tr key={`sep-${modelName}`}>
-                          <td colSpan={7} style={{ padding: 0 }}>
+                          <td colSpan={8} style={{ padding: 0 }}>
                             <div style={{ height: 6 }} />
                           </td>
                         </tr>
@@ -283,6 +289,24 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
                             style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}
                           >
                             {p.win_rate != null ? `${(p.win_rate * 100).toFixed(1)}%` : "-"}
+                          </td>
+                          <td className="px-2 py-1 text-center text-[10px]">
+                            {p.sharpe_gap_pct != null ? (
+                              <span
+                                className="inline-block w-2 h-2 rounded-full"
+                                style={{
+                                  backgroundColor:
+                                    p.sharpe_gap_pct > 40
+                                      ? "var(--color-accent-danger)"
+                                      : p.sharpe_gap_pct > 15
+                                        ? "var(--color-accent-warning)"
+                                        : "var(--color-accent-success)",
+                                }}
+                                title={`Train/OOS gap: ${p.sharpe_gap_pct.toFixed(0)}%`}
+                              />
+                            ) : (
+                              <span style={{ color: "var(--color-text-muted)" }}>-</span>
+                            )}
                           </td>
                         </tr>
                       );

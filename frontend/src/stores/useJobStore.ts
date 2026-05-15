@@ -330,6 +330,7 @@ export const useJobStore = create<JobStore>()((set, get) => ({
           precision: event.precision,
           f1: event.f1,
           flat: event.flat,
+          sharpe_gap_pct: event.sharpe_gap_pct,
         };
         updated.oosPeriods = [...updated.oosPeriods, periodResult];
         if (event.equity != null && event.equity_bh != null) {

@@ -68,6 +68,8 @@ export interface WalkForwardPeriod {
   pct_sideways: number | null;
   pct_trend: number | null;
   pct_volatile: number | null;
+  sharpe_gap_pct: number | null;
+  return_gap_pct: number | null;
 }
 
 export interface FeatureImportanceEntry {
@@ -349,6 +351,7 @@ export interface OosPeriodResult {
   precision: number | null;
   f1: number | null;
   flat?: boolean;
+  sharpe_gap_pct?: number | null;
 }
 
 export interface HealthResponse {

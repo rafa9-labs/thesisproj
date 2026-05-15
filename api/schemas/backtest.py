@@ -248,6 +248,8 @@ class WalkForwardPeriod(BaseModel):
     pct_sideways: Optional[float] = None
     pct_trend: Optional[float] = None
     pct_volatile: Optional[float] = None
+    sharpe_gap_pct: Optional[float] = None
+    return_gap_pct: Optional[float] = None
 
 
 class FeatureImportanceEntry(BaseModel):

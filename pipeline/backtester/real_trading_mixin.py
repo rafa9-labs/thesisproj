@@ -818,6 +818,30 @@ class RealTradingMixin:
             except Exception:
                 return "na", {}
 
+        # S16.1: Helpers to extract in-sample CV metrics from the selected candidate
+        def _safe_get_cv_value(candidate):
+            if not isinstance(candidate, dict):
+                return float("nan")
+            for key in ("__cv_value", "__hpo_best_score", "__verify_best_score"):
+                try:
+                    v = float(candidate.get(key, float("nan")))
+                    if np.isfinite(v):
+                        return v
+                except (TypeError, ValueError):
+                    continue
+            return float("nan")
+
+        def _safe_get_cv_return(candidate):
+            if not isinstance(candidate, dict):
+                return float("nan")
+            try:
+                v = float(candidate.get("__cv_return", float("nan")))
+                if np.isfinite(v):
+                    return v
+            except (TypeError, ValueError):
+                pass
+            return float("nan")
+
         for i in range(n_periods):
             period_idx = i + 1
             
@@ -2673,6 +2697,12 @@ class RealTradingMixin:
                     # model metadata
                     "model_type": model_type,
 
+                    # S16.1: Overfitting detection — in-sample metrics from CV
+                    "train_sharpe": _safe_get_cv_value(best_combo),
+                    "train_return": _safe_get_cv_return(best_combo),
+                    "sharpe_gap_pct": 0.0,   # populated below after sharpe is computed
+                    "return_gap_pct": 0.0,   # populated below
+
                     # performance snapshot (continuous month + carried equities)
                     "cstrategy":           round(float(perf), 6),
                     "creturns":            round(float(monthly_bh_factor), 6),
@@ -2699,6 +2729,26 @@ class RealTradingMixin:
                     # trace features actually used this month
                     "features_used": features_used,
                 }
+
+                # S16.1: Compute per-period train/OOS divergence
+                try:
+                    _train = result["train_sharpe"]
+                    _test = result["sharpe"]
+                    if np.isfinite(_train) and np.isfinite(_test):
+                        result["sharpe_gap_pct"] = round((_train - _test) / max(abs(_train), 0.01) * 100.0, 2)
+                    _tret = result["train_return"]
+                    _sret = result["strategy_return"]
+                    if np.isfinite(_tret) and np.isfinite(_sret):
+                        result["return_gap_pct"] = round((_tret - _sret) / max(abs(_tret), 0.01) * 100.0, 2)
+                except Exception:
+                    pass
+                # S16.1: Persist CV fold-level sharpes for overfitting report
+                try:
+                    cf = getattr(self, "_last_fold_srs", None)
+                    if cf is not None and isinstance(cf, (list, np.ndarray)):
+                        result["cv_fold_sharpes"] = [float(v) if np.isfinite(v) else float("nan") for v in cf]
+                except Exception:
+                    pass
 
                 # --- S16.2: Walk-forward transparency data ---
                 # Signal counts: how many bars had predictions vs passed confidence gate
@@ -2779,6 +2829,8 @@ class RealTradingMixin:
                         "return_pct": result.get("cstrategy"),
                         "directional_accuracy": result.get("directional_accuracy"),
                         "active_rate": result.get("active_rate"),
+                        "train_sharpe": result.get("train_sharpe"),
+                        "sharpe_gap_pct": result.get("sharpe_gap_pct"),
                     })
                 
                 # PBO/MCS monthly bookkeeping (does not affect trading logic)
