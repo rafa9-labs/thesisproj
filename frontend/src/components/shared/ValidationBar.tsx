@@ -1,14 +1,22 @@
-import { TriangleAlert, CheckCircle } from "lucide-react";
+import { TriangleAlert, Info } from "lucide-react";
 
 interface Props {
   warnings: number;
   errors: number;
   canDeploy: boolean;
   isSubmitting: boolean;
+  hasModels: boolean;
+  hasPair: boolean;
+  hasDates: boolean;
   onDeploy: () => void;
 }
 
-export function ValidationBar({ warnings, errors, canDeploy, isSubmitting, onDeploy }: Props) {
+export function ValidationBar({ warnings, errors, canDeploy, isSubmitting, hasModels, hasPair, hasDates, onDeploy }: Props) {
+  const missingItems: string[] = [];
+  if (!hasPair) missingItems.push("a currency pair");
+  if (!hasModels) missingItems.push("at least one model");
+  if (!hasDates) missingItems.push("date range");
+
   return (
     <div
       className="flex items-center justify-between rounded-lg border px-5 py-3"
@@ -18,18 +26,29 @@ export function ValidationBar({ warnings, errors, canDeploy, isSubmitting, onDep
       }}
     >
       <div className="flex items-center gap-4">
-        {errors > 0 && (
+        {missingItems.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <Info size={13} style={{ color: "var(--color-text-muted)" }} />
+            <span
+              className="text-[11px]"
+              style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
+            >
+              Select {missingItems.join(" and ")} to start
+            </span>
+          </div>
+        )}
+        {missingItems.length === 0 && errors > 0 && (
           <div className="flex items-center gap-1.5">
             <TriangleAlert size={13} style={{ color: "var(--color-accent-danger)" }} />
             <span
               className="text-[11px] font-semibold"
               style={{ color: "var(--color-accent-danger)", fontFamily: "var(--font-mono)" }}
             >
-              {errors} error{errors > 1 ? "s" : ""}
+              {errors} configuration error{errors > 1 ? "s" : ""}
             </span>
           </div>
         )}
-        {warnings > 0 && (
+        {missingItems.length === 0 && errors === 0 && warnings > 0 && (
           <div className="flex items-center gap-1.5">
             <TriangleAlert size={13} style={{ color: "var(--color-accent-warning)" }} />
             <span
@@ -40,16 +59,13 @@ export function ValidationBar({ warnings, errors, canDeploy, isSubmitting, onDep
             </span>
           </div>
         )}
-        {errors === 0 && warnings === 0 && (
-          <div className="flex items-center gap-1.5">
-            <CheckCircle size={13} style={{ color: "var(--color-accent-success)" }} />
-            <span
-              className="text-[11px]"
-              style={{ color: "var(--color-accent-success)", fontFamily: "var(--font-mono)" }}
-            >
-              Ready
-            </span>
-          </div>
+        {missingItems.length === 0 && errors === 0 && warnings === 0 && (
+          <span
+            className="text-[11px]"
+            style={{ color: "var(--color-accent-success)", fontFamily: "var(--font-mono)" }}
+          >
+            Ready to deploy
+          </span>
         )}
       </div>
 

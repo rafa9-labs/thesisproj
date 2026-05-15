@@ -13,7 +13,7 @@ interface Props {
 export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
   return (
     <div
-      className="flex items-center gap-0.5 rounded-lg p-0.5"
+      className="flex items-center gap-2 rounded-lg px-1"
       style={{ backgroundColor: "var(--color-elevated)" }}
     >
       {tabs.map((tab) => {
