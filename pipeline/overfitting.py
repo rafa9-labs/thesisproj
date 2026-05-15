@@ -43,6 +43,7 @@ class OverfittingReport:
     signal_gap_pct: float = 0.0
     is_mean_sharpe: float | None = None
     oos_mean_sharpe: float | None = None
+    dsr_min_sharpe: float | None = None
 
 
 def _optimal_block_length(values: np.ndarray) -> int:
@@ -215,6 +216,7 @@ def compute_overfitting_report(
     monthly_records: List[dict],
     model_type: str = "",
     hpo_best_value: Optional[float] = None,
+    n_hpo_trials: Optional[int] = None,
 ) -> OverfittingReport:
     """
     Compute a comprehensive overfitting report from walk-forward monthly records.
@@ -229,6 +231,9 @@ def compute_overfitting_report(
     hpo_best_value : float, optional
         Best HPO trial value used as in-sample proxy when train_sharpe is
         not available.
+    n_hpo_trials : int, optional
+        Total number of HPO trials run. Used to compute DSR-adjusted minimum Sharpe
+        threshold for statistical significance.
 
     Returns
     -------
@@ -350,7 +355,47 @@ def compute_overfitting_report(
     )
     report.risk_level, report.risk_color = _classify_risk(report.overfit_score)
 
+    # --- DSR minimum Sharpe threshold for statistical significance ---
+    if n_hpo_trials is not None and len(sharpes_finite) >= 6:
+        report.dsr_min_sharpe = _compute_dsr_min_sharpe(
+            n_hpo_trials, len(sharpes_finite), len(trades_arr)
+        )
+
     return report
+
+
+def _compute_dsr_min_sharpe(n_hpo_trials: int, n_oos_periods: int, n_total_trades: int) -> float:
+    """Minimum annualized Sharpe for statistical significance after multiple testing.
+
+    Based on the Deflated Sharpe Ratio framework (Lopez de Prado, Bailey et al. 2014).
+    Accounts for:
+    - Number of HPO trials (multiple testing correction via Sidak)
+    - Number of OOS periods (estimation error)
+    - Minimum trades (reliability floor)
+
+    Returns a float: the minimum Sharpe ratio a strategy must achieve to be
+    considered statistically significant at the 95% confidence level.
+    """
+    from math import sqrt
+    from scipy.stats import norm as _norm
+
+    m = max(n_hpo_trials, 1)
+    n = max(n_oos_periods, 6)
+
+    # Sidak correction for multiple testing
+    adj_alpha = 1.0 - (1.0 - 0.05) ** (1.0 / m)
+    z_adj = _norm.ppf(1.0 - adj_alpha / 2.0)
+
+    # Minimum Sharpe for the given number of OOS observations
+    min_sr = z_adj / sqrt(n)
+
+    # Reliability penalty for very few trades
+    if n_total_trades < 10:
+        min_sr *= 1.5
+    elif n_total_trades < 30:
+        min_sr *= 1.2
+
+    return round(float(min_sr), 3)
 
 
 def compute_period_breakdown(monthly_records: List[dict]) -> List[dict]:

@@ -5,12 +5,14 @@ import type { BacktestRequest, HpoIntensity } from "@/api/schemas";
 type Widen<T> = T extends boolean ? boolean : T extends string ? string : T extends number ? number : T;
 type BacktestState = { -readonly [K in keyof typeof DEFAULTS]: Widen<(typeof DEFAULTS)[K]> } & {
   hpoIntensity: HpoIntensity;
+  activePreset: string | null;
 };
 type BacktestActions = {
   setField: <K extends keyof BacktestState>(key: K, value: BacktestState[K]) => void;
   toggleModel: (model: string) => void;
   resetToDefaults: () => void;
   applyPreset: (preset: { pair?: string; timeframe?: string; models?: string[]; months?: number; hpo_intensity?: HpoIntensity; seed?: number; start_date?: string; end_date?: string }) => void;
+  applyStudyPreset: (presetKey: string) => void;
   toRequestPayload: () => BacktestRequest;
 };
 
@@ -19,6 +21,7 @@ const DEFAULT_HPO_INTENSITY: HpoIntensity = "quick";
 export const useBacktestStore = create<BacktestState & BacktestActions>()((set, get) => ({
   ...structuredClone(DEFAULTS) as BacktestState,
   hpoIntensity: DEFAULT_HPO_INTENSITY,
+  activePreset: null,
 
   setField: (key, value) => set({ [key]: value } as Partial<BacktestState>),
 
@@ -46,7 +49,29 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       if (preset.seed !== undefined) updates.seed = preset.seed;
       if (preset.start_date !== undefined) updates.startDate = preset.start_date;
       if (preset.end_date !== undefined) updates.endDate = preset.end_date;
-      return updates;
+      return { ...updates, activePreset: null };
+    }),
+
+  applyStudyPreset: (presetKey) =>
+    set((state) => {
+      try {
+        const { STUDY_PRESETS } = require("@/lib/constants");
+        const p = STUDY_PRESETS[presetKey as keyof typeof STUDY_PRESETS];
+        if (!p) return state;
+        return {
+          hpoIntensity: p.hpoIntensity,
+          nTrials: p.nTrials,
+          repeats: p.repeats,
+          trainMonths: p.trainMonths,
+          testMonths: p.testMonths,
+          confidenceThreshold: p.confidenceThreshold,
+          targetActiveRate: p.targetActiveRate,
+          targetCoverage: p.targetCoverage,
+          activePreset: presetKey,
+        };
+      } catch {
+        return { activePreset: null };
+      }
     }),
 
   toRequestPayload: () => {
@@ -140,7 +165,7 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       end_date: s.endDate || undefined,
       trading_costs: s.evalUseTradingCosts,
       months: s.testMonths,
-      repeats: 1,
+      repeats: s.repeats ?? 1,
       seed: s.seed,
       hpo_intensity: s.hpoIntensity,
       config_overrides: configOverrides,

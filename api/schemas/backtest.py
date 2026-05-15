@@ -231,6 +231,7 @@ class OverfittingReport(BaseModel):
     signal_gap_pct: float = 0.0
     is_mean_sharpe: Optional[float] = None
     oos_mean_sharpe: Optional[float] = None
+    dsr_min_sharpe: Optional[float] = None
 
 
 class WalkForwardPeriod(BaseModel):

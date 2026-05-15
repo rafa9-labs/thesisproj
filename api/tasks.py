@@ -440,7 +440,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             _pub("cycle_started", job_id, {
                 "model": model_type,
                 "cycle_number": cycle_idx + 1,
-                "total_cycles": len(models),
+                "total_cycles": len(models) * int(repeats),
             })
             _pub("model_training", job_id, {"model": model_type, "status": "starting"})
             _pub("model_phase", job_id, {"model": model_type, "phase": "hpo", "total_work": total_work})
@@ -455,88 +455,94 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             tc = _get_trial_counts(hpo_intensity, model_type)
             n_trials_hdr = max(tc.get("random", 3) + tc.get("bayes", 3), 10)
 
-            bt = MLBacktester(
-                symbol=pair,
-                start=start,
-                end=end,
-                trading_costs=trading_costs,
-                model_type=model_type,
-                features_config=feat_cfg,
-                db_path=settings.db_full_path,
-            )
-            bt._progress_callback = _progress_cb
+            # Run repeats: each gets a different seed for HPO reproducibility
+            rep_metrics = []
+            for rep in range(1, int(repeats) + 1):
+                if repeats > 1:
+                    print(f"[REPEAT] {model_type}: rep {rep}/{repeats}")
+                    _progress_cb(f"repeat", model_type, {"rep": rep, "total_repeats": repeats, "model": model_type})
 
-            # --- Inject news & sentiment data if enabled ---
-            if feat_cfg.get("use_news", True):
-                try:
-                    from news.scraper import NewsScraper
-                    from news.sentiment import SentimentAnalyzer
+                rep_seed = int(seed) + rep - 1
 
-                    scraper = NewsScraper()
-                    articles = scraper.fetch_all()
-                    pair_val = pair or "EURUSD"
-                    filtered = NewsScraper.filter_by_pair(articles, pair_val)
-                    backend = feat_cfg.get("news_sentiment_backend", "vader")
-                    analyzer = SentimentAnalyzer(backend=backend)
-                    scored = analyzer.score_articles(filtered)
-                    news_aggregated = analyzer.aggregate_to_df(scored, freq="1h")
-                    econ_events = scraper.economic_calendar_events()
-                    bt._news_aggregated = news_aggregated
-                    bt._news_economic_events = econ_events
-                    _pub("news_loaded", job_id, {"articles": len(filtered), "backend": backend})
-                except Exception as _news_err:
-                    _pub("news_skip", job_id, {"reason": str(_news_err)[:200]})
+                bt = MLBacktester(
+                    symbol=pair,
+                    start=start,
+                    end=end,
+                    trading_costs=trading_costs,
+                    model_type=model_type,
+                    features_config=feat_cfg,
+                    db_path=settings.db_full_path,
+                )
+                bt._progress_callback = _progress_cb
 
-            # --- Inject LLM sentiment data if enabled ---
-            if feat_cfg.get("llm_sentiment_enabled", True):
-                try:
-                    from pipeline.llm.sentiment import LLMSentimentEngine
-
-                    llm_engine = LLMSentimentEngine(config=feat_cfg)
-                    llm_articles = getattr(bt, "_news_raw_articles", [])
-                    if not llm_articles:
+                # --- Inject news & sentiment data if enabled (only on rep 1, reused across reps) ---
+                if rep == 1:
+                    if feat_cfg.get("use_news", True):
                         try:
                             from news.scraper import NewsScraper
+                            from news.sentiment import SentimentAnalyzer
+
                             scraper = NewsScraper()
-                            llm_articles = scraper.fetch_all()
-                        except Exception:
-                            pass
+                            articles = scraper.fetch_all()
+                            pair_val = pair or "EURUSD"
+                            filtered = NewsScraper.filter_by_pair(articles, pair_val)
+                            backend = feat_cfg.get("news_sentiment_backend", "vader")
+                            analyzer = SentimentAnalyzer(backend=backend)
+                            scored = analyzer.score_articles(filtered)
+                            news_aggregated = analyzer.aggregate_to_df(scored, freq="1h")
+                            econ_events = scraper.economic_calendar_events()
+                            bt._news_aggregated = news_aggregated
+                            bt._news_economic_events = econ_events
+                            _pub("news_loaded", job_id, {"articles": len(filtered), "backend": backend})
+                        except Exception as _news_err:
+                            _pub("news_skip", job_id, {"reason": str(_news_err)[:200]})
 
-                    pair_val = pair or "EURUSD"
-                    llm_filtered = NewsScraper.filter_by_pair(llm_articles, pair_val)
-                    scored_llm = llm_engine.score_articles(llm_filtered, pair=pair_val)
-                    llm_aggregated = llm_engine.aggregate_to_df(scored_llm, freq="1h")
-                    bt._llm_aggregated = llm_aggregated
-                    _pub("llm_loaded", job_id, {
-                        "articles": len(llm_filtered),
-                        "backend": feat_cfg.get("llm_backend", "ollama"),
-                    })
-                    llm_engine.close()
-                except Exception as _llm_err:
-                    _pub("llm_skip", job_id, {"reason": str(_llm_err)[:200]})
+                    if feat_cfg.get("llm_sentiment_enabled", True):
+                        try:
+                            from pipeline.llm.sentiment import LLMSentimentEngine
 
-            base_cfg = deepcopy(CLASS_DEFAULTS["features"])
-            base_cfg.update(deepcopy(CLASS_DEFAULTS["cv"]))
-            base_cfg["model_type"] = model_type
-            base_cfg["rep"] = 1
-            base_cfg["trading_costs"] = trading_costs
-            base_cfg["n_trials"] = n_trials_hdr
-            base_cfg["n_startup_trials"] = tc.get("random", 3)
-            base_cfg["use_cached_global_hpo"] = (n_trials_hdr <= 0)
-            base_cfg["seed"] = seed
-            base_cfg["period_unit"] = period_unit
-            base_cfg.update(_convert_model_overrides(config.get("config_overrides", {})))
+                            llm_engine = LLMSentimentEngine(config=feat_cfg)
+                            llm_articles = getattr(bt, "_news_raw_articles", [])
+                            if not llm_articles:
+                                try:
+                                    from news.scraper import NewsScraper
+                                    scraper = NewsScraper()
+                                    llm_articles = scraper.fetch_all()
+                                except Exception:
+                                    pass
 
-            df_sim = bt.real_trading_simulation(
-                base_cfg,
-                models_to_test=[model_type],
-                months=months,
-            )
+                            pair_val = pair or "EURUSD"
+                            llm_filtered = NewsScraper.filter_by_pair(llm_articles, pair_val)
+                            scored_llm = llm_engine.score_articles(llm_filtered, pair=pair_val)
+                            llm_aggregated = llm_engine.aggregate_to_df(scored_llm, freq="1h")
+                            bt._llm_aggregated = llm_aggregated
+                            _pub("llm_loaded", job_id, {"articles": len(llm_filtered), "backend": feat_cfg.get("llm_backend", "ollama")})
+                            llm_engine.close()
+                        except Exception as _llm_err:
+                            _pub("llm_skip", job_id, {"reason": str(_llm_err)[:200]})
 
-            metrics_row = {"model": model_type}
-            equity_series = pd.Series(dtype=np.float64)
-            buyhold_series = pd.Series(dtype=np.float64)
-            bar_concat = getattr(bt, "bar_concat", None)
+                base_cfg = deepcopy(CLASS_DEFAULTS["features"])
+                base_cfg.update(deepcopy(CLASS_DEFAULTS["cv"]))
+                base_cfg["model_type"] = model_type
+                base_cfg["rep"] = rep
+                base_cfg["trading_costs"] = trading_costs
+                base_cfg["n_trials"] = n_trials_hdr
+                base_cfg["n_startup_trials"] = tc.get("random", 3)
+                base_cfg["use_cached_global_hpo"] = (n_trials_hdr <= 0)
+                base_cfg["seed"] = rep_seed
+                base_cfg["period_unit"] = period_unit
+                base_cfg.update(_convert_model_overrides(config.get("config_overrides", {})))
+
+                df_sim = bt.real_trading_simulation(
+                    base_cfg,
+                    models_to_test=[model_type],
+                    months=months,
+                )
+
+                metrics_row = {"model": model_type, "rep": rep, "seed": rep_seed}
+                equity_series = pd.Series(dtype=np.float64)
+                buyhold_series = pd.Series(dtype=np.float64)
+                bar_concat = getattr(bt, "bar_concat", None)
             if bar_concat is not None and not bar_concat.empty and "cstrategy_cont" in bar_concat.columns:
                 equity_series = bar_concat["cstrategy_cont"].astype(np.float64)
                 if "creturns_cont" in bar_concat.columns:
@@ -699,7 +705,8 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 hpo_best = None
                 if hasattr(bt, "_optuna_study") and bt._optuna_study is not None:
                     hpo_best = float(bt._optuna_study.best_value)
-                overfit = compute_overfitting_report(wfo_records, model_type, hpo_best_value=hpo_best)
+                overfit = compute_overfitting_report(wfo_records, model_type, hpo_best_value=hpo_best,
+                                                     n_hpo_trials=n_trials_hdr)
                 metrics_row["overfitting"] = {
                     "overfit_score": overfit.overfit_score,
                     "risk_level": overfit.risk_level,
@@ -720,6 +727,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                     "signal_gap_pct": overfit.signal_gap_pct,
                     "is_mean_sharpe": overfit.is_mean_sharpe,
                     "oos_mean_sharpe": overfit.oos_mean_sharpe,
+                    "dsr_min_sharpe": overfit.dsr_min_sharpe,
                 }
                 metrics_row["walkforward_periods"] = compute_period_breakdown(wfo_records)
             except Exception as _overfit_err:

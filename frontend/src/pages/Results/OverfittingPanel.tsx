@@ -59,6 +59,22 @@ export function OverfittingPanel({ overfitting, walkforwardPeriods }: Props) {
         </div>
       </div>
 
+      {overfitting.dsr_min_sharpe != null && (
+        <div
+          className="mb-4 rounded px-2 py-1 text-[10px]"
+          style={{
+            backgroundColor: "rgba(99,102,241,0.06)",
+            border: "1px solid rgba(99,102,241,0.15)",
+            color: "var(--color-text-secondary)",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          Significance threshold: Sharpe &ge; {overfitting.dsr_min_sharpe.toFixed(2)} required
+          for 95% confidence (adjusted for {overfitting.n_periods} OOS periods
+          and {overfitting.n_signal_periods > 0 ? "HPO testing" : "multiple tests"}).
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         {/* Left: CI bars */}
         <div className="flex flex-col gap-3">

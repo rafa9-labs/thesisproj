@@ -51,6 +51,7 @@ export interface OverfittingReportData {
   signal_gap_pct: number;
   is_mean_sharpe: number | null;
   oos_mean_sharpe: number | null;
+  dsr_min_sharpe: number | null;
 }
 
 export interface WalkForwardPeriod {
