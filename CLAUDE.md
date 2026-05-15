@@ -27,7 +27,7 @@
 - **ALWAYS** push all work to GitHub before ending a session.
 - Before completing a task, check for uncommitted changes.
 - Commit with descriptive messages. Push to `origin <current-branch>`.
-- Current branch: `feature/sprint16-overfitting-transparency` ✅ ALL SPRINT 16 commits consolidated here
+- Current branch: `feature/sprint16.6-ui-redesign` — Tab-based Backtest Setup UI redesign
 - Remote: `https://github.com/rafa9-labs/thesisproj.git`
 
 ## Architecture Overview

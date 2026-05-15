@@ -4,16 +4,24 @@ import { useBacktestStore } from "@/stores/useBacktestStore";
 import { useJobStore } from "@/stores/useJobStore";
 import { useValidation } from "@/hooks/useValidation";
 import { useSubmitBacktest } from "@/api/queries";
+import { TabBar } from "@/components/shared/TabBar";
+import { ValidationBar } from "@/components/shared/ValidationBar";
+import { RuntimeEstimate } from "@/components/shared/RuntimeEstimate";
 import { AssetSelector } from "./AssetSelector";
 import { ModelSelector } from "./ModelSelector";
+import { QuickTestBar } from "./QuickTestBar";
+import { HpoPanel } from "./HpoPanel";
 import { FeaturesPanel } from "./FeaturesPanel";
 import { LabelsPanel } from "./LabelsPanel";
-import { HpoPanel } from "./HpoPanel";
 import { ExecutionPanel } from "./ExecutionPanel";
 import { RunSummary } from "./RunSummary";
-import { QuickTestBar } from "./QuickTestBar";
-import { ValidationAlert } from "@/components/shared/ValidationAlert";
-import { RuntimeEstimate } from "@/components/shared/RuntimeEstimate";
+
+const TABS = [
+  { key: "asset", label: "Asset & Model" },
+  { key: "study", label: "Study & HPO" },
+  { key: "features", label: "Features" },
+  { key: "execution", label: "Labels & Execution" },
+];
 
 export function BacktestPage() {
   const navigate = useNavigate();
@@ -24,71 +32,66 @@ export function BacktestPage() {
   const submit = useSubmitBacktest();
 
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [advancedMode, setAdvancedMode] = useState(false);
+  const [activeTab, setActiveTab] = useState("asset");
+  const [advancedHpo, setAdvancedHpo] = useState(false);
 
   const isSubmitting = submit.isPending;
-
-  const handleDeploy = async () => {
-    try {
-      const payload = toPayload();
-      const result = await submit.mutateAsync(payload);
-      startJob(result.job_id, payload.pair, payload.models);
-      setSummaryOpen(false);
-      navigate("/monitor");
-    } catch (err) {
-      console.error("Deploy failed:", err);
-    }
-  };
-
   const hasModels = selectedModels.length > 0;
   const canDeploy = hasModels && ok;
+  const disabledTabs = new Set<string>();
+  if (!hasModels) {
+    disabledTabs.add("study");
+    disabledTabs.add("features");
+    disabledTabs.add("execution");
+  }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <RuntimeEstimate />
-          <button
-            onClick={() => canDeploy && setSummaryOpen(true)}
-            disabled={!canDeploy || isSubmitting}
-            className="rounded-md px-7 py-2.5 text-xs font-semibold uppercase transition-all duration-300 hover:brightness-110"
-            style={{
-              background: canDeploy
-                ? "linear-gradient(135deg, #00E5FF 0%, #22D3EE 100%)"
-                : "var(--color-glass-border)",
-              color: canDeploy ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-              letterSpacing: "0.08em",
-              cursor: canDeploy ? "pointer" : "not-allowed",
-              opacity: isSubmitting ? 0.6 : 1,
-              boxShadow: canDeploy
-                ? "0 0 24px rgba(0,229,255,0.2)"
-                : "none",
-            }}
-          >
-            {isSubmitting ? "Submitting…" : "Deploy Backtest"}
-          </button>
-        </div>
+        <RuntimeEstimate />
       </div>
 
       <QuickTestBar />
 
-      {(warnings.length > 0 || errors.length > 0) && hasModels && (
-        <ValidationAlert warnings={warnings} errors={errors} />
+      {/* Tab navigation */}
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} disabledTabs={disabledTabs} />
+
+      {/* Tab content */}
+      {activeTab === "asset" && (
+        <div className="flex flex-col gap-5">
+          <AssetSelector />
+          <ModelSelector />
+        </div>
       )}
 
-      <AssetSelector />
-      <ModelSelector />
+      {activeTab === "study" && (
+        <div className="flex flex-col gap-5">
+          <HpoPanel advancedMode={advancedHpo} onToggleAdvanced={() => setAdvancedHpo(!advancedHpo)} />
+        </div>
+      )}
 
-      {advancedMode ? (
-        <>
+      {activeTab === "features" && (
+        <div className="flex flex-col gap-5">
           <FeaturesPanel />
           <LabelsPanel />
-          <HpoPanel advancedMode={advancedMode} onToggleAdvanced={() => setAdvancedMode(!advancedMode)} />
-          <ExecutionPanel />
-        </>
-      ) : (
-        <HpoPanel advancedMode={advancedMode} onToggleAdvanced={() => setAdvancedMode(!advancedMode)} />
+        </div>
       )}
+
+      {activeTab === "execution" && (
+        <div className="flex flex-col gap-5">
+          <ExecutionPanel defaultOpen={true} />
+        </div>
+      )}
+
+      {/* Sticky validation bar */}
+      <ValidationBar
+        warnings={warnings.length}
+        errors={errors.length}
+        canDeploy={canDeploy}
+        isSubmitting={isSubmitting}
+        onDeploy={() => setSummaryOpen(true)}
+      />
 
       <RunSummary
         open={summaryOpen}
