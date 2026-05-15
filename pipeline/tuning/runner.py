@@ -234,6 +234,14 @@ def run_optuna_tuning(
     else:
         _n_startup = _n_startup_arg
 
+    # Clamp startup trials to total trials — avoid 15 startup + 10 total = all random
+    try:
+        _total = int(n_trials)
+        if _n_startup > _total:
+            _n_startup = max(1, _total // 2)
+    except Exception:
+        pass
+
     tpe_ei = int(os.environ.get("TPE_EI_CANDIDATES", "64"))
     sampler = TPESampler(
         n_startup_trials=_n_startup,
@@ -404,7 +412,10 @@ def run_optuna_tuning(
             for _i in range(_target_trials):
                 study.optimize(_func_with_progress, n_trials=1, n_jobs=n_jobs, gc_after_trial=True)
 
-                _after = getattr(study, "best_value", None)
+                try:
+                    _after = study.best_value
+                except (AttributeError, ValueError):
+                    _after = None
                 if _after is None:
                     continue
 
