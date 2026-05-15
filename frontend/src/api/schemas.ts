@@ -104,6 +104,7 @@ export interface TrainingDiagnostics {
   confidence_bands: ConfidenceBand[] | null;
   importance_method: string | null;
   feature_families: Record<string, number> | null;
+  vif_warnings: Array<{ feature: string; vif: number }> | null;
 }
 
 export interface DataStatusSingle {

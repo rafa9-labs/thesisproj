@@ -516,6 +516,7 @@ def _parse_diagnostics(raw):
         confidence_bands=bands,
         importance_method=raw.get("importance_method"),
         feature_families=raw.get("feature_families"),
+        vif_warnings=raw.get("vif_warnings"),
     )
 
 

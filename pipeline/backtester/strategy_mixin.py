@@ -440,6 +440,12 @@ class StrategyMixin:
                 if self._is_debug():
                     print("[Prefilter] No change to feature set.")
 
+            # S16: Store full retained feature list for family distribution in diagnostics
+            try:
+                self._diagnostics_feature_names = list(features)
+            except Exception:
+                self._diagnostics_feature_names = []
+
             # Impute on TRAIN, then apply to both TRAIN and TEST
             imputer = SimpleImputer(strategy="mean")
             train_imputed = pd.DataFrame(
@@ -996,6 +1002,16 @@ class StrategyMixin:
                             extra_callbacks=None,
                         )
                     
+                        # S16.3: Capture feature importance for deep models
+                        try:
+                            from pipeline.diagnostics import compute_feature_importance
+                            _X_fi = X_seq_train[:64] if len(X_seq_train) > 64 else X_seq_train
+                            _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
+                            _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
+                            self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi] if _fi else []
+                        except Exception:
+                            pass
+
                         # Unified deep calibration + coverage threshold (works in CV too)
                         X_cal = X_seq_train
                         y_cal = y_seq_train
@@ -1095,6 +1111,16 @@ class StrategyMixin:
                             extra_callbacks=None,
                         )
 
+                        # S16.3: Capture feature importance for deep models
+                        try:
+                            from pipeline.diagnostics import compute_feature_importance
+                            _X_fi = X_seq_train[:64] if len(X_seq_train) > 64 else X_seq_train
+                            _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
+                            _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
+                            self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi] if _fi else []
+                        except Exception:
+                            pass
+
                         X_cal = X_seq_train
                         y_cal = y_seq_train
 
@@ -1172,6 +1198,16 @@ class StrategyMixin:
                             validation_split_if_needed=0.10,
                             extra_callbacks=None,
                         )
+
+                        # S16.3: Capture feature importance for deep models (LSTM 3D)
+                        try:
+                            from pipeline.diagnostics import compute_feature_importance
+                            _X_fi = X_train_3d[:64] if len(X_train_3d) > 64 else X_train_3d
+                            _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
+                            _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
+                            self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi] if _fi else []
+                        except Exception:
+                            pass
 
                         # Calibration inputs for shared block
                         X_cal  = X_train_3d
@@ -1266,9 +1302,19 @@ class StrategyMixin:
                             extra_callbacks=None,
                         )
 
+                        # S16.3: Capture feature importance for deep models (LSTM 3D)
+                        try:
+                            from pipeline.diagnostics import compute_feature_importance
+                            _X_fi = X_train_3d[:64] if len(X_train_3d) > 64 else X_train_3d
+                            _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
+                            _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
+                            self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi] if _fi else []
+                        except Exception:
+                            pass
+
                         # Calibration inputs for shared block
-                        X_cal  = X_seq_train
-                        y_cal  = y_seq_train
+                        X_cal  = X_train_3d
+                        y_cal  = y_train_eff
                         pred_fn = lambda X: self.model.predict(X, verbose=0, batch_size=batch_size)
 
                     else:
@@ -1313,6 +1359,16 @@ class StrategyMixin:
                             validation_split_if_needed=0.10,
                             extra_callbacks=None,
                         )
+
+                        # S16.3: Capture feature importance for deep models (CNN 3D)
+                        try:
+                            from pipeline.diagnostics import compute_feature_importance
+                            _X_fi = X_train_3d[:64] if len(X_train_3d) > 64 else X_train_3d
+                            _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
+                            _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
+                            self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi] if _fi else []
+                        except Exception:
+                            pass
 
                         # Calibration inputs for shared block
                         X_cal  = X_train_3d

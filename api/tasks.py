@@ -759,11 +759,31 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 try:
                     from pipeline.diagnostics import get_importance_method, classify_feature_families
                     _diag["importance_method"] = get_importance_method(model_type)
-                    _feat_names = [f for f, _ in _fi_tuples] if _fi_tuples else []
+                    _feat_names = getattr(bt, "_diagnostics_feature_names", None)
+                    if not _feat_names:
+                        _feat_names = [f for f, _ in _fi_tuples] if _fi_tuples else []
                     _diag["feature_families"] = classify_feature_families(_feat_names) if _feat_names else {}
                 except Exception:
                     _diag["importance_method"] = "unknown"
                     _diag["feature_families"] = {}
+
+                # S16: VIF collinearity check for logistic models
+                _diag["vif_warnings"] = []
+                if model_type in ("logistic", "logit") and _fi_tuples:
+                    try:
+                        from pipeline.diagnostics import compute_vif
+                        _vif_feats = [f for f, _ in _fi_tuples]
+                        _res = getattr(bt, "results", None)
+                        if _res is not None and hasattr(_res, "columns") and _vif_feats:
+                            _cols = [c for c in _vif_feats if c in _res.columns]
+                            if _cols:
+                                _X_vif = np.asarray(_res[_cols].dropna()[:500], dtype=np.float64)
+                                _vif = compute_vif(_X_vif)
+                                for i, v in zip(_cols, _vif):
+                                    if np.isfinite(v) and v > 10:
+                                        _diag["vif_warnings"].append({"feature": i, "vif": round(float(v), 1)})
+                    except Exception:
+                        pass
 
                 # Confusion matrix from results attrs
                 _cm = None

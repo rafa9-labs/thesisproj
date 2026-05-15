@@ -334,6 +334,34 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
           {data.feature_families && Object.keys(data.feature_families).length > 0 && (
             <FeatureFamilyStrip families={data.feature_families} />
           )}
+          {data.vif_warnings && data.vif_warnings.length > 0 && (
+            <div className="mt-2 rounded p-2" style={{ backgroundColor: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)" }}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-accent-warning)" }}>
+                  VIF Warning
+                </span>
+                <span className="text-[9px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+                  Collinear features (VIF &gt; 10)
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {data.vif_warnings.map((w) => (
+                  <span
+                    key={w.feature}
+                    className="rounded px-1.5 py-0.5 text-[9px]"
+                    style={{
+                      backgroundColor: "rgba(245,158,11,0.15)",
+                      color: "var(--color-accent-warning)",
+                      fontFamily: "var(--font-mono)",
+                    }}
+                    title={`VIF = ${w.vif} — coefficient magnitudes may be unreliable for this feature`}
+                  >
+                    {w.feature} VIF={w.vif}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

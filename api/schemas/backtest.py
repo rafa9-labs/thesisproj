@@ -284,6 +284,7 @@ class TrainingDiagnostics(BaseModel):
     confidence_bands: Optional[List[ConfidenceBand]] = None
     importance_method: Optional[str] = None
     feature_families: Optional[Dict[str, int]] = None
+    vif_warnings: Optional[List[Dict[str, Any]]] = None
 
 
 class BacktestResultMetrics(BaseModel):
