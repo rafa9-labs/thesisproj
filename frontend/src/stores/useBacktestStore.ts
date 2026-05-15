@@ -58,7 +58,6 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       if (!p) return state;
       return {
         hpoIntensity: p.hpoIntensity,
-        nTrials: p.nTrials,
         repeats: p.repeats,
         trainMonths: p.trainMonths,
         testMonths: p.testMonths,

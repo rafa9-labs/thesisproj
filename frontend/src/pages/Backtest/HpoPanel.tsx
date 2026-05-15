@@ -108,8 +108,9 @@ export function HpoPanel({ advancedMode, onToggleAdvanced }: HpoPanelProps) {
               const p = STUDY_PRESETS[key];
               const isSelected = activePreset === key;
               const color = PRESET_COLORS[p.badgeColor] ?? "var(--color-text-muted)";
-              const totalTrials = p.nTrials * p.repeats;
-              const modelKey = selectedModels[0] ?? "lgistic";
+              const tr = p.trialRange;
+              const trialStr = tr.min === tr.max ? `${tr.min}` : `${tr.min}–${tr.max}`;
+              const modelKey = selectedModels[0] ?? "logistic";
               const estMin = (p.estMinutes as Record<string, number>)[modelKey] ?? 30;
 
               return (
@@ -140,11 +141,15 @@ export function HpoPanel({ advancedMode, onToggleAdvanced }: HpoPanelProps) {
                   </div>
 
                   <div className="flex items-center gap-1.5 text-[10px]" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-muted)" }}>
-                    <span>{p.nTrials} tri</span>
+                    <span>{trialStr} tri</span>
                     <span style={{ color: "var(--color-glass-border)" }}>·</span>
-                    <span>{p.repeats} run{ p.repeats > 1 ? "s" : ""}</span>
-                    <span style={{ color: "var(--color-glass-border)" }}>·</span>
-                    <span>{totalTrials} total</span>
+                    <span>{p.repeats} run{p.repeats > 1 ? "s" : ""}</span>
+                    {p.repeats > 1 && (
+                      <>
+                        <span style={{ color: "var(--color-glass-border)" }}>·</span>
+                        <span>{(tr.min * p.repeats).toLocaleString()}–{(tr.max * p.repeats).toLocaleString()} total</span>
+                      </>
+                    )}
                   </div>
 
                   <div
@@ -195,15 +200,19 @@ export function HpoPanel({ advancedMode, onToggleAdvanced }: HpoPanelProps) {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-6">
-                <ParamSlider
-                  label="HPO Trials"
-                  value={s.nTrials}
-                  min={RANGES.nTrials.min}
-                  max={RANGES.nTrials.max}
-                  step={RANGES.nTrials.step}
-                  description="Number of hyperparameter combinations to test per model."
-                  onChange={(v) => setField("nTrials", v)}
-                />
+                <div className="flex flex-col gap-1 rounded-lg p-3"
+                  style={{ backgroundColor: "var(--color-elevated)" }}>
+                  <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
+                    HPO Trials
+                  </span>
+                  <div className="mt-2 text-[11px]" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>
+                    <span style={{ color: "var(--color-brand)" }}>{_trialRangeByIntensity(hpoIntensity)}</span> <span style={{ color: "var(--color-text-muted)" }}>trials per model</span>
+                  </div>
+                  <div className="mt-0.5 text-[9px]" style={{ color: "var(--color-text-muted)" }}>
+                    logistic={_trialForModel(hpoIntensity, "logistic")} · xgboost={_trialForModel(hpoIntensity, "xgboost")} ·
+                    lstm={_trialForModel(hpoIntensity, "lstm")}
+                  </div>
+                </div>
                 <ParamSlider
                   label="Repeats / Seeds"
                   value={s.repeats}
@@ -368,4 +377,38 @@ export function HpoPanel({ advancedMode, onToggleAdvanced }: HpoPanelProps) {
       )}
     </div>
   );
+}
+
+// Per-model trial counts mirroring backend HPO_TRIAL_MAPS (api/schemas/backtest.py)
+const _HPO_TRIALS: Record<string, Record<string, { r: number; b: number }>> = {
+  light: { logistic: { r: 1, b: 1 }, svm: { r: 1, b: 1 }, decision_tree: { r: 1, b: 1 },
+           random_forest: { r: 1, b: 1 }, xgboost: { r: 1, b: 1 },
+           lstm: { r: 1, b: 1 }, cnn: { r: 1, b: 1 }, transformer: { r: 1, b: 1 },
+           ensemble_adaptive_regime: { r: 1, b: 1 }, ensemble_cnn_lstm_xgboost: { r: 1, b: 1 }, dqn: { r: 1, b: 1 } },
+  quick: { logistic: { r: 2, b: 2 }, svm: { r: 2, b: 2 }, decision_tree: { r: 2, b: 2 },
+           random_forest: { r: 2, b: 2 }, xgboost: { r: 2, b: 2 },
+           lstm: { r: 2, b: 2 }, cnn: { r: 2, b: 2 }, transformer: { r: 2, b: 2 },
+           ensemble_adaptive_regime: { r: 2, b: 2 }, ensemble_cnn_lstm_xgboost: { r: 2, b: 2 }, dqn: { r: 1, b: 1 } },
+  standard: { logistic: { r: 5, b: 5 }, svm: { r: 5, b: 5 }, decision_tree: { r: 5, b: 5 },
+             random_forest: { r: 5, b: 10 }, xgboost: { r: 5, b: 15 },
+             lstm: { r: 3, b: 7 }, cnn: { r: 3, b: 7 }, transformer: { r: 3, b: 7 },
+             ensemble_adaptive_regime: { r: 2, b: 3 }, ensemble_cnn_lstm_xgboost: { r: 2, b: 3 }, dqn: { r: 2, b: 3 } },
+  deep: { logistic: { r: 10, b: 10 }, svm: { r: 10, b: 10 }, decision_tree: { r: 5, b: 10 },
+          random_forest: { r: 10, b: 20 }, xgboost: { r: 10, b: 30 },
+          lstm: { r: 5, b: 15 }, cnn: { r: 5, b: 15 }, transformer: { r: 5, b: 15 },
+          ensemble_adaptive_regime: { r: 3, b: 7 }, ensemble_cnn_lstm_xgboost: { r: 3, b: 7 }, dqn: { r: 3, b: 5 } },
+};
+
+function _trialForModel(intensity: string, model: string): number {
+  const m = _HPO_TRIALS[intensity]?.[model];
+  return m ? Math.max(m.r + m.b, 10) : 10;
+}
+
+function _trialRangeByIntensity(intensity: string): string {
+  const models = _HPO_TRIALS[intensity];
+  if (!models) return "10";
+  const vals = Object.values(models).map((m) => Math.max(m.r + m.b, 10));
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  return min === max ? `${min}` : `${min}–${max}`;
 }
