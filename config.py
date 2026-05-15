@@ -336,7 +336,7 @@ PIPELINE_CONSTANTS = {
     "news_event_flags": True,
 
     # LLM sentiment
-    "llm_sentiment_enabled": True,
+    "llm_sentiment_enabled": False,    # off by default — only useful for live trading, not backtesting
     "llm_backend": "ollama",
     "llm_model": "llama3",
     "llm_api_key": "",

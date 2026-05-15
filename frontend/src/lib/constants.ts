@@ -59,7 +59,7 @@ export const DEFAULTS = {
   newsEventFlags: true,
   newsSentimentBackend: "vader" as const,
 
-  llmSentimentEnabled: true,
+  llmSentimentEnabled: false,
   llmBackend: "ollama" as const,
   llmModel: "llama3",
   llmWeight: 0.7,
