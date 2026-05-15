@@ -195,7 +195,7 @@ def _append_event(job_id: str, event: Dict):
     evt_name = event.get("event", "unknown")
     model = event.get("model", "-")
     import logging as _logging
-    _logging.info(f"[EVENT-WRITE] job={job_id[:8]} event={evt_name} model={model}")
+    _logging.debug(f"[EVENT-WRITE] job={job_id[:8]} event={evt_name} model={model}")
     with _job_events_lock:
         if job_id not in _job_events:
             _job_events[job_id] = []
@@ -228,7 +228,7 @@ def get_job_events(job_id: str, after: int = 0) -> List[Dict]:
         store = DataStore(settings.db_full_path)
         events = store.get_job_events(job_id, after=after)
         import logging as _logging
-        _logging.info(f"[EVENT-READ] job={job_id[:8]} after={after} count={len(events)}")
+        _logging.debug(f"[EVENT-READ] job={job_id[:8]} after={after} count={len(events)}")
         return events
     except Exception as _e:
         import logging as _logging

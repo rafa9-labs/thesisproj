@@ -995,7 +995,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
                 f"[ObjectiveGuard] dir={direction} base={float(base_score):.6f} "
                 f"pen_total={float(penalty_total):.6f} pen_nll={float(penalty_nll):.6f} "
                 f"final={float(final_score):.6f} k={_k_s} cov={_cov_s} trades={_tr_s}",
-                level="COMPACT",
+                level="DEBUG"
             )
 
             # Assert the direction invariant.
@@ -1045,14 +1045,14 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
         # Real unexpected error: log and, unless disabled, prune so the study can continue.
         cause = f"{type(e).__name__}: {str(e)}"
 
-        log_print("\n" + "#" * 80, level="COMPACT")
-        log_print(f"[WARN] Error in optuna_objective(): {cause}", level="COMPACT")
+        log_print("\n" + "#" * 80, level="DEBUG")
+        log_print(f"[WARN] Error in optuna_objective(): {cause}", level="DEBUG")
         if 'params' in locals():
-            log_print(f"Trial params were: {params}", level="COMPACT")
+            log_print(f"Trial params were: {params}", level="DEBUG")
 
         # Keep the stack trace always visible; it's rare but important.
         traceback.print_exc()
-        log_print("#" * 80 + "\n", level="COMPACT")
+        log_print("#" * 80 + "\n", level="DEBUG")
 
         if DISABLE_OPTUNA_PRUNING:
             return _bad_obj(direction)
