@@ -6,8 +6,13 @@ import math
 import os
 import time
 import traceback
+import warnings
 from concurrent.futures.process import BrokenProcessPool
 from copy import deepcopy
+
+# Suppress Optuna's repeated UserWarning about tuple categorical choices
+# (MACD variant tuples like (8,17,9) work correctly at runtime)
+warnings.filterwarnings("ignore", category=UserWarning, message=".*categorical distribution should be a tuple.*")
 
 import numpy as np
 import optuna
