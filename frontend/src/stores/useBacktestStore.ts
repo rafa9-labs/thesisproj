@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { DEFAULTS } from "@/lib/constants";
+import { DEFAULTS, STUDY_PRESETS } from "@/lib/constants";
 import type { BacktestRequest, HpoIntensity } from "@/api/schemas";
 
 type Widen<T> = T extends boolean ? boolean : T extends string ? string : T extends number ? number : T;
@@ -54,24 +54,19 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
 
   applyStudyPreset: (presetKey) =>
     set((state) => {
-      try {
-        const { STUDY_PRESETS } = require("@/lib/constants");
-        const p = STUDY_PRESETS[presetKey as keyof typeof STUDY_PRESETS];
-        if (!p) return state;
-        return {
-          hpoIntensity: p.hpoIntensity,
-          nTrials: p.nTrials,
-          repeats: p.repeats,
-          trainMonths: p.trainMonths,
-          testMonths: p.testMonths,
-          confidenceThreshold: p.confidenceThreshold,
-          targetActiveRate: p.targetActiveRate,
-          targetCoverage: p.targetCoverage,
-          activePreset: presetKey,
-        };
-      } catch {
-        return { activePreset: null };
-      }
+      const p = STUDY_PRESETS[presetKey as keyof typeof STUDY_PRESETS];
+      if (!p) return state;
+      return {
+        hpoIntensity: p.hpoIntensity,
+        nTrials: p.nTrials,
+        repeats: p.repeats,
+        trainMonths: p.trainMonths,
+        testMonths: p.testMonths,
+        confidenceThreshold: p.confidenceThreshold,
+        targetActiveRate: p.targetActiveRate,
+        targetCoverage: p.targetCoverage,
+        activePreset: presetKey,
+      };
     }),
 
   toRequestPayload: () => {
