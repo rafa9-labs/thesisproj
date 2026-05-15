@@ -20,65 +20,67 @@ export function ConfigSummaryBar() {
     ? models.map((m) => (modelDescriptions as Record<string, { name: string }>)[m]?.name ?? m).join(", ")
     : "No models selected";
 
-  const sectionStyle: React.CSSProperties = {
-    borderRight: "1px solid var(--color-border)",
-    paddingRight: 14,
+  const labelStyle: React.CSSProperties = {
+    color: "var(--color-text-muted)",
+    fontSize: 9,
+    fontWeight: 600,
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+    marginBottom: 2,
   };
+  const valueStyle: React.CSSProperties = {
+    color: "var(--color-text-primary)",
+    fontFamily: "var(--font-mono)",
+    fontSize: 11,
+    lineHeight: "1.3",
+  };
+
+  const presetColorMap: Record<string, string> = {
+    green: "var(--color-accent-success)",
+    yellow: "var(--color-accent-warning)",
+    orange: "var(--color-accent)",
+    red: "var(--color-accent-danger)",
+  };
+  const presetColor = presetInfo ? presetColorMap[presetInfo.badgeColor] : "var(--color-text-primary)";
 
   return (
     <div
-      className="flex items-center gap-4 rounded-xl border px-5 py-3 text-[11px] overflow-x-auto"
+      className="flex rounded-xl border px-3 py-3"
       style={{
         borderColor: "var(--color-glass-border)",
         backgroundColor: "var(--color-glass)",
       }}
     >
       {/* Asset */}
-      <div className="flex items-center gap-2 shrink-0" style={sectionStyle}>
-        <span className="font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
-          Asset
-        </span>
-        <span className="font-mono" style={{ color: "var(--color-text-primary)" }}>
-          {pair}·{tf}
-        </span>
+      <div className="flex flex-col items-center justify-center" style={{ flex: 1 }}>
+        <span style={labelStyle}>Asset</span>
+        <span style={valueStyle}>{pair}·{tf}</span>
       </div>
 
       {/* Models */}
-      <div className="flex items-center gap-2 shrink-0" style={sectionStyle}>
-        <span className="font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
-          Models
-        </span>
-        <span className="font-mono" style={{ color: "var(--color-brand)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={modelLabels}>
+      <div className="flex flex-col items-center justify-center" style={{ flex: 1, borderLeft: "1px solid var(--color-border)" }}>
+        <span style={labelStyle}>Models</span>
+        <span style={{ ...valueStyle, color: "var(--color-brand)", maxWidth: "90%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={modelLabels}>
           {modelLabels}
         </span>
       </div>
 
       {/* HPO */}
-      <div className="flex items-center gap-2 shrink-0" style={sectionStyle}>
-        <span className="font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
-          HPO
-        </span>
-        <span className="font-mono" style={{ color: "var(--color-text-primary)" }}>
-          {nTrials} tri × {repeats} run{repeats > 1 ? "s" : ""} = {totalTrials} total
-        </span>
+      <div className="flex flex-col items-center justify-center" style={{ flex: 1, borderLeft: "1px solid var(--color-border)" }}>
+        <span style={labelStyle}>HPO</span>
+        <span style={valueStyle}>{nTrials} tri × {repeats} run{repeats > 1 ? "s" : ""} = {totalTrials}</span>
       </div>
 
       {/* Walk-Forward */}
-      <div className="flex items-center gap-2 shrink-0" style={sectionStyle}>
-        <span className="font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
-          Walk-Fwd
-        </span>
-        <span className="font-mono" style={{ color: "var(--color-text-primary)" }}>
-          Train {trainMonths}mo · Test {testMonths}mo
-        </span>
+      <div className="flex flex-col items-center justify-center" style={{ flex: 1, borderLeft: "1px solid var(--color-border)" }}>
+        <span style={labelStyle}>Walk-Fwd</span>
+        <span style={valueStyle}>Train {trainMonths}mo · Test {testMonths}mo</span>
       </div>
 
-      {/* Preset / Intensity */}
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
-          Study
-        </span>
-        <span className="font-mono" style={{ color: presetInfo?.badgeColor ? `var(--color-${presetInfo.badgeColor === "green" ? "accent-success" : presetInfo.badgeColor === "yellow" ? "accent-warning" : presetInfo.badgeColor === "orange" ? "accent" : "accent-danger"})` : "var(--color-text-primary)" }}>
+      {/* Study */}
+      <div className="flex flex-col items-center justify-center" style={{ flex: 1, borderLeft: "1px solid var(--color-border)" }}>
+        <span style={labelStyle}>Study</span>
+        <span style={{ ...valueStyle, color: presetColor }}>
           {presetInfo?.label ?? hpoIntensity}
         </span>
       </div>
