@@ -19,6 +19,85 @@ interface Props {
   modelName: string;
 }
 
+const FAMILY_COLORS: Record<string, string> = {
+  trend: "#22c55e",
+  momentum: "#f97316",
+  volatility: "#6366f1",
+  composite: "#a855f7",
+  regime: "#ec4899",
+  returns: "#14b8a6",
+  news: "#eab308",
+  time: "#787b86",
+  rolling: "#3b82f6",
+  other: "#6b7280",
+};
+
+const METHOD_COLORS: Record<string, { bg: string; fg: string }> = {
+  shap: { bg: "rgba(34,197,94,0.08)", fg: "#22c55e" },
+  gain: { bg: "rgba(34,197,94,0.08)", fg: "#22c55e" },
+  gradient: { bg: "rgba(6,182,212,0.08)", fg: "#06b6d4" },
+  coefficients: { bg: "rgba(59,130,246,0.08)", fg: "#3b82f6" },
+  permutation: { bg: "rgba(120,123,134,0.08)", fg: "#787b86" },
+  mdi: { bg: "rgba(245,158,11,0.08)", fg: "#f59e0b" },
+  submodel: { bg: "rgba(168,85,247,0.08)", fg: "#a855f7" },
+  none: { bg: "rgba(239,68,68,0.05)", fg: "#ef4444" },
+  unknown: { bg: "var(--color-elevated)", fg: "var(--color-text-muted)" },
+};
+
+const METHOD_LABELS: Record<string, string> = {
+  shap: "TreeSHAP Shapley values — gold standard for tree models",
+  gain: "XGBoost gain-based importance — biased toward high-cardinality splits",
+  gradient: "Mean |gradient| via TF GradientTape — model-agnostic for deep networks",
+  coefficients: "Standardized coefficient magnitude — check VIF for collinearity",
+  permutation: "Permutation importance (3 repeats, 500 samples) — model-agnostic fallback",
+  mdi: "Mean decrease impurity (Gini) — biased toward continuous features with many splits. Prefer SHAP.",
+  submodel: "Delegated to sub-model in ensemble",
+  none: "No importance available for this model type",
+  unknown: "",
+};
+
+function FeatureFamilyStrip({ families }: { families: Record<string, number> }) {
+  const entries = Object.entries(families).sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((s, [, c]) => s + c, 0);
+
+  return (
+    <div className="mt-2">
+      <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
+        Feature Families
+      </span>
+      <div className="flex items-center gap-0.5 mt-1">
+        {entries.map(([family, count]) => (
+          <div
+            key={family}
+            className="flex-1 rounded-sm"
+            style={{
+              height: 8,
+              minWidth: 4,
+              backgroundColor: FAMILY_COLORS[family] ?? FAMILY_COLORS.other,
+              opacity: 0.8,
+              cursor: "default",
+            }}
+            title={`${family}: ${count}`}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5">
+        {entries.map(([family, count]) => (
+          <div key={family} className="flex items-center gap-1">
+            <div
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ backgroundColor: FAMILY_COLORS[family] ?? FAMILY_COLORS.other }}
+            />
+            <span className="text-[9px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+              {family} {count}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ImportanceChart({ features }: { features: { feature: string; importance: number }[] }) {
   const sorted = useMemo(() => [...features].sort((a, b) => b.importance - a.importance).slice(0, 15), [features]);
   if (sorted.length === 0) return null;
@@ -235,10 +314,26 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
             <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
               Feature Importance (Top 15)
             </span>
+            {data.importance_method && (
+              <span
+                className="ml-1 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+                style={{
+                  backgroundColor: METHOD_COLORS[data.importance_method]?.bg ?? "var(--color-elevated)",
+                  color: METHOD_COLORS[data.importance_method]?.fg ?? "var(--color-text-muted)",
+                  border: `1px solid ${METHOD_COLORS[data.importance_method]?.fg ?? "var(--color-border)"}`,
+                }}
+                title={METHOD_LABELS[data.importance_method] ?? ""}
+              >
+                {data.importance_method}
+              </span>
+            )}
           </div>
           <div className="rounded-lg p-3" style={{ backgroundColor: "var(--color-elevated)" }}>
             <ImportanceChart features={data.feature_importance!} />
           </div>
+          {data.feature_families && Object.keys(data.feature_families).length > 0 && (
+            <FeatureFamilyStrip families={data.feature_families} />
+          )}
         </div>
       )}
 

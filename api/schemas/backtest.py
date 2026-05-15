@@ -282,6 +282,8 @@ class TrainingDiagnostics(BaseModel):
     prediction_histogram: Optional[List[PredictionHistogramBin]] = None
     confusion_matrix: Optional[ConfusionMatrixData] = None
     confidence_bands: Optional[List[ConfidenceBand]] = None
+    importance_method: Optional[str] = None
+    feature_families: Optional[Dict[str, int]] = None
 
 
 class BacktestResultMetrics(BaseModel):

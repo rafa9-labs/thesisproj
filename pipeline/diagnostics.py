@@ -63,6 +63,8 @@ class TrainingDiagnosticsData:
     prediction_histogram: List[PredictionHistogramBin] = field(default_factory=list)
     confusion_matrix: Optional[ConfusionMatrixData] = None
     confidence_bands: List[ConfidenceBand] = field(default_factory=list)
+    importance_method: str = ""
+    feature_families: Dict[str, int] = field(default_factory=dict)
 
 
 def compute_prediction_histogram(
@@ -393,3 +395,36 @@ def _deep_gradient_importance(model, X_val: Optional[np.ndarray], n_feats: int) 
     except Exception:
         pass
     return None
+
+
+def get_importance_method(model_type: str) -> str:
+    """Return the feature importance method used for this model type."""
+    mt = str(model_type or "").lower().strip()
+    if mt.startswith("ensemble"):
+        return "submodel"
+    if mt in {"xgboost", "xgb"}:
+        return "shap" if _HAS_SHAP else "gain"
+    if mt in {"random_forest", "rf"}:
+        return "shap" if _HAS_SHAP else "mdi"
+    if mt in {"logistic", "logit"}:
+        return "coefficients"
+    if mt in {"svm"}:
+        return "permutation" if _HAS_SKLEARN_PERM else "none"
+    if mt in {"cnn", "lstm", "transformer"}:
+        return "gradient"
+    return "none"
+
+
+def classify_feature_families(feature_names: List[str]) -> Dict[str, int]:
+    """Count features per family using FEATURE_FAMILIES taxonomy."""
+    try:
+        from pipeline.metrics_tuples import FEATURE_FAMILIES
+    except ImportError:
+        return {}
+    from pipeline.feature_utils import _classify_feature
+
+    counts: Dict[str, int] = {}
+    for col in feature_names:
+        family = _classify_feature(col, FEATURE_FAMILIES)
+        counts[family] = counts.get(family, 0) + 1
+    return counts

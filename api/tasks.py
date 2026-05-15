@@ -755,6 +755,16 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 else:
                     _diag["feature_importance"] = []
 
+                # Importance method + feature family distribution
+                try:
+                    from pipeline.diagnostics import get_importance_method, classify_feature_families
+                    _diag["importance_method"] = get_importance_method(model_type)
+                    _feat_names = [f for f, _ in _fi_tuples] if _fi_tuples else []
+                    _diag["feature_families"] = classify_feature_families(_feat_names) if _feat_names else {}
+                except Exception:
+                    _diag["importance_method"] = "unknown"
+                    _diag["feature_families"] = {}
+
                 # Confusion matrix from results attrs
                 _cm = None
                 try:

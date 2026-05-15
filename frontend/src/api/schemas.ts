@@ -102,6 +102,8 @@ export interface TrainingDiagnostics {
   prediction_histogram: PredictionHistogramBin[] | null;
   confusion_matrix: ConfusionMatrixData | null;
   confidence_bands: ConfidenceBand[] | null;
+  importance_method: string | null;
+  feature_families: Record<string, number> | null;
 }
 
 export interface DataStatusSingle {

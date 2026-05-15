@@ -514,6 +514,8 @@ def _parse_diagnostics(raw):
         prediction_histogram=hist,
         confusion_matrix=cm,
         confidence_bands=bands,
+        importance_method=raw.get("importance_method"),
+        feature_families=raw.get("feature_families"),
     )
 
 
