@@ -475,3 +475,50 @@ export const QUICK_START_CATEGORIES = [
     ],
   },
 ];
+
+export const MODEL_CONSTRAINTS: Record<string, { rules: string[]; tips: string[] }> = {
+  logistic: {
+    rules: ["VIF > 10 may cause unstable coefficients — check Training Diagnostics after backtest."],
+    tips: ["C in range 0.01–100 (log scale). Higher C = less regularization, may overfit.", "Use 'balanced' class_weight for imbalanced labels (default)."],
+  },
+  svm: {
+    rules: ["Gamma is now categorical [0.0001, 0.001, 0.01, 0.1, 0.5] — no more gamma=10 that memorizes noise.", "Permutation importance is model-agnostic. Trust it less than SHAP for tree models."],
+    tips: ["RBF kernel is fixed — best for non-linear FX patterns.", "Higher gamma = more localized decision boundaries = risk of overfitting."],
+  },
+  random_forest: {
+    rules: ["max_depth has no None option — trees are always depth-bounded to prevent perfect IS fit.", "Feature importance uses SHAP (gold standard) when available, else MDI (biased — prefer SHAP)."],
+    tips: ["n_estimators 300–1000 (step 100). More trees = smoother predictions.", "min_samples_leaf 1–10. Higher = less overfitting."],
+  },
+  xgboost: {
+    rules: ["Feature importance uses TreeSHAP — exact Shapley values.", "n_trials floor is 10 even in light HPO mode."],
+    tips: ["Learning rate 0.01–0.3 (log scale). Lower LR needs more trees.", "max_depth 3–8. Shallower trees generalize better on financial data.", "subsample 0.6–1.0 helps prevent overfitting to noise."],
+  },
+  decision_tree: {
+    rules: ["Single tree — highly interpretable but prone to overfitting. Use for feature analysis, not production."],
+    tips: ["Compare its feature importance to XGBoost's — agreement suggests robust features."],
+  },
+  lstm: {
+    rules: ["units / lags ratio: optimal 1.5–2.5. At ratio >5, model likely memorizes noise.", "lr in range 1e-4 to 5e-3 (log scale)."],
+    tips: ["Start with 32–64 units for 14 lags. Increase lags before increasing units.", "Use early stopping — patience=6 avoids overtraining on small validation sets."],
+  },
+  cnn: {
+    rules: ["lags ≥ kernel_size × layers (receptive field). 3 layers × kernel=3 = 7 bars seen. With lags=14, only last 7 matter — earlier lags are wasted compute.", "lr in range 1e-4 to 5e-3 (log scale)."],
+    tips: ["filters 32/64/96. More filters = more pattern detectors.", "Kernel size 3 or 5. Larger kernels see more bars per scan."],
+  },
+  transformer: {
+    rules: ["d_model must be divisible by num_heads. d_model/num_heads ≥ 8 (e.g., 64/4=16 ✓, 32/8=4 ✗).", "Attention weights are NOT feature importance. Trust gradient-based rankings over raw attention."],
+    tips: ["d_model 32/64/128. Larger = more capacity but slower training.", "dropout 0.1–0.4. Higher dropout for smaller datasets."],
+  },
+  dqn: {
+    rules: ["Very slow per trial (~2.5 min). Use Minimal preset for quick tests.", "Requires GPU for reasonable runtime on deep architectures."],
+    tips: ["Start with fewer episodes for validation, then scale up.", "DQN is the only RL model — use it to compare learned policies vs supervised approaches."],
+  },
+  ensemble_adaptive_regime: {
+    rules: ["Delegates to sub-models (RF for regime detection, XGBoost for prediction). Feature importance comes from sub-model.", "GPU recommended — sub-models train sequentially but may use GPU internally."],
+    tips: ["Best for mixed-regime markets (sideways + trending + volatile).", "Start with Minimal preset (30 trials) to test regime detection quality."],
+  },
+  ensemble_cnn_lstm_xgboost: {
+    rules: ["Combines CNN (pattern detection), LSTM (sequential memory), and XGBoost (tabular strength).", "Very slow per trial (~3 min). GPU strongly recommended."],
+    tips: ["Feature importance extracted from XGBoost sub-model via TreeSHAP.", "Use Production preset only when you've validated component models individually."],
+  },
+};

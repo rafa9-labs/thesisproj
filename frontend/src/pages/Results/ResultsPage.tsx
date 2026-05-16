@@ -13,6 +13,7 @@ import { HpoDiagnostics } from "./HpoDiagnostics";
 import { OverfittingPanel } from "./OverfittingPanel";
 import { BacktestSummary } from "./BacktestSummary";
 import { WalkForwardPanel } from "./WalkForwardPanel";
+import { ParameterExplorer } from "./ParameterExplorer";
 import { TrainingDiagnosticsPanel } from "./TrainingDiagnostics";
 import { ConfigViewer } from "./ConfigViewer";
 import { DrawdownChart } from "@/components/charts/DrawdownChart";
@@ -231,6 +232,10 @@ export function ResultsPage() {
 
       {activeMetric && (
         <TrainingDiagnosticsPanel data={activeMetric.diagnostics ?? null} modelName={activeMetric.model} />
+      )}
+
+      {activeMetric && (
+        <ParameterExplorer metrics={activeMetric} />
       )}
 
       {metrics.length > 1 && (
