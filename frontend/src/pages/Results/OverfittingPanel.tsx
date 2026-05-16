@@ -97,6 +97,33 @@ export function OverfittingPanel({ overfitting, walkforwardPeriods }: Props) {
               </span>
             </div>
           )}
+          {overfitting.interaction_effects && overfitting.interaction_effects.length > 0 && (
+            <div className="mt-3">
+              <span className="text-[10px] uppercase tracking-[0.06em] block mb-1.5" style={{ color: "var(--color-text-muted)" }}>
+                Parameter Interactions
+              </span>
+              {overfitting.interaction_effects.slice(0, 5).map((ie, i) => (
+                <div key={i} className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-mono" style={{ color: "var(--color-brand)" }}>
+                    {ie.param}
+                  </span>
+                  <div className="flex-1 h-2 rounded-full" style={{ backgroundColor: "var(--color-elevated)" }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.min(ie.interaction_pct, 100)}%`,
+                        backgroundColor: ie.interaction_pct > 20 ? "var(--color-accent-warning)" : "var(--color-accent)",
+                        opacity: 0.7,
+                      }}
+                    />
+                  </div>
+                  <span className="text-[9px] font-mono" style={{ color: "var(--color-text-muted)", minWidth: 30, textAlign: "right" }}>
+                    {ie.interaction_pct}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Right: Gap bars */}

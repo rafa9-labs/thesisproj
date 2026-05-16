@@ -575,6 +575,8 @@ def get_backtest_results(job_id: str):
                 signal_gap_pct=overfit_data.get("signal_gap_pct", 0.0),
                 is_mean_sharpe=overfit_data.get("is_mean_sharpe"),
                 oos_mean_sharpe=overfit_data.get("oos_mean_sharpe"),
+                dsr_min_sharpe=overfit_data.get("dsr_min_sharpe"),
+                interaction_effects=overfit_data.get("interaction_effects"),
             )
 
         wf_periods_raw = m.get("walkforward_periods", [])
@@ -634,6 +636,35 @@ def get_backtest_results(job_id: str):
         config=cfg,
         metrics=metrics,
     )
+
+
+@router.post("/{job_id}/analyze")
+def analyze_backtest_results(job_id: str, model: str = Query("", description="Model to analyze")):
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if job["status"] != "completed":
+        raise HTTPException(400, f"Job status is '{job['status']}', not 'completed'")
+
+    result = job.get("result", {})
+    cfg = job.get("config", {})
+    raw_metrics = result.get("metrics", [])
+
+    target = raw_metrics[0] if raw_metrics else {}
+    if model:
+        for m in raw_metrics:
+            if isinstance(m, dict) and m.get("model") == model:
+                target = m
+                break
+
+    try:
+        from pipeline.llm.advisor import analyze_backtest
+        analysis = analyze_backtest(target, cfg)
+        return {"job_id": job_id, "model": target.get("model", ""), "analysis": analysis}
+    except Exception as e:
+        return {"job_id": job_id, "model": target.get("model", ""), "analysis": {"error": str(e)}}
 
 
 @router.get("/{job_id}/trades/chart-data")

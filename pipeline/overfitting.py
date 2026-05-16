@@ -44,6 +44,7 @@ class OverfittingReport:
     is_mean_sharpe: float | None = None
     oos_mean_sharpe: float | None = None
     dsr_min_sharpe: float | None = None
+    interaction_effects: List[Dict[str, Any]] | None = None
 
 
 def _optimal_block_length(values: np.ndarray) -> int:
@@ -438,3 +439,38 @@ def compute_period_breakdown(monthly_records: List[dict]) -> List[dict]:
         }
         out.append(entry)
     return out
+
+
+def compute_fanova_interactions(study) -> List[Dict[str, Any]]:
+    """Compute fANOVA interaction effects from an Optuna study.
+
+    Uses Optuna's built-in FanovaImportanceEvaluator to decompose
+    objective variance into main effects and pairwise interaction effects.
+
+    Returns a list of interaction entries sorted by importance descending:
+        [{param1: "lr", param2: "dropout", interaction_pct: 23.0}, ...]
+    """
+    result: List[Dict[str, Any]] = []
+    try:
+        from optuna.importance import FanovaImportanceEvaluator
+        evaluator = FanovaImportanceEvaluator()
+        importance = evaluator.evaluate(study)
+
+        for param_name, fanova_data in importance.items():
+            main_effect = float(getattr(fanova_data, "individual_importance", 0) or 0)
+            total_effect = float(getattr(fanova_data, "total_importance", 0) or 0)
+            interaction_pct = round((total_effect - main_effect) * 100, 1)
+
+            if interaction_pct > 0.5:
+                result.append({
+                    "param": param_name,
+                    "main_pct": round(main_effect * 100, 1),
+                    "interaction_pct": interaction_pct,
+                    "total_pct": round(total_effect * 100, 1),
+                })
+
+        result.sort(key=lambda x: x["interaction_pct"], reverse=True)
+    except Exception:
+        pass
+
+    return result[:10]

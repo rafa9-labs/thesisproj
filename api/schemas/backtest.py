@@ -232,6 +232,7 @@ class OverfittingReport(BaseModel):
     is_mean_sharpe: Optional[float] = None
     oos_mean_sharpe: Optional[float] = None
     dsr_min_sharpe: Optional[float] = None
+    interaction_effects: Optional[List[Dict[str, Any]]] = None
 
 
 class WalkForwardPeriod(BaseModel):

@@ -14,6 +14,7 @@ import { OverfittingPanel } from "./OverfittingPanel";
 import { BacktestSummary } from "./BacktestSummary";
 import { WalkForwardPanel } from "./WalkForwardPanel";
 import { ParameterExplorer } from "./ParameterExplorer";
+import { LLMAdvisor } from "./LLMAdvisor";
 import { TrainingDiagnosticsPanel } from "./TrainingDiagnostics";
 import { ConfigViewer } from "./ConfigViewer";
 import { DrawdownChart } from "@/components/charts/DrawdownChart";
@@ -237,6 +238,8 @@ export function ResultsPage() {
       {activeMetric && (
         <ParameterExplorer metrics={activeMetric} />
       )}
+
+      <LLMAdvisor jobId={jobId ?? null} modelName={activeMetric?.model ?? null} />
 
       {metrics.length > 1 && (
         <div className="flex flex-wrap gap-2">

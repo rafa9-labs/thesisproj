@@ -22,6 +22,7 @@ import type {
   DefinePairRequest,
   DefinePairResponse,
   WsEvent,
+  LlmAnalysisResponse,
 } from "./schemas";
 
 export function useHealth() {
@@ -584,5 +585,20 @@ export function useBacktestProgress(jobId: string | null) {
     refetchInterval: 2_000,
     staleTime: 0,
     refetchOnMount: true,
+  });
+}
+
+export function useLlmAnalysis(jobId: string | null, model: string | null) {
+  return useQuery({
+    queryKey: ["llm-analysis", jobId, model],
+    queryFn: async () => {
+      const { data } = await apiClient.post<LlmAnalysisResponse>(
+        `/backtest/${jobId}/analyze?model=${encodeURIComponent(model ?? "")}`
+      );
+      return data;
+    },
+    enabled: !!jobId && !!model,
+    staleTime: 60_000,
+    retry: 1,
   });
 }

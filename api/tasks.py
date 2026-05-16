@@ -751,6 +751,13 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                     hpo_best = float(bt._optuna_study.best_value)
                 overfit = compute_overfitting_report(wfo_records, model_type, hpo_best_value=hpo_best,
                                                      n_hpo_trials=n_trials_hdr)
+                # S16.7: fANOVA interaction effects from Optuna study
+                try:
+                    if hasattr(bt, "_optuna_study") and bt._optuna_study is not None:
+                        from pipeline.overfitting import compute_fanova_interactions
+                        overfit.interaction_effects = compute_fanova_interactions(bt._optuna_study)
+                except Exception:
+                    pass
                 metrics_row["overfitting"] = {
                     "overfit_score": overfit.overfit_score,
                     "risk_level": overfit.risk_level,
@@ -772,6 +779,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                     "is_mean_sharpe": overfit.is_mean_sharpe,
                     "oos_mean_sharpe": overfit.oos_mean_sharpe,
                     "dsr_min_sharpe": overfit.dsr_min_sharpe,
+                    "interaction_effects": overfit.interaction_effects,
                 }
                 metrics_row["walkforward_periods"] = compute_period_breakdown(wfo_records)
             except Exception as _overfit_err:

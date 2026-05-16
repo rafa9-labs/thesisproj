@@ -52,6 +52,7 @@ export interface OverfittingReportData {
   is_mean_sharpe: number | null;
   oos_mean_sharpe: number | null;
   dsr_min_sharpe: number | null;
+  interaction_effects: Array<{ param: string; main_pct: number; interaction_pct: number; total_pct: number }> | null;
 }
 
 export interface WalkForwardPeriod {
@@ -165,6 +166,23 @@ export interface Metrics {
   walkforward_periods: WalkForwardPeriod[] | null;
   diagnostics: TrainingDiagnostics | null;
   summary_text: string | null;
+}
+
+export interface LlmAnalysis {
+  insight?: string;
+  recommended_preset?: string;
+  reason?: string;
+  parameter_changes?: string[];
+  predicted_improvement?: string;
+  warning?: string | null;
+  error?: string;
+  raw_text?: string;
+}
+
+export interface LlmAnalysisResponse {
+  job_id: string;
+  model: string;
+  analysis: LlmAnalysis;
 }
 
 export interface BacktestRequest {
