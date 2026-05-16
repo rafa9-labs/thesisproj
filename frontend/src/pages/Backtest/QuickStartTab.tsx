@@ -3,7 +3,6 @@ import { useBacktestStore } from "@/stores/useBacktestStore";
 import { QUICK_START_CATEGORIES } from "@/lib/constants";
 import { modelDescriptions } from "@/lib/tokens";
 import { Trash2, Bug, Cpu, Network, Layers, Bot } from "lucide-react";
-import { ParameterGuide } from "./ParameterGuide";
 
 interface Props {
   onDeploy: () => void;
@@ -157,9 +156,6 @@ export function QuickStartTab({ onDeploy, canDeploy, isSubmitting }: Props) {
           </div>
         </div>
       )}
-
-      {/* Parameter Guide — collapsible per-model constraints */}
-      <ParameterGuide />
 
       {/* Deploy */}
       {selectedModels.length > 0 && (

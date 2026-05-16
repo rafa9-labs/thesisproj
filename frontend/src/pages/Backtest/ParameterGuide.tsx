@@ -8,14 +8,7 @@ export function ParameterGuide() {
   const s = useBacktestStore();
   const selectedModels = s.selectedModels;
 
-  const guides = useMemo(() => {
-    return selectedModels
-      .map((modelKey) => {
-        const name = (modelDescriptions as Record<string, { name: string }>)[modelKey]?.name ?? modelKey;
-        return { modelKey, name, ...getDynamicWarnings(modelKey, s) };
-      })
-      .filter((g) => g.warnings.length > 0 || g.tips.length > 0);
-  }, [selectedModels, s.lags]);
+  const guides = useMemo(() => buildGuides(selectedModels, s), [selectedModels, s.lags]);
 
   if (selectedModels.length === 0) return null;
 
@@ -38,47 +31,81 @@ export function ParameterGuide() {
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
       </button>
 
-      {open && (
-        <div className="flex flex-col gap-2 px-3 pb-3 pt-1">
-          {guides.map((g) => (
-            <div
-              key={g.modelKey}
-              className="rounded p-2"
-              style={{ backgroundColor: "var(--color-elevated)" }}
-            >
-              <span className="text-[10px] font-semibold uppercase tracking-[0.05em]" style={{ color: "var(--color-brand)" }}>
-                {g.name}
-              </span>
-              <div className="mt-1.5 flex flex-col gap-1.5">
-                {g.warnings.map((w, i) => (
-                  <div key={`w-${i}`} className="flex items-start gap-1.5">
-                    <AlertTriangle size={10} style={{ color: "var(--color-accent-warning)", marginTop: 1, flexShrink: 0 }} />
-                    <span className="text-[9px] leading-relaxed" style={{ color: "var(--color-accent-warning)" }}>
-                      {w}
-                    </span>
-                  </div>
-                ))}
-                {g.tips.map((t, i) => (
-                  <div key={`t-${i}`} className="flex items-start gap-1.5">
-                    <Lightbulb size={10} style={{ color: "var(--color-text-muted)", marginTop: 1, flexShrink: 0 }} />
-                    <span className="text-[9px] leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
-                      {t}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          <span className="text-[8px]" style={{ color: "var(--color-text-muted)" }}>
-            Based on your current settings and known structural constraints.
-          </span>
-        </div>
-      )}
+      {open && <GuideContent guides={guides} />}
     </div>
   );
 }
 
-function getDynamicWarnings(modelKey: string, s: Record<string, unknown>) {
+/** Always-visible inline version for the Hyperparameters tab. */
+export function ParameterGuideInline() {
+  const s = useBacktestStore();
+  const selectedModels = s.selectedModels;
+  const guides = useMemo(() => buildGuides(selectedModels, s), [selectedModels, s.lags]);
+
+  if (guides.length === 0) return null;
+
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 mb-2">
+        <Lightbulb size={12} style={{ color: "var(--color-accent-warning)" }} />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--color-text-secondary)" }}>
+          Parameter Tips
+        </span>
+      </div>
+      <GuideContent guides={guides} />
+    </div>
+  );
+}
+
+function buildGuides(selectedModels: string[], s: Record<string, unknown>) {
+  return selectedModels
+    .map((modelKey) => {
+      const name = (modelDescriptions as Record<string, { name: string }>)[modelKey]?.name ?? modelKey;
+      return { modelKey, name, ...getDynamicWarnings(modelKey, s) };
+    })
+    .filter((g) => g.warnings.length > 0 || g.tips.length > 0);
+}
+
+function GuideContent({ guides }: { guides: { modelKey: string; name: string; warnings: string[]; tips: string[] }[] }) {
+  return (
+    <div className="flex flex-col gap-2 px-3 pb-3 pt-1">
+      {guides.map((g) => (
+        <div
+          key={g.modelKey}
+          className="rounded p-2"
+          style={{ backgroundColor: "var(--color-elevated)" }}
+        >
+          <span className="text-[10px] font-semibold uppercase tracking-[0.05em]" style={{ color: "var(--color-brand)" }}>
+            {g.name}
+          </span>
+          <div className="mt-1.5 flex flex-col gap-1.5">
+            {g.warnings.map((w, i) => (
+              <div key={`w-${i}`} className="flex items-start gap-1.5">
+                <AlertTriangle size={10} style={{ color: "var(--color-accent-warning)", marginTop: 1, flexShrink: 0 }} />
+                <span className="text-[9px] leading-relaxed" style={{ color: "var(--color-accent-warning)" }}>
+                  {w}
+                </span>
+              </div>
+            ))}
+            {g.tips.map((t, i) => (
+              <div key={`t-${i}`} className="flex items-start gap-1.5">
+                <Lightbulb size={10} style={{ color: "var(--color-text-muted)", marginTop: 1, flexShrink: 0 }} />
+                <span className="text-[9px] leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
+                  {t}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      <span className="text-[8px]" style={{ color: "var(--color-text-muted)" }}>
+        Based on your current settings and known structural constraints.
+      </span>
+    </div>
+  );
+}
+
+export function getDynamicWarnings(modelKey: string, s: Record<string, unknown>) {
   const warnings: string[] = [];
   const tips: string[] = [];
   const lags = (s.lags as number) ?? 14;

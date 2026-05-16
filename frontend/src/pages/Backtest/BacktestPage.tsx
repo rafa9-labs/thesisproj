@@ -14,6 +14,7 @@ import { HpoPanel } from "./HpoPanel";
 import { FeaturesPanel } from "./FeaturesPanel";
 import { LabelsPanel } from "./LabelsPanel";
 import { ExecutionPanel } from "./ExecutionPanel";
+import { HyperparamsTab } from "./HyperparamsTab";
 import { QuickStartTab } from "./QuickStartTab";
 import { RunSummary } from "./RunSummary";
 
@@ -22,6 +23,7 @@ const TABS = [
   { key: "asset", label: "Asset & Model" },
   { key: "study", label: "Study & HPO" },
   { key: "features", label: "Features" },
+  { key: "hyperparams", label: "Hyperparameters" },
   { key: "execution", label: "Execution" },
 ];
 
@@ -103,6 +105,13 @@ export function BacktestPage() {
         <div className="flex flex-col gap-5 pt-1">
           <FeaturesPanel />
           <LabelsPanel />
+        </div>
+      )}
+
+      {/* Hyperparameters */}
+      {activeTab === "hyperparams" && (
+        <div className="flex flex-col gap-5 pt-1">
+          <HyperparamsTab />
         </div>
       )}
 
