@@ -820,49 +820,198 @@
 
 ---
 
-## Sprint 16: Trading Logic, Overfitting & Backtest Transparency
+## Sprint 16: Trading Logic, Overfitting & Backtest Transparency ✅ COMPLETE
 
 > **Goal**: Improve core backtest quality — better training logic, overfitting detection, and results that users can actually understand and trust.
 > **Est**: 12-16h
 
-- [ ] **S16.1** Overfitting detection & reporting
+- [x] **S16.1** Overfitting detection & reporting ✅ DONE
   - Train/test score divergence detection (e.g. Sharpe drops > 40% from train to OOS)
   - Bootstrap confidence intervals for key metrics (Sharpe, return, max DD)
   - Overfitting risk score per model in results (color-coded: green/yellow/red)
   - Cross-validation fold stability report (std of Sharpe across folds)
   - **Files**: `pipeline/backtester/evaluation_mixin.py`, `pipeline/metrics_eval.py`, new `pipeline/overfitting.py`
-  - **Est**: 4h
 
-- [ ] **S16.2** Walk-forward transparency panel
+- [x] **S16.2** Walk-forward transparency panel ✅ DONE
   - Per-period breakdown: train Sharpe vs test Sharpe, train return vs test return
   - Visual timeline showing which months are train vs test (interactive)
   - Signal count per period (was the model trading or sitting out?)
   - Regime overlay: which market regime each period fell into
   - **Files**: `frontend/src/pages/Results/WalkForwardPanel.tsx`, new `api/routers/backtest.py` endpoint
-  - **Est**: 3h
 
-- [ ] **S16.3** Training diagnostics — what the model actually learned
+- [x] **S16.3** Training diagnostics — what the model actually learned ✅ DONE
   - Feature importance heatmap per model (gain-based for tree models, permutation for others)
   - Prediction distribution: histogram of predicted probabilities vs actual outcomes
   - Confusion matrix per walk-forward period
   - "Was this model confident?" — filter trades by prediction confidence bands
   - **Files**: `pipeline/backtester/real_trading_mixin.py`, `frontend/src/pages/Results/TrainingDiagnostics.tsx`
-  - **Est**: 4h
 
-- [ ] **S16.4** Plain-English backtest summary generator
+- [x] **S16.4** Plain-English backtest summary generator ✅ DONE
   - Auto-generate a 3-sentence natural-language summary: "This backtest ran XGBoost on EURUSD H1 from Jan 2023 to Dec 2025. It achieved a Sharpe of 1.2 with 58% win rate and -8.3% max drawdown. The model was most confident during low-volatility trending periods."
   - Key findings bullets (best period, worst period, regime performance)
   - Copy-to-clipboard for sharing
   - **Files**: new `pipeline/summary_generator.py`, `frontend/src/pages/Results/BacktestSummary.tsx`
-  - **Est**: 2h
 
-- [ ] **S16.5** Better default training parameters
+- [x] **S16.5** Better default training parameters ✅ DONE
   - Audit search space bounds — tighten ranges that allow degenerate configs
   - Add early stopping patience defaults (stop if 20 trials without improvement)
   - Minimum trade count filter (reject configs that trade < 10 times/month)
   - Default to `calibrate=True` for production runs
   - **Files**: `config.py` (SEARCH_SPACE), `pipeline/tuning/runner.py`
-  - **Est**: 2h
+
+- [x] **S16.6** Backtest Setup UI redesign ✅ DONE
+  - 6-tab layout: Quick Start, Asset & Model, Study & HPO, Features, Hyperparameters, Execution
+  - ConfigSummaryBar with always-visible 5-column preview
+  - Quick Start: categorized presets (Debug, Classical, Deep, Ensemble, RL)
+  - ValidationBar: missing-config indicator, save preset, deploy button
+  - **Files**: `frontend/src/pages/Backtest/BacktestPage.tsx`, `QuickStartTab.tsx`, `HyperparamsTab.tsx`, `ConfigSummaryBar.tsx`, `ValidationBar.tsx`
+
+- [x] **S16.7** Parameter Intelligence (Guide + Explorer + fANOVA + LLM Advisor) ✅ DONE
+  - Parameter Guide: dynamic warnings per model from store values
+  - Parameter Explorer: ParallelCoordinates + ContourPlot on ResultsPage
+  - fANOVA interaction effects in OverfittingPanel
+  - LLM Advisor: "Analyze Results" button → AI suggests next study → "Apply Study" one-click
+  - Hyperparameters tab: ModelHyperparamsPanel + ParameterGuideInline
+  - **Files**: `ParameterGuide.tsx`, `ParallelCoordinates.tsx`, `ContourPlot.tsx`, `LLMAdvisor.tsx`, `pipeline/overfitting.py`, `pipeline/llm/advisor.py`
+
+**Sprint 16 complete** when: All 7 sub-tasks complete. Overfitting detection works, summary is human-readable, training diagnostics are transparent, UI is tab-based with parameter intelligence. ✅ ALL DONE
+
+---
+
+## Sprint 16.8: Model Persistence, Deployment & Experiment Tracking
+
+> **Goal**: Save trained models as deployable artifacts, track experiment lineage, and enable model sharing across KodaQuant installations.
+> **Dependencies**: Zero. Everything uses existing `joblib`, SQLite, sklearn.
+> **Est**: 15-19h
+> **Branch**: `feature/sprint16.8-model-persistence`
+
+### Phase A: Model Snapshot System (4-5h)
+
+- [ ] **A.1** Wire `BaseModel.save()` / `load()` → already defined, never called
+  - `save_artifacts(path)` bundles estimator + scaler + imputer + calibration + metadata.json
+  - **Files**: `models/base_model.py`
+
+- [ ] **A.2** `pipeline/model_persistence.py` — `save_snapshot(bt, model_type, path)`
+  - Produces: `model.joblib`, `scaler.joblib`, `imputer.joblib`, `calibration.joblib`, `metadata.json`, `manifest.sha256`
+  - **Files**: New `pipeline/model_persistence.py`
+
+- [ ] **A.3** Metadata schema — complete audit trail for every saved model
+  - `{model_type, best_params, feature_names, features_config_hash, coverage_conf_thr, calibrate_method, input_shape, train_start, train_end, created_at_utc, seed, pip_freeze, job_id_parent}`
+  - **Files**: `pipeline/model_persistence.py`
+
+- [ ] **A.4** Environment snapshot — `pip freeze` captured at experiment start
+  - Stored in `config["pip_freeze"]` for every job
+  - **Files**: `api/tasks.py`
+
+- [ ] **A.5** Auto-save after walk-forward — last month's model (fully trained on all data)
+  - Output: `deployed_models/{model_type}_{timestamp}/`
+  - **Files**: `api/tasks.py`
+
+- [ ] **A.6** Experiment lineage — `parent_job_id` column in jobs table
+  - Populated on "Re-run" and "Apply Study" (LLM advisor)
+  - **Files**: `pipeline/data_sqlite.py`, `api/services/__init__.py`, `useBacktestStore.ts`
+
+### Phase B: Deployment Registry & Experiment Tracking (5-6h)
+
+- [ ] **B.1** SQLite `deployed_models` table + registry scanner
+  - `(id, model_type, snapshot_path, best_sharpe, created_at, status, tags, parent_job_id)`
+  - `pipeline/model_registry_disk.py` — scan `deployed_models/`, validate, register
+  - **Files**: `pipeline/data_sqlite.py`, New `pipeline/model_registry_disk.py`
+
+- [ ] **B.2** API — list, activate, delete deployed models
+  - `GET /models/deployed` — filterable by model_type, status, tags
+  - `POST /models/{id}/activate` — only one active per model type
+  - `DELETE /models/{id}` — remove from disk + DB
+  - **Files**: `api/routers/models.py`
+
+- [ ] **B.3** Experiment diff endpoint — compare two experiments' configs
+  - `GET /experiments/{id}/diff?compare=job_id` → `{added_keys, removed_keys, changed_values}`
+  - **Files**: `api/routers/backtest.py`
+
+- [ ] **B.4** Experiment tags — `PATCH /experiments/{id}/tags`
+  - **Files**: `api/routers/backtest.py`
+
+- [ ] **B.5** Frontend: "Deployed Models" page + nav entry
+  - Grid of model cards (type badge, Sharpe, date, tags, activate/delete)
+  - **Files**: New `DeployedModelsPage.tsx`, `AppShell.tsx`
+
+- [ ] **B.6** Frontend: Experiment diff modal + inline tag editor
+  - Side-by-side config diff, tag chips with add/remove
+  - **Files**: `ResultsHistoryPage.tsx`, New `TagEditor.tsx`
+
+### Phase C: Multi-Model Signal Engine (4-5h)
+
+- [ ] **C.1** `models/meta_ensemble.py` — wraps N models via sklearn `VotingClassifier`
+  - Methods: majority vote, soft voting, confidence-weighted (by OOS Sharpe)
+  - Can load sub-models from deployed snapshots (no re-training)
+  - **Files**: New `models/meta_ensemble.py`
+
+- [ ] **C.2** Register `meta_ensemble` in MODEL_REGISTRY + add search space
+  - **Files**: `models/registry.py`, `config.py`
+
+- [ ] **C.3** Wire into pipeline evaluation + ensemble_mixin.py dispatcher
+  - Appears as one model type, produces one equity curve
+  - **Files**: `pipeline/backtester/ensemble_mixin.py`
+
+- [ ] **C.4** Frontend: "Signal Committee" in ModelSelector
+  - Select source models from deployed models, pick combination method
+  - **Files**: `ModelSelector.tsx`
+
+### Phase D: Live Trading Bridge (2-3h)
+
+- [ ] **D.1** File-based active model pointer — `deployed_models/.active`
+  - Atomic writes via `tempfile.mkstemp()` + `os.replace()`
+  - **Files**: `pipeline/model_registry_disk.py`
+
+- [ ] **D.2** `GET /models/active/predict?pair=EURUSD&tf=H1` — live prediction endpoint
+  - Loads active model(s), computes features, returns prediction + confidence
+  - Logs to `live_predictions` table for auditing
+  - **Files**: `api/routers/models.py`, `pipeline/data_sqlite.py`
+
+- [ ] **D.3** `GET /models/active/compare` — live vs backtest performance comparison
+  - **Files**: `api/routers/models.py`
+
+### Test Specifications (20 tests across 4 phases)
+
+**Phase A (5 tests):**
+- [ ] `test_snapshot_save_load_roundtrip` — train logistic, save, load, predict → identical output
+- [ ] `test_snapshot_metadata_completeness` — all required fields in metadata.json
+- [ ] `test_snapshot_missing_scaler_graceful` — tree-based model (no scaler) saves/loads without error
+- [ ] `test_pip_freeze_in_config` — job config contains pip_freeze after submission
+- [ ] `test_parent_job_id_lineage` — chain of 3 experiments, each references its parent
+
+**Phase B (6 tests):**
+- [ ] `test_deployed_models_crud` — register, list, activate, delete through API
+- [ ] `test_only_one_active_per_model_type` — activating logistic_2 deactivates logistic_1
+- [ ] `test_config_diff_correctness` — A has lags=10, B has lags=20 → diff = `{lags: {from: 10, to: 20}}`
+- [ ] `test_tags_persist` — add tags, reload, verify present
+- [ ] `test_parent_lineage_visible` — child experiment shows parent info
+- [ ] `test_corrupt_snapshot_skipped` — broken directory doesn't crash registry scan
+
+**Phase C (6 tests):**
+- [ ] `test_majority_vote_3_models` — 2 buy, 1 sell → buy wins
+- [ ] `test_soft_voting_probability_average` — output is mean of probabilities
+- [ ] `test_confidence_weighted_by_sharpe` — high Sharpe model has more influence
+- [ ] `test_committee_from_deployed_snapshots` — load 3 deployed models, combine, no re-training
+- [ ] `test_committee_handles_model_disagreement` — all disagree → neutral (0)
+- [ ] `test_empty_committee_errors` — 0 models → clear error message
+
+**Phase D (5 tests):**
+- [ ] `test_active_pointer_atomic` — read/write `.active` file
+- [ ] `test_predict_endpoint_returns_valid_shape` — 3-class probability for single bar
+- [ ] `test_live_predictions_logged` — after prediction, verify row in live_predictions table
+- [ ] `test_model_hot_swap_atomic` — change active pointer mid-session, next predict uses new model
+- [ ] `test_compare_backtest_vs_live` — live metrics endpoint returns valid comparison data
+
+### Key Design Decisions
+
+- **Zero new dependencies** — joblib (already imported), sklearn (already imported), SQLite (already used), nothing else
+- **Classical models**: `joblib.dump(Pipeline(...))` — 5-50 KB per snapshot
+- **XGBoost**: `booster.save_model()` inside joblib wrapper — 200 KB - 2 MB
+- **Deep models**: `model.save_weights("weights.h5")` + architecture re-instantiation — 1-5 MB
+- **File-based active pointer** instead of Redis — 200-byte JSON, atomic writes, no server dependency
+- **Export format**: `.koda` (zip of snapshot directory) + config-only mode (metadata.json, no weights)
+- **Model sharing**: import validates `manifest.sha256` (tamper detection), warns on feature config mismatch
 
 ---
 
@@ -1152,7 +1301,8 @@ cd frontend && npm run dev
 | **S13** | Beta & Launch | 6-8h | TODO |
 | **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
 | **S15** | KodaQuant Branding | 4-6h | ✅ COMPLETE (2026-05-10, 37 tests) |
-| **S16** | Trading Logic, Overfitting & Backtest Transparency | 12-16h | TODO |
+| **S16** | Trading Logic, Overfitting & Backtest Transparency | 12-16h | ✅ DONE |
+| **S16.8** | Model Persistence, Deployment & Experiment Tracking | 15-19h | TODO |
 | **S17** | UI Polish, Tabs Flow & Search | 8-10h | TODO |
 | **S18** | Live News & Market Data Integration | 10-14h | TODO |
 | **S19** | Ensemble Models & Model Extensibility | 8-10h | TODO |

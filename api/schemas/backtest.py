@@ -75,6 +75,8 @@ class BacktestRequest(BaseModel):
     repeats: int = 1
     seed: int = 42
     hpo_intensity: HPOIntensity = "quick"
+    n_trials: Optional[int] = None
+    parent_job_id: Optional[str] = None
     config_overrides: Dict[str, Any] = Field(default_factory=dict)
 
 

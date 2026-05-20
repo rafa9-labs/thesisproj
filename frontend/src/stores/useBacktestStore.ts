@@ -16,6 +16,8 @@ function _saveCustomPresets(data: Record<string, { name: string; subtitle: strin
 type Widen<T> = T extends boolean ? boolean : T extends string ? string : T extends number ? number : T;
 type BacktestState = { -readonly [K in keyof typeof DEFAULTS]: Widen<(typeof DEFAULTS)[K]> } & {
   hpoIntensity: HpoIntensity;
+  hpoManualOverride: boolean;
+  parentJobId: string | null;
   activePreset: string | null;
   customPresets: Record<string, { name: string; subtitle: string; date: string }>;
 };
@@ -36,6 +38,8 @@ const DEFAULT_HPO_INTENSITY: HpoIntensity = "quick";
 export const useBacktestStore = create<BacktestState & BacktestActions>()((set, get) => ({
   ...structuredClone(DEFAULTS) as BacktestState,
   hpoIntensity: DEFAULT_HPO_INTENSITY,
+  hpoManualOverride: false,
+  parentJobId: null,
   activePreset: null,
   customPresets: _loadCustomPresets(),
 
@@ -52,7 +56,7 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       return { selectedModels: next };
     }),
 
-  resetToDefaults: () => set({ ...structuredClone(DEFAULTS), hpoIntensity: DEFAULT_HPO_INTENSITY } as Partial<BacktestState>),
+  resetToDefaults: () => set({ ...structuredClone(DEFAULTS), hpoIntensity: DEFAULT_HPO_INTENSITY, hpoManualOverride: false, parentJobId: null } as Partial<BacktestState>),
 
   applyPreset: (preset) =>
     set((state) => {
@@ -74,6 +78,7 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       if (!p) return state;
       return {
         hpoIntensity: p.hpoIntensity,
+        hpoManualOverride: false,
         repeats: p.repeats,
         trainMonths: p.trainMonths,
         testMonths: p.testMonths,
@@ -92,6 +97,7 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
             return {
               selectedModels: opt.models,
               hpoIntensity: opt.hpoIntensity,
+              hpoManualOverride: false,
               nTrials: opt.nTrials,
               repeats: opt.repeats,
               trainMonths: opt.trainMonths,
@@ -215,6 +221,8 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       repeats: s.repeats ?? 1,
       seed: s.seed,
       hpo_intensity: s.hpoIntensity,
+      ...(s.hpoManualOverride && { n_trials: s.nTrials }),
+      ...(s.parentJobId && { parent_job_id: s.parentJobId }),
       config_overrides: configOverrides,
     };
   },

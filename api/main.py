@@ -18,7 +18,15 @@ IS_DESKTOP = os.environ.get("FX_APP_MODE", "") == "desktop"
 async def lifespan(app: FastAPI):
     from api.dependencies import get_data_store
     get_data_store()
+    from api.config import settings
+    from api.shutdown import startup_cleanup
+    start = startup_cleanup(settings.db_full_path)
+    if start:
+        print(f"[Shutdown] Startup: marked {start} stale job(s) as failed")
     yield
+    from api.shutdown import shutdown_cleanup
+    shutdown_cleanup(settings.db_full_path)
+    print("[Shutdown] Graceful shutdown complete")
 
 
 app = FastAPI(

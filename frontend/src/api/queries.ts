@@ -597,7 +597,7 @@ export function useLlmAnalysis(jobId: string | null, model: string | null) {
       );
       return data;
     },
-    enabled: !!jobId && !!model,
+    enabled: false,
     staleTime: 60_000,
     retry: 1,
   });

@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     config      TEXT,
     result      TEXT,
     error       TEXT,
+    parent_job_id TEXT,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 );
@@ -126,6 +127,12 @@ class DataStore:
             missing = expected - existing
             if missing:
                 cur.executescript(SCHEMA_SQL)
+            else:
+                try:
+                    cur.execute("ALTER TABLE jobs ADD COLUMN parent_job_id TEXT")
+                except sqlite3.OperationalError:
+                    pass
+            conn.commit()
 
     def _normalize_ts(self, ts: str) -> str:
         """Normalize a timestamp string for SQLite comparison.

@@ -112,7 +112,7 @@ export const RANGES = {
   fracdiffD: { min: 0, max: 1, step: 0.05 },
   lags: { min: 1, max: 60, step: 1 },
   lagDepth: { min: 1, max: 3, step: 1 },
-  nTrials: { min: 2, max: 100, step: 1 },
+  nTrials: { min: 0, max: 150, step: 1 },
   repeats: { min: 1, max: 10, step: 1 },
   seed: { min: 0, max: 9999, step: 1 },
   trainMonths: { min: 6, max: 60, step: 1 },

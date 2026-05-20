@@ -123,14 +123,17 @@ def _get_trial_counts(hpo_intensity: str | None, model: str) -> Dict[str, int]:
 CV_BLOCKS_DEFAULT = 5
 
 
-def _compute_total_work(models: list[str], months: int, hpo_intensity: str | None = None, cv_blocks: int = CV_BLOCKS_DEFAULT, period_unit: str = "months") -> int:
+def _compute_total_work(models: list[str], months: int, hpo_intensity: str | None = None, cv_blocks: int = CV_BLOCKS_DEFAULT, period_unit: str = "months", n_trials_override: int | None = None) -> int:
     from config import convert_month_count_to_periods
     n_periods = convert_month_count_to_periods(months, period_unit)
     total = 0
     for m in models:
-        tc = _get_trial_counts(hpo_intensity, m)
-        n_trials = tc.get("random", 3) + tc.get("bayes", 3)
-        n_trials = max(n_trials, 10)
+        if n_trials_override is not None and n_trials_override >= 0:
+            n_trials = n_trials_override
+        else:
+            tc = _get_trial_counts(hpo_intensity, m)
+            n_trials = tc.get("random", 3) + tc.get("bayes", 3)
+            n_trials = max(n_trials, 10)
         hpo_work = n_trials * cv_blocks
         sim_work = n_periods
         total += hpo_work + sim_work
@@ -142,33 +145,59 @@ _celery_available = False
 # In-memory mapping of job_id → celery_task_id for force-stop revocation
 _JOB_TASK_IDS: Dict[str, str] = {}
 
+# Desktop mode: threading.Event per job for thread-safe cancellation
+import threading as _threading
+_cancellation_events: Dict[str, _threading.Event] = {}
 
-def revoke_task(job_id: str) -> bool:
-    """Revoke the Celery task associated with a job_id (force stop)."""
-    task_id = _JOB_TASK_IDS.pop(job_id, None)
-    if task_id and _celery_available and celery_app is not None:
-        try:
-            celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
-            return True
-        except Exception:
-            pass
+
+def request_cancellation(job_id: str) -> bool:
+    """Signal cancellation for a running job (desktop mode)."""
+    evt = _cancellation_events.get(job_id)
+    if evt is not None:
+        evt.set()
+        return True
     return False
 
 
-def _check_force_stopped(job_id: str):
-    """Check if the job has been force-stopped. Raises SystemExit if stopped."""
+def _is_cancelled(job_id: str) -> bool:
+    """Check if job has been cancelled via DB flag OR threading event."""
+    evt = _cancellation_events.get(job_id)
+    if evt is not None and evt.is_set():
+        return True
     try:
         store = DataStore(settings.db_full_path)
         from api.services import JobManager as _JM
         jm = _JM(store)
         job = jm.get_job(job_id)
         if job and job.get("status") == "failed" and "stopped" in str(job.get("error", "")).lower():
-            import sys as _sys
-            _sys.exit(0)
-    except SystemExit:
-        raise
+            return True
     except Exception:
         pass
+    return False
+
+
+def revoke_task(job_id: str) -> bool:
+    """Revoke the Celery task / signal cancellation for a job_id (force stop)."""
+    task_id = _JOB_TASK_IDS.pop(job_id, None)
+    revoked = False
+    if task_id and _celery_available and celery_app is not None:
+        try:
+            celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
+            revoked = True
+        except Exception:
+            pass
+    evt = _cancellation_events.get(job_id)
+    if evt is not None:
+        evt.set()
+        revoked = True
+    return revoked
+
+
+def _check_force_stopped(job_id: str):
+    """Check if the job has been force-stopped. Raises SystemExit if stopped."""
+    if _is_cancelled(job_id):
+        import sys as _sys
+        _sys.exit(0)
 
 if not IS_DESKTOP:
     try:
@@ -190,10 +219,26 @@ if not IS_DESKTOP:
             task_acks_late=True,
             worker_prefetch_multiplier=1,
             broker_connection_retry_on_startup=True,
+            task_time_limit=3600,
         )
         _celery_available = True
     except Exception:
         _celery_available = False
+
+    if _celery_available:
+        try:
+            from celery.signals import worker_shutdown
+
+            @worker_shutdown.connect
+            def _on_worker_shutdown(**kwargs):
+                print("[Celery] Worker shutting down, cleaning up...")
+                try:
+                    from api.shutdown import shutdown_cleanup
+                    shutdown_cleanup(settings.db_full_path)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
 
 _redis_client = None
@@ -347,6 +392,19 @@ def _sanitize_metrics(metrics_list: list) -> list:
     return safe
 
 
+def _capture_environment() -> str:
+    """Capture the current Python environment as a pip freeze string."""
+    try:
+        import subprocess
+        return subprocess.check_output(
+            [sys.executable, "-m", "pip", "freeze"],
+            text=True, stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+    except Exception:
+        return ""
+
+
 def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     """Core backtest logic -- executed by Celery worker or in-process (desktop mode)."""
     project_root = settings.project_root
@@ -376,8 +434,11 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     repeats = config.get("repeats", 1)
     seed = config.get("seed", 42)
     hpo_intensity = config.get("hpo_intensity", "quick")
+    n_trials_override = config.get("n_trials")
     trading_costs = config.get("trading_costs", True)
     period_unit = config.get("period_unit", "months")
+    parent_job_id = config.get("parent_job_id")
+    pip_freeze = _capture_environment()
 
     if end is None:
         from datetime import date
@@ -399,7 +460,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     except Exception:
         pass
 
-    total_work = _compute_total_work(models, months, hpo_intensity, period_unit=period_unit)
+    total_work = _compute_total_work(models, months, hpo_intensity, period_unit=period_unit, n_trials_override=n_trials_override)
     jm.update_status(job_id, "running")
     _pub("job_started", job_id, {"pair": pair, "models": models, "total_work": total_work})
     emit_event("job_started", job_id=job_id, pair=pair, models=",".join(models), total_work=total_work)
@@ -491,8 +552,14 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             feat_cfg = deepcopy(CLASS_DEFAULTS["features"])
             feat_cfg.update(_convert_model_overrides(config.get("config_overrides", {})))
 
-            tc = _get_trial_counts(hpo_intensity, model_type)
-            n_trials_hdr = max(tc.get("random", 3) + tc.get("bayes", 3), 10)
+            # Resolve trial count: override (0–150) or intensity-based lookup
+            if n_trials_override is not None and n_trials_override >= 0:
+                n_trials_hdr = n_trials_override
+                n_startup_hdr = max(n_trials_override // 2, 1) if n_trials_override > 0 else 0
+            else:
+                tc = _get_trial_counts(hpo_intensity, model_type)
+                n_trials_hdr = max(tc.get("random", 3) + tc.get("bayes", 3), 10)
+                n_startup_hdr = tc.get("random", 3)
 
             # Run repeats: each gets a different seed for HPO reproducibility
             rep_metrics = []
@@ -513,6 +580,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                     db_path=settings.db_full_path,
                 )
                 bt._progress_callback = _progress_cb
+                bt._force_stop_checker = lambda: _is_cancelled(job_id)
 
                 # --- Inject news & sentiment data if enabled (only on rep 1, reused across reps) ---
                 if rep == 1:
@@ -566,7 +634,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 base_cfg["rep"] = rep
                 base_cfg["trading_costs"] = trading_costs
                 base_cfg["n_trials"] = n_trials_hdr
-                base_cfg["n_startup_trials"] = tc.get("random", 3)
+                base_cfg["n_startup_trials"] = n_startup_hdr
                 base_cfg["use_cached_global_hpo"] = (n_trials_hdr <= 0)
                 base_cfg["seed"] = rep_seed
                 base_cfg["period_unit"] = period_unit
@@ -905,7 +973,41 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 metrics_row["diagnostics"] = None
 
             all_metrics.append(metrics_row)
+
+            try:
+                from api.shutdown import wal_checkpoint_periodic
+                wal_checkpoint_periodic(settings.db_full_path)
+            except Exception:
+                pass
+
             _pub("model_training", job_id, {"model": model_type, "status": "complete", "metrics": metrics_row})
+
+            # Save trained model snapshot for deployment
+            try:
+                from pipeline.model_persistence import save_snapshot
+                _model_obj = getattr(bt, "model", None)
+                if _model_obj is not None:
+                    _cov_thr = getattr(bt, "_coverage_conf_thr", None) or getattr(bt, "_deep_coverage_thr", None)
+                    _feat_names = getattr(bt, "_diagnostics_feature_names", None) or []
+                    _fc = getattr(bt, "features_config", None) or {}
+                    _cal_method = _fc.get("calibrate_method", "sigmoid") if _fc else "sigmoid"
+                    save_snapshot(
+                        model=_model_obj,
+                        model_type=model_type,
+                        best_params=_fc,
+                        coverage_conf_thr=float(_cov_thr) if _cov_thr is not None else None,
+                        feature_names=list(_feat_names) if _feat_names else None,
+                        features_config=_fc,
+                        calibrate_method=str(_cal_method),
+                        train_start=str(start)[:10] if start else None,
+                        train_end=str(end)[:10] if end else None,
+                        seed=int(rep_seed) if rep_seed is not None else None,
+                        pip_freeze=pip_freeze,
+                        parent_job_id=parent_job_id,
+                        metrics=metrics_row,
+                    )
+            except Exception:
+                pass
 
             bt.free(release_data=True)
             del bt

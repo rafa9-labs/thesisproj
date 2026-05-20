@@ -11,7 +11,7 @@
  * - Environment variable setup (FX_APP_MODE, FX_DATA_DIR, API_DB_PATH)
  */
 
-import { spawn, exec, ChildProcess } from "child_process";
+import { spawn, exec, execSync, ChildProcess } from "child_process";
 import path from "path";
 import { findAvailablePort, getBackendExePath, getUserDataDir, ensureDataDirs } from "./utils";
 
@@ -189,7 +189,11 @@ export class PythonManager {
       const timeout = setTimeout(() => {
         console.log("[Python] Force killing...");
         if (isWin && pid) {
-          exec(`taskkill /F /T /PID ${pid}`, () => {});
+          try {
+            execSync(`taskkill /F /T /PID ${pid}`);
+          } catch {
+            console.log(`[Python] Force kill: process ${pid} already terminated`);
+          }
         } else {
           this.proc?.kill("SIGKILL");
         }

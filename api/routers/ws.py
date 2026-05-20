@@ -68,4 +68,18 @@ async def backtest_ws(websocket: WebSocket, job_id: str):
     finally:
         _ws_connections[job_id].discard(websocket)
         if not _ws_connections[job_id]:
+            # Last client disconnected — abort running backtest to avoid orphaned runs
+            try:
+                from api.config import settings as s
+                from api.services import JobManager as JM
+                from pipeline.data_sqlite import DataStore as DS
+                jm = JM(DS(s.db_full_path))
+                job = jm.get_job(job_id)
+                if job and job.get("status") in ("pending", "running"):
+                    jm.force_stop_job(job_id)
+                    from api.tasks import revoke_task
+                    revoke_task(job_id)
+                    print(f"[WS-SRV] job={job_id} Client disconnected, backtest aborted", flush=True)
+            except Exception as e:
+                print(f"[WS-SRV] job={job_id} abort failed: {e}", flush=True)
             del _ws_connections[job_id]

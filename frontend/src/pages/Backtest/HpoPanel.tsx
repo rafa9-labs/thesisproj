@@ -37,6 +37,8 @@ export function HpoPanel({ advancedMode, onToggleAdvanced }: HpoPanelProps) {
   const activePreset = useBacktestStore((s) => s.activePreset);
   const selectedModels = useBacktestStore((s) => s.selectedModels);
   const hpoIntensity = useBacktestStore((s) => s.hpoIntensity);
+  const nTrials = useBacktestStore((s) => s.nTrials);
+  const hpoManualOverride = useBacktestStore((s) => s.hpoManualOverride);
 
   const handlePresetClick = useCallback((key: string) => {
     applyStudyPreset(key);
@@ -190,12 +192,17 @@ export function HpoPanel({ advancedMode, onToggleAdvanced }: HpoPanelProps) {
 
             <div className="flex flex-col gap-6">
               <div className="max-w-sm">
-                <ParamSelect
-                  label="HPO Intensity"
-                  value={hpoIntensity}
-                  options={[...SELECT_OPTIONS.hpoIntensity]}
-                  description="Preset search depth. Light = fast validation, Deep = production-grade tuning."
-                  onChange={(v) => setField("hpoIntensity", v as "light" | "quick" | "standard" | "deep")}
+                <ParamSlider
+                  label="HPO Trials"
+                  value={hpoManualOverride ? nTrials : _effectiveMaxTrials(hpoIntensity)}
+                  min={RANGES.nTrials.min}
+                  max={RANGES.nTrials.max}
+                  step={RANGES.nTrials.step}
+                  description={`Set 0 for no HPO (default params only). Max ${RANGES.nTrials.max} for deep search. ${!hpoManualOverride ? "Click or drag to enable manual override." : "Override active."}`}
+                  onChange={(v) => {
+                    setField("nTrials", v);
+                    setField("hpoManualOverride", true);
+                  }}
                 />
               </div>
 
@@ -206,12 +213,23 @@ export function HpoPanel({ advancedMode, onToggleAdvanced }: HpoPanelProps) {
                     HPO Trials
                   </span>
                   <div className="mt-2 text-[11px]" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>
-                    <span style={{ color: "var(--color-brand)" }}>{_trialRangeByIntensity(hpoIntensity)}</span> <span style={{ color: "var(--color-text-muted)" }}>trials per model</span>
+                    <span style={{ color: "var(--color-brand)" }}>
+                      {hpoManualOverride ? nTrials : _trialRangeByIntensity(hpoIntensity)}
+                    </span>
+                    <span style={{ color: "var(--color-text-muted)" }}> trials per model</span>
+                    {hpoManualOverride && nTrials === 0 && (
+                      <span style={{ color: "var(--color-accent-warning)", marginLeft: 8 }}>no HPO — defaults only</span>
+                    )}
                   </div>
                   <div className="mt-0.5 text-[9px]" style={{ color: "var(--color-text-muted)" }}>
                     logistic={_trialForModel(hpoIntensity, "logistic")} · xgboost={_trialForModel(hpoIntensity, "xgboost")} ·
                     lstm={_trialForModel(hpoIntensity, "lstm")}
                   </div>
+                  {hpoManualOverride && (
+                    <div className="mt-1 text-[9px]" style={{ color: "var(--color-accent)" }}>
+                      Manual override — {nTrials} trial{nTrials !== 1 ? "s" : ""} for all models
+                    </div>
+                  )}
                 </div>
                 <ParamSlider
                   label="Repeats / Seeds"
@@ -411,4 +429,11 @@ function _trialRangeByIntensity(intensity: string): string {
   const min = Math.min(...vals);
   const max = Math.max(...vals);
   return min === max ? `${min}` : `${min}–${max}`;
+}
+
+function _effectiveMaxTrials(intensity: string): number {
+  const models = _HPO_TRIALS[intensity];
+  if (!models) return 10;
+  const vals = Object.values(models).map((m) => Math.max(m.r + m.b, 10));
+  return Math.max(...vals);
 }

@@ -844,6 +844,11 @@ class RealTradingMixin:
 
         for i in range(n_periods):
             period_idx = i + 1
+
+            if getattr(self, "_force_stop_checker", None) is not None:
+                if self._force_stop_checker():
+                    print(f"[CANCELLED] Force-stop requested at month {period_idx}/{n_periods}")
+                    raise KeyboardInterrupt("Force stopped by user")
             
             # V2 export safety: always define, then overwrite if evaluator provides it
             _signal_coverage_month = float("nan")

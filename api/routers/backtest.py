@@ -181,6 +181,8 @@ def submit_backtest(req: BacktestRequest):
         "repeats": req.repeats,
         "seed": req.seed,
         "hpo_intensity": req.hpo_intensity,
+        "n_trials": req.n_trials,
+        "parent_job_id": req.parent_job_id,
         "trading_costs": req.trading_costs,
         "config_overrides": req.config_overrides,
     }
@@ -191,18 +193,24 @@ def submit_backtest(req: BacktestRequest):
         raise HTTPException(status_code=409, detail="A backtest is already running. Please wait for completion.")
 
     if IS_DESKTOP:
-        # Desktop mode: run synchronously, return completed result
-        try:
-            result = run_backtest_task._func(job_id, config)
-        except Exception as exc:
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(500, f"Backtest failed: {exc}")
-        jm2 = JobManager(get_data_store())
-        completed = jm2.get_job(job_id)
+        import threading
+        from api.tasks import _cancellation_events
+
+        def _run_desktop():
+            evt = threading.Event()
+            _cancellation_events[job_id] = evt
+            try:
+                run_backtest_task._func(job_id, config)
+            except Exception as exc:
+                import traceback
+                traceback.print_exc()
+            finally:
+                _cancellation_events.pop(job_id, None)
+
+        threading.Thread(target=_run_desktop, daemon=True).start()
         return BacktestSubmitResponse(
             job_id=job_id,
-            status="completed" if completed and completed.get("status") == "completed" else "failed",
+            status="pending",
             pair=pair,
             models=req.models,
         )

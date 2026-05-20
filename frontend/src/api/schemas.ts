@@ -195,6 +195,8 @@ export interface BacktestRequest {
   repeats?: number;
   seed?: number;
   hpo_intensity?: HpoIntensity;
+  n_trials?: number;
+  parent_job_id?: string;
   config_overrides: Record<string, unknown>;
 }
 

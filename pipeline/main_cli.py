@@ -1058,4 +1058,7 @@ def main() ->  None:
             print(f"[tables] detailed per-run table skipped: {_e}")
 
 if __name__ == "__main__":
+    import atexit
+    from pipeline.backtester.deep_mixin import DeepMixin
+    atexit.register(DeepMixin._shutdown_deep_pool)
     main()
