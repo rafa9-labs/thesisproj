@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from datetime import datetime, timezone
@@ -32,6 +33,7 @@ class DeployRequest(BaseModel):
     model: str = "logistic"
     timeframe: str = "M30"
     initial_equity: float = 10000.0
+    model_id: str | None = None
 
 
 class SessionInfo(BaseModel):
@@ -238,7 +240,39 @@ async def deploy_live_session(req: DeployRequest):
 
     session_id = str(uuid.uuid4())[:8]
 
-    bt_result = _run_backtest_for_model(pair, req.model, req.timeframe)
+    model_obj = None
+    bt = None
+
+    if req.model_id:
+        # Load from saved snapshot
+        from pipeline.model_persistence import load_snapshot, load_model_only, read_metadata
+        from pipeline.model_registry_disk import get_all_deployed
+        from api.config import settings
+
+        rows = get_all_deployed(settings.db_full_path)
+        snapshot_path = None
+        for r in rows:
+            if r.get("id") == req.model_id:
+                snapshot_path = r.get("snapshot_path")
+                break
+        if not snapshot_path or not os.path.exists(snapshot_path):
+            raise HTTPException(404, f"Snapshot not found for model {req.model_id}")
+
+        try:
+            model_obj = load_model_only(snapshot_path)
+            model_type = read_metadata(snapshot_path).get("model_type", "unknown")
+        except Exception:
+            raise HTTPException(500, "Failed to load saved model")
+    else:
+        # Train fresh (existing behavior)
+        bt_result = _run_backtest_for_model(pair, req.model, req.timeframe)
+        if bt_result:
+            model_obj = bt_result.get("model")
+            bt = bt_result.get("backtester")
+            model_type = bt_result.get("config", {}).get("model_type", req.model)
+
+    if model_obj is None:
+        raise HTTPException(500, "Failed to obtain model for live trading")
 
     session = {
         "session_id": session_id,
@@ -251,8 +285,8 @@ async def deploy_live_session(req: DeployRequest):
         "signal_count": 0,
         "last_mid": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "model_obj": bt_result.get("model") if bt_result else None,
-        "backtester": bt_result.get("backtester") if bt_result else None,
+        "model_obj": model_obj,
+        "backtester": bt,
         "ws_queues": [],
     }
 

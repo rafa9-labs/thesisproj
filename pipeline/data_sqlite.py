@@ -83,6 +83,29 @@ CREATE INDEX IF NOT EXISTS idx_job_events_job_id
 
 CREATE INDEX IF NOT EXISTS idx_job_events_job_id_event_index
     ON job_events (job_id, event_index);
+
+CREATE TABLE IF NOT EXISTS deployed_models (
+    id              TEXT PRIMARY KEY,
+    model_type      TEXT    NOT NULL,
+    snapshot_path   TEXT    NOT NULL,
+    best_sharpe     REAL,
+    best_return     REAL,
+    created_at      TEXT    NOT NULL,
+    status          TEXT    NOT NULL DEFAULT 'inactive',
+    tags            TEXT    DEFAULT '[]',
+    parent_job_id   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS live_predictions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp       TEXT    NOT NULL,
+    model_id        TEXT    NOT NULL,
+    pair            TEXT    NOT NULL,
+    timeframe       TEXT    NOT NULL,
+    predicted_class INTEGER NOT NULL,
+    confidence      REAL    NOT NULL,
+    signal_used     INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -130,6 +153,32 @@ class DataStore:
             else:
                 try:
                     cur.execute("ALTER TABLE jobs ADD COLUMN parent_job_id TEXT")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    cur.executescript("""
+                        CREATE TABLE IF NOT EXISTS deployed_models (
+                            id              TEXT PRIMARY KEY,
+                            model_type      TEXT    NOT NULL,
+                            snapshot_path   TEXT    NOT NULL,
+                            best_sharpe     REAL,
+                            best_return     REAL,
+                            created_at      TEXT    NOT NULL,
+                            status          TEXT    NOT NULL DEFAULT 'inactive',
+                            tags            TEXT    DEFAULT '[]',
+                            parent_job_id   TEXT
+                        );
+                        CREATE TABLE IF NOT EXISTS live_predictions (
+                            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                            timestamp       TEXT    NOT NULL,
+                            model_id        TEXT    NOT NULL,
+                            pair            TEXT    NOT NULL,
+                            timeframe       TEXT    NOT NULL,
+                            predicted_class INTEGER NOT NULL,
+                            confidence      REAL    NOT NULL,
+                            signal_used     INTEGER NOT NULL DEFAULT 0
+                        );
+                    """)
                 except sqlite3.OperationalError:
                     pass
             conn.commit()

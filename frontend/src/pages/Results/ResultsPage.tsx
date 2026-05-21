@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useRef } from "react";
-import { BarChart3, ArrowLeft, Play } from "lucide-react";
+import { BarChart3, ArrowLeft, Play, Box } from "lucide-react";
 import { useJobResults, useTradeChartData } from "@/api/queries";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ExportBar } from "@/components/shared/ExportBar";
@@ -218,6 +218,19 @@ export function ResultsPage() {
 
       {activeMetric && (
         <BacktestSummary text={activeMetric.summary_text ?? null} />
+      )}
+
+      {activeMetric && activeMetric.model && (
+        <div className="flex items-center gap-2 rounded-lg border px-4 py-2"
+          style={{ borderColor: "var(--color-accent-success)", backgroundColor: "rgba(34,197,94,0.05)" }}>
+          <Box size={12} style={{ color: "var(--color-accent-success)" }} />
+          <span className="text-[10px] font-medium uppercase tracking-[0.06em]" style={{ color: "var(--color-accent-success)" }}>
+            Model saved
+          </span>
+          <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+            {activeMetric.model} snapshot auto-saved to deployed models
+          </span>
+        </div>
       )}
 
       {activeMetric && (

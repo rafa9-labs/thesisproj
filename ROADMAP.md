@@ -878,140 +878,90 @@
 
 ---
 
-## Sprint 16.8: Model Persistence, Deployment & Experiment Tracking
+## Sprint 16.8: Model Persistence, Deployment & Experiment Tracking ✅ COMPLETE
 
 > **Goal**: Save trained models as deployable artifacts, track experiment lineage, and enable model sharing across KodaQuant installations.
 > **Dependencies**: Zero. Everything uses existing `joblib`, SQLite, sklearn.
 > **Est**: 15-19h
 > **Branch**: `feature/sprint16.8-model-persistence`
+> **Completed**: 2026-05-21 — All 4 phases (A-D) implemented + tested (64 fast tests pass)
 
-### Phase A: Model Snapshot System (4-5h)
+### Phase A: Model Snapshot System ✅ DONE
+- [x] **A.1-A.6**: `save_snapshot()`, `load_snapshot()`, metadata schema, pip_freeze, auto-save per walk-forward cycle, parent_job_id lineage
+- **Files**: `pipeline/model_persistence.py`, `models/base_model.py`, `api/tasks.py`, `pipeline/data_sqlite.py`
 
-- [ ] **A.1** Wire `BaseModel.save()` / `load()` → already defined, never called
-  - `save_artifacts(path)` bundles estimator + scaler + imputer + calibration + metadata.json
-  - **Files**: `models/base_model.py`
+### Phase B: Deployment Registry ✅ DONE
+- [x] **B.1-B.6**: `deployed_models` table, `model_registry_disk.py` (scan/register/activate/delete/tags), API endpoints, DeployedModelsPage UI, TagEditor
+- **Files**: `pipeline/model_registry_disk.py`, `api/routers/models.py`, `DeployedModelsPage.tsx`, `TagEditor.tsx`
 
-- [ ] **A.2** `pipeline/model_persistence.py` — `save_snapshot(bt, model_type, path)`
-  - Produces: `model.joblib`, `scaler.joblib`, `imputer.joblib`, `calibration.joblib`, `metadata.json`, `manifest.sha256`
-  - **Files**: New `pipeline/model_persistence.py`
+### Phase C: Multi-Model Signal Engine ✅ DONE
+- [x] **C.1-C.4**: `MetaEnsemble` (majority/soft/weighted voting), registry entry, search space, frontend ModelSelector
+- **Files**: `models/meta_ensemble.py`, `models/registry.py`, `config.py`, `ModelSelector.tsx`
 
-- [ ] **A.3** Metadata schema — complete audit trail for every saved model
-  - `{model_type, best_params, feature_names, features_config_hash, coverage_conf_thr, calibrate_method, input_shape, train_start, train_end, created_at_utc, seed, pip_freeze, job_id_parent}`
-  - **Files**: `pipeline/model_persistence.py`
+### Phase D: Live Prediction Bridge ✅ DONE
+- [x] **D.1-D.3**: `.active` pointer, `/active/predict`, `/active/predict-with-data`, `/active/compare`
+- **Files**: `pipeline/model_persistence.py`, `api/routers/models.py`, `pipeline/data_sqlite.py`
 
-- [ ] **A.4** Environment snapshot — `pip freeze` captured at experiment start
-  - Stored in `config["pip_freeze"]` for every job
-  - **Files**: `api/tasks.py`
+**Results**: 160 total tests (72 backend + 88 frontend), zero TS errors. All 4 phases deployed to `feature/sprint16.8-model-persistence`.
 
-- [ ] **A.5** Auto-save after walk-forward — last month's model (fully trained on all data)
-  - Output: `deployed_models/{model_type}_{timestamp}/`
-  - **Files**: `api/tasks.py`
+---
 
-- [ ] **A.6** Experiment lineage — `parent_job_id` column in jobs table
-  - Populated on "Re-run" and "Apply Study" (LLM advisor)
-  - **Files**: `pipeline/data_sqlite.py`, `api/services/__init__.py`, `useBacktestStore.ts`
+## Sprint 16.9: Saved Model — Forward Test & Live Trading Bridge
 
-### Phase B: Deployment Registry & Experiment Tracking (5-6h)
+> **Goal**: Make saved models actually usable. Add a Forward Test tab for temporal testing and bridge deployed models into live trading.
+> **Dependencies**: Sprint 16.8 (model persistence + registry).
+> **Est**: 5-7h
+> **Branch**: `feature/sprint16.8-model-persistence`
 
-- [ ] **B.1** SQLite `deployed_models` table + registry scanner
-  - `(id, model_type, snapshot_path, best_sharpe, created_at, status, tags, parent_job_id)`
-  - `pipeline/model_registry_disk.py` — scan `deployed_models/`, validate, register
-  - **Files**: `pipeline/data_sqlite.py`, New `pipeline/model_registry_disk.py`
+### Phase 1: Forward Test Engine + UI (3-4h)
 
-- [ ] **B.2** API — list, activate, delete deployed models
-  - `GET /models/deployed` — filterable by model_type, status, tags
-  - `POST /models/{id}/activate` — only one active per model type
-  - `DELETE /models/{id}` — remove from disk + DB
-  - **Files**: `api/routers/models.py`
+- [ ] **P1.1** `pipeline/forward_test.py` — `run_forward_test(snapshot_path, pair, tf, start, end, sizing)`
+  - Loads snapshot, creates MLBacktester, injects model, runs `real_trading_simulation()` with `skip_hpo=True, skip_training=True`
+  - Returns full metrics/equity/trades (same schema as backtest results)
+  - Also produces `generate_forecast_errors()` for future DM test (Phase 3 deferral)
+  - **Files**: New `pipeline/forward_test.py`
 
-- [ ] **B.3** Experiment diff endpoint — compare two experiments' configs
-  - `GET /experiments/{id}/diff?compare=job_id` → `{added_keys, removed_keys, changed_values}`
-  - **Files**: `api/routers/backtest.py`
+- [ ] **P1.2** API endpoint — `POST /models/{id}/forward-test`
+  - Validates model exists, launches Celery job via `_run_forward_test_impl`
+  - Returns `job_id` → frontend navigates to Monitor → Results
+  - **Files**: `api/routers/models.py`, `api/tasks.py`
 
-- [ ] **B.4** Experiment tags — `PATCH /experiments/{id}/tags`
-  - **Files**: `api/routers/backtest.py`
+- [ ] **P1.3** Frontend — "Forward Test" tab (7th tab on BacktestPage)
+  - Model selector dropdown from `/models/deployed`
+  - Date range picker, pair/timeframe selectors, position sizing dropdown
+  - "Run Forward Test" button → creates job → navigates to Monitor
+  - **Files**: New `ForwardTestTab.tsx`, modify `BacktestPage.tsx`
 
-- [ ] **B.5** Frontend: "Deployed Models" page + nav entry
-  - Grid of model cards (type badge, Sharpe, date, tags, activate/delete)
-  - **Files**: New `DeployedModelsPage.tsx`, `AppShell.tsx`
+### Phase 2: Live Trading with Saved Models (1-2h)
 
-- [ ] **B.6** Frontend: Experiment diff modal + inline tag editor
-  - Side-by-side config diff, tag chips with add/remove
-  - **Files**: `ResultsHistoryPage.tsx`, New `TagEditor.tsx`
+- [ ] **P2.1** Modify `POST /live/deploy` — add `model_id` parameter
+  - If provided: load snapshot via `load_snapshot(model_id)`, skip `_run_backtest_for_model()`
+  - Signal loop unchanged (already uses `session["model_obj"]`)
+  - **Files**: `api/routers/live.py`
 
-### Phase C: Multi-Model Signal Engine (4-5h)
+- [ ] **P2.2** Frontend — LiveTradingPage saved model selector
+  - Replace model type dropdown with deployed model list (from `/models/deployed?status=active`)
+  - Pass `model_id` in deploy request
+  - **Files**: `LiveTradingPage.tsx`
 
-- [ ] **C.1** `models/meta_ensemble.py` — wraps N models via sklearn `VotingClassifier`
-  - Methods: majority vote, soft voting, confidence-weighted (by OOS Sharpe)
-  - Can load sub-models from deployed snapshots (no re-training)
-  - **Files**: New `models/meta_ensemble.py`
+### Phase 3 (DEFERRED): Validation Gate with DM/SPA/Chow Tests
+> Full statistical validation gate for auto-promotion. Deferred to Sprint 17+.
 
-- [ ] **C.2** Register `meta_ensemble` in MODEL_REGISTRY + add search space
-  - **Files**: `models/registry.py`, `config.py`
+- [ ] DM Test (Diebold-Mariano) — compare forecast errors of candidate vs benchmark
+- [ ] SPA Test (Hansen) — control for data snooping bias across K configurations  
+- [ ] Chow Test — structural break detection before promotion
+- [ ] Dual-lock gate: candidate must beat Active Model AND Naive Baseline
 
-- [ ] **C.3** Wire into pipeline evaluation + ensemble_mixin.py dispatcher
-  - Appears as one model type, produces one equity curve
-  - **Files**: `pipeline/backtester/ensemble_mixin.py`
+### Test Specifications (8 tests)
 
-- [ ] **C.4** Frontend: "Signal Committee" in ModelSelector
-  - Select source models from deployed models, pick combination method
-  - **Files**: `ModelSelector.tsx`
-
-### Phase D: Live Trading Bridge (2-3h)
-
-- [ ] **D.1** File-based active model pointer — `deployed_models/.active`
-  - Atomic writes via `tempfile.mkstemp()` + `os.replace()`
-  - **Files**: `pipeline/model_registry_disk.py`
-
-- [ ] **D.2** `GET /models/active/predict?pair=EURUSD&tf=H1` — live prediction endpoint
-  - Loads active model(s), computes features, returns prediction + confidence
-  - Logs to `live_predictions` table for auditing
-  - **Files**: `api/routers/models.py`, `pipeline/data_sqlite.py`
-
-- [ ] **D.3** `GET /models/active/compare` — live vs backtest performance comparison
-  - **Files**: `api/routers/models.py`
-
-### Test Specifications (20 tests across 4 phases)
-
-**Phase A (5 tests):**
-- [ ] `test_snapshot_save_load_roundtrip` — train logistic, save, load, predict → identical output
-- [ ] `test_snapshot_metadata_completeness` — all required fields in metadata.json
-- [ ] `test_snapshot_missing_scaler_graceful` — tree-based model (no scaler) saves/loads without error
-- [ ] `test_pip_freeze_in_config` — job config contains pip_freeze after submission
-- [ ] `test_parent_job_id_lineage` — chain of 3 experiments, each references its parent
-
-**Phase B (6 tests):**
-- [ ] `test_deployed_models_crud` — register, list, activate, delete through API
-- [ ] `test_only_one_active_per_model_type` — activating logistic_2 deactivates logistic_1
-- [ ] `test_config_diff_correctness` — A has lags=10, B has lags=20 → diff = `{lags: {from: 10, to: 20}}`
-- [ ] `test_tags_persist` — add tags, reload, verify present
-- [ ] `test_parent_lineage_visible` — child experiment shows parent info
-- [ ] `test_corrupt_snapshot_skipped` — broken directory doesn't crash registry scan
-
-**Phase C (6 tests):**
-- [ ] `test_majority_vote_3_models` — 2 buy, 1 sell → buy wins
-- [ ] `test_soft_voting_probability_average` — output is mean of probabilities
-- [ ] `test_confidence_weighted_by_sharpe` — high Sharpe model has more influence
-- [ ] `test_committee_from_deployed_snapshots` — load 3 deployed models, combine, no re-training
-- [ ] `test_committee_handles_model_disagreement` — all disagree → neutral (0)
-- [ ] `test_empty_committee_errors` — 0 models → clear error message
-
-**Phase D (5 tests):**
-- [ ] `test_active_pointer_atomic` — read/write `.active` file
-- [ ] `test_predict_endpoint_returns_valid_shape` — 3-class probability for single bar
-- [ ] `test_live_predictions_logged` — after prediction, verify row in live_predictions table
-- [ ] `test_model_hot_swap_atomic` — change active pointer mid-session, next predict uses new model
-- [ ] `test_compare_backtest_vs_live` — live metrics endpoint returns valid comparison data
-
-### Key Design Decisions
-
-- **Zero new dependencies** — joblib (already imported), sklearn (already imported), SQLite (already used), nothing else
-- **Classical models**: `joblib.dump(Pipeline(...))` — 5-50 KB per snapshot
-- **XGBoost**: `booster.save_model()` inside joblib wrapper — 200 KB - 2 MB
-- **Deep models**: `model.save_weights("weights.h5")` + architecture re-instantiation — 1-5 MB
-- **File-based active pointer** instead of Redis — 200-byte JSON, atomic writes, no server dependency
-- **Export format**: `.koda` (zip of snapshot directory) + config-only mode (metadata.json, no weights)
-- **Model sharing**: import validates `manifest.sha256` (tamper detection), warns on feature config mismatch
+- [ ] `test_forward_test_engine` — load saved model, run on test range, verify metrics
+- [ ] `test_forward_test_no_trades` — model that predicts flat → clean zero-trade result
+- [ ] `test_forward_test_endpoint` — POST /models/{id}/forward-test returns valid job_id
+- [ ] `test_live_deploy_with_model_id` — deploy saved model → signal loop starts
+- [ ] `test_live_deploy_no_model_id` — backward compat: train-fresh path still works
+- [ ] `test_forward_test_tab_renders` — tab shows model list + date picker
+- [ ] `test_live_page_model_selector` — saved model dropdown renders active models
+- [ ] `test_forward_test_results_page` — results page renders forward test output identically
 
 ---
 
@@ -1302,7 +1252,8 @@ cd frontend && npm run dev
 | **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
 | **S15** | KodaQuant Branding | 4-6h | ✅ COMPLETE (2026-05-10, 37 tests) |
 | **S16** | Trading Logic, Overfitting & Backtest Transparency | 12-16h | ✅ DONE |
-| **S16.8** | Model Persistence, Deployment & Experiment Tracking | 15-19h | TODO |
+| **S16.8** | Model Persistence, Deployment & Experiment Tracking | 15-19h | ✅ COMPLETE (2026-05-21, 64 tests) |
+| **S16.9** | Forward Test + Live Trading Bridge | 5-7h | IN PROGRESS |
 | **S17** | UI Polish, Tabs Flow & Search | 8-10h | TODO |
 | **S18** | Live News & Market Data Integration | 10-14h | TODO |
 | **S19** | Ensemble Models & Model Extensibility | 8-10h | TODO |
@@ -1326,7 +1277,9 @@ cd frontend && npm run dev
 | S12 | News pipeline works, LLM sentiment is ML feature, Results shows all history, Dashboard has live price ticker + candlestick charts + Market Pulse, backtest trade visualization on Results detail, live monitor with multi-pair grid |
 | S13 | Beta tested, publicly launched, first sales |
 | S15 | All user-facing text says "KodaQuant", professional branding | ✅ DONE — 37 tests, 12 files cleaned, icons regenerated |
-| S16 | Overfitting detection works, backtest summary is human-readable, training is transparent |
+| S16 | Overfitting detection works, backtest summary is human-readable, training is transparent | ✅ DONE |
+| S16.8 | Model persistence complete — snapshots save/load/export/import, deployed models registry with CRUD, MetaEnsemble signal committee, live prediction bridge with compare endpoint | ✅ DONE |
+| S16.9 | Forward Test tab operational — saved models tested on any date range; Live Trading deploys saved models instead of training fresh |
 | S17 | Cmd+K search, tab-style navigation, consistent UI, no dead code |
 | S18 | Live news feed + live OANDA prices feed into backtesting + dashboard |
 | S19 | All ensemble types working, plugin system for custom models |

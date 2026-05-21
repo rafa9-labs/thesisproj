@@ -279,6 +279,11 @@ SEARCH_SPACE = {
         # Fixed: num_blocks=1, ff_multiple=2, dense_units=128,
         #        pooling="cls", use_time2vec=False, batch_size=256
     },
+    # -- Meta Ensemble (Signal Committee) --
+    "meta_ensemble": {
+        "meta_combination_method": ["majority", "soft", "weighted"],
+        # sub-models selected by user in frontend, not tuned by HPO
+    },
 }
 
 

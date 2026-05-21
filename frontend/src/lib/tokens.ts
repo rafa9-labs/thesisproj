@@ -95,7 +95,7 @@ export const modelCategories = {
   ensemble: {
     label: "Ensemble",
     color: colors.accentEnsemble,
-    models: ["ensemble_adaptive_regime"],
+    models: ["ensemble_adaptive_regime", "meta_ensemble"],
   },
 } as const;
 
@@ -110,4 +110,5 @@ export const modelDescriptions: Record<string, { name: string; short: string; ap
   transformer: { name: "Transformer", short: "Attention Engine", apprentice: "Self-attention architecture that weighs the importance of every historical bar simultaneously." },
   dqn: { name: "Dueling DQN", short: "Autonomous Agent", apprentice: "Reinforcement learning agent. Instead of predicting price, it learns a trading policy through trial and error." },
   ensemble_adaptive_regime: { name: "Adaptive Regime", short: "The Shapeshifter", apprentice: "Dynamically shifts between models depending on market regime (trending vs ranging)." },
+  meta_ensemble: { name: "Signal Committee", short: "The Committee", apprentice: "Wraps multiple models and combines their predictions via voting. Run logistic + xgboost + lstm as one." },
 };

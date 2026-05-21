@@ -23,6 +23,13 @@ async def lifespan(app: FastAPI):
     start = startup_cleanup(settings.db_full_path)
     if start:
         print(f"[Shutdown] Startup: marked {start} stale job(s) as failed")
+    try:
+        from pipeline.model_registry_disk import scan_and_repair
+        result = scan_and_repair(settings.db_full_path)
+        if any(v for v in result.values()):
+            print(f"[Registry] scan_and_repair: registered={result['registered']} cleaned={result['cleaned']} skipped={result['skipped']}")
+    except Exception:
+        pass
     yield
     from api.shutdown import shutdown_cleanup
     shutdown_cleanup(settings.db_full_path)

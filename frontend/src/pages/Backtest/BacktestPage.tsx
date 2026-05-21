@@ -18,6 +18,8 @@ import { HyperparamsTab } from "./HyperparamsTab";
 import { QuickStartTab } from "./QuickStartTab";
 import { RunSummary } from "./RunSummary";
 
+import { ForwardTestTab } from "./ForwardTestTab";
+
 const TABS = [
   { key: "quickstart", label: "Quick Start" },
   { key: "asset", label: "Asset & Model" },
@@ -25,6 +27,7 @@ const TABS = [
   { key: "features", label: "Features" },
   { key: "hyperparams", label: "Hyperparameters" },
   { key: "execution", label: "Execution" },
+  { key: "forwardtest", label: "Forward Test" },
 ];
 
 export function BacktestPage() {
@@ -121,6 +124,9 @@ export function BacktestPage() {
           <ExecutionPanel defaultOpen={true} />
         </div>
       )}
+
+      {/* Forward Test */}
+      {activeTab === "forwardtest" && <ForwardTestTab />}
 
       {/* Validation bar */}
       <ValidationBar

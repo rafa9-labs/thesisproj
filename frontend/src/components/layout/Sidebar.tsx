@@ -10,6 +10,7 @@ import {
   PanelLeftOpen,
   PanelLeftClose,
   Zap,
+  Box,
 } from "lucide-react";
 import { KodaLogo } from "@/components/shared/KodaLogo";
 import { layout } from "@/lib/tokens";
@@ -39,6 +40,7 @@ const navGroups: NavGroup[] = [
       { icon: Eye, label: "Monitor", path: "/monitor" },
       { icon: BarChart3, label: "Results", path: "/results" },
       { icon: GitCompare, label: "Compare", path: "/compare" },
+      { icon: Box, label: "Models", path: "/models" },
     ],
   },
   {

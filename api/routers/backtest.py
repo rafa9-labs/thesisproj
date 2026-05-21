@@ -675,6 +675,95 @@ def analyze_backtest_results(job_id: str, model: str = Query("", description="Mo
         return {"job_id": job_id, "model": target.get("model", ""), "analysis": {"error": str(e)}}
 
 
+# ────────────────────────────────────────────────────────────
+#  Experiment diff & tags (Phase B: experiment tracking)
+# ────────────────────────────────────────────────────────────
+from pydantic import BaseModel
+
+
+class TagsUpdateRequest(BaseModel):
+    action: str
+    tag: str
+
+
+@router.get("/experiments/{job_id}/diff")
+def get_experiment_diff(job_id: str, compare: str = Query(..., description="Job ID to compare against")):
+    store = get_data_store()
+    jm = JobManager(store)
+    a = jm.get_job(job_id)
+    b = jm.get_job(compare)
+    if a is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if b is None:
+        raise HTTPException(404, f"Comparison job {compare} not found")
+
+    cfg_a = a.get("config", {}) if isinstance(a.get("config"), dict) else {}
+    cfg_b = b.get("config", {}) if isinstance(b.get("config"), dict) else {}
+    overrides_a = cfg_a.get("config_overrides", {}) or {}
+    overrides_b = cfg_b.get("config_overrides", {}) or {}
+
+    def _flatten(cfg, overrides, prefix=""):
+        flat = {}
+        for k in ["pair", "models", "months", "repeats", "seed", "hpo_intensity"]:
+            if k in cfg:
+                flat[prefix + k] = cfg[k]
+        for k, v in overrides.items():
+            flat[prefix + k] = v
+        return flat
+
+    flat_a = _flatten(cfg_a, overrides_a)
+    flat_b = _flatten(cfg_b, overrides_b)
+    all_keys = sorted(set(flat_a.keys()) | set(flat_b.keys()))
+
+    added_keys = {}
+    removed_keys = {}
+    changed_values = {}
+    unchanged_count = 0
+
+    for k in all_keys:
+        va = flat_a.get(k)
+        vb = flat_b.get(k)
+        if k not in flat_a and k in flat_b:
+            added_keys[k] = vb
+        elif k in flat_a and k not in flat_b:
+            removed_keys[k] = va
+        elif va != vb:
+            changed_values[k] = {"from": va, "to": vb}
+        else:
+            unchanged_count += 1
+
+    return {
+        "base": {"job_id": job_id, "created_at": a.get("created_at", "")},
+        "compare": {"job_id": compare, "created_at": b.get("created_at", "")},
+        "added_keys": added_keys,
+        "removed_keys": removed_keys,
+        "changed_values": changed_values,
+    "unchanged_count": unchanged_count,
+}
+
+
+@router.patch("/experiments/{job_id}/tags")
+def update_experiment_tags(job_id: str, req: TagsUpdateRequest):
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+
+    import json as _json
+    existing = _json.loads(job.get("result", "{}") or "{}")
+    tags = list(existing.get("tags", []) if isinstance(existing.get("tags"), list) else [])
+
+    if req.action == "add" and req.tag not in tags:
+        tags.append(req.tag)
+    elif req.action == "remove":
+        tags = [t for t in tags if t != req.tag]
+
+    existing["tags"] = tags
+    jm.update_status(job_id, job.get("status", "completed"), result=existing)
+    return {"tags": tags}
+
+
 @router.get("/{job_id}/trades/chart-data")
 def get_trade_chart_data(job_id: str, model: str = Query(..., description="Model name")):
     store = get_data_store()

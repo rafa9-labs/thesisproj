@@ -1111,11 +1111,94 @@ def _download_data_impl(job_id: str, pair: str, years: int = 10):
         raise
 
 
+def _run_forward_test_impl(job_id: str, config: dict):
+    """Execute a forward test: load saved model, run prediction-only on date range."""
+    project_root = settings.project_root
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    os.chdir(project_root)
+
+    from api.services import JobManager
+    from pipeline.data_sqlite import DataStore
+
+    store = DataStore(settings.db_full_path)
+    jm = JobManager(store)
+
+    jm.update_status(job_id, "running")
+    _pub("job_started", job_id, {"type": "forward_test"})
+
+    try:
+        from pipeline.forward_test import run_forward_test
+        from pipeline.model_registry_disk import get_all_deployed
+
+        model_id = config.get("model_id", "")
+        snapshot_path = config.get("snapshot_path", "")
+        pair = config.get("pair", "EURUSD")
+        timeframe = config.get("timeframe", "H1")
+        start_date = config.get("start_date", "")
+        end_date = config.get("end_date", "")
+        position_sizing = config.get("position_sizing", "fixed")
+        trading_costs = config.get("trading_costs", True)
+
+        if not snapshot_path or not os.path.isdir(snapshot_path):
+            # Try to resolve from deployed models
+            rows = get_all_deployed(settings.db_full_path)
+            for r in rows:
+                if r.get("id") == model_id:
+                    snapshot_path = r.get("snapshot_path", "")
+                    break
+
+        if not snapshot_path or not os.path.isdir(snapshot_path):
+            raise FileNotFoundError(f"Snapshot path not found for model {model_id}")
+
+        result = run_forward_test(
+            snapshot_path=snapshot_path,
+            pair=pair,
+            timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date,
+            position_sizing=position_sizing,
+            trading_costs=trading_costs,
+        )
+
+        jm.update_status(job_id, "completed", result={
+            "pair": pair,
+            "models": [result.get("model_type", "unknown")],
+            "config": config,
+            "metrics": [{
+                "model": result.get("model_type", "unknown"),
+                "sharpe": result["metrics"]["sharpe"],
+                "total_return_pct": result["metrics"]["total_return_pct"],
+                "win_rate": result["metrics"]["win_rate"],
+                "max_drawdown_pct": result["metrics"]["max_drawdown_pct"],
+                "total_trades": result["metrics"]["total_trades"],
+                "diagnostics": result.get("diagnostics"),
+            }],
+            "forward_test": result,
+        })
+        _pub("job_complete", job_id, {"metrics": result["metrics"]})
+        emit_event("job_complete", job_id=job_id, n_models=1)
+        return result
+
+    except (Exception, KeyboardInterrupt) as e:
+        if isinstance(e, KeyboardInterrupt):
+            jm.update_status(job_id, "failed", error="Force stopped by user")
+            _pub("job_failed", job_id, {"error": "Stopped by user"})
+            emit_event("job_failed", job_id=job_id, error="Stopped by user")
+            return
+        tb = traceback.format_exc()
+        jm.update_status(job_id, "failed", error=f"{e}\n{tb}")
+        _pub("job_failed", job_id, {"error": str(e)})
+        emit_event("job_failed", job_id=job_id, error=str(e)[:200])
+        raise
+
+
 # --- Public API: dispatch to Celery or in-process depending on availability ---
 
 if _celery_available and celery_app is not None:
     run_backtest_task = celery_app.task(name="run_backtest")(_run_backtest_impl)
     download_data_task = celery_app.task(name="download_data")(_download_data_impl)
+    run_forward_test_task = celery_app.task(name="run_forward_test")(_run_forward_test_impl)
 else:
     class _SyncTask:
         """Celery-compatible task interface for synchronous (desktop) execution."""

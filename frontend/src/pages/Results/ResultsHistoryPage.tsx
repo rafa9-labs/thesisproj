@@ -1,9 +1,10 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, Trash2, Download, Search, ChevronUp, ChevronDown, Filter } from "lucide-react";
+import { Eye, Trash2, Download, Search, ChevronUp, ChevronDown, Filter, RefreshCw } from "lucide-react";
 import { useResultsHistory, useDeleteJob, useHeatmap } from "@/api/queries";
 import { formatRelativeTime, formatPercent } from "@/lib/formatters";
 import { PerformanceHeatmapSection } from "@/pages/Dashboard/PerformanceHeatmapSection";
+import { useBacktestStore } from "@/stores/useBacktestStore";
 import type { BacktestSummaryItem } from "@/api/schemas";
 
 const SORT_COLS = [
@@ -49,6 +50,8 @@ function SortHeader({ label, active, direction, onClick }: { label: string; acti
 export function ResultsHistoryPage() {
   const navigate = useNavigate();
   const deleteJob = useDeleteJob();
+  const setField = useBacktestStore((s) => s.setField);
+  const applyPreset = useBacktestStore((s) => s.applyPreset);
   const [search, setSearch] = useState("");
   const [pairFilter, setPairFilter] = useState("");
   const [sortBy, setSortBy] = useState("created_at");
@@ -114,6 +117,13 @@ export function ResultsHistoryPage() {
     a.href = url; a.download = "backtest_results.json"; a.click();
     URL.revokeObjectURL(url);
   }, [filtered, selected]);
+
+  const handleRerun = useCallback(async (row: BacktestSummaryItem) => {
+    setField("parentJobId", row.job_id);
+    setField("pair", row.pair || "EURUSD");
+    if (row.models?.length) setField("selectedModels", row.models as string[]);
+    navigate("/backtest");
+  }, [setField, navigate]);
 
   const PAIRS = [...new Set(results.map((r) => r.pair).filter(Boolean))].sort();
 
@@ -229,6 +239,7 @@ export function ResultsHistoryPage() {
                     </td>
                     <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => handleRerun(row)} className="rounded p-1.5 transition-colors hover:bg-[var(--color-primary-glow)]" style={{ color: "var(--color-accent)", cursor: "pointer" }} title="Re-run"><RefreshCw size={14} /></button>
                         <button onClick={() => navigate(`/results/${row.job_id}`)} className="rounded p-1.5 transition-colors hover:bg-[var(--color-primary-glow)]" style={{ color: "var(--color-text-muted)", cursor: "pointer" }} title="View"><Eye size={14} /></button>
                         <button onClick={() => deleteJob.mutate(row.job_id)} className="rounded p-1.5 transition-colors hover:bg-[var(--color-accent-danger)]" style={{ color: "var(--color-text-muted)", cursor: "pointer" }} title="Delete"><Trash2 size={14} /></button>
                       </div>
