@@ -24,7 +24,7 @@ markers = [
     "benchmark: marks benchmark/timing tests",
     "deep: marks deep learning model tests (TF/Keras, high memory)",
 ]
-addopts = "--tb=short"
+addopts = "--tb=short -n 4 --dist loadscope"
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::FutureWarning",
