@@ -89,13 +89,15 @@ export function MonitorPage() {
 
   useEffect(() => {
     if (visibleIds.size > 0) {
-      if (!selectedJobId || !visibleIds.has(selectedJobId)) {
-        const first = [...visibleIds][0];
-        selectJob(first);
-        setActiveTab(first, "hpo-and-results");
+      if (!selectedJobId || !visibleIds.has(selectedJobId) || !activeJobs.has(selectedJobId)) {
+        const first = [...visibleIds].find((id) => activeJobs.has(id)) ?? null;
+        if (first) {
+          selectJob(first);
+          setActiveTab(first, "hpo-and-results");
+        }
       }
     }
-  }, [visibleIds.size, selectedJobId, selectJob, setActiveTab]);
+  }, [visibleIds.size, selectedJobId, selectJob, setActiveTab, activeJobs]);
 
   const selectedJobStatus = selectedJobId ? getJob(selectedJobId)?.status : null;
   const wsJobId = selectedJobId && (selectedJobStatus === "pending" || selectedJobStatus === "running") ? selectedJobId : null;
@@ -141,13 +143,16 @@ export function MonitorPage() {
 
   const handleForceStop = async () => {
     if (!selectedJobId) return;
+    const jobId = selectedJobId;
     try {
-      await forceStop.mutateAsync(selectedJobId);
+      await forceStop.mutateAsync(jobId);
       handleWsEvent({
         event: "job_failed",
-        job_id: selectedJobId,
+        job_id: jobId,
         error: "Stopped by user",
       });
+      setCompletedCache((prev) => { const next = new Map(prev); next.delete(jobId); return next; });
+      useJobStore.getState().removeJob(jobId);
     } catch (err) {
       console.error("Force stop failed:", err);
     }
