@@ -49,6 +49,14 @@ function useActivateModel() {
   });
 }
 
+function useDeactivateModel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post(`/models/deployed/${id}/deactivate`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["deployed-models"] }),
+  });
+}
+
 function useDeleteModel() {
   const qc = useQueryClient();
   return useMutation({
@@ -69,6 +77,7 @@ function useUpdateTags() {
 export function DeployedModelsPage() {
   const { data: models, isLoading } = useDeployedModels();
   const activateModel = useActivateModel();
+  const deactivateModel = useDeactivateModel();
   const deleteModel = useDeleteModel();
   const updateTags = useUpdateTags();
   const [filter, setFilter] = useState<string>("all");
@@ -87,7 +96,7 @@ export function DeployedModelsPage() {
             Deployed Models
           </h2>
           <p className="text-[11px] mt-1" style={{ color: "var(--color-text-muted)" }}>
-            Models saved after backtest completion. Activate one per type for live prediction.
+            Models you've saved from backtest results. Activate one per type for live prediction.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -120,7 +129,7 @@ export function DeployedModelsPage() {
         >
           <Box size={40} style={{ color: "var(--color-text-muted)" }} />
           <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-            No deployed models yet. Run a backtest to save your first model.
+            No deployed models yet. Run a backtest, then click Save Model on the Results page.
           </span>
         </div>
       )}
@@ -203,8 +212,8 @@ export function DeployedModelsPage() {
               )}
               {m.status === "active" && (
                 <button
-                  onClick={() => activateModel.mutate(m.id)}
-                  disabled={activateModel.isPending}
+                  onClick={() => deactivateModel.mutate(m.id)}
+                  disabled={deactivateModel.isPending}
                   className="flex items-center gap-1 rounded-md px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] transition-all hover:brightness-110"
                   style={{
                     backgroundColor: "var(--color-glass-hover)",

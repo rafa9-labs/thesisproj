@@ -152,6 +152,17 @@ def activate_deployed_model(model_id: str):
     return {"status": "ok"}
 
 
+@router.post("/deployed/{model_id}/deactivate")
+def deactivate_deployed_model(model_id: str):
+    from api.config import settings
+    from pipeline.model_registry_disk import deactivate_model
+
+    ok = deactivate_model(model_id, settings.db_full_path)
+    if not ok:
+        raise HTTPException(404, f"Model {model_id} not found")
+    return {"status": "ok"}
+
+
 @router.delete("/deployed/{model_id}")
 def delete_deployed_model(model_id: str):
     from api.config import settings
@@ -403,3 +414,58 @@ def forward_test_model(model_id: str, req: ForwardTestRequest):
         run_forward_test_task.delay(job_id, config)
 
     return ForwardTestResponse(job_id=job_id, status="pending")
+
+
+# ────────────────────────────────────────────────────────────
+#  Save model from completed backtest job (manual trigger)
+# ────────────────────────────────────────────────────────────
+class SaveFromJobResponse(BaseModel):
+    status: str
+    model_id: str
+    snapshot_path: str
+
+
+@router.post("/save-from-job/{job_id}")
+def save_model_from_job(job_id: str, model_name: str = Query("", description="Model to save, empty = first model")):
+    """Register a model snapshot from a completed backtest.
+
+    The trained model is written to disk during the backtest execution.
+    This endpoint registers it in the deployed_models table so it appears
+    in the Models page. The user decides when to save.
+    """
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if job["status"] != "completed":
+        raise HTTPException(400, f"Job status is '{job['status']}', not 'completed'")
+
+    result = job.get("result", {})
+    raw_metrics = result.get("metrics", [])
+    if not raw_metrics:
+        raise HTTPException(400, "Job has no metrics data")
+
+    target = raw_metrics[0]
+    if model_name:
+        for m in raw_metrics:
+            if isinstance(m, dict) and m.get("model") == model_name:
+                target = m
+                break
+
+    snapshot_path = target.get("snapshot_path") if isinstance(target, dict) else None
+    if not snapshot_path or not os.path.isdir(snapshot_path):
+        raise HTTPException(400,
+            f"No snapshot for model '{target.get('model', '?')}'. "
+            "Run a new backtest to capture the trained model."
+        )
+
+    from pipeline.model_persistence import validate_snapshot
+    ok, reason = validate_snapshot(snapshot_path)
+    if not ok:
+        raise HTTPException(500, f"Snapshot invalid: {reason}")
+
+    from pipeline.model_registry_disk import register_snapshot
+    model_id = register_snapshot(snapshot_path, DB_PATH)
+
+    return SaveFromJobResponse(status="ok", model_id=model_id, snapshot_path=snapshot_path)
