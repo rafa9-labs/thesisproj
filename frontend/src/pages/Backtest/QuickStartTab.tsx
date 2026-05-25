@@ -36,15 +36,23 @@ export function QuickStartTab(_props: Props) {
     (modelDescriptions as Record<string, { name: string }>)[m]?.name ?? m;
 
   return (
-    <div className="flex flex-col gap-5 pt-1">
-      {/* Category blocks stacked vertically */}
-      {QUICK_START_CATEGORIES.map((cat) => {
+    <div className="flex flex-col py-6 px-2">
+      {/* Category blocks stacked vertically, separated by full-width rules */}
+      {QUICK_START_CATEGORIES.map((cat, idx) => {
         const catColor = CATEGORY_COLORS[cat.key] ?? "var(--color-text-muted)";
 
         return (
-          <div key={cat.key} className="mb-10">
+          <div key={cat.key}>
+            {/* Divider between categories (not before the first) */}
+            {idx > 0 && (
+              <div
+                className="my-8"
+                style={{ borderTop: "1px solid #252525" }}
+              />
+            )}
+
             {/* Category header */}
-            <div className="flex items-center gap-1.5 mb-4">
+            <div className="flex items-center gap-2 mb-5 px-1">
               <span style={{ color: catColor }}>{CATEGORY_ICONS[cat.key]}</span>
               <span
                 className="text-[11px] font-semibold uppercase tracking-[0.1em]"
@@ -52,10 +60,16 @@ export function QuickStartTab(_props: Props) {
               >
                 {cat.label}
               </span>
+              <span
+                className="text-[10px] ml-1"
+                style={{ color: "#4B5563" }}
+              >
+                {cat.options.length} presets
+              </span>
             </div>
 
-            {/* Options grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Options grid — generous gap, internal padding */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
               {cat.options.map((opt) => {
                 const hrs = opt.estMinutes >= 120;
                 const timeStr = hrs ? `${(opt.estMinutes / 60).toFixed(0)}h` : `${opt.estMinutes}min`;
@@ -63,35 +77,45 @@ export function QuickStartTab(_props: Props) {
                   <div
                     key={opt.key}
                     onClick={() => handlePreset(opt.key)}
-                    className="bg-[#1E1E1E] border border-[#333333] rounded-xl p-6 flex flex-col justify-between cursor-pointer transition-colors duration-150 hover:border-[#A8E063]"
+                    className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-5 py-4 flex flex-col cursor-pointer transition-colors duration-150 hover:border-[#A8E063] hover:bg-[#1E1E1E]"
                   >
                     {/* Header row */}
-                    <div className="flex justify-between items-start mb-3">
-                      <span className="text-white text-lg font-bold tracking-wide leading-tight">
+                    <div className="flex justify-between items-start mb-2">
+                      <span
+                        className="text-[12px] font-semibold tracking-wide"
+                        style={{ color: "#FFFFFF", lineHeight: 1.4 }}
+                      >
                         {opt.label}
                       </span>
-                      <span className="text-[#9CA3AF] text-sm font-medium whitespace-nowrap ml-2 mt-0.5">
+                      <span
+                        className="text-[10px] tabular-nums whitespace-nowrap ml-3"
+                        style={{ color: "#6B7280", fontFamily: "var(--font-mono)" }}
+                      >
                         ~{timeStr}
                       </span>
                     </div>
 
-                    {/* Description */}
-                    <p className="text-[#D1D5DB] text-sm leading-relaxed flex-1 mb-0">
+                    {/* Description — proper line height for readability */}
+                    <p
+                      className="text-[11px] flex-1 mb-3"
+                      style={{ color: "#9CA3AF", lineHeight: 1.6 }}
+                    >
                       {opt.subtitle}
                     </p>
 
                     {/* Model badges */}
-                    <div className="mt-5 flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-[#2A2A2A]">
                       {opt.models.slice(0, 3).map((m) => (
                         <span
                           key={m}
-                          className="inline-flex items-center px-2.5 py-1 bg-[#2A2A2A] rounded-md text-xs font-medium text-gray-300 uppercase tracking-wider"
+                          className="inline-flex items-center px-2 py-0.5 bg-[#252525] rounded text-[9px] font-medium uppercase tracking-wider"
+                          style={{ color: "#D1D5DB", fontFamily: "var(--font-mono)" }}
                         >
                           {modelName(m)}
                         </span>
                       ))}
                       {opt.models.length > 3 && (
-                        <span className="inline-flex items-center text-xs text-[#9CA3AF]">
+                        <span className="text-[9px]" style={{ color: "#6B7280" }}>
                           +{opt.models.length - 3}
                         </span>
                       )}
@@ -107,9 +131,13 @@ export function QuickStartTab(_props: Props) {
       {/* Custom Presets */}
       {Object.keys(customPresets).length > 0 && (
         <div>
-          <div className="flex items-center gap-1.5 mb-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color: "var(--color-text-secondary)" }}>
+          <div className="my-8" style={{ borderTop: "1px solid #252525" }} />
+          <div className="flex items-center gap-2 mb-5 px-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: "#FFFFFF" }}>
               My Presets
+            </span>
+            <span className="text-[10px] ml-1" style={{ color: "#4B5563" }}>
+              {Object.keys(customPresets).length} saved
             </span>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
