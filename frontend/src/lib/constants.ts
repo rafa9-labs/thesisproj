@@ -265,7 +265,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "baseline",
         label: "Logistic Probe",
-        subtitle: "Runs the full pipeline with a single Logistic model and minimal HPO. Use this to confirm data, features, and labels are wired correctly before committing compute.",
+        subtitle: "Runs the full pipeline with a single Logistic model and minimal HPO.\n\nUse this to confirm data, features, and labels are wired correctly before committing compute.",
         models: ["logistic"],
         hpoIntensity: "light" as const,
         nTrials: 10,
@@ -278,7 +278,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "signal",
         label: "XGBoost Smoke",
-        subtitle: "Fast XGBoost run to surface any signal before tuning. 20 Optuna trials on 2 years of data — enough to reject pure noise, not enough to trust.",
+        subtitle: "Fast XGBoost run to surface any signal before tuning.\n\n20 Optuna trials on 2 years of data — enough to reject pure noise, not enough to trust.",
         models: ["xgboost"],
         hpoIntensity: "quick" as const,
         nTrials: 20,
@@ -298,7 +298,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "classical_logit",
         label: "Logistic Regression",
-        subtitle: "Ridge-penalised Logistic on 3 years of data. Cheap, interpretable, and a solid coefficient-based baseline. Good first stop when you want to understand which features matter.",
+        subtitle: "Ridge-penalised Logistic on 3 years of data. Cheap, interpretable, and a solid coefficient-based baseline.\n\nGood first stop when you want to understand which features matter.",
         models: ["logistic"],
         hpoIntensity: "standard" as const,
         nTrials: 30,
@@ -311,7 +311,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "classical_tri",
         label: "Logit + SVM + XGBoost",
-        subtitle: "Three complementary classifiers in one run: linear boundary (Logit), margin-maximising kernel (SVM), and gradient-boosted trees (XGBoost). Compare Sharpe across them directly.",
+        subtitle: "Three complementary classifiers in one run: linear boundary (Logit), margin-maximising kernel (SVM), and gradient-boosted trees (XGBoost).\n\nCompare Sharpe across them directly.",
         models: ["logistic", "svm", "xgboost"],
         hpoIntensity: "standard" as const,
         nTrials: 50,
@@ -324,7 +324,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "classical_full",
         label: "Full Classical Suite",
-        subtitle: "All five classical models — Logit, SVM, Decision Tree, Random Forest, XGBoost — at 80 trials each. Use this to benchmark every traditional approach before moving to deep learning.",
+        subtitle: "All five classical models — Logit, SVM, Decision Tree, Random Forest, XGBoost — at 80 trials each.\n\nUse this to benchmark every traditional approach before moving to deep learning.",
         models: ["logistic", "svm", "decision_tree", "random_forest", "xgboost"],
         hpoIntensity: "standard" as const,
         nTrials: 80,
@@ -337,7 +337,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "classical_hardened",
         label: "Hardened Classical",
-        subtitle: "Same five models at deep HPO depth (120 trials) on 4 years of training data. Higher confidence threshold filters marginal signals. The deployment-ready classical benchmark.",
+        subtitle: "Same five models at deep HPO depth (120 trials) on 4 years of training data.\n\nHigher confidence threshold filters marginal signals. The deployment-ready classical benchmark.",
         models: ["logistic", "svm", "decision_tree", "random_forest", "xgboost"],
         hpoIntensity: "deep" as const,
         nTrials: 120,
@@ -357,7 +357,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "deep_lstm_solo",
         label: "LSTM Sequence",
-        subtitle: "Single LSTM on 3 years of data. Tests whether temporal ordering in your feature lags adds predictive value over classical approaches. 40 Optuna trials.",
+        subtitle: "Single LSTM on 3 years of data. Tests whether temporal ordering in your feature lags adds predictive value over classical approaches.\n\n40 Optuna trials.",
         models: ["lstm"],
         hpoIntensity: "standard" as const,
         nTrials: 40,
@@ -370,7 +370,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "deep_cnn_lstm",
         label: "CNN + LSTM Pair",
-        subtitle: "CNN captures local price patterns, LSTM tracks sequential dependencies. Running both reveals whether spatial or temporal structure drives your edge — 60 trials each.",
+        subtitle: "CNN captures local price patterns, LSTM tracks sequential dependencies.\n\nRunning both reveals whether spatial or temporal structure drives your edge — 60 trials each.",
         models: ["lstm", "cnn"],
         hpoIntensity: "standard" as const,
         nTrials: 60,
@@ -383,7 +383,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "deep_full_stack",
         label: "CNN + LSTM + Transformer",
-        subtitle: "Full deep learning stack at maximum depth. CNN for patterns, LSTM for memory, Transformer for global attention across the lag window. 100 trials each, 4-year training set.",
+        subtitle: "Full deep learning stack at maximum depth. CNN for patterns, LSTM for memory, Transformer for global attention across the lag window.\n\n100 trials each, 4-year training set.",
         models: ["cnn", "lstm", "transformer"],
         hpoIntensity: "deep" as const,
         nTrials: 100,
@@ -403,7 +403,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "ensemble_regime",
         label: "Adaptive Regime",
-        subtitle: "RF-based regime detector routes predictions to context-specific sub-models. Tests whether your data has distinct trending, ranging, and volatile states worth separating.",
+        subtitle: "RF-based regime detector routes predictions to context-specific sub-models.\n\nTests whether your data has distinct trending, ranging, and volatile states worth separating.",
         models: ["ensemble_adaptive_regime"],
         hpoIntensity: "standard" as const,
         nTrials: 30,
@@ -416,7 +416,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "ensemble_hybrid",
         label: "CNN-LSTM-XGB Fusion",
-        subtitle: "Stacks CNN pattern detection, LSTM memory, and XGBoost tabular strength into a single ensemble signal. 50 trials each. Best for capturing multi-structure edges.",
+        subtitle: "Stacks CNN pattern detection, LSTM memory, and XGBoost tabular strength into a single ensemble signal.\n\n50 trials each. Best for capturing multi-structure edges.",
         models: ["ensemble_cnn_lstm_xgboost"],
         hpoIntensity: "standard" as const,
         nTrials: 50,
@@ -429,7 +429,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "ensemble_full",
         label: "Both Ensembles, Deep HPO",
-        subtitle: "Adaptive Regime and CNN-LSTM-XGB run back-to-back at deep HPO on 4 years of data. The most complete ensemble benchmark — use when you want to deploy an ensemble strategy.",
+        subtitle: "Adaptive Regime and CNN-LSTM-XGB run back-to-back at deep HPO on 4 years of data.\n\nThe most complete ensemble benchmark — use when you want to deploy an ensemble strategy.",
         models: ["ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost"],
         hpoIntensity: "deep" as const,
         nTrials: 80,
@@ -449,7 +449,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "rl_dqn_explore",
         label: "DQN Exploration",
-        subtitle: "Short DQN run to test whether a learned action policy outperforms random entry on your data. 20 trials, 2-year window. Treat this as a feasibility check, not a deployable strategy.",
+        subtitle: "Short DQN run to test whether a learned action policy outperforms random entry on your data.\n\n20 trials, 2-year window. Treat this as a feasibility check, not a deployable strategy.",
         models: ["dqn"],
         hpoIntensity: "standard" as const,
         nTrials: 20,
@@ -462,7 +462,7 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "rl_dqn_tuned",
         label: "DQN Tuned Policy",
-        subtitle: "50 deep HPO trials on 3 years of data. Optimises replay buffer, learning rate, network depth, and epsilon decay jointly. Use this to compare a tuned RL policy against your best classical model.",
+        subtitle: "50 deep HPO trials on 3 years of data. Optimises replay buffer, learning rate, network depth, and epsilon decay jointly.\n\nUse this to compare a tuned RL policy against your best classical model.",
         models: ["dqn"],
         hpoIntensity: "deep" as const,
         nTrials: 50,
@@ -479,7 +479,7 @@ export const QUICK_START_CATEGORIES = [
 export const MODEL_CONSTRAINTS: Record<string, { rules: string[]; tips: string[] }> = {
   logistic: {
     rules: ["VIF > 10 may cause unstable coefficients — check Training Diagnostics after backtest."],
-    tips: ["C in range 0.01–100 (log scale). Higher C = less regularization, may overfit.", "Use 'balanced' class_weight for imbalanced labels (default)."],
+    tips: ["C in range 0.01���100 (log scale). Higher C = less regularization, may overfit.", "Use 'balanced' class_weight for imbalanced labels (default)."],
   },
   svm: {
     rules: ["Gamma is now categorical [0.0001, 0.001, 0.01, 0.1, 0.5] — no more gamma=10 that memorizes noise.", "Permutation importance is model-agnostic. Trust it less than SHAP for tree models."],

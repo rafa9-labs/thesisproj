@@ -44,11 +44,11 @@ export function QuickStartTab(_props: Props) {
           <div key={cat.key}>
             {/* Divider between categories */}
             {idx > 0 && (
-              <div className="my-12" style={{ borderTop: "1px solid #333333" }} />
+              <div className="mt-14 mb-10" style={{ borderTop: "1px solid #2A2A2A" }} />
             )}
 
             {/* Category header */}
-            <div className="flex items-center gap-2 mt-8 mb-4 px-1">
+            <div className="flex items-center gap-2 mb-5 px-1">
               <span style={{ color: catColor }}>{CATEGORY_ICONS[cat.key]}</span>
               <span
                 className="text-[11px] font-semibold uppercase tracking-[0.1em]"
@@ -85,7 +85,7 @@ export function QuickStartTab(_props: Props) {
                       </span>
 
                       <span
-                        className="block text-[10px] tabular-nums mb-4"
+                        className="block text-[10px] tabular-nums mb-3"
                         style={{
                           color: "#A8E063",
                           fontFamily: "var(--font-mono)",
@@ -95,12 +95,17 @@ export function QuickStartTab(_props: Props) {
                         est. {timeStr}
                       </span>
 
-                      <p
-                        className="text-[11px]"
-                        style={{ color: "#9CA3AF", lineHeight: 1.75 }}
-                      >
-                        {opt.subtitle}
-                      </p>
+                      <div className="flex flex-col gap-2">
+                        {opt.subtitle.split("\n\n").map((para, i) => (
+                          <p
+                            key={i}
+                            className="text-[11px]"
+                            style={{ color: "#9CA3AF", lineHeight: 1.7 }}
+                          >
+                            {para}
+                          </p>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Bottom: model badges */}
