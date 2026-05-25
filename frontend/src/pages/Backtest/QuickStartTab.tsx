@@ -52,20 +52,69 @@ export function QuickStartTab(_props: Props) {
             )}
 
             {/* Category header */}
-            <div className="flex items-center gap-2 mb-6 px-1">
-              <span style={{ color: catColor }}>{CATEGORY_ICONS[cat.key]}</span>
-              <span
-                className="text-[11px] font-semibold uppercase tracking-[0.1em]"
-                style={{ color: "#FFFFFF" }}
-              >
-                {cat.label}
-              </span>
-              <span
-                className="text-[10px] ml-1"
-                style={{ color: "#4B5563" }}
-              >
-                {cat.options.length} presets
-              </span>
+            <div className="flex items-center gap-2 mt-8 mb-4 px-1">
+
+            {/* Options grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              {cat.options.map((opt) => {
+                const hrs = opt.estMinutes >= 120;
+                const timeStr = hrs ? `${(opt.estMinutes / 60).toFixed(0)}h` : `${opt.estMinutes}min`;
+                return (
+                  <div
+                    key={opt.key}
+                    onClick={() => handlePreset(opt.key)}
+                    className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg p-6 flex flex-col justify-between cursor-pointer transition-colors duration-150 hover:border-[#A8E063] hover:bg-[#1E1E1E]"
+                  >
+                    {/* Top content */}
+                    <div>
+                      {/* Title */}
+                      <span
+                        className="text-[13px] font-semibold tracking-wide mb-1 block"
+                        style={{ color: "#FFFFFF", lineHeight: 1.4 }}
+                      >
+                        {opt.label}
+                      </span>
+
+                      {/* Time estimate */}
+                      <span
+                        className="text-[10px] tabular-nums mb-4 block"
+                        style={{
+                          color: "#A8E063",
+                          fontFamily: "var(--font-mono)",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        est. {timeStr}
+                      </span>
+
+                      {/* Description */}
+                      <p
+                        className="text-[11px]"
+                        style={{ color: "#9CA3AF", lineHeight: 1.75 }}
+                      >
+                        {opt.subtitle}
+                      </p>
+                    </div>
+
+                    {/* Model badges */}
+                    <div className="mt-4 flex flex-wrap gap-2 pt-3 border-t border-[#252525]">
+                      {opt.models.slice(0, 3).map((m) => (
+                        <span
+                          key={m}
+                          className="inline-flex items-center px-2.5 py-1 bg-[#2A2A2A] rounded-md text-[10px] font-medium text-gray-300 uppercase tracking-wider"
+                        >
+                          {modelName(m)}
+                        </span>
+                      ))}
+                      {opt.models.length > 3 && (
+                        <span className="inline-flex items-center text-[10px]" style={{ color: "#6B7280" }}>
+                          +{opt.models.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Options grid — generous gap, internal padding */}
