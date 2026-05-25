@@ -7,10 +7,10 @@ const _CUSTOM_PRESETS_KEY = "kodaquant-custom-presets";
 function _loadCustomPresets(): Record<string, { name: string; subtitle: string; date: string }> {
   try {
     return JSON.parse(localStorage.getItem(_CUSTOM_PRESETS_KEY) || "{}");
-  } catch { return {}; }
+  } catch { /* ignore */ return {}; }
 }
 function _saveCustomPresets(data: Record<string, { name: string; subtitle: string; date: string }>) {
-  try { localStorage.setItem(_CUSTOM_PRESETS_KEY, JSON.stringify(data)); } catch {}
+  try { localStorage.setItem(_CUSTOM_PRESETS_KEY, JSON.stringify(data)); } catch { /* ignore */ }
 }
 
 type Widen<T> = T extends boolean ? boolean : T extends string ? string : T extends number ? number : T;
@@ -59,7 +59,7 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
   resetToDefaults: () => set({ ...structuredClone(DEFAULTS), hpoIntensity: DEFAULT_HPO_INTENSITY, hpoManualOverride: false, parentJobId: null } as Partial<BacktestState>),
 
   applyPreset: (preset) =>
-    set((state) => {
+    set(() => {
       const updates: Partial<BacktestState> = {};
       if (preset.pair !== undefined) updates.pair = preset.pair;
       if (preset.timeframe !== undefined) updates.timeframe = preset.timeframe;
@@ -90,7 +90,7 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
     }),
 
   applyQuickPreset: (presetKey) =>
-    set((state) => {
+    set(() => {
       for (const cat of QUICK_START_CATEGORIES) {
         for (const opt of cat.options) {
           if (opt.key === presetKey) {

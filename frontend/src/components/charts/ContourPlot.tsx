@@ -35,25 +35,23 @@ export function ContourPlot({ trials }: Props) {
         if (typeof v === "number") pset.add(k);
       }
     }
-    const names = Array.from(pset).slice(0, 20);
-    if (names.length >= 2 && !xParam) {
-      setXParam(names[0]);
-      setYParam(names[1] || names[0]);
-    }
-    return names;
+    return Array.from(pset).slice(0, 20);
   }, [trials]);
 
+  const xParamKey = xParam || (numericParams.length >= 2 ? numericParams[0] : "");
+  const yParamKey = yParam || (numericParams.length >= 2 ? (numericParams[1] || numericParams[0]) : "");
+
   const scatterData = useMemo(() => {
-    if (!trials || !xParam || !yParam) return [];
+    if (!trials || !xParamKey || !yParamKey) return [];
     return trials
-      .filter((t) => t.value != null && t.params?.[xParam] != null && t.params?.[yParam] != null)
+      .filter((t) => t.value != null && t.params?.[xParamKey] != null && t.params?.[yParamKey] != null)
       .map((t) => ({
-        x: Number(t.params![xParam]),
-        y: Number(t.params![yParam]),
+        x: Number(t.params![xParamKey]),
+        y: Number(t.params![yParamKey]),
         score: Number(t.value),
         trial: t.trial_number,
       }));
-  }, [trials, xParam, yParam]);
+  }, [trials, xParamKey, yParamKey]);
 
   const colorByScore = (score: number) => {
     if (score > 1.0) return "rgba(34,197,94,0.7)";
@@ -74,7 +72,7 @@ export function ContourPlot({ trials }: Props) {
     <div>
       <div className="flex items-center gap-2 mb-2">
         <select
-          value={xParam}
+          value={xParamKey}
           onChange={(e) => setXParam(e.target.value)}
           className="rounded px-2 py-1 text-[10px] border"
           style={{
@@ -91,7 +89,7 @@ export function ContourPlot({ trials }: Props) {
         </select>
         <span style={{ color: "var(--color-text-muted)" }}>×</span>
         <select
-          value={yParam}
+          value={yParamKey}
           onChange={(e) => setYParam(e.target.value)}
           className="rounded px-2 py-1 text-[10px] border"
           style={{
@@ -114,12 +112,12 @@ export function ContourPlot({ trials }: Props) {
             <XAxis
               dataKey="x"
               tick={{ fill: "var(--color-text-muted)", fontSize: 9, fontFamily: "var(--font-mono)" }}
-              label={{ value: xParam, position: "bottom", offset: 0, style: { fill: "var(--color-text-muted)", fontSize: 9 } }}
+              label={{ value: xParamKey, position: "bottom", offset: 0, style: { fill: "var(--color-text-muted)", fontSize: 9 } }}
             />
             <YAxis
               dataKey="y"
               tick={{ fill: "var(--color-text-muted)", fontSize: 9, fontFamily: "var(--font-mono)" }}
-              label={{ value: yParam, angle: -90, position: "left", style: { fill: "var(--color-text-muted)", fontSize: 9 } }}
+              label={{ value: yParamKey, angle: -90, position: "left", style: { fill: "var(--color-text-muted)", fontSize: 9 } }}
             />
             <ZAxis range={[30, 80]} />
             <Tooltip

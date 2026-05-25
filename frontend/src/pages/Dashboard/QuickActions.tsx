@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
 import { Play, RotateCcw } from "lucide-react";
-import { useBacktestStore } from "@/stores/useBacktestStore";
 
 export function QuickActions() {
   const navigate = useNavigate();

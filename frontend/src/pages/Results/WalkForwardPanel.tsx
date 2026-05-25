@@ -10,7 +10,7 @@ import {
   Cell,
   ReferenceLine,
 } from "recharts";
-import { Activity, BarChart3, TrendingUp, TrendingDown, Eye } from "lucide-react";
+import { Eye } from "lucide-react";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { formatMetric, formatPercent } from "@/lib/formatters";
 import type { WalkForwardPeriod } from "@/api/schemas";
@@ -56,22 +56,6 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
     }));
   }, [periods]);
 
-  if (!data.length) {
-    return (
-      <div className="rounded-xl border p-5" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
-        <div className="flex items-center gap-2 mb-4">
-          <Eye size={16} style={{ color: "var(--color-text-muted)" }} />
-          <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--color-text-secondary)" }}>
-            Walk-Forward Transparency
-          </h3>
-        </div>
-        <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-          No walk-forward period data available for {modelName}.
-        </p>
-      </div>
-    );
-  }
-
   const barData = useMemo(() => {
     if (viewMode === "sharpe") {
       return data.map((d) => ({
@@ -101,6 +85,22 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
   const viewLabel2 = viewMode === "sharpe" ? "Train Sharpe" : viewMode === "return" ? "B&H Return %" : null;
 
   const hovered = hoveredIdx !== null ? data[hoveredIdx] : null;
+
+  if (!data.length) {
+    return (
+      <div className="rounded-xl border p-5" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
+        <div className="flex items-center gap-2 mb-4">
+          <Eye size={16} style={{ color: "var(--color-text-muted)" }} />
+          <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--color-text-secondary)" }}>
+            Walk-Forward Transparency
+          </h3>
+        </div>
+        <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+          No walk-forward period data available for {modelName}.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border p-5" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>

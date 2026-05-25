@@ -31,7 +31,7 @@ export function HpoMonitor({ model, trials, bestTrial, totalTrials }: Props) {
   const topParams = useMemo(() => {
     if (!currentTrial?.params) return [];
     return Object.entries(currentTrial.params).slice(0, 3);
-  }, [currentTrial?.params]);
+  }, [currentTrial]);
 
   return (
     <div className="flex flex-col gap-3">

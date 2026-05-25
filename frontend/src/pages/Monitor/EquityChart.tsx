@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   LineChart,
   Line,
@@ -38,9 +38,7 @@ interface ChartRow {
 
 export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
   const [yMode, setYMode] = useState<YMode>("pct");
-  const [mounted, setMounted] = useState(false);
   const chartWrapperRef = useRef<HTMLDivElement>(null);
-  useEffect(() => setMounted(true), []);
 
   const chartData = useMemo(() => {
     const byPeriod = new Map<number, ChartRow>();
@@ -101,7 +99,7 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
       </div>
 
       <div ref={chartWrapperRef} style={{ width: "100%", height: 320, minWidth: 0 }}>
-        {mounted && hasData ? (
+        {hasData ? (
           <ResponsiveContainer width="100%" height={320}>
             <LineChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" strokeOpacity={0.3} />

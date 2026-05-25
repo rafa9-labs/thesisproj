@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useState, useRef, useEffect } from "react";
 import { Terminal, ChevronUp, ChevronDown, Trash2 } from "lucide-react";
 

@@ -12,7 +12,9 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
   const [electronVersion, setElectronVersion] = useState<string>("");
 
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (open && (window as any).__ELECTRON__?.getAppVersion) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window as any).__ELECTRON__.getAppVersion().then((v: string) => setElectronVersion(v));
     }
   }, [open]);

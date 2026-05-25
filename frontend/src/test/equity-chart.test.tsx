@@ -3,16 +3,18 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { EquityChart } from "@/pages/Monitor/EquityChart";
 
 vi.mock("recharts", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const FakeLineChart = ({ children }: any) => <div data-testid="line-chart">{children}</div>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const FakeResponsiveContainer = ({ children }: any) => (
+    <div data-testid="responsive-container">{children}</div>
+  );
   const FakeLine = () => <div data-testid="line" />;
   const FakeXAxis = () => <div data-testid="x-axis" />;
   const FakeYAxis = () => <div data-testid="y-axis" />;
   const FakeTooltip = () => <div data-testid="tooltip" />;
   const FakeLegend = () => <div data-testid="legend" />;
   const FakeCartesianGrid = () => <div data-testid="grid" />;
-  const FakeResponsiveContainer = ({ children }: any) => (
-    <div data-testid="responsive-container">{children}</div>
-  );
   return {
     LineChart: FakeLineChart,
     Line: FakeLine,
@@ -25,7 +27,9 @@ vi.mock("recharts", () => {
   };
 });
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const emptyOosPeriods: any[] = [];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const emptyOosEquity: any[] = [];
 
 const sampleOosEquity = [

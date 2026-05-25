@@ -7,28 +7,6 @@ import { PerformanceHeatmapSection } from "@/pages/Dashboard/PerformanceHeatmapS
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import type { BacktestSummaryItem } from "@/api/schemas";
 
-const SORT_COLS = [
-  { key: "created_at", label: "Date" },
-  { key: "sharpe", label: "Sharpe" },
-  { key: "total_return_pct", label: "Return" },
-  { key: "win_rate", label: "Win Rate" },
-  { key: "max_drawdown_pct", label: "Max DD" },
-];
-
-const STATUS_STYLES: Record<string, { dot: string; bg: string; text: string }> = {
-  completed: { dot: "var(--color-accent-success)", bg: "rgba(34,197,94,0.10)", text: "var(--color-accent-success)" },
-  failed: { dot: "var(--color-accent-danger)", bg: "rgba(239,68,68,0.10)", text: "var(--color-accent-danger)" },
-  running: { dot: "var(--color-brand)", bg: "var(--color-brand-glow)", text: "var(--color-brand)" },
-  pending: { dot: "var(--color-accent-warning)", bg: "rgba(245,158,11,0.10)", text: "var(--color-accent-warning)" },
-};
-
-const CARD_STYLE: React.CSSProperties = {
-  backgroundColor: "var(--color-glass)",
-  border: "1px solid var(--color-glass-border)",
-  borderRadius: 10,
-  backdropFilter: "blur(12px)",
-};
-
 const TH_STYLE: React.CSSProperties = {
   backgroundColor: "var(--color-surface)",
   color: "var(--color-text-muted)",
@@ -51,7 +29,6 @@ export function ResultsHistoryPage() {
   const navigate = useNavigate();
   const deleteJob = useDeleteJob();
   const setField = useBacktestStore((s) => s.setField);
-  const applyPreset = useBacktestStore((s) => s.applyPreset);
   const [search, setSearch] = useState("");
   const [pairFilter, setPairFilter] = useState("");
   const [sortBy, setSortBy] = useState("created_at");
@@ -75,7 +52,7 @@ export function ResultsHistoryPage() {
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
@@ -210,7 +187,6 @@ export function ResultsHistoryPage() {
               <tr><td colSpan={10} className="px-3 py-8 text-center" style={{ color: "var(--color-text-muted)" }}>No results found. Run a backtest to see results here.</td></tr>
             ) : (
               filtered.map((row) => {
-                const status = STATUS_STYLES[row.status] || STATUS_STYLES.completed;
                 const isSel = selected.has(row.job_id);
                 return (
                   <tr

@@ -27,7 +27,7 @@ export function DebugOverlay({ jobId, pollCursor }: { jobId: string | null; poll
     try {
       const p = JSON.parse(str);
       eventName = p.event ?? "unknown";
-    } catch {}
+    } catch { /* ignore */ }
     setLogs((prev) => {
       const entry: LogEntry = { id: nextId.current++, ts: new Date().toISOString().slice(11, 23), source, raw: str.slice(0, 300) };
       const next = [...prev, entry];
@@ -45,7 +45,6 @@ export function DebugOverlay({ jobId, pollCursor }: { jobId: string | null; poll
   useEffect(() => {
     if (!open) return;
     const check = setInterval(() => setWsConnected(wsManager.connected), 500);
-    setWsConnected(wsManager.connected);
     return () => clearInterval(check);
   }, [open]);
 

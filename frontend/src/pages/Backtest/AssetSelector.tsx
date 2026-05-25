@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { Download, CheckCircle, AlertTriangle } from "lucide-react";
 import { usePairs, useDataStatus, useDownloadData, useDownloadJobStatus, useDefinePair } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 
@@ -16,24 +16,19 @@ export function AssetSelector() {
   const definePair = useDefinePair();
 
   const [downloadJobId, setDownloadJobId] = useState<string | null>(null);
-  const { data: dlJobStatus } = useDownloadJobStatus(downloadJobId);
+  const dlCompleted = downloadJobId != null;
+  const { data: dlJobStatus } = useDownloadJobStatus(dlCompleted ? downloadJobId : null);
 
   const [showDefineModal, setShowDefineModal] = useState(false);
   const [defineSymbol, setDefineSymbol] = useState("");
   const [definePip, setDefinePip] = useState("0.0001");
-  const [defineDecimals, setDefineDecimals] = useState("4");
-
-  useEffect(() => {
-    if (dlJobStatus?.status === "completed") {
-      setDownloadJobId(null);
-    }
-  }, [dlJobStatus?.status]);
+  const [defineDecimals] = useState("4");
 
   const handleDownload = async () => {
     try {
       const result = await downloadData.mutateAsync({ pair });
       setDownloadJobId(result.job_id);
-    } catch {}
+    } catch { /* ignore */ }
   };
 
   const handleDefine = async () => {
@@ -49,7 +44,7 @@ export function AssetSelector() {
       setField("pair", result.symbol);
       setShowDefineModal(false);
       setDefineSymbol("");
-    } catch {}
+    } catch { /* ignore */ }
   };
 
   const isKnown = pairs?.some((p) => p.pair.symbol === pair);

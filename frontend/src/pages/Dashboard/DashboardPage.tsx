@@ -42,7 +42,10 @@ export function DashboardPage() {
 
   const [activePair, setActivePair] = useState("EURUSD");
   const activePairRef = useRef(activePair);
-  activePairRef.current = activePair;
+
+  useEffect(() => {
+    activePairRef.current = activePair;
+  }, [activePair]);
 
   useEffect(() => {
     if (availablePairs.length > 0 && !availablePairs.includes(activePairRef.current)) {

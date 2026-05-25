@@ -28,13 +28,12 @@ const makeResults = (overrides: Partial<JobResults> = {}): JobResults => ({
 });
 
 describe("computeDashboardKPIs", () => {
-  it("returns zeros for empty array", () => {
+  it("returns nulls for empty array", () => {
     const kpis = computeDashboardKPIs([]);
     expect(kpis).toEqual({
-      totalRuns: 0,
-      bestSharpe: null,
+      avgSharpe: null,
       avgWinRate: null,
-      bestReturn: null,
+      profitableMonthsPct: null,
     });
   });
 
@@ -47,10 +46,9 @@ describe("computeDashboardKPIs", () => {
       }),
     ];
     const kpis = computeDashboardKPIs(results);
-    expect(kpis.totalRuns).toBe(1);
-    expect(kpis.bestSharpe).toBe(1.47);
+    expect(kpis.avgSharpe).toBeCloseTo(1.47);
     expect(kpis.avgWinRate).toBeCloseTo(0.552);
-    expect(kpis.bestReturn).toBeCloseTo(0.124);
+    expect(kpis.profitableMonthsPct).toBeNull();
   });
 
   it("computes across multiple jobs with multiple models", () => {
@@ -69,10 +67,8 @@ describe("computeDashboardKPIs", () => {
       }),
     ];
     const kpis = computeDashboardKPIs(results);
-    expect(kpis.totalRuns).toBe(3);
-    expect(kpis.bestSharpe).toBe(1.47);
+    expect(kpis.avgSharpe).toBeCloseTo((1.47 + 0.89 + 1.12) / 3);
     expect(kpis.avgWinRate).toBeCloseTo((0.55 + 0.52 + 0.54) / 3);
-    expect(kpis.bestReturn).toBeCloseTo(0.12);
   });
 
   it("handles null metrics gracefully", () => {
@@ -84,10 +80,9 @@ describe("computeDashboardKPIs", () => {
       }),
     ];
     const kpis = computeDashboardKPIs(results);
-    expect(kpis.totalRuns).toBe(1);
-    expect(kpis.bestSharpe).toBeNull();
+    expect(kpis.avgSharpe).toBeNull();
     expect(kpis.avgWinRate).toBeNull();
-    expect(kpis.bestReturn).toBeNull();
+    expect(kpis.profitableMonthsPct).toBeNull();
   });
 
   it("handles mix of null and present values", () => {
@@ -100,23 +95,7 @@ describe("computeDashboardKPIs", () => {
       }),
     ];
     const kpis = computeDashboardKPIs(results);
-    expect(kpis.totalRuns).toBe(2);
-    expect(kpis.bestSharpe).toBe(1.0);
+    expect(kpis.avgSharpe).toBeCloseTo(1.0);
     expect(kpis.avgWinRate).toBeCloseTo(0.55);
-    expect(kpis.bestReturn).toBeCloseTo(0.05);
-  });
-
-  it("picks best Sharpe from negative values", () => {
-    const results = [
-      makeResults({
-        metrics: [
-          { model: "a", sharpe: -0.5, sortino: null, max_drawdown: null, total_return_pct: -0.1, win_rate: 0.4, total_trades: 10, profit_factor: 0.8, avg_trade: -0.01, ...nullExtra },
-          { model: "b", sharpe: -0.2, sortino: null, max_drawdown: null, total_return_pct: -0.02, win_rate: 0.48, total_trades: 10, profit_factor: 0.9, avg_trade: -0.002, ...nullExtra },
-        ],
-      }),
-    ];
-    const kpis = computeDashboardKPIs(results);
-    expect(kpis.bestSharpe).toBe(-0.2);
-    expect(kpis.bestReturn).toBeCloseTo(-0.02);
   });
 });
