@@ -42,17 +42,17 @@ export function QuickStartTab(_props: Props) {
         const catColor = CATEGORY_COLORS[cat.key] ?? "var(--color-text-muted)";
 
         return (
-          <div key={cat.key}>
+          <div key={cat.key} className="pt-12">
             {/* Divider between categories (not before the first) */}
             {idx > 0 && (
               <div
-                className="my-8"
-                style={{ borderTop: "1px solid #252525" }}
+                className="mb-12"
+                style={{ borderTop: "1px solid #333333" }}
               />
             )}
 
             {/* Category header */}
-            <div className="flex items-center gap-2 mb-5 px-1">
+            <div className="flex items-center gap-2 mb-6 px-1">
               <span style={{ color: catColor }}>{CATEGORY_ICONS[cat.key]}</span>
               <span
                 className="text-[11px] font-semibold uppercase tracking-[0.1em]"
@@ -69,7 +69,7 @@ export function QuickStartTab(_props: Props) {
             </div>
 
             {/* Options grid — generous gap, internal padding */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
               {cat.options.map((opt) => {
                 const hrs = opt.estMinutes >= 120;
                 const timeStr = hrs ? `${(opt.estMinutes / 60).toFixed(0)}h` : `${opt.estMinutes}min`;
@@ -134,9 +134,9 @@ export function QuickStartTab(_props: Props) {
 
       {/* Custom Presets */}
       {Object.keys(customPresets).length > 0 && (
-        <div>
-          <div className="my-8" style={{ borderTop: "1px solid #252525" }} />
-          <div className="flex items-center gap-2 mb-5 px-1">
+        <div className="pt-12">
+          <div className="mb-12" style={{ borderTop: "1px solid #333333" }} />
+          <div className="flex items-center gap-2 mb-6 px-1">
             <span className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: "#FFFFFF" }}>
               My Presets
             </span>
@@ -144,7 +144,7 @@ export function QuickStartTab(_props: Props) {
               {Object.keys(customPresets).length} saved
             </span>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
             {Object.entries(customPresets).map(([key, p]) => (
               <div
                 key={key}
