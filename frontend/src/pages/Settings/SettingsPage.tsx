@@ -5,91 +5,193 @@ import {
   Database,
   Key,
   Info,
-  ChevronDown,
-  ChevronRight,
   ExternalLink,
+  GitBranch,
 } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useConfig, useSaveConfig, useStoreApiKey, useStoreKv } from "@/api/queries";
 
-interface SectionProps {
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}
-
-function Section({ icon, title, children, defaultOpen = false }: SectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <div
-      className="rounded-lg border transition-all duration-200 hover:border-[var(--color-border-active)]"
-      style={{
-        borderColor: "var(--color-glass-border)",
-        backgroundColor: "var(--color-glass)",
-        backdropFilter: "blur(12px)",
-      }}
-    >
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors duration-200"
-        style={{ cursor: "pointer" }}
-      >
-        <span style={{ color: "var(--color-text-muted)" }}>{icon}</span>
-        <span className="flex-1 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-          {title}
-        </span>
-        {open ? (
-          <ChevronDown size={16} strokeWidth={1.5} style={{ color: "var(--color-text-muted)" }} />
-        ) : (
-          <ChevronRight size={16} strokeWidth={1.5} style={{ color: "var(--color-text-muted)" }} />
-        )}
-      </button>
-      {open && (
-        <div
-          className="border-t px-5 py-4"
-          style={{ borderColor: "var(--color-glass-border)" }}
-        >
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-2.5">
-      <span className="text-[11px] font-light tracking-wide" style={{ color: "var(--color-text-secondary)" }}>
-        {label}
-      </span>
-      <div className="flex items-center gap-2">{children}</div>
-    </div>
-  );
-}
+// ─── Primitives ────────────────────────────────────────────────────────────────
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
+      type="button"
       onClick={() => onChange(!value)}
-      className="relative h-5 w-9 rounded-full transition-all duration-200"
+      className="relative flex-shrink-0 rounded-full transition-colors"
       style={{
-        backgroundColor: value ? "var(--color-brand)" : "var(--color-glass-border)",
-        cursor: "pointer",
-        boxShadow: value ? "0 0 8px rgba(0,229,255,0.25)" : "none",
+        width: 28,
+        height: 14,
+        backgroundColor: value ? "#1D4ED833" : "#1F2937",
+        border: `1px solid ${value ? "#3B82F6" : "#374151"}`,
       }}
+      aria-pressed={value}
     >
       <span
-        className="absolute top-0.5 h-4 w-4 rounded-full transition-transform duration-200"
+        className="absolute rounded-full transition-all"
         style={{
-          backgroundColor: value ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-          left: value ? 18 : 2,
+          width: 8,
+          height: 8,
+          top: 2,
+          left: value ? 15 : 3,
+          backgroundColor: value ? "#3B82F6" : "#4B5563",
         }}
       />
     </button>
   );
 }
+
+function NumericInput({
+  value,
+  min,
+  max,
+  onChange,
+  width = 56,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (v: number) => void;
+  width?: number;
+}) {
+  return (
+    <input
+      type="number"
+      value={value}
+      min={min}
+      max={max}
+      onChange={(e) => {
+        const v = Number(e.target.value);
+        if (v >= min && v <= max) onChange(v);
+      }}
+      className="rounded border text-right focus:outline-none"
+      style={{
+        width,
+        height: 26,
+        padding: "0 6px",
+        backgroundColor: "#131722",
+        borderColor: "#2A2E39",
+        color: "#D1D4DC",
+        fontSize: 11,
+        fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+      }}
+    />
+  );
+}
+
+function TextInput({
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  type = "text",
+  width = 220,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onBlur?: () => void;
+  placeholder?: string;
+  type?: string;
+  width?: number;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+      placeholder={placeholder}
+      className="rounded border focus:outline-none"
+      style={{
+        width,
+        height: 26,
+        padding: "0 8px",
+        backgroundColor: "#131722",
+        borderColor: "#2A2E39",
+        color: "#D1D4DC",
+        fontSize: 11,
+        fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+      }}
+    />
+  );
+}
+
+// ─── Layout primitives ─────────────────────────────────────────────────────────
+
+function FieldRow({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="flex items-center justify-between"
+      style={{ minHeight: 34, borderBottom: "1px solid #2A2E3940", padding: "0 0" }}
+    >
+      <div className="flex flex-col" style={{ gap: 1 }}>
+        <span style={{ fontSize: 11, color: "#787B86", letterSpacing: "0.03em" }}>{label}</span>
+        {hint && <span style={{ fontSize: 10, color: "#4B5563" }}>{hint}</span>}
+      </div>
+      <div className="flex items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+function SectionPanel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="flex flex-col"
+      style={{
+        backgroundColor: "#1E222D",
+        border: "1px solid #2A2E39",
+        borderRadius: 4,
+        padding: "10px 14px",
+        gap: 0,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div
+      className="flex items-center gap-2"
+      style={{ marginBottom: 8 }}
+    >
+      <span
+        style={{
+          fontSize: 9,
+          letterSpacing: "0.1em",
+          color: "#4B5563",
+          textTransform: "uppercase",
+          fontWeight: 600,
+        }}
+      >
+        {label}
+      </span>
+      <div style={{ flex: 1, height: 1, backgroundColor: "#2A2E39" }} />
+    </div>
+  );
+}
+
+// ─── Nav items ─────────────────────────────────────────────────────────────────
+
+const NAV_ITEMS = [
+  { key: "general", label: "General", icon: <SettingsIcon size={13} strokeWidth={1.5} /> },
+  { key: "gpu", label: "GPU & Compute", icon: <Cpu size={13} strokeWidth={1.5} /> },
+  { key: "datasources", label: "Data Sources", icon: <Database size={13} strokeWidth={1.5} /> },
+  { key: "license", label: "License", icon: <Key size={13} strokeWidth={1.5} /> },
+  { key: "pipeline", label: "Pipeline Configuration", icon: <GitBranch size={13} strokeWidth={1.5} /> },
+  { key: "about", label: "About", icon: <Info size={13} strokeWidth={1.5} /> },
+];
+
+// ─── License sub-section ───────────────────────────────────────────────────────
 
 interface LicenseInfo {
   plan: string;
@@ -102,7 +204,7 @@ interface LicenseInfo {
   machine_id: string;
 }
 
-function LicenseSection() {
+function LicenseContent() {
   const [license, setLicense] = useState<LicenseInfo | null>(null);
   const [inputKey, setInputKey] = useState("");
   const [activating, setActivating] = useState(false);
@@ -112,7 +214,7 @@ function LicenseSection() {
     const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
     fetch(`${apiBase}/license/status`)
       .then((r) => r.json())
-      .then((data) => setLicense(data as LicenseInfo))
+      .then((d) => setLicense(d as LicenseInfo))
       .catch(() => {});
   }, []);
 
@@ -129,8 +231,8 @@ function LicenseSection() {
       });
       const data = await res.json();
       if (data.success) {
-        const statusRes = await fetch(`${apiBase}/license/status`);
-        setLicense(await statusRes.json());
+        const r2 = await fetch(`${apiBase}/license/status`);
+        setLicense(await r2.json());
         setInputKey("");
       } else {
         setError(data.detail || data.error || "Activation failed");
@@ -142,126 +244,282 @@ function LicenseSection() {
     }
   };
 
-  const handleDeactivate = async () => {
-    try {
-      const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
-      await fetch(`${apiBase}/license/deactivate`, { method: "POST" });
-      const statusRes = await fetch(`${apiBase}/license/status`);
-      setLicense(await statusRes.json());
-    } catch { /* ignore */ }
-  };
-
   if (!license) {
-    return (
-      <div className="py-3 text-xs" style={{ color: "var(--color-text-muted)" }}>
-        Checking license status...
-      </div>
-    );
+    return <span style={{ fontSize: 11, color: "#4B5563" }}>Checking license status…</span>;
   }
 
-  const planLabel: Record<string, string> = {
-    free: "Free",
-    trial: "Trial",
-    pro: "Pro",
-    team: "Team",
-  };
   const planColor: Record<string, string> = {
-    free: "var(--color-text-muted)",
-    trial: "#f59e0b",
-    pro: "var(--color-accent)",
-    team: "#10b981",
+    free: "#4B5563",
+    trial: "#F59E0B",
+    pro: "#3B82F6",
+    team: "#10B981",
   };
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span
-            className="rounded-md border px-3 py-1.5 text-xs font-semibold"
-            style={{
-              borderColor: planColor[license.plan] || "var(--color-border)",
-              backgroundColor: `${planColor[license.plan] || "var(--color-accent)"}15`,
-              color: planColor[license.plan] || "var(--color-text-primary)",
-            }}
-          >
-            {planLabel[license.plan] || license.plan}
-          </span>
-          {license.trial_active && (
-            <span className="text-xs" style={{ color: "#f59e0b" }}>
-              {license.trial_days_left} days left
-            </span>
-          )}
-        </div>
-        {license.licensed && (
-          <button
-            onClick={handleDeactivate}
-            className="rounded-md border px-2 py-1 text-xs"
-            style={{
-              borderColor: "var(--color-border)",
-              color: "var(--color-text-muted)",
-              cursor: "pointer",
-            }}
-          >
-            Deactivate
-          </button>
-        )}
-      </div>
-
-      {license.needs_activation && !license.trial_active && (
-        <div className="flex flex-col gap-2">
-          <input
-            type="text"
-            value={inputKey}
-            onChange={(e) => setInputKey(e.target.value)}
-            placeholder="XXXX-XXXX-XXXX-XXXX"
-            className="rounded-md border px-3 py-1.5 text-xs"
-            style={{
-              borderColor: "var(--color-border)",
-              backgroundColor: "var(--color-app)",
-              color: "var(--color-text-primary)",
-              fontFamily: "var(--font-mono)",
-            }}
-            onKeyDown={(e) => e.key === "Enter" && handleActivate()}
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={handleActivate}
-              disabled={activating}
-              className="rounded-md px-3 py-1.5 text-xs font-semibold"
-              style={{
-                backgroundColor: "var(--color-accent)",
-                color: "#fff",
-                cursor: activating ? "not-allowed" : "pointer",
-                opacity: activating ? 0.6 : 1,
-              }}
-            >
-              {activating ? "Activating..." : "Activate"}
-            </button>
-          </div>
-          {error && (
-            <p className="text-xs" style={{ color: "#ef4444" }}>{error}</p>
-          )}
-        </div>
-      )}
-
+      <FieldRow label="Plan">
+        <span
+          style={{
+            fontSize: 10,
+            fontFamily: "var(--font-mono)",
+            color: planColor[license.plan] ?? "#D1D4DC",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        >
+          {license.plan}
+          {license.trial_active && ` · ${license.trial_days_left}d left`}
+        </span>
+      </FieldRow>
       {license.machine_id && (
         <FieldRow label="Machine ID">
-          <span className="text-xs font-mono" style={{ color: "var(--color-text-muted)" }}>
+          <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "#4B5563" }}>
             {license.machine_id}
           </span>
         </FieldRow>
       )}
-
-      <div className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-        {license.plan === "free"
-          ? "Free: 3 models (logistic, XGBoost, RF) + fixed lot sizing"
-          : license.plan === "trial"
-            ? "Full access during trial period"
-            : "All features unlocked"}
-      </div>
+      {license.needs_activation && !license.trial_active && (
+        <div className="flex flex-col gap-2 pt-1">
+          <div className="flex items-center gap-2">
+            <TextInput
+              value={inputKey}
+              onChange={setInputKey}
+              placeholder="XXXX-XXXX-XXXX-XXXX"
+              width={200}
+            />
+            <button
+              type="button"
+              onClick={handleActivate}
+              disabled={activating}
+              style={{
+                height: 26,
+                padding: "0 12px",
+                fontSize: 10,
+                letterSpacing: "0.06em",
+                backgroundColor: "#1D4ED818",
+                border: "1px solid #3B82F655",
+                color: "#60A5FA",
+                borderRadius: 3,
+                cursor: activating ? "not-allowed" : "pointer",
+                opacity: activating ? 0.6 : 1,
+                fontFamily: "inherit",
+              }}
+            >
+              {activating ? "ACTIVATING…" : "ACTIVATE"}
+            </button>
+          </div>
+          {error && <span style={{ fontSize: 10, color: "#F23645" }}>{error}</span>}
+        </div>
+      )}
+      {license.licensed && (
+        <button
+          type="button"
+          onClick={async () => {
+            const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
+            await fetch(`${apiBase}/license/deactivate`, { method: "POST" }).catch(() => {});
+            const r = await fetch(`${apiBase}/license/status`).catch(() => null);
+            if (r) setLicense(await r.json());
+          }}
+          style={{
+            alignSelf: "flex-start",
+            height: 24,
+            padding: "0 10px",
+            fontSize: 10,
+            letterSpacing: "0.06em",
+            backgroundColor: "transparent",
+            border: "1px solid #2A2E39",
+            color: "#4B5563",
+            borderRadius: 3,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          DEACTIVATE
+        </button>
+      )}
     </div>
   );
 }
+
+// ─── Content panels per section ────────────────────────────────────────────────
+
+function GeneralContent({ store, syncToBackend }: { store: ReturnType<typeof useSettingsStore>; syncToBackend: (k: string, v: unknown) => void }) {
+  return (
+    <SectionPanel>
+      <SectionLabel label="Application" />
+      <FieldRow label="Verbose Mode (Apprentice)" hint="Show extended explanations in tooltips">
+        <Toggle
+          value={store.verboseMode}
+          onChange={(v) => { store.setField("verboseMode", v); syncToBackend("verboseMode", v); }}
+        />
+      </FieldRow>
+      <FieldRow label="Theme">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#4B5563" }}>Dark (only)</span>
+      </FieldRow>
+      <FieldRow label="API URL">
+        <TextInput
+          value={store.apiUrl}
+          onChange={(v) => store.setField("apiUrl", v)}
+          onBlur={() => syncToBackend("apiUrl", store.apiUrl)}
+          width={200}
+        />
+      </FieldRow>
+    </SectionPanel>
+  );
+}
+
+function GpuContent({ store, syncToBackend }: { store: ReturnType<typeof useSettingsStore>; syncToBackend: (k: string, v: unknown) => void }) {
+  return (
+    <SectionPanel>
+      <SectionLabel label="Compute Resources" />
+      <FieldRow label="Thread Budget" hint="CPU threads allocated to training workers (1–16)">
+        <NumericInput
+          value={store.threadBudget}
+          min={1}
+          max={16}
+          onChange={(v) => { store.setField("threadBudget", v); syncToBackend("threadBudget", v); }}
+        />
+      </FieldRow>
+      <FieldRow label="Mixed Precision (FP16)" hint="Use half-precision tensors on CUDA devices">
+        <Toggle
+          value={store.mixedPrecision}
+          onChange={(v) => { store.setField("mixedPrecision", v); syncToBackend("mixedPrecision", v); }}
+        />
+      </FieldRow>
+      <FieldRow label="GPU Status">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#4B5563" }}>
+          Detected at startup — see terminal
+        </span>
+      </FieldRow>
+    </SectionPanel>
+  );
+}
+
+function DataSourcesContent({
+  store,
+  onOandaBlur,
+  onAccountBlur,
+  apiKeySaved,
+  accountIdSaved,
+}: {
+  store: ReturnType<typeof useSettingsStore>;
+  onOandaBlur: () => void;
+  onAccountBlur: () => void;
+  apiKeySaved: boolean;
+  accountIdSaved: boolean;
+}) {
+  return (
+    <SectionPanel>
+      <SectionLabel label="OANDA" />
+      <FieldRow label="API Key">
+        <div className="flex items-center gap-2">
+          <TextInput
+            value={store.oandaApiKey ?? ""}
+            onChange={(v) => store.setField("oandaApiKey", v || null)}
+            onBlur={onOandaBlur}
+            placeholder="Enter API key…"
+            type="password"
+            width={220}
+          />
+          {apiKeySaved && (
+            <span style={{ fontSize: 10, color: "#089981", fontFamily: "var(--font-mono)" }}>SAVED</span>
+          )}
+        </div>
+      </FieldRow>
+      <FieldRow label="Account ID">
+        <div className="flex items-center gap-2">
+          <TextInput
+            value={store.oandaAccountId ?? ""}
+            onChange={(v) => store.setField("oandaAccountId", v || null)}
+            onBlur={onAccountBlur}
+            placeholder="e.g. 001-001-12345678-001"
+            width={220}
+          />
+          {accountIdSaved && (
+            <span style={{ fontSize: 10, color: "#089981", fontFamily: "var(--font-mono)" }}>SAVED</span>
+          )}
+        </div>
+      </FieldRow>
+      <FieldRow label="Data Directory">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#4B5563" }}>
+          Set via DATA_DIR env var
+        </span>
+      </FieldRow>
+    </SectionPanel>
+  );
+}
+
+function PipelineContent({ store, syncToBackend }: { store: ReturnType<typeof useSettingsStore>; syncToBackend: (k: string, v: unknown) => void }) {
+  return (
+    <SectionPanel>
+      <SectionLabel label="Pipeline Defaults" />
+      <FieldRow label="Configuration">
+        <span style={{ fontSize: 11, color: "#4B5563" }}>
+          Advanced parameters are set per-backtest.{" "}
+          <code style={{ fontFamily: "var(--font-mono)", color: "#6B7280" }}>config.py</code> holds global defaults.
+        </span>
+      </FieldRow>
+      <div style={{ paddingTop: 8 }}>
+        <button
+          type="button"
+          onClick={() => {
+            store.setField("verboseMode", false);
+            store.setField("threadBudget", 4);
+            store.setField("mixedPrecision", true);
+            store.setField("apiUrl", "http://localhost:8000");
+            syncToBackend("reset", true);
+          }}
+          style={{
+            height: 26,
+            padding: "0 12px",
+            fontSize: 10,
+            letterSpacing: "0.06em",
+            backgroundColor: "transparent",
+            border: "1px solid #2A2E39",
+            color: "#787B86",
+            borderRadius: 3,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            textTransform: "uppercase",
+          }}
+        >
+          Reset to Defaults
+        </button>
+      </div>
+    </SectionPanel>
+  );
+}
+
+function AboutContent() {
+  return (
+    <SectionPanel>
+      <SectionLabel label="Application Info" />
+      <FieldRow label="Version">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#D1D4DC" }}>v1.0.0-dev</span>
+      </FieldRow>
+      <FieldRow label="Pipeline">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#D1D4DC" }}>Forex ML Backtester</span>
+      </FieldRow>
+      <FieldRow label="Models Registered">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#D1D4DC" }}>10</span>
+      </FieldRow>
+      <FieldRow label="Repository">
+        <a
+          href="https://github.com/rafa9-labs/thesisproj"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1"
+          style={{ fontSize: 11, color: "#3B82F6", fontFamily: "var(--font-mono)" }}
+        >
+          rafa9-labs/thesisproj
+          <ExternalLink size={10} strokeWidth={1.5} />
+        </a>
+      </FieldRow>
+    </SectionPanel>
+  );
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
   const store = useSettingsStore();
@@ -269,6 +527,7 @@ export function SettingsPage() {
   const saveConfig = useSaveConfig();
   const storeApiKey = useStoreApiKey();
   const storeKv = useStoreKv();
+  const [activeSection, setActiveSection] = useState("general");
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [accountIdSaved, setAccountIdSaved] = useState(false);
   const synced = useRef(false);
@@ -288,232 +547,85 @@ export function SettingsPage() {
   };
 
   const handleOandaBlur = () => {
-    const key = store.oandaApiKey;
-    if (key) {
-      storeApiKey.mutate({ name: "oanda", value: key }, {
-        onSuccess: () => {
-          setApiKeySaved(true);
-          setTimeout(() => setApiKeySaved(false), 2000);
-        },
+    if (store.oandaApiKey) {
+      storeApiKey.mutate({ name: "oanda", value: store.oandaApiKey }, {
+        onSuccess: () => { setApiKeySaved(true); setTimeout(() => setApiKeySaved(false), 2000); },
       });
     }
   };
 
   const handleAccountIdBlur = () => {
-    const acc = store.oandaAccountId;
-    if (acc) {
-      storeKv.mutate({ key: "oanda_account_id", value: acc }, {
-        onSuccess: () => {
-          setAccountIdSaved(true);
-          setTimeout(() => setAccountIdSaved(false), 2000);
-        },
+    if (store.oandaAccountId) {
+      storeKv.mutate({ key: "oanda_account_id", value: store.oandaAccountId }, {
+        onSuccess: () => { setAccountIdSaved(true); setTimeout(() => setAccountIdSaved(false), 2000); },
       });
     }
   };
 
+  const renderContent = () => {
+    switch (activeSection) {
+      case "general": return <GeneralContent store={store} syncToBackend={syncToBackend} />;
+      case "gpu": return <GpuContent store={store} syncToBackend={syncToBackend} />;
+      case "datasources": return (
+        <DataSourcesContent
+          store={store}
+          onOandaBlur={handleOandaBlur}
+          onAccountBlur={handleAccountIdBlur}
+          apiKeySaved={apiKeySaved}
+          accountIdSaved={accountIdSaved}
+        />
+      );
+      case "license": return <SectionPanel><SectionLabel label="License" /><LicenseContent /></SectionPanel>;
+      case "pipeline": return <PipelineContent store={store} syncToBackend={syncToBackend} />;
+      case "about": return <AboutContent />;
+      default: return null;
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-5">
-
-      <Section icon={<SettingsIcon size={18} />} title="General" defaultOpen>
-        <FieldRow label="Verbose Mode (Apprentice)">
-          <Toggle
-            value={store.verboseMode}
-            onChange={(v) => store.setField("verboseMode", v)}
-          />
-        </FieldRow>
-        <FieldRow label="API URL">
-          <input
-            type="text"
-            value={store.apiUrl}
-            onChange={(e) => store.setField("apiUrl", e.target.value)}
-            className="rounded-md border px-3 py-1.5 text-xs transition-all duration-200 focus:outline-none"
-            style={{
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "var(--color-glass)",
-              color: "var(--color-text-primary)",
-              fontFamily: "var(--font-mono)",
-              width: 240,
-              backdropFilter: "blur(8px)",
-            }}
-          />
-        </FieldRow>
-        <FieldRow label="Theme">
-          <span
-            className="rounded-md border px-3 py-1.5 text-xs"
-            style={{
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "var(--color-glass)",
-              color: "var(--color-text-primary)",
-              backdropFilter: "blur(8px)",
-            }}
-          >
-            Dark (only)
-          </span>
-        </FieldRow>
-      </Section>
-
-      <Section icon={<Cpu size={18} />} title="GPU & Compute">
-        <FieldRow label="Thread Budget">
-          <div className="flex items-center gap-3">
-            <input
-              type="range"
-              min={1}
-              max={16}
-              value={store.threadBudget}
-              onChange={(e) => store.setField("threadBudget", Number(e.target.value))}
-              className="w-32"
+    <div className="flex gap-0" style={{ minHeight: 0 }}>
+      {/* Left nav sidebar */}
+      <div
+        style={{
+          width: 200,
+          flexShrink: 0,
+          borderRight: "1px solid #2A2E39",
+          paddingRight: 0,
+        }}
+      >
+        {NAV_ITEMS.map((item) => {
+          const active = activeSection === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setActiveSection(item.key)}
+              className="flex items-center gap-2.5 w-full transition-colors"
               style={{
-                accentColor: "var(--color-brand)",
-                background: `linear-gradient(to right, var(--color-brand) 0%, var(--color-brand) ${((store.threadBudget - 1) / 15) * 100}%, var(--color-glass-border) ${((store.threadBudget - 1) / 15) * 100}%, var(--color-glass-border) 100%)`,
+                height: 36,
+                padding: "0 14px",
+                backgroundColor: active ? "#1E222D" : "transparent",
+                borderLeft: `2px solid ${active ? "#3B82F6" : "transparent"}`,
+                color: active ? "#D1D4DC" : "#787B86",
+                fontSize: 11,
+                cursor: "pointer",
+                textAlign: "left",
+                letterSpacing: "0.02em",
               }}
-            />
-            <span
-              className="text-xs font-medium"
-              style={{ color: "var(--color-brand)", fontFamily: "var(--font-mono)", minWidth: 24 }}
             >
-              {store.threadBudget}
-            </span>
-          </div>
-        </FieldRow>
-        <FieldRow label="Mixed Precision (FP16)">
-          <Toggle
-            value={store.mixedPrecision}
-            onChange={(v) => store.setField("mixedPrecision", v)}
-          />
-        </FieldRow>
-        <FieldRow label="GPU Status">
-          <span
-            className="text-xs"
-            style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
-          >
-            Detected at startup — see terminal panel
-          </span>
-        </FieldRow>
-      </Section>
-
-      <Section icon={<Database size={18} />} title="Data Sources">
-        <FieldRow label="OANDA API Key">
-          <div className="flex items-center gap-2">
-            <input
-              type="password"
-              value={store.oandaApiKey ?? ""}
-              onChange={(e) => store.setField("oandaApiKey", e.target.value || null)}
-              onBlur={handleOandaBlur}
-              placeholder="Enter API key…"
-              className="rounded-md border px-3 py-1.5 text-xs transition-all duration-200 focus:outline-none"
-              style={{
-                borderColor: "var(--color-glass-border)",
-                backgroundColor: "var(--color-glass)",
-                color: "var(--color-text-primary)",
-                fontFamily: "var(--font-mono)",
-                width: 240,
-                backdropFilter: "blur(8px)",
-              }}
-            />
-            {apiKeySaved && (
-              <span className="text-[10px] font-medium" style={{ color: "var(--color-accent-success)" }}>
-                Saved
+              <span style={{ color: active ? "#3B82F6" : "#4B5563", flexShrink: 0 }}>
+                {item.icon}
               </span>
-            )}
-          </div>
-        </FieldRow>
-        <FieldRow label="OANDA Account ID">
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={store.oandaAccountId ?? ""}
-              onChange={(e) => store.setField("oandaAccountId", e.target.value || null)}
-              onBlur={handleAccountIdBlur}
-              placeholder="Enter account ID…"
-              className="rounded-md border px-3 py-1.5 text-xs transition-all duration-200 focus:outline-none"
-              style={{
-                borderColor: "var(--color-glass-border)",
-                backgroundColor: "var(--color-glass)",
-                color: "var(--color-text-primary)",
-                fontFamily: "var(--font-mono)",
-                width: 240,
-                backdropFilter: "blur(8px)",
-              }}
-            />
-            {accountIdSaved && (
-              <span className="text-[10px] font-medium" style={{ color: "var(--color-accent-success)" }}>
-                Saved
-              </span>
-            )}
-          </div>
-        </FieldRow>
-        <FieldRow label="Data Directory">
-          <span
-            className="text-xs"
-            style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
-          >
-            Configured via environment variable
-          </span>
-        </FieldRow>
-      </Section>
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
 
-      <Section icon={<Key size={18} />} title="License">
-        <LicenseSection />
-      </Section>
-
-      <Section icon={<SettingsIcon size={18} />} title="Pipeline Configuration">
-        <div className="flex flex-col gap-2">
-          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-            Advanced pipeline parameters are configured per-backtest on the Backtest page.
-            Default constants are defined in <code style={{ fontFamily: "var(--font-mono)" }}>config.py</code>.
-          </span>
-          <button
-            onClick={() => {
-              store.setField("verboseMode", false);
-              store.setField("threadBudget", 4);
-              store.setField("mixedPrecision", true);
-              store.setField("apiUrl", "http://localhost:8000");
-              syncToBackend("reset", true);
-            }}
-            className="mt-2 self-start rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] transition-all duration-200 hover:border-[var(--color-border-active)]"
-            style={{
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "var(--color-glass-hover)",
-              color: "var(--color-text-secondary)",
-              cursor: "pointer",
-            }}
-          >
-            Reset to Defaults
-          </button>
-        </div>
-      </Section>
-
-      <Section icon={<Info size={18} />} title="About">
-        <div className="flex flex-col gap-2">
-          <FieldRow label="Version">
-            <span style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", fontSize: 12 }}>
-              v1.0.0-dev
-            </span>
-          </FieldRow>
-          <FieldRow label="Pipeline">
-            <span style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", fontSize: 12 }}>
-              Forex ML Backtester
-            </span>
-          </FieldRow>
-          <FieldRow label="Models">
-            <span style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)", fontSize: 12 }}>
-              10 registered
-            </span>
-          </FieldRow>
-          <div className="flex items-center gap-2 pt-2">
-            <ExternalLink size={12} style={{ color: "var(--color-text-muted)" }} />
-            <a
-              href="https://github.com/rafa9-labs/thesisproj"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs"
-              style={{ color: "var(--color-accent)" }}
-            >
-              GitHub Repository
-            </a>
-          </div>
-        </div>
-      </Section>
+      {/* Right content */}
+      <div style={{ flex: 1, paddingLeft: 20, paddingTop: 2 }}>
+        {renderContent()}
+      </div>
     </div>
   );
 }

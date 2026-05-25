@@ -1,240 +1,353 @@
+import { useState, useRef, useEffect } from "react";
+import { Info } from "lucide-react";
 import { useBacktestStore } from "@/stores/useBacktestStore";
-import { ParamSlider } from "@/components/shared/ParamSlider";
-import { ParamSelect } from "@/components/shared/ParamSelect";
-import { RANGES, SELECT_OPTIONS } from "@/lib/constants";
-import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { SELECT_OPTIONS } from "@/lib/constants";
 
-const sectionClass = "rounded-xl border p-6";
-const sectionStyle: React.CSSProperties = {
-  borderColor: "var(--color-glass-border)",
-  backgroundColor: "rgba(255,255,255,0.02)",
+// ─── Shared primitives ────────────────────────────────────────────────────────
+
+const PANEL: React.CSSProperties = {
+  backgroundColor: "#1E222D",
+  border: "1px solid #2A2E39",
+  borderRadius: 4,
+  padding: "10px 14px",
 };
-const sectionTitleClass = "mb-1 text-[11px] font-medium uppercase tracking-[0.12em]";
-const sectionTitleStyle: React.CSSProperties = { color: "var(--color-text-secondary)" };
-const explainerClass = "mb-5 text-[11px] font-light leading-relaxed max-w-[720px]";
-const explainerStyle: React.CSSProperties = { color: "var(--color-text-muted)" };
 
-export function ExecutionPanel({ defaultOpen = false }: { defaultOpen?: boolean }) {
+const LABEL: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase" as const,
+  color: "#787B86",
+  whiteSpace: "nowrap" as const,
+};
+
+const INPUT: React.CSSProperties = {
+  height: 26,
+  padding: "0 8px",
+  backgroundColor: "#131722",
+  border: "1px solid #2A2E39",
+  borderRadius: 3,
+  color: "#D1D4DC",
+  fontSize: 12,
+  fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+  outline: "none",
+  width: "100%",
+};
+
+const SELECT_STYLE: React.CSSProperties = {
+  ...INPUT,
+  cursor: "pointer",
+  appearance: "none" as const,
+  WebkitAppearance: "none" as const,
+  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23787B86' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+  backgroundRepeat: "no-repeat",
+  backgroundPosition: "right 8px center",
+  paddingRight: 24,
+};
+
+// ─── Tooltip ──────────────────────────────────────────────────────────────────
+
+function Tip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  return (
+    <span ref={ref} style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+      <button
+        type="button"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onClick={() => setOpen((v) => !v)}
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center" }}
+        aria-label="More information"
+      >
+        <Info size={11} color="#4B5563" strokeWidth={1.5} />
+      </button>
+      {open && (
+        <span
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 6px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: "#1E222D",
+            border: "1px solid #2A2E39",
+            borderRadius: 4,
+            padding: "6px 10px",
+            width: 220,
+            fontSize: 11,
+            color: "#9CA3AF",
+            lineHeight: 1.5,
+            zIndex: 50,
+            whiteSpace: "normal",
+            pointerEvents: "none",
+          }}
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ─── FieldRow: label + (i) stacked above an input ────────────────────────────
+
+function Field({
+  label,
+  tip,
+  children,
+  style,
+}: {
+  label: string;
+  tip: string;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5, ...style }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <span style={LABEL}>{label}</span>
+        <Tip text={tip} />
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ─── NumericInput ─────────────────────────────────────────────────────────────
+
+function NumericInput({
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  const [raw, setRaw] = useState(String(value));
+
+  // keep in sync when store changes externally
+  useEffect(() => setRaw(String(value)), [value]);
+
+  function commit(str: string) {
+    const n = parseFloat(str);
+    if (!isNaN(n)) {
+      const clamped = Math.min(max, Math.max(min, n));
+      onChange(clamped);
+      setRaw(String(clamped));
+    } else {
+      setRaw(String(value));
+    }
+  }
+
+  return (
+    <input
+      type="number"
+      value={raw}
+      min={min}
+      max={max}
+      step={step}
+      style={INPUT}
+      onChange={(e) => setRaw(e.target.value)}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => { if (e.key === "Enter") commit((e.target as HTMLInputElement).value); }}
+    />
+  );
+}
+
+// ─── SelectInput ─────────────────────────────────────────────────────────────
+
+function SelectInput({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <select
+      value={value}
+      style={SELECT_STYLE}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value} style={{ backgroundColor: "#1E222D", color: "#D1D4DC" }}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// ─── SectionHeader ────────────────────────────────────────────────────────────
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+      <span
+        style={{
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          color: "#4B5563",
+        }}
+      >
+        {label}
+      </span>
+      <div style={{ flex: 1, height: 1, backgroundColor: "#2A2E39" }} />
+    </div>
+  );
+}
+
+// ─── Main panel ──────────────────────────────────────────────────────────────
+
+export function ExecutionPanel({ defaultOpen: _defaultOpen = false }: { defaultOpen?: boolean }) {
   const setField = useBacktestStore((s) => s.setField);
-  const s = useBacktestStore.getState();
-  const [open, setOpen] = useState(defaultOpen);
+  const initialEquity = useBacktestStore((s) => s.initialEquity as number);
+  const maxLeverage = useBacktestStore((s) => s.maxLeverage as number);
+  const sizingMethod = useBacktestStore((s) => s.sizingMethod as string);
+  const trailingMethod = useBacktestStore((s) => s.trailingMethod as string);
+  const maxDrawdownPct = useBacktestStore((s) => s.maxDrawdownPct as number);
+  const maxConsecutiveLosses = useBacktestStore((s) => s.maxConsecutiveLosses as number);
+  const dailyLossLimitPct = useBacktestStore((s) => s.dailyLossLimitPct as number);
 
   return (
     <div
-      className="flex flex-col gap-6 rounded-xl border p-6"
       style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
+        backgroundColor: "#131722",
+        border: "1px solid #2A2E39",
+        borderRadius: 4,
+        padding: "14px 16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
       }}
     >
-      {/* Header with collapse toggle */}
-      <button
-        className="flex w-full items-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] transition-colors duration-200 hover:text-[var(--color-text-primary)]"
-        style={{ color: "var(--color-text-muted)" }}
-        onClick={() => setOpen(!open)}
-      >
-        {open ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
-        Execution Models (Advanced)
-      </button>
+      {/* ── Section 1: GENERAL ── */}
+      <div style={PANEL}>
+        <SectionHeader label="General" />
+        <div style={{ display: "flex", gap: 16 }}>
+          <Field
+            label="Initial Equity"
+            tip="Starting account balance in base currency used for all backtest simulations."
+            style={{ flex: 1 }}
+          >
+            <NumericInput
+              value={initialEquity}
+              min={1000}
+              max={100000}
+              step={1000}
+              onChange={(v) => setField("initialEquity", v)}
+            />
+          </Field>
 
-      {open && (
-        <div className="flex flex-col gap-6">
-
-          {/* ── General ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>General</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Base account and margin settings that apply to every execution model.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
-              <ParamSlider
-                label="Initial Equity"
-                value={s.initialEquity}
-                min={RANGES.initialEquity.min}
-                max={RANGES.initialEquity.max}
-                step={RANGES.initialEquity.step}
-                description="Starting account balance in base currency."
-                onChange={(v) => setField("initialEquity", v)}
-              />
-              <ParamSlider
-                label="Max Leverage"
-                value={s.maxLeverage}
-                min={RANGES.maxLeverage.min}
-                max={RANGES.maxLeverage.max}
-                step={RANGES.maxLeverage.step}
-                description="Highest leverage allowed per position. Affects margin requirements and drawdown magnitude."
-                onChange={(v) => setField("maxLeverage", v)}
-              />
-            </div>
-          </section>
-
-          {/* ── Position Sizing ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-classical)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>Position Sizing</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Determines how large each trade should be relative to account equity. Different methods balance growth vs. risk of ruin.
-            </p>
-            <div className="flex flex-col gap-6">
-              <div className="max-w-sm">
-                <ParamSelect
-                  label="Method"
-                  value={s.sizingMethod}
-                  options={[...SELECT_OPTIONS.sizingMethod]}
-                  description="Fixed Lot = constant size. Kelly = optimal growth. Fixed Fractional = risk %. ATR = volatility-adjusted."
-                  onChange={(v) => setField("sizingMethod", v as typeof s.sizingMethod)}
-                />
-              </div>
-
-              {s.sizingMethod === "kelly" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
-                  <ParamSlider
-                    label="Kelly Fraction"
-                    value={s.kellyFraction}
-                    min={RANGES.kellyFraction.min}
-                    max={RANGES.kellyFraction.max}
-                    step={RANGES.kellyFraction.step}
-                    description="Fraction of full Kelly to use. 0.5 = Half-Kelly, safer but slower growth."
-                    onChange={(v) => setField("kellyFraction", v)}
-                  />
-                  <ParamSlider
-                    label="Min Trades"
-                    value={s.kellyMinTrades}
-                    min={RANGES.kellyMinTrades.min}
-                    max={RANGES.kellyMinTrades.max}
-                    step={RANGES.kellyMinTrades.step}
-                    description="Minimum trade history before Kelly sizing activates. Prevents erratic early sizing."
-                    onChange={(v) => setField("kellyMinTrades", v)}
-                  />
-                </div>
-              )}
-
-              {s.sizingMethod === "fixed_fractional" && (
-                <div className="max-w-sm">
-                  <ParamSlider
-                    label="Risk Fraction"
-                    value={s.riskFraction}
-                    min={RANGES.riskFraction.min}
-                    max={RANGES.riskFraction.max}
-                    step={RANGES.riskFraction.step}
-                    description="Percentage of equity risked on each trade. 2% = standard conservative sizing."
-                    onChange={(v) => setField("riskFraction", v)}
-                  />
-                </div>
-              )}
-
-              {s.sizingMethod === "atr" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
-                  <ParamSlider
-                    label="ATR Risk %"
-                    value={s.atrRiskPct}
-                    min={RANGES.atrRiskPct.min}
-                    max={RANGES.atrRiskPct.max}
-                    step={RANGES.atrRiskPct.step}
-                    description="Equity percentage risked, scaled by current ATR volatility."
-                    onChange={(v) => setField("atrRiskPct", v)}
-                  />
-                  <ParamSlider
-                    label="ATR SL Mult"
-                    value={s.atrSlMult}
-                    min={RANGES.atrSlMult.min}
-                    max={RANGES.atrSlMult.max}
-                    step={RANGES.atrSlMult.step}
-                    description="Stop-loss distance as a multiple of ATR. Higher = wider stops, fewer whipsaws."
-                    onChange={(v) => setField("atrSlMult", v)}
-                  />
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* ── Trailing Stops ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-deep)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>Trailing Stops</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Automatically moves the stop-loss in favor of the trade as price progresses, locking in profits while allowing runners.
-            </p>
-            <div className="flex flex-col gap-6">
-              <div className="max-w-sm">
-                <ParamSelect
-                  label="Method"
-                  value={s.trailingMethod}
-                  options={[...SELECT_OPTIONS.trailingMethod]}
-                  description="None = no trailing. Standard = fixed pip step. ATR = volatility-adjusted step. Chandelier = highest high / lowest low minus ATR multiple."
-                  onChange={(v) => setField("trailingMethod", v as typeof s.trailingMethod)}
-                />
-              </div>
-              {s.trailingMethod !== "none" && (
-                <div className="max-w-sm">
-                  <ParamSlider
-                    label="Activation"
-                    value={s.trailingActivation}
-                    min={RANGES.trailingActivation.min}
-                    max={RANGES.trailingActivation.max}
-                    step={RANGES.trailingActivation.step}
-                    description="Profit threshold (as a fraction of price) that must be reached before the trailing stop begins to move."
-                    onChange={(v) => setField("trailingActivation", v)}
-                  />
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* ── Risk Management ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-danger)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>Risk Management</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Circuit breakers and drawdown controls that halt trading when conditions become unfavorable. Essential for live deployment.
-            </p>
-            <div className="flex flex-col gap-6">
-              <div className="max-w-sm">
-                <ParamSlider
-                  label="Max Drawdown"
-                  value={s.maxDrawdownPct}
-                  min={RANGES.maxDrawdownPct.min}
-                  max={RANGES.maxDrawdownPct.max}
-                  step={RANGES.maxDrawdownPct.step}
-                  description="Peak-to-trough equity drop that triggers a full trading halt. 15% = common institutional limit."
-                  onChange={(v) => setField("maxDrawdownPct", v)}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
-                <ParamSlider
-                  label="Max Consec. Losses"
-                  value={s.maxConsecutiveLosses}
-                  min={RANGES.maxConsecutiveLosses.min}
-                  max={RANGES.maxConsecutiveLosses.max}
-                  step={RANGES.maxConsecutiveLosses.step}
-                  description="Halt after this many consecutive losing trades. Prevents revenge-trading spirals."
-                  onChange={(v) => setField("maxConsecutiveLosses", v)}
-                />
-                <ParamSlider
-                  label="Daily Loss Limit"
-                  value={s.dailyLossLimitPct}
-                  min={RANGES.dailyLossLimitPct.min}
-                  max={RANGES.dailyLossLimitPct.max}
-                  step={RANGES.dailyLossLimitPct.step}
-                  description="Maximum daily equity loss before pausing until the next session."
-                  onChange={(v) => setField("dailyLossLimitPct", v)}
-                />
-              </div>
-            </div>
-          </section>
+          <Field
+            label="Max Leverage"
+            tip="Maximum leverage multiplier allowed per position. Higher leverage amplifies both gains and drawdowns."
+            style={{ flex: 1 }}
+          >
+            <NumericInput
+              value={maxLeverage}
+              min={1}
+              max={50}
+              step={1}
+              onChange={(v) => setField("maxLeverage", v)}
+            />
+          </Field>
         </div>
-      )}
+      </div>
+
+      {/* ── Section 2: TRADE MANAGEMENT ── */}
+      <div style={PANEL}>
+        <SectionHeader label="Trade Management" />
+        <div style={{ display: "flex", gap: 16 }}>
+          <Field
+            label="Position Sizing Method"
+            tip="Fixed Lot = constant size. Kelly = optimal growth fraction. Fixed Fractional = % of equity per trade. ATR = volatility-adjusted."
+            style={{ flex: 1 }}
+          >
+            <SelectInput
+              value={sizingMethod}
+              options={[...SELECT_OPTIONS.sizingMethod]}
+              onChange={(v) => setField("sizingMethod", v as typeof sizingMethod)}
+            />
+          </Field>
+
+          <Field
+            label="Trailing Stops Method"
+            tip="None = no trailing. Standard = fixed pip step. ATR = volatility-adjusted step. Chandelier = highest high/low minus ATR multiple."
+            style={{ flex: 1 }}
+          >
+            <SelectInput
+              value={trailingMethod}
+              options={[...SELECT_OPTIONS.trailingMethod]}
+              onChange={(v) => setField("trailingMethod", v as typeof trailingMethod)}
+            />
+          </Field>
+        </div>
+      </div>
+
+      {/* ── Section 3: RISK MANAGEMENT ── */}
+      <div style={PANEL}>
+        <SectionHeader label="Risk Management" />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+          <Field
+            label="Max Drawdown"
+            tip="Peak-to-trough equity drop that triggers a full trading halt. 0.15 = 15%, a common institutional circuit-breaker."
+          >
+            <NumericInput
+              value={maxDrawdownPct}
+              min={0.05}
+              max={0.5}
+              step={0.05}
+              onChange={(v) => setField("maxDrawdownPct", v)}
+            />
+          </Field>
+
+          <Field
+            label="Max Consec. Losses"
+            tip="Halt trading after this many consecutive losing trades. Prevents emotional drawdown spirals in live deployment."
+          >
+            <NumericInput
+              value={maxConsecutiveLosses}
+              min={2}
+              max={20}
+              step={1}
+              onChange={(v) => setField("maxConsecutiveLosses", v)}
+            />
+          </Field>
+
+          <Field
+            label="Daily Loss Limit"
+            tip="Maximum daily equity loss as a fraction before pausing until the next session. 0.03 = 3% of equity."
+          >
+            <NumericInput
+              value={dailyLossLimitPct}
+              min={0.01}
+              max={0.1}
+              step={0.01}
+              onChange={(v) => setField("dailyLossLimitPct", v)}
+            />
+          </Field>
+        </div>
+      </div>
     </div>
   );
 }
