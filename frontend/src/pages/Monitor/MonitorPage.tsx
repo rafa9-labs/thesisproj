@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, FlaskConical, ChevronRight, Square, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { Eye, FlaskConical, ChevronRight, Square, Wifi, WifiOff } from "lucide-react";
 import { useActiveBacktests, useForceStopJob, useJobStatus } from "@/api/queries";
 import { useJobStore } from "@/stores/useJobStore";
 import { useBacktestWebSocket } from "@/hooks/useBacktestWebSocket";
@@ -10,8 +10,6 @@ import { CycleCard } from "./CycleCard";
 import { EquityChart } from "./EquityChart";
 import { DebugOverlay } from "./DebugOverlay";
 import { wsManager } from "@/api/websocket";
-
-const COMPLETED_TTL_MS = 5 * 60 * 1000;
 
 export function MonitorPage() {
   const navigate = useNavigate();
@@ -46,46 +44,15 @@ export function MonitorPage() {
     }
   }, [runningList, activeJobs, ensureJob]);
 
-  const localJobIds = useMemo(() => {
-    const ids: string[] = [];
-    activeJobs.forEach((_, id) => ids.push(id));
-    return ids;
-  }, [activeJobs]);
+  const allJobIds = useMemo(() => ({
+    active: new Set(runningList.map((j) => j.job_id)),
+    completed: completedCache,
+  }), [runningList, completedCache]);
 
-  const allJobIds = useMemo(() => {
-    const now = Date.now();
-    const next = new Map(completedCache);
-    let changed = false;
-    for (const [id, expiredAt] of completedCache) {
-      if (now > expiredAt) {
-        next.delete(id);
-        changed = true;
-      }
-    }
-    if (changed) setCompletedCache(next);
-
-    return {
-      active: new Set(runningList.map((j) => j.job_id)),
-      completed: next,
-    };
-  }, [runningList, completedCache]);
-
-  useEffect(() => {
-    for (const [id] of activeJobs) {
-      const job = getJob(id);
-      if (job && (job.status === "completed" || job.status === "failed")) {
-        if (!allJobIds.active.has(id) && !allJobIds.completed.has(id)) {
-          setCompletedCache((prev) => {
-            const next = new Map(prev);
-            next.set(id, Date.now() + COMPLETED_TTL_MS);
-            return next;
-          });
-        }
-      }
-    }
-  }, [activeJobs, allJobIds.active, allJobIds.completed, getJob]);
-
-  const visibleIds = new Set([...allJobIds.active, ...allJobIds.completed.keys()]);
+  const visibleIds = useMemo(
+    () => new Set([...allJobIds.active, ...allJobIds.completed.keys()]),
+    [allJobIds],
+  );
 
   useEffect(() => {
     if (visibleIds.size > 0) {
@@ -97,21 +64,17 @@ export function MonitorPage() {
         }
       }
     }
-  }, [visibleIds.size, selectedJobId, selectJob, setActiveTab, activeJobs]);
+  }, [visibleIds, selectedJobId, selectJob, setActiveTab, activeJobs]);
 
   const selectedJobStatus = selectedJobId ? getJob(selectedJobId)?.status : null;
   const wsJobId = selectedJobId && (selectedJobStatus === "pending" || selectedJobStatus === "running") ? selectedJobId : null;
   useBacktestWebSocket(wsJobId);
 
   useEffect(() => {
-    if (!selectedJobId) {
-      setWsConnected(false);
-      return;
-    }
+    if (!selectedJobId) return;
     const check = setInterval(() => {
       setWsConnected(wsManager.connected);
     }, 1000);
-    setWsConnected(wsManager.connected);
     return () => clearInterval(check);
   }, [selectedJobId]);
 
@@ -159,7 +122,6 @@ export function MonitorPage() {
   };
 
   const selectedJob = selectedJobId ? getJob(selectedJobId) : undefined;
-  const currentPhase = selectedJob?.modelPhases.get(selectedJob?.currentModel ?? "");
 
   const allOosPeriods = selectedJob?.oosPeriods ?? [];
   const allOosEquity = selectedJob?.oosEquity ?? [];

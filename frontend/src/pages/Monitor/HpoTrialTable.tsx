@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from "react";
-import { Trophy, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import type { HpoTrialRow } from "@/api/schemas";
 
 interface Props {
@@ -45,7 +45,7 @@ function isBest(trial: HpoTrialRow, best: HpoTrialRow | null): boolean {
   return best?.trial_number === trial.trial_number;
 }
 
-export function HpoTrialTable({ model, trials, bestTrial, totalTrials }: Props) {
+export function HpoTrialTable({ trials, bestTrial, totalTrials }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const visible = trials.slice(-30);

@@ -10,7 +10,7 @@ interface Props {
 }
 
 export function LLMAdvisor({ jobId, modelName }: Props) {
-  const { data, isLoading, isError, refetch } = useLlmAnalysis(jobId, modelName);
+  const { data, isLoading, refetch } = useLlmAnalysis(jobId, modelName);
   const applyQuickPreset = useBacktestStore((s) => s.applyQuickPreset);
   const setField = useBacktestStore((s) => s.setField);
 

@@ -11,7 +11,6 @@ import {
 } from "recharts";
 import { ChartCard } from "./ChartCard";
 import type { MonthlyResult } from "@/api/schemas";
-import { formatPercent } from "@/lib/formatters";
 
 interface MonthlyReturnsChartProps {
   monthlyResults: MonthlyResult[] | null;

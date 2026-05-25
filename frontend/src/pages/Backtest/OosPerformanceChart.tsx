@@ -38,11 +38,9 @@ function OosPerformanceChartInner({ model, equity, totalPeriods, currentPeriod, 
   }, [equity, yMode]);
 
   const yLabel = yMode === "pct" ? "%" : "$";
-  const baseValue = yMode === "pct" ? 0 : 10000;
 
   const pct = totalPeriods > 0 ? Math.min(Math.round((currentPeriod / totalPeriods) * 100), 100) : 0;
 
-  const latestSharpe = equity.length > 0 ? null : null;
   const lastModel = equity.length > 0 ? equity[equity.length - 1].model : null;
   const lastBh = equity.length > 0 ? equity[equity.length - 1].bh : null;
 

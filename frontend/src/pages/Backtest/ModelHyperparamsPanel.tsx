@@ -3,7 +3,7 @@ import { useModelHyperparams } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamSelect } from "@/components/shared/ParamSelect";
-import type { HyperparamSpec, HyperparamRange, HyperparamChoice, HyperparamFixed } from "@/api/schemas";
+import type { HyperparamSpec, HyperparamRange, HyperparamFixed } from "@/api/schemas";
 
 const MODEL_COLORS: Record<string, string> = {
   classical: "var(--color-accent-classical, #22d3ee)",

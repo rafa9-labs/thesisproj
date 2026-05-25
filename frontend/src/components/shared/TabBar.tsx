@@ -13,32 +13,50 @@ interface Props {
 export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
   return (
     <div
-      className="flex items-center gap-1 rounded-lg"
-      style={{ backgroundColor: "var(--color-elevated)" }}
+      className="flex items-end w-full justify-between"
     >
       {tabs.map((tab) => {
         const disabled = disabledTabs?.has(tab.key);
         const isActive = activeTab === tab.key;
+
         return (
           <button
             key={tab.key}
             onClick={() => !disabled && onTabChange(tab.key)}
             disabled={disabled}
-            className="rounded-md px-0 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all duration-150"
+            className="relative pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors duration-150"
             style={{
-              flex: 1,
-              backgroundColor: isActive ? "var(--color-surface)" : "transparent",
+              paddingBottom: 8,
+              paddingLeft: 0,
+              paddingRight: 0,
+              background: "transparent",
+              border: "none",
               color: isActive
-                ? "var(--color-brand)"
+                ? "var(--color-text-primary)"
                 : disabled
-                  ? "var(--color-text-muted)"
-                  : "var(--color-text-secondary)",
-              boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.15)" : "none",
+                ? "var(--color-text-muted)"
+                : "rgba(255,255,255,0.38)",
               cursor: disabled ? "not-allowed" : "pointer",
-              opacity: disabled ? 0.5 : 1,
+              opacity: disabled ? 0.4 : 1,
+              outline: "none",
+              whiteSpace: "nowrap",
             }}
           >
             {tab.label}
+            {/* Active underline */}
+            {isActive && (
+              <span
+                style={{
+                  position: "absolute",
+                  bottom: -1,
+                  left: 0,
+                  right: 0,
+                  height: 2,
+                  backgroundColor: "var(--color-brand)",
+                  borderRadius: "2px 2px 0 0",
+                }}
+              />
+            )}
           </button>
         );
       })}

@@ -1,10 +1,16 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useState, useRef, useEffect } from "react";
-import { Terminal, ChevronUp, ChevronDown, Trash2 } from "lucide-react";
+import { ChevronUp, ChevronDown, Trash2 } from "lucide-react";
 
 interface LogEntry {
   ts: Date;
   level: "info" | "warn" | "error" | "debug";
   message: string;
+}
+
+export interface TerminalPanelStatusProps {
+  apiOk: boolean;
+  wsConnected: boolean;
 }
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -25,7 +31,29 @@ export function pushTerminalLog(level: LogEntry["level"], message: string) {
   listeners.forEach((fn) => fn());
 }
 
-export function TerminalPanel() {
+function StatusPip({ active, label }: { active: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <div className="relative">
+        <div
+          className="h-[5px] w-[5px] rounded-full"
+          style={{ backgroundColor: active ? "var(--color-accent-success)" : "var(--color-text-muted)" }}
+        />
+        {active && (
+          <div
+            className="absolute inset-0 animate-ping-brand rounded-full"
+            style={{ backgroundColor: "var(--color-accent-success)", opacity: 0.35 }}
+          />
+        )}
+      </div>
+      <span style={{ color: "var(--color-text-muted)", fontSize: 9, fontFamily: "var(--font-mono)" }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+export function TerminalPanel({ apiOk = false, wsConnected = false }: Partial<TerminalPanelStatusProps>) {
   const [open, setOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>(logBuffer);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -49,68 +77,96 @@ export function TerminalPanel() {
 
   return (
     <div
-      className="flex flex-col border-t transition-all duration-200"
+      className="flex flex-col"
       style={{
-        borderColor: "var(--color-border)",
         backgroundColor: "var(--color-app)",
-        height: open ? 200 : 32,
+        borderTop: "1px solid rgba(255,255,255,0.04)",
+        height: open ? 228 : 28,
         overflow: "hidden",
+        transition: "height 200ms ease",
+        flexShrink: 0,
       }}
     >
-      <button
+      {/* ── Status bar / toggle row — always 28px ───────────────── */}
+      <div
+        className="flex items-center justify-between px-6 cursor-pointer select-none"
+        style={{ height: 28, flexShrink: 0 }}
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between border-b px-3"
-        style={{
-          height: 32,
-          borderColor: "var(--color-border)",
-          backgroundColor: "var(--color-surface)",
-          cursor: "pointer",
-          flexShrink: 0,
-        }}
       >
-        <div className="flex items-center gap-2">
-          <Terminal size={12} style={{ color: "var(--color-text-muted)" }} />
-          <span
-            className="text-[10px] font-semibold uppercase tracking-wide"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            Terminal
-          </span>
-          {logs.length > 0 && (
+        {/* Left: terminal toggle + status pips */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
             <span
-              className="rounded-full px-1.5 text-[10px]"
               style={{
-                backgroundColor: "var(--color-elevated)",
                 color: "var(--color-text-muted)",
                 fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                letterSpacing: "0.03em",
               }}
             >
-              {logs.length}
+              {">_"}
             </span>
-          )}
+            <span
+              style={{
+                color: open ? "var(--color-text-secondary)" : "var(--color-text-muted)",
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+              }}
+            >
+              Terminal
+            </span>
+            {logs.length > 0 && (
+              <span
+                style={{
+                  color: "var(--color-text-muted)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 9,
+                }}
+              >
+                [{logs.length}]
+              </span>
+            )}
+          </div>
+          <StatusPip active={apiOk} label="API" />
+          <StatusPip active={wsConnected} label="WS" />
         </div>
+
+        {/* Right: version + clear + chevron */}
         <div className="flex items-center gap-2">
+          <span
+            style={{
+              color: "var(--color-text-muted)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 9,
+              letterSpacing: "0.04em",
+              opacity: 0.6,
+            }}
+          >
+            v1.0.0 — KodaQuant
+          </span>
           {open && (
             <span
               onClick={(e) => { e.stopPropagation(); clear(); }}
-              className="rounded p-0.5"
+              className="rounded p-0.5 hover:text-[var(--color-text-secondary)]"
               style={{ color: "var(--color-text-muted)", cursor: "pointer" }}
               title="Clear logs"
             >
-              <Trash2 size={11} />
+              <Trash2 size={10} />
             </span>
           )}
           {open ? (
-            <ChevronDown size={12} style={{ color: "var(--color-text-muted)" }} />
+            <ChevronDown size={10} style={{ color: "var(--color-text-muted)" }} />
           ) : (
-            <ChevronUp size={12} style={{ color: "var(--color-text-muted)" }} />
+            <ChevronUp size={10} style={{ color: "var(--color-text-muted)" }} />
           )}
         </div>
-      </button>
+      </div>
+
+      {/* ── Log output area ──────────────────────────────────────── */}
       {open && (
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto px-3 py-1"
+          className="flex-1 overflow-y-auto px-6 py-1"
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: 11,

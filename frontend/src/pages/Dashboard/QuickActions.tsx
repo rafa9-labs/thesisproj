@@ -1,42 +1,39 @@
 import { useNavigate } from "react-router-dom";
-import { Play, RotateCcw } from "lucide-react";
-import { useBacktestStore } from "@/stores/useBacktestStore";
+import { Plus, RotateCcw } from "lucide-react";
 
 export function QuickActions() {
   const navigate = useNavigate();
-  const applyPreset = useBacktestStore((s) => s.applyPreset);
 
   return (
-    <div className="flex items-center gap-3">
-      <h3
-        className="text-[11px] font-medium uppercase tracking-[0.12em] mr-2"
-        style={{ color: "var(--color-text-muted)" }}
-      >
-        Quick Actions
-      </h3>
+    <div className="flex items-center gap-1.5">
+      {/* Primary: New Backtest */}
       <button
         onClick={() => navigate("/backtest")}
-        className="flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-medium transition-all duration-200 hover:scale-[1.02]"
+        className="flex items-center gap-1.5 rounded border px-3 text-[11px] font-semibold uppercase tracking-[0.06em] transition-colors duration-150 hover:brightness-110"
         style={{
+          height: 28,
           backgroundColor: "var(--color-brand)",
-          color: "#fff",
+          borderColor: "var(--color-brand)",
+          color: "#0A0D12",
         }}
       >
-        <Play size={13} />
+        <Plus size={12} strokeWidth={2.5} />
         New Backtest
       </button>
+
+      {/* Icon-only: Re-run Last */}
       <button
-        onClick={() => {
-          navigate("/backtest");
-        }}
-        className="flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-medium transition-all duration-200 hover:bg-[var(--color-glass-hover)]"
+        onClick={() => navigate("/backtest")}
+        className="flex items-center justify-center rounded border transition-colors duration-150 hover:bg-[var(--color-glass-hover)]"
         style={{
+          height: 28,
+          width: 28,
           borderColor: "var(--color-glass-border)",
-          color: "var(--color-text-secondary)",
+          color: "var(--color-text-muted)",
         }}
+        title="Re-run last backtest"
       >
-        <RotateCcw size={13} />
-        Re-run Last
+        <RotateCcw size={13} strokeWidth={1.5} />
       </button>
     </div>
   );

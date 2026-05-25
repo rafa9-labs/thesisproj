@@ -27,7 +27,6 @@ export function PlaybackController({
   onSpeedChange,
   onSeek,
 }: PlaybackControllerProps) {
-  const progress = totalBars > 1 ? (currentIndex / (totalBars - 1)) * 100 : 0;
   const pct = (currentIndex / Math.max(totalBars - 1, 1)) * 100;
 
   return (

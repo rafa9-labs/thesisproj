@@ -11,7 +11,6 @@ import {
 } from "recharts";
 import { BarChart3, Grid3X3, TrendingUp, Layers, Activity } from "lucide-react";
 import { ChartCard } from "@/components/charts/ChartCard";
-import { formatMetric, formatPercent } from "@/lib/formatters";
 import type { TrainingDiagnostics as TrainingDiagnosticsType } from "@/api/schemas";
 
 interface Props {
@@ -58,7 +57,6 @@ const METHOD_LABELS: Record<string, string> = {
 
 function FeatureFamilyStrip({ families }: { families: Record<string, number> }) {
   const entries = Object.entries(families).sort((a, b) => b[1] - a[1]);
-  const total = entries.reduce((s, [, c]) => s + c, 0);
 
   return (
     <div className="mt-2">
@@ -101,7 +99,6 @@ function FeatureFamilyStrip({ families }: { families: Record<string, number> }) 
 function ImportanceChart({ features }: { features: { feature: string; importance: number }[] }) {
   const sorted = useMemo(() => [...features].sort((a, b) => b.importance - a.importance).slice(0, 15), [features]);
   if (sorted.length === 0) return null;
-  const maxImp = Math.max(...sorted.map((f) => f.importance), 0.001);
   return (
     <div style={{ height: Math.max(sorted.length * 28, 120) }}>
       <ResponsiveContainer width="100%" height="100%">

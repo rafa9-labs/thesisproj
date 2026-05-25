@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useState, useMemo } from "react";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { modelDescriptions } from "@/lib/tokens";

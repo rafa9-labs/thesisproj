@@ -82,14 +82,6 @@ export function ParallelCoordinates({ trials }: Props) {
     return { data: sampled, paramKeys: keys.slice(0, 10) };
   }, [trials]);
 
-  if (paramKeys.length === 0) {
-    return (
-      <div className="flex items-center justify-center rounded-lg p-8" style={{ color: "var(--color-text-muted)" }}>
-        <span className="text-xs">No numeric parameter data available for visualization.</span>
-      </div>
-    );
-  }
-
   // Use a single line with all data points flattened
   const chartData = useMemo(() => {
     const result: { param: string; trial: string; value: number }[] = [];
@@ -106,6 +98,14 @@ export function ParallelCoordinates({ trials }: Props) {
     }
     return result;
   }, [data, paramKeys]);
+
+  if (paramKeys.length === 0) {
+    return (
+      <div className="flex items-center justify-center rounded-lg p-8" style={{ color: "var(--color-text-muted)" }}>
+        <span className="text-xs">No numeric parameter data available for visualization.</span>
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: "100%", height: 200 }}>
@@ -134,7 +134,7 @@ export function ParallelCoordinates({ trials }: Props) {
           />
           {[...new Set(chartData.map((d) => d.trial))]
             .slice(0, 30)
-            .map((trial, i) => (
+            .map((trial) => (
               <Line
                 key={trial}
                 type="linear"

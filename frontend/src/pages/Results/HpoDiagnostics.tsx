@@ -29,14 +29,20 @@ export function OptimizationTrace({ trials }: { trials: HpoTrial[] }) {
     y: padT + plotH - ((t.value - minVal) / range) * plotH,
   }));
 
-  let best = trials[0].value;
-  const bestLine = trials.map((t, i) => {
-    if (t.value < best) best = t.value;
-    return {
-      x: padL + (i / Math.max(maxTrial - 1, 1)) * plotW,
-      y: padT + plotH - ((best - minVal) / range) * plotH,
-    };
-  });
+  const { cumBests } = trials.reduce(
+    (acc, t) => {
+      const nextBest = Math.min(acc.minSoFar, t.value);
+      acc.cumBests.push(nextBest);
+      acc.minSoFar = nextBest;
+      return acc;
+    },
+    { cumBests: [] as number[], minSoFar: trials[0].value },
+  );
+
+  const bestLine = cumBests.map((best, i) => ({
+    x: padL + (i / Math.max(maxTrial - 1, 1)) * plotW,
+    y: padT + plotH - ((best - minVal) / range) * plotH,
+  }));
 
   const linePath = bestLine.map((p, i) => (i === 0 ? `M${p.x},${p.y}` : `L${p.x},${p.y}`)).join(" ");
 

@@ -13,8 +13,6 @@ const RISK_COLORS: Record<string, string> = {
 };
 
 export function OverfittingPanel({ overfitting, walkforwardPeriods }: Props) {
-  if (!overfitting) return null;
-
   const gapPeriods = useMemo(() => {
     if (!walkforwardPeriods || walkforwardPeriods.length === 0) return [];
     return walkforwardPeriods.map((p, i) => ({
@@ -24,6 +22,8 @@ export function OverfittingPanel({ overfitting, walkforwardPeriods }: Props) {
       testSharpe: p.test_sharpe,
     }));
   }, [walkforwardPeriods]);
+
+  if (!overfitting) return null;
 
   const hasGaps = gapPeriods.some((g) => g.gap != null);
 
@@ -220,3 +220,4 @@ function CiBarRow({ label, ci, format }: { label: string; ci: { low?: number | n
     </div>
   );
 }
+

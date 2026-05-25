@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { X } from "lucide-react";
-import { createChart, type IChartApi, CandlestickSeries, LineSeries, HistogramSeries, ColorType } from "lightweight-charts";
+import { createChart, type IChartApi, CandlestickSeries, LineSeries, ColorType } from "lightweight-charts";
 import { PlaybackController } from "@/components/charts/PlaybackController";
 import type { OHLCBar, TradeChartMarker, EquityPoint, MonthlyResult, HpoTrial } from "@/api/schemas";
 
@@ -43,16 +43,18 @@ export function BacktestPlayback({
   const [speed, setSpeed] = useState(1);
   const totalBars = candles.length;
 
-  const visibleCandles = candles.slice(0, currentBar + 1);
+  const visibleCandles = useMemo(() => candles.slice(0, currentBar + 1), [candles, currentBar]);
   const currentCandle = visibleCandles[visibleCandles.length - 1];
   const currentTimestamp = currentCandle?.t ?? 0;
 
-  const visibleEquity = equityCurve
-    ? equityCurve.filter((e) => e.time <= currentTimestamp)
-    : [];
-  const visibleTrades = trades
-    ? trades.filter((t) => t.entry_time <= currentTimestamp)
-    : [];
+  const visibleEquity = useMemo(
+    () => equityCurve ? equityCurve.filter((e) => e.time <= currentTimestamp) : [],
+    [equityCurve, currentTimestamp],
+  );
+  const visibleTrades = useMemo(
+    () => trades ? trades.filter((t) => t.entry_time <= currentTimestamp) : [],
+    [trades, currentTimestamp],
+  );
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -181,7 +183,7 @@ export function BacktestPlayback({
       chart.remove();
       chartRef.current = null;
     };
-  }, [visibleCandles.length, currentBar, visibleEquity, visibleTrades, monthlyResults]);
+  }, [visibleCandles, visibleEquity, visibleTrades, monthlyResults]);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -227,7 +229,7 @@ export function BacktestPlayback({
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === "Escape") onClose();
-    if (e.key === " ") { e.preventDefault(); isPlaying ? handlePause() : handlePlay(); }
+    if (e.key === " ") { e.preventDefault(); if (isPlaying) handlePause(); else handlePlay(); }
     if (e.key === "ArrowRight") handleStepForward();
     if (e.key === "ArrowLeft") handleStepBack();
     if (e.key === "Home") handleReset();

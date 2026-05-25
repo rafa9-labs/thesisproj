@@ -54,31 +54,33 @@ function PriceCard({ price }: { price: LivePrice }) {
         )}
       </div>
 
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-baseline gap-2 mb-2">
         <div className="flex flex-col">
-          <span className="text-[9px]" style={{ color: "var(--color-text-muted)" }}>BID</span>
-          <span className="text-[12px] font-medium" style={{ color: "var(--color-accent-danger)", fontFamily: "var(--font-mono)" }}>
+          <span className="text-[8px] leading-none" style={{ color: "var(--color-text-muted)" }}>BID</span>
+          <span className="text-base font-bold leading-none" style={{ color: "var(--color-accent-danger)", fontFamily: "var(--font-mono)" }}>
             {price.bid != null ? price.bid.toFixed(5) : "—"}
           </span>
         </div>
-        <div className="flex flex-col items-end">
-          <span className="text-[9px]" style={{ color: "var(--color-text-muted)" }}>ASK</span>
-          <span className="text-[12px] font-medium" style={{ color: "var(--color-accent-success)", fontFamily: "var(--font-mono)" }}>
+        <div className="flex flex-col">
+          <span className="text-[8px] leading-none" style={{ color: "var(--color-text-muted)" }}>ASK</span>
+          <span className="text-base font-bold leading-none" style={{ color: "var(--color-accent-success)", fontFamily: "var(--font-mono)" }}>
             {price.ask != null ? price.ask.toFixed(5) : "—"}
           </span>
         </div>
       </div>
 
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
-          S: {price.spread_pips != null ? `${price.spread_pips} pips` : "—"}
-        </span>
-        <span className="text-[10px]" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>
-          M {price.mid != null ? price.mid.toFixed(5) : "—"}
+      <div className="flex items-center gap-1 text-[8px]" style={{ color: "var(--color-text-muted)" }}>
+        <span>S: {price.spread_pips != null ? `${price.spread_pips}p` : "—"}</span>
+        <span style={{ fontFamily: "var(--font-mono)" }}>
+          M: {price.mid != null ? price.mid.toFixed(5) : "—"}
         </span>
       </div>
 
-      <Sparkline points={price.sparkline} />
+      {price.sparkline && (
+        <div className="mt-1.5">
+          <Sparkline points={price.sparkline} />
+        </div>
+      )}
     </div>
   );
 }
@@ -88,11 +90,11 @@ function SkeletonCard() {
     <div className="flex-1 rounded-lg border px-3 py-2.5 animate-pulse min-w-0"
       style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
       <div className="h-3 w-14 rounded mb-2" style={{ backgroundColor: "var(--color-glass-hover)" }} />
-      <div className="flex justify-between mb-2">
-        <div className="h-8 w-20 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
-        <div className="h-8 w-20 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+      <div className="flex gap-2 mb-2">
+        <div className="h-8 w-16 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+        <div className="h-8 w-16 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
       </div>
-      <div className="h-3 w-24 rounded mb-2" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+      <div className="h-3 w-24 rounded mb-1.5" style={{ backgroundColor: "var(--color-glass-hover)" }} />
       <div className="h-[26px] w-full rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
     </div>
   );
@@ -100,9 +102,10 @@ function SkeletonCard() {
 
 export function PriceTicker({ pairs }: { pairs: string[] }) {
   const navigate = useNavigate();
-  if (!pairs || pairs.length === 0) return null;
-  const displayPairs = pairs.slice(0, 3);
+  const displayPairs = (pairs ?? []).slice(0, 3);
   const { data, isLoading } = useLivePrices(displayPairs);
+
+  if (!pairs || pairs.length === 0) return null;
 
   if (data?.source === "key_required") {
     return (
@@ -146,7 +149,7 @@ export function PriceTicker({ pairs }: { pairs: string[] }) {
   }
 
   return (
-    <div className="flex gap-3">
+    <div className="flex gap-2">
       {isLoading
         ? displayPairs.map((p) => <SkeletonCard key={p} />)
         : (data?.prices ?? displayPairs.map((s) => ({ symbol: s, bid: null, ask: null, mid: null, spread_pips: null, change_pct: null, timestamp: "", sparkline: [] }))).map((price) => (

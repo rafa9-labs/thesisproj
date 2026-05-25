@@ -5,7 +5,7 @@ import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamSelect } from "@/components/shared/ParamSelect";
 import { SELECT_OPTIONS } from "@/lib/constants";
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Newspaper } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 const CORE_INDICATORS = [
   { key: "useAdx" as const, label: "ADX", description: "Average Directional Index. Measures trend strength regardless of direction." },
