@@ -1,18 +1,31 @@
-import { Search, Bell, User, Menu, PanelLeftClose, Info } from "lucide-react";
+import { Search, Bell, User, Info } from "lucide-react";
 import { useState } from "react";
-import { KodaLogo } from "@/components/shared/KodaLogo";
-import { Breadcrumb } from "./Breadcrumb";
+import { useLocation } from "react-router-dom";
 import { AboutDialog } from "@/components/shared/AboutDialog";
 import { layout } from "@/lib/tokens";
 
-interface TopBarProps {
-  sidebarCollapsed: boolean;
-  onToggleSidebar: () => void;
+const routeTitles: Record<string, string> = {
+  "": "Dashboard",
+  "backtest": "Backtest Setup",
+  "monitor": "Monitor",
+  "results": "Results",
+  "models": "Models",
+  "live-trading": "Live Trading",
+  "news": "News",
+  "settings": "Settings",
+};
+
+function usePageTitle(): string {
+  const location = useLocation();
+  const segment = location.pathname.split("/").filter(Boolean)[0] ?? "";
+  return routeTitles[segment] ?? segment;
 }
 
-export function TopBar({ sidebarCollapsed, onToggleSidebar }: TopBarProps) {
+export function TopBar() {
   const [aboutOpen, setAboutOpen] = useState(false);
+  const title = usePageTitle();
   const unreadCount = 0;
+
   return (
     <header
       className="flex flex-col"
@@ -24,34 +37,28 @@ export function TopBar({ sidebarCollapsed, onToggleSidebar }: TopBarProps) {
         zIndex: 20,
       }}
     >
-      {/* Main top bar */}
       <div
-        className="flex items-center justify-between px-5"
+        className="flex items-center justify-between px-6"
         style={{ height: layout.headerHeight }}
       >
+        {/* Left: page title */}
+        <span
+          className="text-[13px] font-semibold uppercase tracking-[0.1em]"
+          style={{
+            fontFamily: "var(--font-sans)",
+            color: "var(--color-text-primary)",
+          }}
+        >
+          {title}
+        </span>
+
+        {/* Right: search + actions */}
         <div className="flex items-center gap-3">
-          {/* Sidebar toggle */}
+          {/* Search bar — prominent, wider */}
           <button
-            onClick={onToggleSidebar}
-            className="flex items-center justify-center rounded-md p-1.5 transition-colors duration-200 hover:bg-[var(--color-glass-hover)]"
-            style={{ color: "var(--color-text-muted)" }}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {sidebarCollapsed ? <Menu size={16} strokeWidth={1.5} /> : <PanelLeftClose size={16} strokeWidth={1.5} />}
-          </button>
-
-          {/* Only show logo text in top bar when sidebar is collapsed */}
-          {sidebarCollapsed && (
-            <KodaLogo size="sm" />
-          )}
-          <Breadcrumb />
-        </div>
-
-        <div className="flex items-center gap-4">
-          {/* Command palette placeholder */}
-          <button
-            className="hidden items-center gap-2 rounded-md border px-3 py-1.5 transition-all duration-200 hover:border-[var(--color-border-active)] md:flex"
+            className="flex items-center gap-2.5 rounded-md border px-4 py-1.5 transition-all duration-200 hover:border-[var(--color-border-active)]"
             style={{
+              width: 260,
               borderColor: "var(--color-glass-border)",
               backgroundColor: "var(--color-glass)",
               color: "var(--color-text-muted)",
@@ -62,15 +69,16 @@ export function TopBar({ sidebarCollapsed, onToggleSidebar }: TopBarProps) {
               // TODO: wire up global command palette
             }}
           >
-            <Search size={13} strokeWidth={1.5} />
-            <span>Search…</span>
+            <Search size={13} strokeWidth={1.5} style={{ flexShrink: 0 }} />
+            <span className="flex-1 text-left">Search…</span>
             <span
-              className="rounded px-1 text-[10px]"
+              className="rounded px-1.5 text-[10px]"
               style={{
                 backgroundColor: "rgba(0,229,255,0.08)",
                 border: "1px solid rgba(0,229,255,0.15)",
                 color: "var(--color-brand)",
                 fontFamily: "var(--font-mono)",
+                flexShrink: 0,
               }}
             >
               Ctrl+K
@@ -87,7 +95,10 @@ export function TopBar({ sidebarCollapsed, onToggleSidebar }: TopBarProps) {
             {unreadCount > 0 && (
               <span
                 className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: "var(--color-brand)", boxShadow: "0 0 6px rgba(0,229,255,0.5)" }}
+                style={{
+                  backgroundColor: "var(--color-brand)",
+                  boxShadow: "0 0 6px rgba(0,229,255,0.5)",
+                }}
               />
             )}
           </button>
