@@ -85,11 +85,7 @@ export function BacktestPage() {
 
       {/* Quick Start */}
       {activeTab === "quickstart" && (
-        <QuickStartTab
-          onDeploy={() => setSummaryOpen(true)}
-          canDeploy={canDeploy}
-          isSubmitting={isSubmitting}
-        />
+        <QuickStartTab />
       )}
 
       {/* Asset & Model */}

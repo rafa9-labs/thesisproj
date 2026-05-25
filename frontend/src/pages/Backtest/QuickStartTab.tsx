@@ -4,11 +4,8 @@ import { QUICK_START_CATEGORIES } from "@/lib/constants";
 import { modelDescriptions } from "@/lib/tokens";
 import { Trash2, Bug, Cpu, Network, Layers, Bot } from "lucide-react";
 
-interface Props {
-  onDeploy: () => void;
-  canDeploy: boolean;
-  isSubmitting: boolean;
-}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+interface Props {}
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   debug: <Bug size={13} />,
@@ -26,11 +23,10 @@ const CATEGORY_COLORS: Record<string, string> = {
   rl: "var(--color-accent-danger)",
 };
 
-export function QuickStartTab({ onDeploy, canDeploy, isSubmitting }: Props) {
+export function QuickStartTab(_props: Props) {
   const applyQuickPreset = useBacktestStore((s) => s.applyQuickPreset);
   const removeCustomPreset = useBacktestStore((s) => s.removeCustomPreset);
   const customPresets = useBacktestStore((s) => s.customPresets);
-  const selectedModels = useBacktestStore((s) => s.selectedModels);
 
   const handlePreset = useCallback((key: string) => {
     applyQuickPreset(key);
@@ -52,7 +48,7 @@ export function QuickStartTab({ onDeploy, canDeploy, isSubmitting }: Props) {
               <span style={{ color: catColor }}>{CATEGORY_ICONS[cat.key]}</span>
               <span
                 className="text-[10px] font-semibold uppercase tracking-[0.08em]"
-                style={{ color: catColor }}
+                style={{ color: "#FFFFFF" }}
               >
                 {cat.label}
               </span>
@@ -69,29 +65,29 @@ export function QuickStartTab({ onDeploy, canDeploy, isSubmitting }: Props) {
                     onClick={() => handlePreset(opt.key)}
                     className="rounded-lg border p-2.5 cursor-pointer transition-all duration-150 hover:brightness-110"
                     style={{
-                      borderColor: catColor,
-                      backgroundColor: `${catColor}06`,
+                      borderColor: "#333333",
+                      backgroundColor: "#1E1E1E",
                     }}
                   >
                     <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: catColor }}>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "#FFFFFF" }}>
                         {opt.label}
                       </span>
-                      <span className="text-[8px] font-mono" style={{ color: "var(--color-text-muted)" }}>
+                      <span className="text-[8px] font-mono" style={{ color: "#9CA3AF" }}>
                         ~{timeStr}
                       </span>
                     </div>
-                    <p className="text-[9px] mb-1" style={{ color: "var(--color-text-muted)" }}>
+                    <p className="text-[9px] mb-1" style={{ color: "#9CA3AF" }}>
                       {opt.subtitle}
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {opt.models.slice(0, 3).map((m) => (
                         <span
                           key={m}
-                          className="rounded px-1 py-0.5 text-[7px] font-semibold uppercase tracking-wider"
+                          className="rounded-md px-2 py-1 text-[7px] inline-block"
                           style={{
-                            backgroundColor: `${catColor}12`,
-                            color: catColor,
+                            backgroundColor: "#2A2A2A",
+                            color: "#D1D5DB",
                             fontFamily: "var(--font-mono)",
                           }}
                         >
@@ -101,7 +97,7 @@ export function QuickStartTab({ onDeploy, canDeploy, isSubmitting }: Props) {
                       {opt.models.length > 3 && (
                         <span
                           className="text-[7px] font-mono"
-                          style={{ color: "var(--color-text-muted)" }}
+                          style={{ color: "#9CA3AF" }}
                         >
                           +{opt.models.length - 3}
                         </span>
@@ -157,28 +153,7 @@ export function QuickStartTab({ onDeploy, canDeploy, isSubmitting }: Props) {
         </div>
       )}
 
-      {/* Deploy */}
-      {selectedModels.length > 0 && (
-        <div className="flex justify-end pt-1">
-          <button
-            onClick={canDeploy ? onDeploy : undefined}
-            disabled={!canDeploy || isSubmitting}
-            className="rounded-md px-8 py-3 text-sm font-bold uppercase transition-all duration-300 hover:brightness-110"
-            style={{
-              background: canDeploy
-                ? "linear-gradient(135deg, #00E5FF 0%, #22D3EE 100%)"
-                : "var(--color-glass-border)",
-              color: canDeploy ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-              letterSpacing: "0.08em",
-              cursor: canDeploy ? "pointer" : "not-allowed",
-              boxShadow: canDeploy ? "0 0 24px rgba(0,229,255,0.2)" : "none",
-              opacity: isSubmitting ? 0.7 : 1,
-            }}
-          >
-            {isSubmitting ? "Submitting..." : "Deploy Backtest"}
-          </button>
-        </div>
-      )}
+
     </div>
   );
 }

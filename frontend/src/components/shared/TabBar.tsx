@@ -13,8 +13,7 @@ interface Props {
 export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
   return (
     <div
-      className="flex items-end"
-      style={{ gap: 32 }}
+      className="flex items-end w-full justify-between"
     >
       {tabs.map((tab) => {
         const disabled = disabledTabs?.has(tab.key);
