@@ -1,29 +1,258 @@
-import { useCallback } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import { useBacktestStore } from "@/stores/useBacktestStore";
-import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamToggle } from "@/components/shared/ParamToggle";
-import { ParamSelect } from "@/components/shared/ParamSelect";
 import { RANGES, SELECT_OPTIONS, STUDY_PRESETS } from "@/lib/constants";
 import { ModelHyperparamsPanel } from "./ModelHyperparamsPanel";
 
-const sectionClass = "rounded-xl border p-6";
-const sectionStyle: React.CSSProperties = {
-  borderColor: "var(--color-glass-border)",
-  backgroundColor: "rgba(255,255,255,0.02)",
+// ─── Preset dot colors ────────────────────────────────────────────────────────
+const PRESET_DOT: Record<string, string> = {
+  green:  "#4B5563", // gray  – Diagnostic
+  yellow: "#92400E", // amber – Exploratory
+  orange: "#7C3D12", // orange – Validation
+  red:    "#7F1D1D", // red   – Production
 };
-const sectionTitleClass = "mb-1 text-[11px] font-medium uppercase tracking-[0.12em]";
-const sectionTitleStyle: React.CSSProperties = { color: "var(--color-text-secondary)" };
-const explainerClass = "mb-5 text-[11px] font-light leading-relaxed max-w-[720px]";
-const explainerStyle: React.CSSProperties = { color: "var(--color-text-muted)" };
+const PRESET_DOT_ACTIVE: Record<string, string> = {
+  green:  "#6B7280",
+  yellow: "#D97706",
+  orange: "#EA580C",
+  red:    "#EF4444",
+};
 
+// ─── Tooltip ──────────────────────────────────────────────────────────────────
+function InfoTooltip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative inline-flex items-center">
+      <button
+        type="button"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onClick={() => setOpen((p) => !p)}
+        className="flex items-center justify-center rounded-full transition-colors"
+        style={{
+          width: 14,
+          height: 14,
+          fontSize: 9,
+          color: "#4B5563",
+          border: "1px solid #2A2E39",
+          backgroundColor: "#1E222D",
+          lineHeight: 1,
+          fontFamily: "var(--font-mono)",
+        }}
+        aria-label="More info"
+      >
+        i
+      </button>
+      {open && (
+        <div
+          className="absolute z-50 rounded px-2.5 py-2 text-[10px] leading-relaxed shadow-lg"
+          style={{
+            bottom: "calc(100% + 6px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 220,
+            backgroundColor: "#1E222D",
+            border: "1px solid #2A2E39",
+            color: "#9598A1",
+            fontFamily: "var(--font-sans)",
+          }}
+        >
+          {text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Compact number input ─────────────────────────────────────────────────────
+function NumInput({
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  width = 72,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (v: number) => void;
+  width?: number;
+}) {
+  return (
+    <input
+      type="number"
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="rounded border px-2 text-right focus:outline-none"
+      style={{
+        width,
+        height: 28,
+        fontSize: 11,
+        fontFamily: "var(--font-mono)",
+        backgroundColor: "#131722",
+        borderColor: "#2A2E39",
+        color: "#D1D4DC",
+      }}
+    />
+  );
+}
+
+// ─── Compact select ───────────────────────────────────────────────────────────
+function CompactSelect({
+  value,
+  options,
+  onChange,
+  width = 120,
+}: {
+  value: string;
+  options: readonly { value: string; label: string }[];
+  onChange: (v: string) => void;
+  width?: number;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded border px-2 focus:outline-none"
+      style={{
+        width,
+        height: 28,
+        fontSize: 11,
+        fontFamily: "var(--font-sans)",
+        backgroundColor: "#131722",
+        borderColor: "#2A2E39",
+        color: "#D1D4DC",
+      }}
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// ─── Minimal slider (quality gates) ──────────────────────────────────────────
+function ThinSlider({
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  const pct = ((value - min) / (max - min)) * 100;
+  return (
+    <div className="flex items-center gap-2 flex-1">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="flex-1 cursor-pointer appearance-none rounded-full"
+        style={{
+          height: 3,
+          accentColor: "#2D4A47",
+          background: `linear-gradient(to right, #3D6B68 0%, #3D6B68 ${pct}%, #2A2E39 ${pct}%, #2A2E39 100%)`,
+        }}
+      />
+      <span
+        className="tabular-nums"
+        style={{ width: 40, fontSize: 10, fontFamily: "var(--font-mono)", color: "#D1D4DC", textAlign: "right" }}
+      >
+        {(value * 100).toFixed(0)}%
+      </span>
+    </div>
+  );
+}
+
+// ─── Field row label + info icon ──────────────────────────────────────────────
+function FieldLabel({ label, tip }: { label: string; tip: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span
+        className="uppercase tracking-[0.08em] whitespace-nowrap"
+        style={{ fontSize: 10, color: "#787B86", fontFamily: "var(--font-sans)" }}
+      >
+        {label}
+      </span>
+      <InfoTooltip text={tip} />
+    </div>
+  );
+}
+
+// ─── Section header ───────────────────────────────────────────────────────────
+function SectionHeader({ label, accentColor }: { label: string; accentColor: string }) {
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: accentColor }} />
+      <span
+        className="uppercase tracking-[0.1em]"
+        style={{ fontSize: 10, fontWeight: 600, color: "#787B86", fontFamily: "var(--font-sans)" }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// ─── Toggle switch ────────────────────────────────────────────────────────────
+function CompactToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="relative rounded-full transition-colors duration-200"
+      style={{
+        width: 36,
+        height: 20,
+        backgroundColor: checked ? "#2D4A47" : "#2A2E39",
+        border: "1px solid",
+        borderColor: checked ? "#3D6B68" : "#2A2E39",
+        flexShrink: 0,
+      }}
+    >
+      <span
+        className="absolute rounded-full transition-transform duration-200"
+        style={{
+          top: 3,
+          left: checked ? 17 : 3,
+          width: 12,
+          height: 12,
+          backgroundColor: checked ? "#9CCDCA" : "#4B5563",
+        }}
+      />
+    </button>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 const PRESET_KEYS = ["diagnostic", "exploratory", "validation", "production"] as const;
-
-const PRESET_COLORS: Record<string, string> = {
-  green: "var(--color-accent-success)",
-  yellow: "var(--color-accent-warning)",
-  orange: "var(--color-accent)",
-  red: "var(--color-accent-danger)",
-};
 
 interface HpoPanelProps {
   advancedMode: boolean;
@@ -33,371 +262,379 @@ interface HpoPanelProps {
 export function HpoPanel({ advancedMode, onToggleAdvanced }: HpoPanelProps) {
   const setField = useBacktestStore((s) => s.setField);
   const applyStudyPreset = useBacktestStore((s) => s.applyStudyPreset);
-  const s = useBacktestStore.getState();
   const activePreset = useBacktestStore((s) => s.activePreset);
   const selectedModels = useBacktestStore((s) => s.selectedModels);
-  const hpoIntensity = useBacktestStore((s) => s.hpoIntensity);
   const nTrials = useBacktestStore((s) => s.nTrials);
   const hpoManualOverride = useBacktestStore((s) => s.hpoManualOverride);
+  const repeats = useBacktestStore((s) => s.repeats);
+  const optunaDirection = useBacktestStore((s) => s.optunaDirection);
+  const seed = useBacktestStore((s) => s.seed);
+  const trainMonths = useBacktestStore((s) => s.trainMonths);
+  const testMonths = useBacktestStore((s) => s.testMonths);
+  const periodUnit = useBacktestStore((s) => s.periodUnit);
+  const targetActiveRate = useBacktestStore((s) => s.targetActiveRate);
+  const targetCoverage = useBacktestStore((s) => s.targetCoverage);
+  const confidenceThreshold = useBacktestStore((s) => s.confidenceThreshold);
+  const evalUseTradingCosts = useBacktestStore((s) => s.evalUseTradingCosts);
+  const slipNormBps = useBacktestStore((s) => s.slipNormBps);
 
   const handlePresetClick = useCallback((key: string) => {
     applyStudyPreset(key);
   }, [applyStudyPreset]);
 
+  const panelBase: React.CSSProperties = {
+    backgroundColor: "#1E222D",
+    border: "1px solid #2A2E39",
+    borderRadius: 6,
+  };
+
   return (
     <div
-      className="flex flex-col gap-6 rounded-xl border p-6"
-      style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
-      }}
+      className="flex flex-col rounded-lg"
+      style={{ backgroundColor: "#1E222D", border: "1px solid #2A2E39" }}
     >
-      {/* Header with mode toggle */}
-      <div className="flex items-center justify-between pb-2">
-        <div className="flex flex-col gap-0.5">
-          <h3
-            className="text-[11px] font-medium uppercase tracking-[0.12em]"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            Walk-Forward &amp; HPO
-          </h3>
-        </div>
+      {/* ── Header ── */}
+      <div
+        className="flex items-center justify-between px-4"
+        style={{ height: 40, borderBottom: "1px solid #2A2E39" }}
+      >
+        <span
+          className="uppercase tracking-[0.1em]"
+          style={{ fontSize: 10, fontWeight: 600, color: "#787B86" }}
+        >
+          Walk-Forward &amp; HPO
+        </span>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onToggleAdvanced}
-            className="rounded-md px-3 py-1 text-[10px] font-medium uppercase tracking-[0.1em] transition-all duration-200"
-            style={{
-              backgroundColor: !advancedMode ? "var(--color-brand)" : "var(--color-glass-hover)",
-              color: !advancedMode ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-              border: "1px solid",
-              borderColor: !advancedMode ? "transparent" : "var(--color-glass-border)",
-              boxShadow: !advancedMode ? "0 0 12px rgba(0,229,255,0.15)" : "none",
-            }}
-          >
-            Preset
-          </button>
-          <button
-            onClick={onToggleAdvanced}
-            className="rounded-md px-3 py-1 text-[10px] font-medium uppercase tracking-[0.1em] transition-all duration-200"
-            style={{
-              backgroundColor: advancedMode ? "var(--color-brand)" : "var(--color-glass-hover)",
-              color: advancedMode ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-              border: "1px solid",
-              borderColor: advancedMode ? "transparent" : "var(--color-glass-border)",
-              boxShadow: advancedMode ? "0 0 12px rgba(0,229,255,0.15)" : "none",
-            }}
-          >
-            Advanced
-          </button>
+        {/* Pill toggle */}
+        <div
+          className="flex items-center rounded-full p-0.5"
+          style={{ backgroundColor: "#131722", border: "1px solid #2A2E39" }}
+        >
+          {[
+            { label: "PRESET", active: !advancedMode },
+            { label: "ADVANCED", active: advancedMode },
+          ].map(({ label, active }) => (
+            <button
+              key={label}
+              onClick={onToggleAdvanced}
+              className="rounded-full px-3 transition-all duration-150"
+              style={{
+                height: 22,
+                fontSize: 9,
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                fontFamily: "var(--font-sans)",
+                backgroundColor: active ? "#2A2E39" : "transparent",
+                color: active ? "#D1D4DC" : "#4B5563",
+                border: "none",
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {!advancedMode ? (
-        /* ── PRESET MODE ── */
-        <section className={sectionClass} style={sectionStyle}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-            <h4 className={sectionTitleClass} style={sectionTitleStyle}>Study Preset</h4>
-          </div>
-          <p className={explainerClass} style={explainerStyle}>
-            Choose a study intensity. Higher presets run more HPO trials and seeds for greater statistical confidence.
-          </p>
+      <div className="flex flex-col gap-5 p-4">
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* ══════════════ PRESET MODE ══════════════ */}
+        {!advancedMode && (
+          <div className="flex flex-col" style={{ gap: 2 }}>
             {PRESET_KEYS.map((key) => {
               const p = STUDY_PRESETS[key];
               const isSelected = activePreset === key;
-              const color = PRESET_COLORS[p.badgeColor] ?? "var(--color-text-muted)";
+              const dotColor = isSelected
+                ? PRESET_DOT_ACTIVE[p.badgeColor]
+                : PRESET_DOT[p.badgeColor];
               const tr = p.trialRange;
               const trialStr = tr.min === tr.max ? `${tr.min}` : `${tr.min}–${tr.max}`;
-              const modelKey = selectedModels[0] ?? "logistic";
+              const modelKey = (selectedModels as string[])[0] ?? "logistic";
               const estMin = (p.estMinutes as Record<string, number>)[modelKey] ?? 30;
+              const estStr = estMin > 120 ? `~${(estMin / 60).toFixed(0)}h / model` : `~${estMin}min / model`;
 
               return (
-                <div
+                <button
                   key={key}
+                  type="button"
                   onClick={() => handlePresetClick(key)}
-                  className="rounded-lg border p-3 cursor-pointer transition-all duration-150"
+                  className="flex items-center gap-3 rounded px-3 text-left transition-all duration-100"
                   style={{
-                    borderColor: isSelected ? color : "var(--color-glass-border)",
-                    backgroundColor: isSelected ? `${color}08` : "var(--color-elevated)",
-                    boxShadow: isSelected ? `0 0 8px ${color}30` : "none",
+                    height: 44,
+                    backgroundColor: isSelected ? "#2A2E39" : "transparent",
+                    border: `1px solid ${isSelected ? "#3A3E4A" : "transparent"}`,
                   }}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color }}>
-                      {p.label}
-                    </span>
-                    <span
-                      className="rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider"
-                      style={{
-                        backgroundColor: `${color}18`,
-                        color,
-                        fontFamily: "var(--font-mono)",
-                      }}
-                    >
-                      {p.badge}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 text-[10px]" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-muted)" }}>
-                    <span>{trialStr} tri</span>
-                    <span style={{ color: "var(--color-glass-border)" }}>·</span>
-                    <span>{p.repeats} run{p.repeats > 1 ? "s" : ""}</span>
-                    {p.repeats > 1 && (
-                      <>
-                        <span style={{ color: "var(--color-glass-border)" }}>·</span>
-                        <span>{(tr.min * p.repeats).toLocaleString()}–{(tr.max * p.repeats).toLocaleString()} total</span>
-                      </>
-                    )}
-                  </div>
-
+                  {/* Dot */}
                   <div
-                    className="mt-1.5 text-[9px]"
-                    style={{ color: "var(--color-text-muted)" }}
+                    className="rounded-full flex-shrink-0"
+                    style={{ width: 6, height: 6, backgroundColor: dotColor }}
+                  />
+
+                  {/* Name */}
+                  <span
+                    className="flex-shrink-0"
+                    style={{
+                      width: 88,
+                      fontSize: 12,
+                      fontWeight: isSelected ? 600 : 400,
+                      color: isSelected ? "#D1D4DC" : "#787B86",
+                      fontFamily: "var(--font-sans)",
+                    }}
                   >
-                    ~{estMin > 120 ? `${(estMin / 60).toFixed(0)}h` : `${estMin}min`} / model
-                  </div>
-                </div>
+                    {p.label}
+                  </span>
+
+                  {/* Specs */}
+                  <span
+                    className="flex-1 tabular-nums"
+                    style={{ fontSize: 11, color: "#4B5563", fontFamily: "var(--font-mono)" }}
+                  >
+                    {trialStr} tri&nbsp;&nbsp;·&nbsp;&nbsp;{p.repeats} run{p.repeats > 1 ? "s" : ""}&nbsp;&nbsp;·&nbsp;&nbsp;{p.trainMonths}mo train
+                  </span>
+
+                  {/* Est time */}
+                  <span
+                    className="tabular-nums flex-shrink-0"
+                    style={{ fontSize: 10, color: isSelected ? "#6B7280" : "#374151", fontFamily: "var(--font-mono)" }}
+                  >
+                    {estStr}
+                  </span>
+                </button>
               );
             })}
+
+            {/* Description strip */}
+            {activePreset && (
+              <div
+                className="mt-2 px-3 py-2 rounded text-[11px] leading-relaxed"
+                style={{ backgroundColor: "#131722", border: "1px solid #2A2E39", color: "#4B5563", fontFamily: "var(--font-sans)" }}
+              >
+                {STUDY_PRESETS[activePreset as keyof typeof STUDY_PRESETS]?.description}
+              </div>
+            )}
           </div>
+        )}
 
-          {activePreset && (
-            <div
-              className="mt-3 rounded-lg p-3 text-[11px] leading-relaxed"
-              style={{
-                backgroundColor: "var(--color-elevated)",
-                color: "var(--color-text-secondary)",
-              }}
-            >
-              {STUDY_PRESETS[activePreset as keyof typeof STUDY_PRESETS]?.description}
-            </div>
-          )}
-        </section>
-      ) : (
-        <>
-          {/* ── ADVANCED MODE ── */}
-          {/* ── Optimization Strategy ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>Optimization Strategy</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Controls how aggressively the engine searches hyperparameters. Deeper searches find better configs but take longer.
-            </p>
+        {/* ══════════════ ADVANCED MODE ══════════════ */}
+        {advancedMode && (
+          <div className="flex flex-col gap-4">
 
-            <div className="flex flex-col gap-6">
-              <div className="max-w-sm">
-                <ParamSlider
-                  label="HPO Trials"
-                  value={hpoManualOverride ? nTrials : _effectiveMaxTrials(hpoIntensity)}
-                  min={RANGES.nTrials.min}
-                  max={RANGES.nTrials.max}
-                  step={RANGES.nTrials.step}
-                  description={`Set 0 for no HPO (default params only). Max ${RANGES.nTrials.max} for deep search. ${!hpoManualOverride ? "Click or drag to enable manual override." : "Override active."}`}
-                  onChange={(v) => {
-                    setField("nTrials", v);
-                    setField("hpoManualOverride", true);
-                  }}
-                />
-              </div>
+            {/* ── Group 1: Optimization Strategy ── */}
+            <div style={{ ...panelBase, padding: "12px 14px" }}>
+              <SectionHeader label="Optimization Strategy" accentColor="#3D6B68" />
+              <div className="flex flex-wrap gap-x-6 gap-y-3 items-end">
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-6">
-                <div className="flex flex-col gap-1 rounded-lg p-3"
-                  style={{ backgroundColor: "var(--color-elevated)" }}>
-                  <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
-                    HPO Trials
-                  </span>
-                  <div className="mt-2 text-[11px]" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>
-                    <span style={{ color: "var(--color-brand)" }}>
-                      {hpoManualOverride ? nTrials : _trialRangeByIntensity(hpoIntensity)}
-                    </span>
-                    <span style={{ color: "var(--color-text-muted)" }}> trials per model</span>
-                    {hpoManualOverride && nTrials === 0 && (
-                      <span style={{ color: "var(--color-accent-warning)", marginLeft: 8 }}>no HPO — defaults only</span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 text-[9px]" style={{ color: "var(--color-text-muted)" }}>
-                    logistic={_trialForModel(hpoIntensity, "logistic")} · xgboost={_trialForModel(hpoIntensity, "xgboost")} ·
-                    lstm={_trialForModel(hpoIntensity, "lstm")}
-                  </div>
-                  {hpoManualOverride && (
-                    <div className="mt-1 text-[9px]" style={{ color: "var(--color-accent)" }}>
-                      Manual override — {nTrials} trial{nTrials !== 1 ? "s" : ""} for all models
-                    </div>
-                  )}
-                </div>
-                <ParamSlider
-                  label="Repeats / Seeds"
-                  value={s.repeats}
-                  min={RANGES.repeats.min}
-                  max={RANGES.repeats.max}
-                  step={RANGES.repeats.step}
-                  description="How many independent runs with different seeds. More runs = higher confidence the result isn't seed-dependent."
-                  onChange={(v) => setField("repeats", v)}
-                />
-                <ParamSelect
-                  label="Direction"
-                  value={s.optunaDirection}
-                  options={[...SELECT_OPTIONS.optunaDirection]}
-                  description="Whether to maximize Sharpe or minimize a metric like drawdown."
-                  onChange={(v) => setField("optunaDirection", v as "maximize" | "minimize")}
-                />
-                <ParamSlider
-                  label="Seed"
-                  value={s.seed}
-                  min={RANGES.seed.min}
-                  max={RANGES.seed.max}
-                  step={RANGES.seed.step}
-                  description="Random seed for reproducible HPO runs. Same seed = same results."
-                  onChange={(v) => setField("seed", v)}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
-                <ParamSlider
-                  label="Max HPO Duration (min)"
-                  value={s.maxHpoDurationMinutes ?? 0}
-                  min={0}
-                  max={120}
-                  step={5}
-                  description="Hard time limit. 0 = no limit. The optimizer returns the best config found so far if time runs out."
-                  onChange={(v) => setField("maxHpoDurationMinutes", v)}
-                />
-                <div />
-              </div>
-            </div>
-          </section>
-
-          {/* ── Walk-Forward Windows ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-success)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>Walk-Forward Windows</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Splits data into rolling train/test chunks. The model retrains on each window and tests on the next, preventing look-ahead bias.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-6">
-              <ParamSlider
-                label="Train Window"
-                value={s.trainMonths}
-                min={RANGES.trainMonths.min}
-                max={RANGES.trainMonths.max}
-                step={RANGES.trainMonths.step}
-                description="Months of historical data used to train each fold."
-                onChange={(v) => setField("trainMonths", v)}
-              />
-              <ParamSlider
-                label="Test Window"
-                value={s.testMonths}
-                min={RANGES.testMonths.min}
-                max={RANGES.testMonths.max}
-                step={RANGES.testMonths.step}
-                description="Months held out for validation after training."
-                onChange={(v) => setField("testMonths", v)}
-              />
-              <ParamSelect
-                label="Period Unit"
-                value={s.periodUnit ?? "months"}
-                options={["months", "weeks", "days"]}
-                description="Granularity of each train/test window."
-                onChange={(v) => setField("periodUnit", v as "months" | "weeks" | "days")}
-              />
-            </div>
-          </section>
-
-          {/* ── Quality Gates ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-warning)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>Quality Gates</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Minimum thresholds a model must pass to be considered viable. Configs below any gate are discarded automatically.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-6">
-              <ParamSlider
-                label="Active Rate"
-                value={s.targetActiveRate}
-                min={RANGES.targetActiveRate.min}
-                max={RANGES.targetActiveRate.max}
-                step={RANGES.targetActiveRate.step}
-                description="Minimum % of bars the model should signal trades on. Filters idle models."
-                onChange={(v) => setField("targetActiveRate", v)}
-              />
-              <ParamSlider
-                label="Coverage"
-                value={s.targetCoverage}
-                min={RANGES.targetCoverage.min}
-                max={RANGES.targetCoverage.max}
-                step={RANGES.targetCoverage.step}
-                description="Minimum % of the test period the model must have exposure for."
-                onChange={(v) => setField("targetCoverage", v)}
-              />
-              <ParamSlider
-                label="Confidence"
-                value={s.confidenceThreshold}
-                min={RANGES.confidenceThreshold.min}
-                max={RANGES.confidenceThreshold.max}
-                step={RANGES.confidenceThreshold.step}
-                description="Minimum prediction confidence. Higher = fewer but higher-conviction trades."
-                onChange={(v) => setField("confidenceThreshold", v)}
-              />
-            </div>
-          </section>
-
-          {/* ── Execution Reality ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-danger)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>Execution Reality</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Simulates real-world trading friction. Sharper backtests include slippage and spread to avoid overestimating returns.
-            </p>
-
-            <div className="flex flex-col gap-6">
-              <div className="max-w-xs">
-                <ParamToggle
-                  label="Trading Costs"
-                  checked={s.evalUseTradingCosts}
-                  description="Enable spread + slippage simulation in the backtest loop."
-                  onChange={(v) => setField("evalUseTradingCosts", v)}
-                />
-              </div>
-
-              {s.evalUseTradingCosts && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
-                  <ParamSlider
-                    label="Slippage (bps)"
-                    value={s.slipNormBps}
-                    min={RANGES.slipNormBps.min}
-                    max={RANGES.slipNormBps.max}
-                    step={RANGES.slipNormBps.step}
-                    description="Average execution slippage in basis points. 1 bps = 0.01%."
-                    onChange={(v) => setField("slipNormBps", v)}
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel
+                    label="HPO Trials"
+                    tip="Number of Optuna trials per model. Set 0 for default params only. More trials = better configs but slower runs."
+                  />
+                  <NumInput
+                    value={hpoManualOverride ? nTrials : 10}
+                    min={RANGES.nTrials.min}
+                    max={RANGES.nTrials.max}
+                    onChange={(v) => {
+                      setField("nTrials", v);
+                      setField("hpoManualOverride", true);
+                    }}
+                    width={72}
                   />
                 </div>
-              )}
-            </div>
-          </section>
 
-          {/* ── Per-Model Hyperparameters ── */}
-          <ModelHyperparamsPanel />
-        </>
-      )}
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel
+                    label="Repeats / Seeds"
+                    tip="Independent runs with different seeds. Higher values reduce seed-dependence and improve confidence in results."
+                  />
+                  <NumInput
+                    value={repeats}
+                    min={RANGES.repeats.min}
+                    max={RANGES.repeats.max}
+                    onChange={(v) => setField("repeats", v)}
+                    width={72}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel
+                    label="Direction"
+                    tip="Whether to maximize a metric (e.g. Sharpe) or minimize one (e.g. drawdown) during HPO search."
+                  />
+                  <CompactSelect
+                    value={optunaDirection}
+                    options={SELECT_OPTIONS.optunaDirection}
+                    onChange={(v) => setField("optunaDirection", v as "maximize" | "minimize")}
+                    width={120}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel
+                    label="Seed"
+                    tip="Random seed for reproducibility. Same seed and same config will always produce identical results."
+                  />
+                  <NumInput
+                    value={seed}
+                    min={RANGES.seed.min}
+                    max={RANGES.seed.max}
+                    onChange={(v) => setField("seed", v)}
+                    width={72}
+                  />
+                </div>
+
+              </div>
+            </div>
+
+            {/* ── Group 2: Walk-Forward Windows ── */}
+            <div style={{ ...panelBase, padding: "12px 14px" }}>
+              <SectionHeader label="Walk-Forward Windows" accentColor="#4B5563" />
+              <div className="flex flex-wrap gap-x-6 gap-y-3 items-end">
+
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel
+                    label="Train Window"
+                    tip="Months of historical data used to train each walk-forward fold."
+                  />
+                  <NumInput
+                    value={trainMonths}
+                    min={RANGES.trainMonths.min}
+                    max={RANGES.trainMonths.max}
+                    onChange={(v) => setField("trainMonths", v)}
+                    width={72}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel
+                    label="Test Window"
+                    tip="Months held out for out-of-sample validation after each training fold."
+                  />
+                  <NumInput
+                    value={testMonths}
+                    min={RANGES.testMonths.min}
+                    max={RANGES.testMonths.max}
+                    onChange={(v) => setField("testMonths", v)}
+                    width={72}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel
+                    label="Period Unit"
+                    tip="Granularity of the train and test window lengths (months, weeks, or days)."
+                  />
+                  <CompactSelect
+                    value={periodUnit ?? "months"}
+                    options={[
+                      { value: "months", label: "Months" },
+                      { value: "weeks",  label: "Weeks"  },
+                      { value: "days",   label: "Days"   },
+                    ]}
+                    onChange={(v) => setField("periodUnit", v as "months" | "weeks" | "days")}
+                    width={110}
+                  />
+                </div>
+
+              </div>
+            </div>
+
+            {/* ── Group 3: Quality Gates ── */}
+            <div style={{ ...panelBase, padding: "12px 14px" }}>
+              <SectionHeader label="Quality Gates" accentColor="#92400E" />
+              <div className="flex flex-col gap-3">
+
+                <div className="flex items-center gap-3">
+                  <FieldLabel
+                    label="Active Rate"
+                    tip="Minimum % of bars the model must signal trades on. Filters models that barely trade."
+                  />
+                  <ThinSlider
+                    value={targetActiveRate}
+                    min={RANGES.targetActiveRate.min}
+                    max={RANGES.targetActiveRate.max}
+                    step={RANGES.targetActiveRate.step}
+                    onChange={(v) => setField("targetActiveRate", v)}
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <FieldLabel
+                    label="Coverage"
+                    tip="Minimum % of the test period the model must have exposure. Rejects models that go silent mid-window."
+                  />
+                  <ThinSlider
+                    value={targetCoverage}
+                    min={RANGES.targetCoverage.min}
+                    max={RANGES.targetCoverage.max}
+                    step={RANGES.targetCoverage.step}
+                    onChange={(v) => setField("targetCoverage", v)}
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <FieldLabel
+                    label="Confidence"
+                    tip="Minimum prediction probability required to enter a trade. Higher = fewer but higher-conviction signals."
+                  />
+                  <ThinSlider
+                    value={confidenceThreshold}
+                    min={RANGES.confidenceThreshold.min}
+                    max={RANGES.confidenceThreshold.max}
+                    step={RANGES.confidenceThreshold.step}
+                    onChange={(v) => setField("confidenceThreshold", v)}
+                  />
+                </div>
+
+              </div>
+            </div>
+
+            {/* ── Group 4: Execution Reality ── */}
+            <div style={{ ...panelBase, padding: "12px 14px" }}>
+              <SectionHeader label="Execution Reality" accentColor="#7F1D1D" />
+              <div className="flex flex-wrap gap-x-6 gap-y-3 items-center">
+
+                <div className="flex items-center gap-3">
+                  <FieldLabel
+                    label="Trading Costs"
+                    tip="Enables spread and slippage simulation during the backtest loop. Disabling inflates returns."
+                  />
+                  <CompactToggle
+                    checked={evalUseTradingCosts}
+                    onChange={(v) => setField("evalUseTradingCosts", v)}
+                  />
+                </div>
+
+                {evalUseTradingCosts && (
+                  <div className="flex flex-col gap-1.5">
+                    <FieldLabel
+                      label="Slippage BPS"
+                      tip="Average execution slippage in basis points. 1 bps = 0.01%. Typical retail FX: 0.1–0.5 bps."
+                    />
+                    <NumInput
+                      value={slipNormBps}
+                      min={RANGES.slipNormBps.min}
+                      max={RANGES.slipNormBps.max}
+                      step={RANGES.slipNormBps.step}
+                      onChange={(v) => setField("slipNormBps", v)}
+                      width={72}
+                    />
+                  </div>
+                )}
+
+              </div>
+            </div>
+
+            {/* ── Per-Model Hyperparameters ── */}
+            <ModelHyperparamsPanel />
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
 
-// Per-model trial counts mirroring backend HPO_TRIAL_MAPS (api/schemas/backtest.py)
+// ─── Private helpers (retained for internal use) ──────────────────────────────
 const _HPO_TRIALS: Record<string, Record<string, { r: number; b: number }>> = {
   light: { logistic: { r: 1, b: 1 }, svm: { r: 1, b: 1 }, decision_tree: { r: 1, b: 1 },
            random_forest: { r: 1, b: 1 }, xgboost: { r: 1, b: 1 },
@@ -417,23 +654,8 @@ const _HPO_TRIALS: Record<string, Record<string, { r: number; b: number }>> = {
           ensemble_adaptive_regime: { r: 3, b: 7 }, ensemble_cnn_lstm_xgboost: { r: 3, b: 7 }, dqn: { r: 3, b: 5 } },
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function _trialForModel(intensity: string, model: string): number {
   const m = _HPO_TRIALS[intensity]?.[model];
   return m ? Math.max(m.r + m.b, 10) : 10;
-}
-
-function _trialRangeByIntensity(intensity: string): string {
-  const models = _HPO_TRIALS[intensity];
-  if (!models) return "10";
-  const vals = Object.values(models).map((m) => Math.max(m.r + m.b, 10));
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  return min === max ? `${min}` : `${min}–${max}`;
-}
-
-function _effectiveMaxTrials(intensity: string): number {
-  const models = _HPO_TRIALS[intensity];
-  if (!models) return 10;
-  const vals = Object.values(models).map((m) => Math.max(m.r + m.b, 10));
-  return Math.max(...vals);
 }

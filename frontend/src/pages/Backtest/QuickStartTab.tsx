@@ -1,136 +1,188 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { QUICK_START_CATEGORIES } from "@/lib/constants";
 import { modelDescriptions } from "@/lib/tokens";
-import { Trash2, Bug, Cpu, Network, Layers, Bot } from "lucide-react";
+import { Trash2, Bug, Cpu, Network, Layers, Bot, Info } from "lucide-react";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface Props {}
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  debug: <Bug size={13} />,
-  classical: <Cpu size={13} />,
-  deep: <Network size={13} />,
-  ensemble: <Layers size={13} />,
-  rl: <Bot size={13} />,
+  debug: <Bug size={11} />,
+  classical: <Cpu size={11} />,
+  deep: <Network size={11} />,
+  ensemble: <Layers size={11} />,
+  rl: <Bot size={11} />,
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  debug: "var(--color-text-muted)",
-  classical: "var(--color-brand)",
-  deep: "var(--color-accent)",
-  ensemble: "var(--color-accent-warning)",
-  rl: "var(--color-accent-danger)",
+  debug:    "#787B86",
+  classical: "#22D3EE",
+  deep:     "#A78BFA",
+  ensemble: "#EC4899",
+  rl:       "#F59E0B",
 };
 
 export function QuickStartTab(_props: Props) {
-  const applyQuickPreset = useBacktestStore((s) => s.applyQuickPreset);
+  const applyQuickPreset  = useBacktestStore((s) => s.applyQuickPreset);
   const removeCustomPreset = useBacktestStore((s) => s.removeCustomPreset);
-  const customPresets = useBacktestStore((s) => s.customPresets);
+  const customPresets      = useBacktestStore((s) => s.customPresets);
+  const [tooltip, setTooltip] = useState<{ key: string; x: number; y: number } | null>(null);
 
   const handlePreset = useCallback((key: string) => {
     applyQuickPreset(key);
   }, [applyQuickPreset]);
 
-  const modelName = (m: string) =>
+  const modelBadgeName = (m: string) =>
     (modelDescriptions as Record<string, { name: string }>)[m]?.name ?? m;
 
+  // Flatten all presets for tooltip lookup
+  const allPresets = QUICK_START_CATEGORIES.flatMap((c) => c.options);
+  const tooltipPreset = tooltip ? allPresets.find((p) => p.key === tooltip.key) : null;
+
   return (
-    <div className="flex flex-col py-6 px-2">
+    <div
+      className="flex flex-col"
+      style={{ paddingBottom: 8 }}
+      onMouseLeave={() => setTooltip(null)}
+    >
       {QUICK_START_CATEGORIES.map((cat, idx) => {
-        const catColor = CATEGORY_COLORS[cat.key] ?? "var(--color-text-muted)";
+        const catColor = CATEGORY_COLORS[cat.key] ?? "#787B86";
 
         return (
           <div key={cat.key}>
-            {/* Divider between categories */}
+            {/* Category separator */}
             {idx > 0 && (
-              <div className="mt-14 mb-10" style={{ borderTop: "1px solid #2A2A2A" }} />
+              <div
+                className="mx-0"
+                style={{ height: 1, backgroundColor: "#2A2E39", margin: "12px 0" }}
+              />
             )}
 
-            {/* Category header */}
-            <div className="flex items-center gap-2 mb-5 px-1">
-              <span style={{ color: catColor }}>{CATEGORY_ICONS[cat.key]}</span>
+            {/* Category header row */}
+            <div
+              className="flex items-center gap-2 px-3 py-1.5"
+              style={{ backgroundColor: "#1A1D27" }}
+            >
+              <span style={{ color: catColor, display: "flex", alignItems: "center" }}>
+                {CATEGORY_ICONS[cat.key]}
+              </span>
               <span
-                className="text-[11px] font-semibold uppercase tracking-[0.1em]"
-                style={{ color: "#FFFFFF" }}
+                className="text-[10px] font-semibold uppercase tracking-[0.12em]"
+                style={{ color: catColor }}
               >
                 {cat.label}
               </span>
-              <span className="text-[10px] ml-1" style={{ color: "#4B5563" }}>
+              <span
+                className="text-[10px] ml-1"
+                style={{ color: "#4A5568", fontFamily: "var(--font-mono)" }}
+              >
                 {cat.options.length} presets
               </span>
             </div>
 
-            {/* Cards grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-              {cat.options.map((opt) => {
-                const hrs = opt.estMinutes >= 120;
-                const timeStr = hrs
-                  ? `${(opt.estMinutes / 60).toFixed(0)}h`
-                  : `${opt.estMinutes}min`;
+            {/* Preset rows */}
+            {cat.options.map((opt, rowIdx) => {
+              const hrs = opt.estMinutes >= 120;
+              const timeStr = hrs
+                ? `${(opt.estMinutes / 60).toFixed(0)}h`
+                : `${opt.estMinutes}min`;
+              const isOdd = rowIdx % 2 === 1;
 
-                return (
-                  <div
-                    key={opt.key}
-                    onClick={() => handlePreset(opt.key)}
-                    className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg p-6 flex flex-col justify-between cursor-pointer transition-colors duration-150 hover:border-[#A8E063] hover:bg-[#1E1E1E]"
-                  >
-                    {/* Top: title + estimate + description */}
-                    <div>
-                      <span
-                        className="block text-[13px] font-semibold tracking-wide mb-1"
-                        style={{ color: "#FFFFFF", lineHeight: 1.4 }}
-                      >
-                        {opt.label}
-                      </span>
+              return (
+                <div
+                  key={opt.key}
+                  className="flex items-center gap-3 px-3 transition-colors duration-100"
+                  style={{
+                    height: 40,
+                    backgroundColor: isOdd ? "rgba(255,255,255,0.015)" : "transparent",
+                    borderBottom: "1px solid #1E222D",
+                  }}
+                  onMouseEnter={() => setTooltip(null)}
+                >
+                  {/* Col 1: Name + info icon */}
+                  <div className="flex items-center gap-1.5" style={{ minWidth: 200, maxWidth: 200 }}>
+                    <span
+                      className="text-[12px] font-medium truncate"
+                      style={{ color: "#D1D4DC" }}
+                    >
+                      {opt.label}
+                    </span>
+                    <button
+                      className="shrink-0 flex items-center justify-center rounded transition-colors"
+                      style={{ color: "#4A5568", cursor: "default" }}
+                      onMouseEnter={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setTooltip({ key: opt.key, x: rect.left, y: rect.bottom + 4 });
+                      }}
+                      onMouseLeave={() => setTooltip(null)}
+                      tabIndex={-1}
+                    >
+                      <Info size={11} />
+                    </button>
+                  </div>
 
+                  {/* Col 2: Model badges */}
+                  <div className="flex flex-1 items-center gap-1.5 flex-wrap">
+                    {opt.models.slice(0, 4).map((m) => (
                       <span
-                        className="block text-[10px] tabular-nums mb-3"
+                        key={m}
+                        className="inline-flex items-center px-1.5 rounded text-[9px] font-medium uppercase tracking-wider"
                         style={{
-                          color: "#A8E063",
-                          fontFamily: "var(--font-mono)",
-                          letterSpacing: "0.04em",
+                          backgroundColor: "#1E222D",
+                          color: "#787B86",
+                          border: "1px solid #2A2E39",
+                          lineHeight: "18px",
+                          whiteSpace: "nowrap",
                         }}
                       >
-                        est. {timeStr}
+                        {modelBadgeName(m)}
                       </span>
-
-                      <div className="flex flex-col gap-2">
-                        {opt.subtitle.split("\n\n").map((para, i) => (
-                          <p
-                            key={i}
-                            className="text-[11px]"
-                            style={{ color: "#9CA3AF", lineHeight: 1.7 }}
-                          >
-                            {para}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Bottom: model badges */}
-                    <div className="mt-4 flex flex-wrap gap-2 pt-3 border-t border-[#252525]">
-                      {opt.models.slice(0, 3).map((m) => (
-                        <span
-                          key={m}
-                          className="inline-flex items-center px-2.5 py-1 bg-[#2A2A2A] rounded-md text-[10px] font-medium text-gray-300 uppercase tracking-wider"
-                        >
-                          {modelName(m)}
-                        </span>
-                      ))}
-                      {opt.models.length > 3 && (
-                        <span
-                          className="inline-flex items-center text-[10px]"
-                          style={{ color: "#6B7280" }}
-                        >
-                          +{opt.models.length - 3}
-                        </span>
-                      )}
-                    </div>
+                    ))}
+                    {opt.models.length > 4 && (
+                      <span
+                        className="text-[9px]"
+                        style={{ color: "#4A5568", fontFamily: "var(--font-mono)" }}
+                      >
+                        +{opt.models.length - 4}
+                      </span>
+                    )}
                   </div>
-                );
-              })}
-            </div>
+
+                  {/* Col 3: Time + Select */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span
+                      className="text-[10px] tabular-nums"
+                      style={{ color: "#4A5568", fontFamily: "var(--font-mono)", minWidth: 46, textAlign: "right" }}
+                    >
+                      {timeStr}
+                    </span>
+                    <button
+                      onClick={() => handlePreset(opt.key)}
+                      className="rounded text-[10px] font-semibold uppercase tracking-wider transition-colors duration-100"
+                      style={{
+                        backgroundColor: "#1E222D",
+                        border: "1px solid #2A2E39",
+                        color: "#787B86",
+                        padding: "3px 10px",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = "#089981";
+                        (e.currentTarget as HTMLButtonElement).style.color = "#089981";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = "#2A2E39";
+                        (e.currentTarget as HTMLButtonElement).style.color = "#787B86";
+                      }}
+                    >
+                      Select
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         );
       })}
@@ -138,63 +190,103 @@ export function QuickStartTab(_props: Props) {
       {/* Custom Presets */}
       {Object.keys(customPresets).length > 0 && (
         <div>
-          <div className="my-12" style={{ borderTop: "1px solid #333333" }} />
-          <div className="flex items-center gap-2 mt-8 mb-4 px-1">
-            <span
-              className="text-[11px] font-semibold uppercase tracking-[0.1em]"
-              style={{ color: "#FFFFFF" }}
-            >
+          <div style={{ height: 1, backgroundColor: "#2A2E39", margin: "12px 0" }} />
+          <div
+            className="flex items-center gap-2 px-3 py-1.5"
+            style={{ backgroundColor: "#1A1D27" }}
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "#787B86" }}>
               My Presets
             </span>
-            <span className="text-[10px] ml-1" style={{ color: "#4B5563" }}>
+            <span className="text-[10px] ml-1" style={{ color: "#4A5568", fontFamily: "var(--font-mono)" }}>
               {Object.keys(customPresets).length} saved
             </span>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
-            {Object.entries(customPresets).map(([key, p]) => (
-              <div
-                key={key}
-                className="rounded-lg border p-6 flex items-center justify-between"
-                style={{
-                  borderColor: "var(--color-glass-border)",
-                  backgroundColor: "var(--color-elevated)",
-                }}
-              >
-                <div>
-                  <span
-                    className="text-[11px] font-semibold"
-                    style={{ color: "var(--color-text-primary)" }}
-                  >
-                    {p.name}
+          {Object.entries(customPresets).map(([key, p], rowIdx) => (
+            <div
+              key={key}
+              className="flex items-center gap-3 px-3 transition-colors duration-100"
+              style={{
+                height: 40,
+                backgroundColor: rowIdx % 2 === 1 ? "rgba(255,255,255,0.015)" : "transparent",
+                borderBottom: "1px solid #1E222D",
+              }}
+            >
+              <div className="flex items-center gap-1.5 flex-1" style={{ minWidth: 0 }}>
+                <span className="text-[12px] font-medium truncate" style={{ color: "#D1D4DC" }}>
+                  {p.name}
+                </span>
+                {p.subtitle && (
+                  <span className="text-[10px] truncate" style={{ color: "#4A5568" }}>
+                    — {p.subtitle}
                   </span>
-                  {p.subtitle && (
-                    <p
-                      className="text-[9px] mt-0.5"
-                      style={{ color: "var(--color-text-muted)" }}
-                    >
-                      {p.subtitle}
-                    </p>
-                  )}
-                  <span
-                    className="text-[8px] font-mono"
-                    style={{ color: "var(--color-text-muted)" }}
-                  >
-                    Saved {p.date}
-                  </span>
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeCustomPreset(key);
-                  }}
-                  className="rounded p-1"
-                  style={{ color: "var(--color-accent-danger)", cursor: "pointer" }}
-                  title="Delete preset"
-                >
-                  <Trash2 size={12} />
-                </button>
+                )}
               </div>
-            ))}
+              <span
+                className="text-[9px] tabular-nums shrink-0"
+                style={{ color: "#4A5568", fontFamily: "var(--font-mono)" }}
+              >
+                {p.date}
+              </span>
+              <button
+                onClick={() => removeCustomPreset(key)}
+                className="shrink-0 rounded p-1 transition-colors"
+                style={{ color: "#4A5568", cursor: "pointer" }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = "#EF4444")}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = "#4A5568")}
+                title="Delete preset"
+              >
+                <Trash2 size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Floating tooltip */}
+      {tooltip && tooltipPreset && (
+        <div
+          className="fixed z-50 rounded border pointer-events-none"
+          style={{
+            top: tooltip.y,
+            left: Math.min(tooltip.x, typeof window !== "undefined" ? window.innerWidth - 280 : tooltip.x),
+            width: 260,
+            backgroundColor: "#1E222D",
+            borderColor: "#2A2E39",
+            padding: "10px 12px",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+          }}
+        >
+          <p
+            className="text-[10px] font-semibold mb-1.5 uppercase tracking-wider"
+            style={{ color: "#D1D4DC" }}
+          >
+            {tooltipPreset.label}
+          </p>
+          {tooltipPreset.subtitle.split("\n\n").map((para, i) => (
+            <p
+              key={i}
+              className="text-[10px] leading-relaxed"
+              style={{ color: "#787B86", marginTop: i > 0 ? 6 : 0 }}
+            >
+              {para}
+            </p>
+          ))}
+          <div
+            className="mt-2 pt-2 flex items-center gap-2"
+            style={{ borderTop: "1px solid #2A2E39" }}
+          >
+            <span className="text-[9px] uppercase tracking-wider" style={{ color: "#4A5568" }}>
+              Est.
+            </span>
+            <span
+              className="text-[10px] tabular-nums"
+              style={{ color: "#089981", fontFamily: "var(--font-mono)" }}
+            >
+              {tooltipPreset.estMinutes >= 120
+                ? `${(tooltipPreset.estMinutes / 60).toFixed(0)}h`
+                : `${tooltipPreset.estMinutes}min`}
+            </span>
           </div>
         </div>
       )}

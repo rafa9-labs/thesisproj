@@ -7,150 +7,233 @@ import type { ModelInfo } from "@/api/schemas";
 
 const GPU_MODELS = new Set(["cnn", "lstm", "transformer", "dqn", "ensemble_adaptive_regime"]);
 
+const CATEGORY_COLORS: Record<string, string> = {
+  classical: "#22D3EE",
+  deep:      "#A78BFA",
+  rl:        "#F59E0B",
+  ensemble:  "#EC4899",
+};
+
 export function ModelSelector() {
   const { data: models, isLoading } = useModels();
-  const selected = useBacktestStore((s) => s.selectedModels);
+  const selected    = useBacktestStore((s) => s.selectedModels);
   const toggleModel = useBacktestStore((s) => s.toggleModel);
-  const verbose = useSettingsStore((s) => s.verboseMode);
+  const verbose     = useSettingsStore((s) => s.verboseMode);
 
   const modelsByCategory = categorizeModels(models ?? []);
 
   return (
     <div
-      className="flex flex-col gap-4 rounded-lg border p-5"
+      className="flex flex-col"
       style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
+        backgroundColor: "#1A1D27",
+        border: "1px solid #2A2E39",
+        borderRadius: 6,
       }}
     >
-      <div className="mb-1 flex items-center justify-between">
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-3 py-2"
+        style={{ borderBottom: "1px solid #2A2E39" }}
+      >
+        <div className="flex items-center gap-2">
+          <div style={{ width: 2, height: 10, backgroundColor: "#A78BFA", borderRadius: 1 }} />
+          <span
+            className="text-[9px] font-semibold uppercase tracking-[0.14em]"
+            style={{ color: "#787B86" }}
+          >
+            Model Selection
+          </span>
+        </div>
         <span
-          className="text-[11px] font-medium uppercase tracking-[0.12em]"
-          style={{ color: "var(--color-text-muted)" }}
+          className="text-[10px] tabular-nums"
+          style={{ color: "#4A5568", fontFamily: "var(--font-mono)" }}
         >
-          Model Selection
-        </span>
-        <span className="text-[11px] font-medium" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
           {selected.length}/5 selected
         </span>
       </div>
 
+      {/* Table header */}
+      <div
+        className="grid px-3 py-1.5"
+        style={{
+          gridTemplateColumns: "20px 1fr 120px 140px",
+          borderBottom: "1px solid #2A2E39",
+          backgroundColor: "#131620",
+        }}
+      >
+        <div />
+        <span className="text-[9px] font-semibold uppercase tracking-[0.1em]" style={{ color: "#4A5568" }}>Model</span>
+        <span className="text-[9px] font-semibold uppercase tracking-[0.1em]" style={{ color: "#4A5568" }}>Category</span>
+        <span className="text-[9px] font-semibold uppercase tracking-[0.1em]" style={{ color: "#4A5568" }}>Notes</span>
+      </div>
+
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className="flex flex-col gap-0">
+          {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="h-28 animate-skeleton rounded-lg"
-              style={{ backgroundColor: "var(--color-glass-hover)" }}
+              className="animate-pulse mx-3 my-1 rounded"
+              style={{ height: 28, backgroundColor: "#2A2E39" }}
             />
           ))}
         </div>
       ) : (
-        <div className="flex flex-col gap-7">
+        <div className="flex flex-col">
           {Object.entries(modelCategories).map(([catKey, cat]) => {
             const catModels = modelsByCategory[catKey] ?? [];
             if (catModels.length === 0) return null;
+            const catColor = CATEGORY_COLORS[catKey] ?? "#787B86";
+
             return (
               <div key={catKey}>
-                {/* Category divider: hairline + dot + off-white label */}
-                <div className="mb-3 flex items-center gap-2">
-                  <div
-                    className="rounded-full shrink-0"
-                    style={{ width: 8, height: 8, backgroundColor: cat.color }}
-                  />
-                  <span
-                    className="text-[10px] font-medium uppercase tracking-[0.14em] whitespace-nowrap"
-                    style={{ color: "var(--color-text-secondary)" }}
-                  >
-                    {cat.label}
-                  </span>
-                  <div className="h-px flex-1" style={{ backgroundColor: "#333" }} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {catModels.map((m) => (
-                    <ModelCard
-                      key={m.name}
-                      model={m}
-                      isSelected={selected.includes(m.name)}
-                      isFull={selected.length >= 5 && !selected.includes(m.name)}
-                      categoryColor={cat.color}
-                      verbose={verbose}
-                      onToggle={() => toggleModel(m.name)}
+                {/* Category sub-header */}
+                <div
+                  className="grid px-3 py-1"
+                  style={{
+                    gridTemplateColumns: "20px 1fr 120px 140px",
+                    borderBottom: "1px solid #1E222D",
+                    backgroundColor: "rgba(255,255,255,0.012)",
+                  }}
+                >
+                  <div />
+                  <div className="flex items-center gap-1.5">
+                    <div
+                      style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: catColor, flexShrink: 0 }}
                     />
-                  ))}
+                    <span
+                      className="text-[9px] font-semibold uppercase tracking-[0.12em]"
+                      style={{ color: catColor }}
+                    >
+                      {cat.label}
+                    </span>
+                  </div>
+                  <div />
+                  <div />
                 </div>
+
+                {/* Model rows */}
+                {catModels.map((m, rowIdx) => {
+                  const isSelected = selected.includes(m.name);
+                  const isFull     = selected.length >= 5 && !isSelected;
+                  const needsGpu   = GPU_MODELS.has(m.name);
+                  const desc       = modelDescriptions[m.name];
+                  const isOdd      = rowIdx % 2 === 1;
+
+                  return (
+                    <button
+                      key={m.name}
+                      onClick={() => !isFull && toggleModel(m.name)}
+                      disabled={isFull}
+                      className="grid w-full px-3 text-left transition-colors duration-100"
+                      style={{
+                        gridTemplateColumns: "20px 1fr 120px 140px",
+                        height: 34,
+                        alignItems: "center",
+                        borderBottom: "1px solid #1E222D",
+                        backgroundColor: isSelected
+                          ? "rgba(8,153,129,0.08)"
+                          : isOdd
+                          ? "rgba(255,255,255,0.012)"
+                          : "transparent",
+                        cursor: isFull ? "not-allowed" : "pointer",
+                        opacity: isFull ? 0.35 : 1,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected && !isFull)
+                          (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                            "rgba(255,255,255,0.03)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected)
+                          (e.currentTarget as HTMLButtonElement).style.backgroundColor = isOdd
+                            ? "rgba(255,255,255,0.012)"
+                            : "transparent";
+                      }}
+                    >
+                      {/* Checkbox */}
+                      <div className="flex items-center justify-center">
+                        <div
+                          style={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: 3,
+                            border: isSelected ? "1.5px solid #089981" : "1.5px solid #2A2E39",
+                            backgroundColor: isSelected ? "#089981" : "transparent",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                            transition: "all 0.1s",
+                          }}
+                        >
+                          {isSelected && (
+                            <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
+                              <path d="M1 2.5L2.8 4L6 1" stroke="#0A0D12" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Model name */}
+                      <div className="flex flex-col justify-center min-w-0">
+                        <span
+                          className="text-[11px] font-medium truncate"
+                          style={{ color: isSelected ? "#D1D4DC" : "#9CA3AF" }}
+                        >
+                          {desc?.name ?? m.display_name}
+                        </span>
+                        {verbose && desc?.short && (
+                          <span
+                            className="text-[9px] truncate"
+                            style={{ color: "#4A5568" }}
+                          >
+                            {desc.short}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Category badge */}
+                      <div>
+                        <span
+                          className="inline-flex items-center px-1.5 rounded text-[9px] font-medium uppercase tracking-wider"
+                          style={{
+                            backgroundColor: "rgba(255,255,255,0.04)",
+                            border: `1px solid ${catColor}30`,
+                            color: catColor,
+                            lineHeight: "16px",
+                          }}
+                        >
+                          {cat.label}
+                        </span>
+                      </div>
+
+                      {/* GPU badge */}
+                      <div>
+                        {needsGpu && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 rounded text-[9px] font-medium"
+                            style={{
+                              backgroundColor: "rgba(245,158,11,0.06)",
+                              border: "1px solid rgba(245,158,11,0.2)",
+                              color: "#F59E0B",
+                              lineHeight: "16px",
+                            }}
+                          >
+                            <AlertTriangle size={9} strokeWidth={2} />
+                            GPU rec.
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             );
           })}
         </div>
       )}
     </div>
-  );
-}
-
-function ModelCard({
-  model,
-  isSelected,
-  isFull,
-  categoryColor,
-  verbose,
-  onToggle,
-}: {
-  model: ModelInfo;
-  isSelected: boolean;
-  isFull: boolean;
-  categoryColor: string;
-  verbose: boolean;
-  onToggle: () => void;
-}) {
-  const desc = modelDescriptions[model.name];
-  const needsGpu = GPU_MODELS.has(model.name);
-
-  return (
-    <button
-      onClick={onToggle}
-      disabled={isFull}
-      className="flex flex-col gap-2 rounded-lg border p-4 text-left transition-all duration-150"
-      style={{
-        borderColor: isSelected ? "var(--color-brand)" : "#333",
-        backgroundColor: isSelected ? "rgba(168,224,99,0.05)" : "var(--color-glass)",
-        opacity: isFull ? 0.35 : 1,
-        cursor: isFull ? "not-allowed" : "pointer",
-        borderLeftWidth: isSelected ? 2 : 1,
-        boxShadow: "none",
-      }}
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-          {desc?.name ?? model.display_name}
-        </span>
-        {isSelected && (
-          <span
-            className="text-xs font-semibold"
-            style={{ color: "var(--color-brand)", fontFamily: "var(--font-mono)" }}
-          >
-            ✓
-          </span>
-        )}
-      </div>
-      <span className="text-[12px] font-light leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
-        {desc?.short ?? model.description}
-      </span>
-      {needsGpu && !isSelected && (
-        <div className="flex items-center gap-1.5">
-          <AlertTriangle size={10} strokeWidth={1.5} style={{ color: "var(--color-accent-warning)" }} />
-          <span className="text-[10px] font-medium" style={{ color: "var(--color-accent-warning)" }}>
-            GPU recommended
-          </span>
-        </div>
-      )}
-      {verbose && desc?.apprentice && (
-        <p className="mt-1 text-[11px] font-light leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
-          {desc.apprentice}
-        </p>
-      )}
-    </button>
   );
 }
 
