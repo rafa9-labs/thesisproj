@@ -42,20 +42,20 @@ export function QuickStartTab(_props: Props) {
         const catColor = CATEGORY_COLORS[cat.key] ?? "var(--color-text-muted)";
 
         return (
-          <div key={cat.key}>
+          <div key={cat.key} className="mb-10">
             {/* Category header */}
-            <div className="flex items-center gap-1.5 mb-2">
+            <div className="flex items-center gap-1.5 mb-4">
               <span style={{ color: catColor }}>{CATEGORY_ICONS[cat.key]}</span>
               <span
-                className="text-[10px] font-semibold uppercase tracking-[0.08em]"
+                className="text-[11px] font-semibold uppercase tracking-[0.1em]"
                 style={{ color: "#FFFFFF" }}
               >
                 {cat.label}
               </span>
             </div>
 
-            {/* Options in a horizontal row */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            {/* Options grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               {cat.options.map((opt) => {
                 const hrs = opt.estMinutes >= 120;
                 const timeStr = hrs ? `${(opt.estMinutes / 60).toFixed(0)}h` : `${opt.estMinutes}min`;
@@ -63,42 +63,35 @@ export function QuickStartTab(_props: Props) {
                   <div
                     key={opt.key}
                     onClick={() => handlePreset(opt.key)}
-                    className="rounded-lg border p-2.5 cursor-pointer transition-all duration-150 hover:brightness-110"
-                    style={{
-                      borderColor: "#333333",
-                      backgroundColor: "#1E1E1E",
-                    }}
+                    className="bg-[#1E1E1E] border border-[#333333] rounded-xl p-6 flex flex-col justify-between cursor-pointer transition-colors duration-150 hover:border-[#A8E063]"
                   >
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "#FFFFFF" }}>
+                    {/* Header row */}
+                    <div className="flex justify-between items-start mb-3">
+                      <span className="text-white text-lg font-bold tracking-wide leading-tight">
                         {opt.label}
                       </span>
-                      <span className="text-[8px] font-mono" style={{ color: "#9CA3AF" }}>
+                      <span className="text-[#9CA3AF] text-sm font-medium whitespace-nowrap ml-2 mt-0.5">
                         ~{timeStr}
                       </span>
                     </div>
-                    <p className="text-[9px] mb-1" style={{ color: "#9CA3AF" }}>
+
+                    {/* Description */}
+                    <p className="text-[#D1D5DB] text-sm leading-relaxed flex-1 mb-0">
                       {opt.subtitle}
                     </p>
-                    <div className="flex flex-wrap gap-1">
+
+                    {/* Model badges */}
+                    <div className="mt-5 flex flex-wrap gap-2">
                       {opt.models.slice(0, 3).map((m) => (
                         <span
                           key={m}
-                          className="rounded-md px-2 py-1 text-[7px] inline-block"
-                          style={{
-                            backgroundColor: "#2A2A2A",
-                            color: "#D1D5DB",
-                            fontFamily: "var(--font-mono)",
-                          }}
+                          className="inline-flex items-center px-2.5 py-1 bg-[#2A2A2A] rounded-md text-xs font-medium text-gray-300 uppercase tracking-wider"
                         >
                           {modelName(m)}
                         </span>
                       ))}
                       {opt.models.length > 3 && (
-                        <span
-                          className="text-[7px] font-mono"
-                          style={{ color: "#9CA3AF" }}
-                        >
+                        <span className="inline-flex items-center text-xs text-[#9CA3AF]">
                           +{opt.models.length - 3}
                         </span>
                       )}
