@@ -39,40 +39,48 @@ function BullBearBar({ position }: { position: number }) {
   );
 }
 
-/** Compact sentiment scores in grid format */
+/** Compact sentiment scores — strict 3-column grid, perfectly aligned */
 function SentimentScores({ llm, vader, confidence }: { llm: number | null; vader: number | null; confidence: number | null }) {
+  const items = [
+    { label: "LLM", value: llm != null ? (llm > 0 ? "+" : "") + llm.toFixed(2) : "—" },
+    { label: "VADER", value: vader != null ? (vader > 0 ? "+" : "") + vader.toFixed(2) : "—" },
+    { label: "CONF", value: confidence != null ? formatPercent(confidence) : "—" },
+  ];
   return (
-    <div className="flex flex-col gap-1">
-      <div className="grid grid-cols-3 gap-2 text-[10px]">
-        <div>
-          <div style={{ color: "var(--color-text-muted)" }}>LLM</div>
-          <div className="font-mono" style={{ color: "var(--color-text-secondary)" }}>
-            {llm != null ? (llm > 0 ? "+" : "") + llm.toFixed(2) : "—"}
-          </div>
+    <div
+      className="grid grid-cols-3 mt-3 pt-3"
+      style={{ borderTop: "1px solid var(--color-glass-border)" }}
+    >
+      {items.map(({ label, value }) => (
+        <div key={label} className="flex flex-col items-center gap-0.5">
+          <span
+            className="text-[9px] font-medium uppercase tracking-[0.1em]"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            {label}
+          </span>
+          <span
+            className="text-[12px] tabular-nums"
+            style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-secondary)" }}
+          >
+            {value}
+          </span>
         </div>
-        <div>
-          <div style={{ color: "var(--color-text-muted)" }}>VADER</div>
-          <div className="font-mono" style={{ color: "var(--color-text-secondary)" }}>
-            {vader != null ? (vader > 0 ? "+" : "") + vader.toFixed(2) : "—"}
-          </div>
-        </div>
-        <div>
-          <div style={{ color: "var(--color-text-muted)" }}>Conf</div>
-          <div className="font-mono" style={{ color: "var(--color-text-secondary)" }}>
-            {confidence != null ? formatPercent(confidence) : "—"}
-          </div>
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
 
-/** Article row with colored left border and relative timestamp */
+/** Article row — fixed height, strict 1-line title truncation, uniform sizing */
 function ArticleRow({ article }: { article: ArticleItem }) {
   const score = article.sentiment_score;
   const isBullish = score > 0.2;
   const isBearish = score < -0.2;
-  const borderColor = isBullish ? "var(--color-accent-success)" : isBearish ? "var(--color-accent-danger)" : "var(--color-text-muted)";
+  const borderColor = isBullish
+    ? "var(--color-accent-success)"
+    : isBearish
+    ? "var(--color-accent-danger)"
+    : "var(--color-glass-border)";
 
   const now = new Date().getTime();
   const ts = new Date(article.timestamp).getTime();
@@ -81,22 +89,41 @@ function ArticleRow({ article }: { article: ArticleItem }) {
   const hoursDiff = Math.floor(minsDiff / 60);
   const daysDiff = Math.floor(hoursDiff / 24);
   const timeStr =
-    daysDiff > 0 ? `${daysDiff}d ago` : hoursDiff > 0 ? `${hoursDiff}h ago` : minsDiff > 0 ? `${minsDiff}m ago` : "now";
+    daysDiff > 0
+      ? `${daysDiff}d`
+      : hoursDiff > 0
+      ? `${hoursDiff}h`
+      : minsDiff > 0
+      ? `${minsDiff}m`
+      : "now";
 
   return (
     <div
-      className="flex gap-1.5 py-1.5 text-[9px] border-l-2 pl-1.5"
-      style={{ borderLeftColor: borderColor, color: "var(--color-text-secondary)" }}
+      className="flex items-center gap-2 border-l-2 pl-2"
+      style={{
+        borderLeftColor: borderColor,
+        height: 32,
+        flexShrink: 0,
+      }}
     >
-      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <div className="truncate" style={{ color: "var(--color-text-primary)" }}>
-          {article.title}
-        </div>
-        <div style={{ color: "var(--color-text-muted)" }} className="flex items-center justify-between">
-          <span>{article.source}</span>
-          <span>{timeStr}</span>
-        </div>
-      </div>
+      {/* title — strict 1 line, no wrapping */}
+      <span
+        className="flex-1 min-w-0 text-[10px] truncate"
+        style={{ color: "var(--color-text-primary)", lineHeight: "1.3" }}
+      >
+        {article.title}
+      </span>
+      {/* meta: source + time, never wraps */}
+      <span
+        className="shrink-0 text-[9px] tabular-nums"
+        style={{
+          color: "var(--color-text-muted)",
+          fontFamily: "var(--font-mono)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {article.source} · {timeStr}
+      </span>
     </div>
   );
 }

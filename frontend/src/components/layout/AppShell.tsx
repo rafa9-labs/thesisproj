@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { layout } from "@/lib/tokens";
+
 import { TerminalPanel } from "./TerminalPanel";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -34,65 +34,14 @@ export function AppShell() {
           <Outlet />
         </div>
 
-        <TerminalPanel />
+        <TerminalPanel
+          apiOk={health?.status === "ok"}
+          wsConnected={wsConnected}
+        />
         <UpdateNotification />
-
-        <footer
-          className="flex items-center justify-between px-5"
-          style={{
-            height: layout.statusBarHeight,
-            borderTop: "1px solid rgba(255,255,255,0.04)",
-            backgroundColor: "var(--color-surface)",
-            color: "var(--color-text-muted)",
-            fontSize: "10px",
-            fontWeight: 300,
-            fontFamily: "var(--font-mono)",
-            flexShrink: 0,
-          }}
-        >
-          <div className="flex items-center gap-3"
-          >
-            <StatusDot
-              color={health?.status === "ok" ? "var(--color-brand)" : "var(--color-accent-danger)"}
-              label="API"
-              pulse={health?.status === "ok"}
-            />
-            <StatusDot
-              color={wsConnected ? "var(--color-brand)" : "var(--color-text-muted)"}
-              label="WS"
-              pulse={wsConnected}
-            />
-          </div>
-          <span style={{ letterSpacing: "0.04em" }}>v1.0.0 — KodaQuant</span>
-        </footer>
       </div>
     </div>
   );
 }
 
-function StatusDot({
-  color,
-  label,
-  pulse,
-}: {
-  color: string;
-  label: string;
-  pulse?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="relative">
-        <div className="h-[5px] w-[5px] rounded-full" style={{ backgroundColor: color }} />
-        {pulse && (
-          <div
-            className="absolute inset-0 animate-ping-brand rounded-full"
-            style={{ backgroundColor: color, opacity: 0.4 }}
-          />
-        )}
-      </div>
-      <span className="text-[10px]" style={{ color: "var(--color-text-muted)", fontWeight: 300 }}>
-        {label}
-      </span>
-    </div>
-  );
-}
+
