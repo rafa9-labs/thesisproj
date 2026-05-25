@@ -8,62 +8,16 @@ interface ArticleItem {
   timestamp: string;
 }
 
-function SentimentGauge({ value, label, pair }: { value: number | null; label: string; pair: string }) {
-  const clamped = Math.max(-1, Math.min(1, value ?? 0));
-  const pct = ((clamped + 1) / 2) * 100;
-  const isBullish = clamped > 0.3;
-  const isBearish = clamped < -0.3;
-  const color = isBullish ? "var(--color-accent-success)" : isBearish ? "var(--color-accent-danger)" : "var(--color-accent-warning)";
-  const bg = isBullish ? "rgba(34,197,94,0.12)" : isBearish ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.12)";
-
-  return (
-    <div className="flex items-center gap-4">
-      <div className="relative w-20 h-20 flex-shrink-0">
-        <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
-          <circle cx="60" cy="60" r="52" fill="none" stroke="var(--color-glass-hover)" strokeWidth="8" />
-          <circle
-            cx="60" cy="60" r="52" fill="none"
-            stroke={color}
-            strokeWidth="8"
-            strokeLinecap="round"
-            strokeDasharray={`${(pct / 100) * 327} 327`}
-            style={{ transition: "stroke-dasharray 0.6s ease" }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-sm font-semibold" style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>
-            {clamped > 0 ? "+" : ""}{clamped.toFixed(2)}
-          </span>
-        </div>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium" style={{ color: "var(--color-text-primary)" }}>{pair}</span>
-        <span
-          className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase"
-          style={{ backgroundColor: bg, color, width: "fit-content" }}
-        >
-          {isBullish ? "Bullish" : isBearish ? "Bearish" : "Neutral"}
-        </span>
-        <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>{label}</span>
-      </div>
-    </div>
-  );
-}
-
-function PositionBar({ position, confidence, articleCount }: { position: number; confidence: number; articleCount: number }) {
+/** Horizontal Bull/Bear progress bar replacing circular gauge */
+function BullBearBar({ position }: { position: number }) {
   const clamped = Math.max(-1, Math.min(1, position));
   const pct = ((clamped + 1) / 2) * 100;
   const isLong = clamped > 0;
   const color = isLong ? "var(--color-accent-success)" : clamped < 0 ? "var(--color-accent-danger)" : "var(--color-text-muted)";
-  const label = isLong ? `+${(clamped * 100).toFixed(0)}% Long` : clamped < 0 ? `${(clamped * 100).toFixed(0)}% Short` : "Neutral";
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>Recommended Position</span>
-        <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>{articleCount} articles</span>
-      </div>
-      <div className="relative h-2 w-full rounded-full overflow-hidden" style={{ backgroundColor: "var(--color-glass-hover)" }}>
+    <div className="flex flex-col gap-1">
+      <div className="relative h-1.5 w-full rounded-full overflow-hidden" style={{ backgroundColor: "var(--color-glass-hover)" }}>
         <div
           className="absolute top-0 h-full rounded-full transition-all duration-500"
           style={{
@@ -72,106 +26,150 @@ function PositionBar({ position, confidence, articleCount }: { position: number;
             backgroundColor: color,
           }}
         />
-        <div
-          className="absolute top-0 h-full w-[1px]"
-          style={{ left: "50%", backgroundColor: "var(--color-text-muted)" }}
-        />
+        <div className="absolute top-0 h-full w-px" style={{ left: "50%", backgroundColor: "var(--color-text-muted)" }} />
       </div>
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
-        <span className="text-[10px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>Confidence {formatPercent(confidence)}</span>
+      <div className="flex items-center justify-between text-[9px]">
+        <span style={{ color: "var(--color-accent-danger)" }}>SHORT</span>
+        <span style={{ color: clamped > 0.3 ? "var(--color-accent-success)" : clamped < -0.3 ? "var(--color-accent-danger)" : "var(--color-text-muted)" }}>
+          {clamped > 0 ? "+" : ""}{clamped.toFixed(2)}
+        </span>
+        <span style={{ color: "var(--color-accent-success)" }}>LONG</span>
       </div>
     </div>
   );
 }
 
-function ArticleFeedItem({ article }: { article: ArticleItem }) {
-  const isPositive = article.sentiment_score > 0;
-  const color = isPositive ? "var(--color-accent-success)" : article.sentiment_score < 0 ? "var(--color-accent-danger)" : "var(--color-text-muted)";
+/** Compact sentiment scores in grid format */
+function SentimentScores({ llm, vader, confidence }: { llm: number | null; vader: number | null; confidence: number | null }) {
   return (
-    <div className="flex items-center gap-2 py-1.5" style={{ borderBottom: "1px solid var(--color-glass-border)" }}>
-      <span className="font-mono text-[10px] font-medium w-10 text-right flex-shrink-0" style={{ color }}>
-        {article.sentiment_score > 0 ? "+" : ""}{article.sentiment_score.toFixed(2)}
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className="text-[11px] truncate leading-tight" style={{ color: "var(--color-text-secondary)" }}>{article.title}</div>
-        <div className="text-[9px] mt-0.5" style={{ color: "var(--color-text-muted)" }}>{article.source}</div>
+    <div className="flex flex-col gap-1">
+      <div className="grid grid-cols-3 gap-2 text-[10px]">
+        <div>
+          <div style={{ color: "var(--color-text-muted)" }}>LLM</div>
+          <div className="font-mono" style={{ color: "var(--color-text-secondary)" }}>
+            {llm != null ? (llm > 0 ? "+" : "") + llm.toFixed(2) : "—"}
+          </div>
+        </div>
+        <div>
+          <div style={{ color: "var(--color-text-muted)" }}>VADER</div>
+          <div className="font-mono" style={{ color: "var(--color-text-secondary)" }}>
+            {vader != null ? (vader > 0 ? "+" : "") + vader.toFixed(2) : "—"}
+          </div>
+        </div>
+        <div>
+          <div style={{ color: "var(--color-text-muted)" }}>Conf</div>
+          <div className="font-mono" style={{ color: "var(--color-text-secondary)" }}>
+            {confidence != null ? formatPercent(confidence) : "—"}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
+/** Article row with colored left border and relative timestamp */
+function ArticleRow({ article }: { article: ArticleItem }) {
+  const score = article.sentiment_score;
+  const isBullish = score > 0.2;
+  const isBearish = score < -0.2;
+  const borderColor = isBullish ? "var(--color-accent-success)" : isBearish ? "var(--color-accent-danger)" : "var(--color-text-muted)";
+
+  const now = new Date().getTime();
+  const ts = new Date(article.timestamp).getTime();
+  const msDiff = now - ts;
+  const minsDiff = Math.floor(msDiff / 60000);
+  const hoursDiff = Math.floor(minsDiff / 60);
+  const daysDiff = Math.floor(hoursDiff / 24);
+  const timeStr =
+    daysDiff > 0 ? `${daysDiff}d ago` : hoursDiff > 0 ? `${hoursDiff}h ago` : minsDiff > 0 ? `${minsDiff}m ago` : "now";
+
+  return (
+    <div
+      className="flex gap-1.5 py-1.5 text-[9px] border-l-2 pl-1.5"
+      style={{ borderLeftColor: borderColor, color: "var(--color-text-secondary)" }}
+    >
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <div className="truncate" style={{ color: "var(--color-text-primary)" }}>
+          {article.title}
+        </div>
+        <div style={{ color: "var(--color-text-muted)" }} className="flex items-center justify-between">
+          <span>{article.source}</span>
+          <span>{timeStr}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Sentiment + bias only — used in Col 2 */
 export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
   const { data: sentiment, isLoading: sentLoading } = useLiveSentiment(pair);
-  const { data: newsStatus } = useNewsStatus();
 
   const pairData = sentiment?.pairs?.[pair];
-  const blended = pairData?.blended_sentiment ?? pairData?.vader_sentiment ?? 0;
-  const topArticles: ArticleItem[] = sentiment?.top_articles ?? [];
   const recommendedPosition = pairData?.recommended_position ?? 0;
-  const positionConfidence = pairData?.position_confidence ?? 0;
-  const articleCount = pairData?.article_count ?? 0;
+
+  if (sentLoading) {
+    return (
+      <div className="flex flex-col gap-3 animate-pulse">
+        <div className="h-8 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+        <div className="h-16 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <div
-        className="rounded-lg border p-4"
-        style={{
-          borderColor: "var(--color-glass-border)",
-          backgroundColor: "var(--color-glass)",
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <div className="flex flex-col gap-4">
-          {sentLoading ? (
-            <div className="flex items-center justify-center py-4" style={{ color: "var(--color-text-muted)" }}>
-              <span className="text-xs">Loading sentiment data...</span>
-            </div>
-          ) : (
-            <>
-               <SentimentGauge value={blended} label={sentiment?.backend === "vader" ? "VADER" : `LLM (${sentiment?.model ?? "?"})`} pair={pair} />
+      <BullBearBar position={recommendedPosition} />
+      <SentimentScores
+        llm={pairData?.llm_sentiment}
+        vader={pairData?.vader_sentiment}
+        confidence={pairData?.llm_confidence}
+      />
+      {sentiment?.backend === "vader" && (
+        <span className="text-[9px]" style={{ color: "var(--color-accent-warning)" }}>
+          LLM unavailable — using VADER fallback.
+        </span>
+      )}
+    </div>
+  );
+}
 
-               {sentiment?.backend === "vader" && (
-                 <span className="text-[9px]" style={{ color: "var(--color-accent-warning)" }}>
-                   LLM unavailable — using VADER fallback. Start Ollama or configure an API key.
-                 </span>
-               )}
+/** News articles only — used in Col 3 */
+export function NewsArticlesPanel({ pair = "EURUSD" }: { pair?: string }) {
+  const { data: sentiment, isLoading: sentLoading } = useLiveSentiment(pair);
+  const { data: newsStatus } = useNewsStatus();
 
-               <PositionBar position={recommendedPosition} confidence={positionConfidence} articleCount={articleCount} />
+  const topArticles: ArticleItem[] = sentiment?.top_articles ?? [];
 
-               <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>Sentiment Details</span>
-                <div className="flex justify-between text-[10px]" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-secondary)" }}>
-                  <span>LLM</span>
-                  <span>{pairData?.llm_sentiment != null ? (pairData.llm_sentiment > 0 ? "+" : "") + pairData.llm_sentiment.toFixed(2) : "—"}</span>
-                </div>
-                <div className="flex justify-between text-[10px]" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-secondary)" }}>
-                  <span>VADER</span>
-                  <span>{pairData?.vader_sentiment != null ? (pairData.vader_sentiment > 0 ? "+" : "") + pairData.vader_sentiment.toFixed(2) : "—"}</span>
-                </div>
-                <div className="flex justify-between text-[10px]" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-secondary)" }}>
-                  <span>Confidence</span>
-                  <span>{pairData?.llm_confidence != null ? formatPercent(pairData.llm_confidence) : "—"}</span>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>Top Articles</span>
-                  <span className="text-[9px]" style={{ color: "var(--color-text-muted)" }}>
-                    {newsStatus?.cached_articles ?? 0} cached
-                  </span>
-                </div>
-                {topArticles.length > 0 ? (
-                  topArticles.map((a, i) => <ArticleFeedItem key={`${a.title}-${i}`} article={a} />)
-                ) : (
-                  <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>No articles available. Run a backtest with news features enabled.</span>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+  if (sentLoading) {
+    return (
+      <div className="flex flex-col gap-2 animate-pulse">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div key={i} className="h-8 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+        ))}
       </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-0 h-full">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] uppercase tracking-[0.1em] font-medium" style={{ color: "var(--color-text-muted)" }}>
+          Top Articles
+        </span>
+        <span className="text-[9px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+          {newsStatus?.cached_articles ?? 0} cached
+        </span>
+      </div>
+      {topArticles.length > 0 ? (
+        topArticles.slice(0, 8).map((a, i) => (
+          <ArticleRow key={`${a.title}-${i}`} article={a} />
+        ))
+      ) : (
+        <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+          No articles available. Run a backtest with news features enabled.
+        </span>
+      )}
     </div>
   );
 }
