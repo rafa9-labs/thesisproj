@@ -172,10 +172,10 @@ export function ValidationBar({
             height: 34,
             paddingLeft: 24,
             paddingRight: 24,
-            backgroundColor: canDeploy ? "var(--color-brand)" : "var(--color-glass-border)",
-            color: canDeploy ? "#0A0D12" : "var(--color-text-muted)",
+            backgroundColor: "var(--color-brand)",
+            color: "#0A0D12",
             cursor: canDeploy && !isSubmitting ? "pointer" : "not-allowed",
-            opacity: isSubmitting ? 0.7 : 1,
+            opacity: canDeploy ? (isSubmitting ? 0.7 : 1) : 0.35,
             border: "none",
           }}
         >

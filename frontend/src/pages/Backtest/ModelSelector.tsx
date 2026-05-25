@@ -53,16 +53,19 @@ export function ModelSelector() {
             if (catModels.length === 0) return null;
             return (
               <div key={catKey}>
-                {/* Gradient divider line */}
-                <div className="mb-3 flex items-center gap-3">
-                  <div className="h-px flex-1" style={{ background: `linear-gradient(to right, transparent, ${cat.color}, transparent)` }} />
+                {/* Category divider: hairline + dot + off-white label */}
+                <div className="mb-3 flex items-center gap-2">
+                  <div
+                    className="rounded-full shrink-0"
+                    style={{ width: 8, height: 8, backgroundColor: cat.color }}
+                  />
                   <span
-                    className="text-[10px] font-light uppercase tracking-[0.14em] whitespace-nowrap"
-                    style={{ color: cat.color }}
+                    className="text-[10px] font-medium uppercase tracking-[0.14em] whitespace-nowrap"
+                    style={{ color: "var(--color-text-secondary)" }}
                   >
                     {cat.label}
                   </span>
-                  <div className="h-px flex-1" style={{ background: `linear-gradient(to right, ${cat.color}, transparent)` }} />
+                  <div className="h-px flex-1" style={{ backgroundColor: "#333" }} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {catModels.map((m) => (
@@ -108,15 +111,14 @@ function ModelCard({
     <button
       onClick={onToggle}
       disabled={isFull}
-      className="flex flex-col gap-2 rounded-lg border p-4 text-left transition-all duration-300"
+      className="flex flex-col gap-2 rounded-lg border p-4 text-left transition-all duration-150"
       style={{
-        borderColor: isSelected ? categoryColor : "var(--color-glass-border)",
-        backgroundColor: isSelected ? "rgba(0,229,255,0.06)" : "var(--color-glass)",
+        borderColor: isSelected ? "var(--color-brand)" : "#333",
+        backgroundColor: isSelected ? "rgba(168,224,99,0.05)" : "var(--color-glass)",
         opacity: isFull ? 0.35 : 1,
         cursor: isFull ? "not-allowed" : "pointer",
-        borderLeftWidth: isSelected ? 3 : 1,
-        backdropFilter: "blur(8px)",
-        boxShadow: isSelected ? `0 0 16px ${categoryColor}20` : "none",
+        borderLeftWidth: isSelected ? 2 : 1,
+        boxShadow: "none",
       }}
     >
       <div className="flex items-center justify-between">
@@ -126,7 +128,7 @@ function ModelCard({
         {isSelected && (
           <span
             className="text-xs font-semibold"
-            style={{ color: categoryColor, fontFamily: "var(--font-mono)" }}
+            style={{ color: "var(--color-brand)", fontFamily: "var(--font-mono)" }}
           >
             ✓
           </span>

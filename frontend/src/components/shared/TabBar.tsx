@@ -14,7 +14,7 @@ export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
   return (
     <div
       className="flex items-end"
-      style={{ borderBottom: "1px solid var(--color-glass-border)" }}
+      style={{ borderBottom: "1px solid var(--color-glass-border)", gap: 32 }}
     >
       {tabs.map((tab) => {
         const disabled = disabledTabs?.has(tab.key);
@@ -25,8 +25,11 @@ export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
             key={tab.key}
             onClick={() => !disabled && onTabChange(tab.key)}
             disabled={disabled}
-            className="relative px-4 pb-3 pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors duration-150"
+            className="relative pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors duration-150"
             style={{
+              paddingBottom: 8,
+              paddingLeft: 0,
+              paddingRight: 0,
               background: "transparent",
               border: "none",
               color: isActive

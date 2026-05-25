@@ -69,11 +69,16 @@ export function BacktestPage() {
 
   return (
     <div className="flex flex-col" style={{ minHeight: "100%" }}>
-      {/* Status strip + tab nav — fixed chrome at the top of the page */}
-      <div className="flex flex-col gap-5 pb-5">
-        <ConfigSummaryBar />
+      {/* Status strip */}
+      <ConfigSummaryBar />
+
+      {/* 24px gap between status strip and tab nav */}
+      <div style={{ marginTop: 24 }}>
         <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
+
+      {/* 24px gap between tab nav and main content */}
+      <div style={{ height: 24, flexShrink: 0 }} />
 
       {/* Quick Start */}
       {activeTab === "quickstart" && (
