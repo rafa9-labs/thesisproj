@@ -8,7 +8,6 @@ import type { JobResults } from "@/api/schemas";
 import { formatMetric, formatPercent } from "@/lib/formatters";
 import { useDashboardKPIs } from "./DashboardKPIs";
 import { RecentJobsTable } from "./RecentJobsTable";
-import { QuickActions } from "./QuickActions";
 import { MarketPulsePanel, NewsArticlesPanel } from "./MarketPulsePanel";
 import { PriceTicker } from "./PriceTicker";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";
@@ -103,41 +102,52 @@ export function DashboardPage() {
   const hasCompleted = completedJobs.length > 0;
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* ── Utility bar: pair selector + quick actions (no title) ───────────── */}
-      <div className="flex items-center justify-end gap-2">
-        <select
-          value={activePair}
-          onChange={(e) => setActivePair(e.target.value)}
-          className="rounded border px-2 py-1 text-[11px] transition focus:outline-none"
-          style={{
-            borderColor: "var(--color-glass-border)",
-            backgroundColor: "var(--color-glass)",
-            color: "var(--color-text-primary)",
-            fontFamily: "var(--font-mono)",
-            height: 28,
-          }}
-        >
-          {(availablePairs.length > 0 ? availablePairs : ["EURUSD", "GBPUSD", "USDJPY"]).map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-        <QuickActions />
-      </div>
-
+    <div className="flex flex-col gap-6">
       {/* ── Ticker ribbon ──────────────────────────────────────────────────── */}
       <PriceTicker pairs={availablePairs.length > 0 ? [activePair, ...availablePairs.filter((p) => p !== activePair).slice(0, 2)] : ["EURUSD", "GBPUSD", "USDJPY"]} />
 
-      {/* ── Full-width candlestick chart ────────────────────────────────────── */}
+      {/* ── Full-width candlestick chart with embedded pair selector ──────── */}
       <div
-        className="rounded-lg border"
+        className="rounded-lg border flex flex-col"
         style={{
           borderColor: "var(--color-glass-border)",
           backgroundColor: "var(--color-glass)",
-          padding: "16px",
         }}
       >
-        <CandlestickChart pair={activePair} timeframe="M30" limit={150} height={440} />
+        {/* Chart panel header */}
+        <div
+          className="flex items-center justify-between px-4"
+          style={{
+            height: 40,
+            borderBottom: "1px solid var(--color-glass-border)",
+          }}
+        >
+          <span
+            className="text-[10px] font-medium uppercase tracking-[0.12em]"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            Price Chart
+          </span>
+          <select
+            value={activePair}
+            onChange={(e) => setActivePair(e.target.value)}
+            className="rounded border px-2 text-[11px] transition focus:outline-none"
+            style={{
+              height: 26,
+              borderColor: "var(--color-glass-border)",
+              backgroundColor: "var(--color-elevated)",
+              color: "var(--color-text-primary)",
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            {(availablePairs.length > 0 ? availablePairs : ["EURUSD", "GBPUSD", "USDJPY"]).map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </div>
+        <div className="p-4">
+          <CandlestickChart pair={activePair} timeframe="M30" limit={150} height={440} />
+        </div>
       </div>
 
       {/* ── 3-column widget grid ───────────────────────────────────────────── */}

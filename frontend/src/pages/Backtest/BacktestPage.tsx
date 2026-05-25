@@ -7,7 +7,6 @@ import { useSubmitBacktest } from "@/api/queries";
 import { ConfigSummaryBar } from "@/components/shared/ConfigSummaryBar";
 import { TabBar } from "@/components/shared/TabBar";
 import { ValidationBar } from "@/components/shared/ValidationBar";
-import { RuntimeEstimate } from "@/components/shared/RuntimeEstimate";
 import { AssetSelector } from "./AssetSelector";
 import { ModelSelector } from "./ModelSelector";
 import { HpoPanel } from "./HpoPanel";
@@ -69,15 +68,12 @@ export function BacktestPage() {
   };
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <RuntimeEstimate />
+    <div className="flex flex-col" style={{ minHeight: "100%" }}>
+      {/* Status strip + tab nav — fixed chrome at the top of the page */}
+      <div className="flex flex-col gap-5 pb-5">
+        <ConfigSummaryBar />
+        <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
-
-      <ConfigSummaryBar />
-
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Quick Start */}
       {activeTab === "quickstart" && (
@@ -128,7 +124,10 @@ export function BacktestPage() {
       {/* Forward Test */}
       {activeTab === "forwardtest" && <ForwardTestTab />}
 
-      {/* Validation bar */}
+      {/* Bottom spacer so content clears the sticky footer */}
+      <div style={{ height: 72, flexShrink: 0 }} />
+
+      {/* Validation bar — sticky footer */}
       <ValidationBar
         warnings={warnings.length}
         errors={errors.length}

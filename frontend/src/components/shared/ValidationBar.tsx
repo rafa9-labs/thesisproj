@@ -1,4 +1,6 @@
-import { TriangleAlert, Info, Bookmark } from "lucide-react";
+import { TriangleAlert, Bookmark } from "lucide-react";
+import { useRuntimeEstimate } from "@/api/queries";
+import { useBacktestStore } from "@/stores/useBacktestStore";
 
 interface Props {
   warnings: number;
@@ -12,7 +14,67 @@ interface Props {
   onSavePreset?: () => void;
 }
 
-export function ValidationBar({ warnings, errors, canDeploy, isSubmitting, hasModels, hasPair, hasDates, onDeploy, onSavePreset }: Props) {
+function RuntimeInline() {
+  const selectedModels = useBacktestStore((s) => s.selectedModels);
+  const testMonths = useBacktestStore((s) => s.testMonths);
+  const hpoIntensity = useBacktestStore((s) => s.hpoIntensity);
+
+  const { data, isLoading } = useRuntimeEstimate(
+    selectedModels as string[],
+    testMonths as number,
+    hpoIntensity,
+  );
+
+  if (selectedModels.length === 0 || isLoading || !data) return null;
+
+  const { estimated_minutes_low, estimated_minutes_high } = data;
+
+  const fmt = (mins: number) => {
+    if (mins < 1) return `${Math.round(mins * 60)}s`;
+    if (mins < 60) return `${Math.round(mins)} min`;
+    const h = Math.floor(mins / 60);
+    const m = Math.round(mins % 60);
+    return m > 0 ? `~${h}h ${m}m` : `~${h}h`;
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span
+        style={{
+          fontSize: 9,
+          fontWeight: 600,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: "var(--color-text-muted)",
+          opacity: 0.7,
+        }}
+      >
+        EST. RUNTIME
+      </span>
+      <span
+        style={{
+          fontSize: 12,
+          fontFamily: "var(--font-mono)",
+          color: "var(--color-text-primary)",
+        }}
+      >
+        {fmt(estimated_minutes_low)} – {fmt(estimated_minutes_high)}
+      </span>
+    </div>
+  );
+}
+
+export function ValidationBar({
+  warnings,
+  errors,
+  canDeploy,
+  isSubmitting,
+  hasModels,
+  hasPair,
+  hasDates,
+  onDeploy,
+  onSavePreset,
+}: Props) {
   const missingItems: string[] = [];
   if (!hasPair) missingItems.push("a currency pair");
   if (!hasModels) missingItems.push("at least one model");
@@ -20,79 +82,101 @@ export function ValidationBar({ warnings, errors, canDeploy, isSubmitting, hasMo
 
   return (
     <div
-      className="flex items-center justify-between rounded-lg border px-5 py-3"
+      className="sticky bottom-0 z-20 flex items-center justify-between px-6"
       style={{
-        backgroundColor: "var(--color-surface)",
-        borderColor: "var(--color-border)",
+        height: 56,
+        borderTop: "1px solid #333",
+        backgroundColor: "var(--color-app)",
       }}
     >
-      <div className="flex items-center gap-4">
-        {missingItems.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <Info size={13} style={{ color: "var(--color-text-muted)" }} />
+      {/* Left: status + runtime */}
+      <div className="flex items-center gap-6">
+        {/* Status text */}
+        <div className="flex items-center gap-2">
+          {missingItems.length > 0 ? (
             <span
-              className="text-[11px]"
-              style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
+              style={{
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+                color: "var(--color-text-muted)",
+              }}
             >
               Select {missingItems.join(" and ")} to start
             </span>
-          </div>
-        )}
-        {missingItems.length === 0 && errors > 0 && (
-          <div className="flex items-center gap-1.5">
-            <TriangleAlert size={13} style={{ color: "var(--color-accent-danger)" }} />
+          ) : errors > 0 ? (
+            <div className="flex items-center gap-1.5">
+              <TriangleAlert size={12} style={{ color: "var(--color-accent-danger)" }} />
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                {errors} config error{errors > 1 ? "s" : ""}
+              </span>
+            </div>
+          ) : warnings > 0 ? (
+            <div className="flex items-center gap-1.5">
+              <TriangleAlert size={12} style={{ color: "var(--color-accent-warning)" }} />
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                {warnings} warning{warnings > 1 ? "s" : ""}
+              </span>
+            </div>
+          ) : (
             <span
-              className="text-[11px] font-semibold"
-              style={{ color: "var(--color-accent-danger)", fontFamily: "var(--font-mono)" }}
+              style={{
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+                color: "var(--color-brand)",
+              }}
             >
-              {errors} configuration error{errors > 1 ? "s" : ""}
+              Ready to deploy
             </span>
-          </div>
-        )}
-        {missingItems.length === 0 && errors === 0 && warnings > 0 && (
-          <div className="flex items-center gap-1.5">
-            <TriangleAlert size={13} style={{ color: "var(--color-accent-warning)" }} />
-            <span
-              className="text-[11px] font-semibold"
-              style={{ color: "var(--color-accent-warning)", fontFamily: "var(--font-mono)" }}
-            >
-              {warnings} warning{warnings > 1 ? "s" : ""}
-            </span>
-          </div>
-        )}
-        {missingItems.length === 0 && errors === 0 && warnings === 0 && (
-          <span
-            className="text-[11px]"
-            style={{ color: "var(--color-accent-success)", fontFamily: "var(--font-mono)" }}
-          >
-            Ready to deploy
-          </span>
-        )}
+          )}
+        </div>
+
+        {/* Divider + runtime */}
+        <RuntimeInline />
       </div>
 
-      <div className="flex items-center gap-2">
+      {/* Right: save preset + deploy CTA */}
+      <div className="flex items-center gap-3">
         {onSavePreset && canDeploy && (
           <button
             onClick={onSavePreset}
-            className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-[10px] font-semibold uppercase transition-all"
-            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)", cursor: "pointer" }}
+            className="flex items-center gap-1.5 rounded border px-3 text-[10px] font-semibold uppercase tracking-[0.06em] transition-colors duration-150 hover:brightness-110"
+            style={{
+              height: 34,
+              borderColor: "var(--color-glass-border)",
+              color: "var(--color-text-secondary)",
+              background: "transparent",
+            }}
           >
             <Bookmark size={11} />
             Save Preset
           </button>
         )}
+
         <button
           onClick={onDeploy}
           disabled={!canDeploy || isSubmitting}
-          className="rounded-md px-6 py-2 text-xs font-bold uppercase transition-all duration-300 hover:brightness-110"
+          className="rounded text-[11px] font-bold uppercase tracking-[0.08em] transition-all duration-150 hover:brightness-110"
           style={{
-            background: canDeploy
-              ? "linear-gradient(135deg, #00E5FF 0%, #22D3EE 100%)"
-              : "var(--color-glass-border)",
-            color: canDeploy ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-            letterSpacing: "0.08em",
-            cursor: canDeploy ? "pointer" : "not-allowed",
+            height: 34,
+            paddingLeft: 24,
+            paddingRight: 24,
+            backgroundColor: canDeploy ? "var(--color-brand)" : "var(--color-glass-border)",
+            color: canDeploy ? "#0A0D12" : "var(--color-text-muted)",
+            cursor: canDeploy && !isSubmitting ? "pointer" : "not-allowed",
             opacity: isSubmitting ? 0.7 : 1,
+            border: "none",
           }}
         >
           {isSubmitting ? "Submitting..." : "Deploy Backtest"}

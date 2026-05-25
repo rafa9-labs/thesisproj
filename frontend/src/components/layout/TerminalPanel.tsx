@@ -89,7 +89,7 @@ export function TerminalPanel({ apiOk = false, wsConnected = false }: Partial<Te
     >
       {/* ── Status bar / toggle row — always 28px ───────────────── */}
       <div
-        className="flex items-center justify-between px-3 cursor-pointer select-none"
+        className="flex items-center justify-between px-6 cursor-pointer select-none"
         style={{ height: 28, flexShrink: 0 }}
         onClick={() => setOpen(!open)}
       >
@@ -166,7 +166,7 @@ export function TerminalPanel({ apiOk = false, wsConnected = false }: Partial<Te
       {open && (
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto px-3 py-1"
+          className="flex-1 overflow-y-auto px-6 py-1"
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: 11,
