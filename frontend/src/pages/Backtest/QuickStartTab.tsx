@@ -77,34 +77,38 @@ export function QuickStartTab(_props: Props) {
                   <div
                     key={opt.key}
                     onClick={() => handlePreset(opt.key)}
-                    className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-5 py-4 flex flex-col cursor-pointer transition-colors duration-150 hover:border-[#A8E063] hover:bg-[#1E1E1E]"
+                    className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-5 py-5 flex flex-col cursor-pointer transition-colors duration-150 hover:border-[#A8E063] hover:bg-[#1E1E1E]"
                   >
-                    {/* Header row */}
-                    <div className="flex justify-between items-start mb-2">
-                      <span
-                        className="text-[12px] font-semibold tracking-wide"
-                        style={{ color: "#FFFFFF", lineHeight: 1.4 }}
-                      >
-                        {opt.label}
-                      </span>
-                      <span
-                        className="text-[10px] tabular-nums whitespace-nowrap ml-3"
-                        style={{ color: "#6B7280", fontFamily: "var(--font-mono)" }}
-                      >
-                        ~{timeStr}
-                      </span>
-                    </div>
+                    {/* Title */}
+                    <span
+                      className="text-[13px] font-semibold tracking-wide mb-1"
+                      style={{ color: "#FFFFFF", lineHeight: 1.4 }}
+                    >
+                      {opt.label}
+                    </span>
 
-                    {/* Description — proper line height for readability */}
+                    {/* Time estimate — own line, clearly separated from title */}
+                    <span
+                      className="text-[10px] tabular-nums mb-4"
+                      style={{
+                        color: "#A8E063",
+                        fontFamily: "var(--font-mono)",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      est. {timeStr}
+                    </span>
+
+                    {/* Description */}
                     <p
-                      className="text-[11px] flex-1 mb-3"
-                      style={{ color: "#9CA3AF", lineHeight: 1.6 }}
+                      className="text-[11px] flex-1 mb-4"
+                      style={{ color: "#9CA3AF", lineHeight: 1.75 }}
                     >
                       {opt.subtitle}
                     </p>
 
                     {/* Model badges */}
-                    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-[#2A2A2A]">
+                    <div className="flex flex-wrap gap-1.5 pt-3 border-t border-[#252525]">
                       {opt.models.slice(0, 3).map((m) => (
                         <span
                           key={m}
