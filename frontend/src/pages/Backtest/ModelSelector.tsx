@@ -93,7 +93,6 @@ function ModelCard({
   model,
   isSelected,
   isFull,
-  categoryColor,
   verbose,
   onToggle,
 }: {
