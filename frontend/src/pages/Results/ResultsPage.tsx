@@ -62,6 +62,7 @@ export function ResultsPage() {
   const equityChartRef = useRef<EquityCurveChartHandle>(null);
 
   const activeMetric = results?.metrics?.length ? results.metrics[Math.min(activeModelIdx, results.metrics.length - 1)] : null;
+  const metrics = results?.metrics ?? [];
   const modelCurves = useMemo(() => {
     if (!metrics.length) return [];
     return metrics
@@ -138,8 +139,6 @@ export function ResultsPage() {
       </div>
     );
   }
-
-  const metrics = results?.metrics ?? [];
 
   const handleExportCsv = () => {
     if (!activeMetric?.trades?.length) return;

@@ -82,7 +82,7 @@ export function UpdateNotification() {
       handleCheckForUpdates();
     };
     api.onTriggerUpdateCheck?.(handler);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);  
 
   const handleDownload = async () => {
     const api = getElectronAPI();

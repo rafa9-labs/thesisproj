@@ -4,7 +4,6 @@ import { useBacktestStore } from "@/stores/useBacktestStore";
 
 export function QuickActions() {
   const navigate = useNavigate();
-  const applyPreset = useBacktestStore((s) => s.applyPreset);
 
   return (
     <div className="flex items-center gap-3">

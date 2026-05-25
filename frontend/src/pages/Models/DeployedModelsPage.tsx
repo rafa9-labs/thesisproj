@@ -1,8 +1,8 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/api/client";
 import { TagEditor } from "@/components/shared/TagEditor";
-import { Box, Trash2, Star, Download } from "lucide-react";
+import { Box, Trash2, Star } from "lucide-react";
 
 interface DeployedModel {
   id: string;

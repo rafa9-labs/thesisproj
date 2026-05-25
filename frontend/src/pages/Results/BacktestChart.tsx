@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { createChart, type IChartApi, CandlestickSeries, HistogramSeries, LineSeries, ColorType } from "lightweight-charts";
+import { createChart, type IChartApi, CandlestickSeries, LineSeries, ColorType } from "lightweight-charts";
 import { useTradeChartData } from "@/api/queries";
 
 interface BacktestChartProps {

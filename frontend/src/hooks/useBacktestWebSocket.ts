@@ -6,7 +6,10 @@ import type { WsEvent } from "@/api/schemas";
 export function useBacktestWebSocket(jobId: string | null) {
   const handleWsEvent = useJobStore((s) => s.handleWsEvent);
   const handlerRef = useRef(handleWsEvent);
-  handlerRef.current = handleWsEvent;
+
+  useEffect(() => {
+    handlerRef.current = handleWsEvent;
+  }, [handleWsEvent]);
 
   useEffect(() => {
     if (!jobId) return;

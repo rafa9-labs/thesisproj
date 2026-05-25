@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, Play, Square, AlertTriangle, TrendingUp, TrendingDown, Minus, Loader2, Box } from "lucide-react";
-import { usePairs, useModels, useLivePrices, useDeployLiveSession, useStopLiveSession } from "@/api/queries";
+import { Activity, Play, Square, AlertTriangle, TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react";
+import { usePairs, useLivePrices, useDeployLiveSession, useStopLiveSession } from "@/api/queries";
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/api/client";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Activity, TrendingUp } from "lucide-react";
@@ -41,12 +41,14 @@ export function DashboardPage() {
   );
 
   const [activePair, setActivePair] = useState("EURUSD");
+  const activePairRef = useRef(activePair);
+  activePairRef.current = activePair;
 
   useEffect(() => {
-    if (availablePairs.length > 0 && !availablePairs.includes(activePair)) {
+    if (availablePairs.length > 0 && !availablePairs.includes(activePairRef.current)) {
       setActivePair(availablePairs[0]);
     }
-  }, [availablePairs, activePair]);
+  }, [availablePairs]);
 
   const completedJobs = useMemo(
     () => (jobs ?? []).filter((j) => j.status === "completed").slice(0, 5),

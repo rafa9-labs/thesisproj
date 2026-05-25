@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { GitCompare } from "lucide-react";
-import { useHeatmap, useJobHistory } from "@/api/queries";
+import { useHeatmap } from "@/api/queries";
 import apiClient from "@/api/client";
 import { CrossPairOverlayChart } from "@/components/charts/CrossPairOverlayChart";
 import { EmptyState } from "@/components/shared/EmptyState";

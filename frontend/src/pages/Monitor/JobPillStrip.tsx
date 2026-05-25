@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Eye, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { JobSummary } from "@/api/schemas";
 import { useJobStore } from "@/stores/useJobStore";
 

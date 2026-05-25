@@ -8,9 +8,6 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
-  Check,
-  X,
-  AlertTriangle,
 } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useConfig, useSaveConfig, useStoreApiKey, useStoreKv } from "@/api/queries";
@@ -151,7 +148,7 @@ function LicenseSection() {
       await fetch(`${apiBase}/license/deactivate`, { method: "POST" });
       const statusRes = await fetch(`${apiBase}/license/status`);
       setLicense(await statusRes.json());
-    } catch {}
+    } catch { /* ignore */ }
   };
 
   if (!license) {
