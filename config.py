@@ -332,7 +332,7 @@ PIPELINE_CONSTANTS = {
     # Deep model training
     "deep_cv_batch_size": 256,
     "deep_cv_patience": 6,
-    "deep_cv_max_epochs": 12,
+    "deep_cv_max_epochs": 8,
 
     # News & sentiment
     "use_news": True,

@@ -635,6 +635,7 @@ def get_backtest_results(job_id: str):
             walkforward_periods=wf_periods,
             diagnostics=_parse_diagnostics(m.get("diagnostics")),
             summary_text=m.get("summary_text"),
+            snapshot_path=m.get("snapshot_path"),
         ))
 
     return BacktestResultsResponse(

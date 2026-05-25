@@ -120,7 +120,7 @@ def _get_trial_counts(hpo_intensity: str | None, model: str) -> Dict[str, int]:
             return model_map[model]
     return _TRIAL_COUNTS_FALLBACK.get(model, {"random": 3, "bayes": 3})
 
-CV_BLOCKS_DEFAULT = 5
+CV_BLOCKS_DEFAULT = 3
 
 
 def _compute_total_work(models: list[str], months: int, hpo_intensity: str | None = None, cv_blocks: int = CV_BLOCKS_DEFAULT, period_unit: str = "months", n_trials_override: int | None = None) -> int:
@@ -133,7 +133,6 @@ def _compute_total_work(models: list[str], months: int, hpo_intensity: str | Non
         else:
             tc = _get_trial_counts(hpo_intensity, m)
             n_trials = tc.get("random", 3) + tc.get("bayes", 3)
-            n_trials = max(n_trials, 10)
         hpo_work = n_trials * cv_blocks
         sim_work = n_periods
         total += hpo_work + sim_work
@@ -198,6 +197,145 @@ def _check_force_stopped(job_id: str):
     if _is_cancelled(job_id):
         import sys as _sys
         _sys.exit(0)
+
+
+_wsl_available_cache = None
+
+
+def _wsl_available() -> bool:
+    global _wsl_available_cache
+    if _wsl_available_cache is not None:
+        return _wsl_available_cache
+    try:
+        import subprocess as _sp
+        result = _sp.run(["wsl", "--status"], capture_output=True, text=True, timeout=10)
+        _wsl_available_cache = result.returncode == 0
+    except Exception:
+        _wsl_available_cache = False
+    return _wsl_available_cache
+
+
+def _has_gpu_models(models: list[str]) -> bool:
+    from pipeline.runtime import GPU_RECOMMENDED_MODELS
+    return any(m in GPU_RECOMMENDED_MODELS for m in models)
+
+
+def _run_backtest_via_wsl(job_id: str, config: dict) -> bool:
+    """Run backtest in WSL2 for GPU acceleration. Returns True if dispatched, False if fallback needed."""
+    models = config.get("models", [])
+
+    if not _has_gpu_models(models):
+        return False
+
+    if not _wsl_available():
+        _pub("wsl_fallback", job_id, {"reason": "WSL2 not available, using CPU fallback"})
+        emit_event("wsl_fallback", job_id=job_id, reason="WSL2 not available")
+        return False
+
+    from api.services import JobManager
+    from pipeline.data_sqlite import DataStore
+
+    store = DataStore(settings.db_full_path)
+    jm = JobManager(store)
+    jm.update_status(job_id, "running", error=None)
+    _pub("job_started", job_id, {"pair": config.get("pair"), "models": models, "runtime": "wsl_gpu"})
+    emit_event("job_started", job_id=job_id, runtime="wsl_gpu")
+
+    project_root = settings.project_root
+    results_dir = os.path.join(project_root, "results")
+
+    import tempfile
+    job_file_path = None
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", prefix=f"wsl_job_{job_id}_", delete=False) as f:
+        wsl_config = dict(config)
+        wsl_config["results_dir"] = results_dir
+        json.dump(wsl_config, f)
+        job_file_path = f.name
+
+    wsl_job_path_unix = job_file_path.replace("\\", "/").replace("C:", "/mnt/c")
+
+    cmd = [
+        "wsl", "bash", "-c",
+        f"cd /mnt/c/Users/rafa/ML_Trading/thesisproj && "
+        f"export PYTHONPATH=/mnt/c/Users/rafa/ML_Trading/thesisproj && "
+        f"export MLB_THREADS=1 && "
+        f"~/thesisproj-venv/bin/python pipeline/wsl_runner.py "
+        f"--job-file={wsl_job_path_unix} --job-id={job_id}"
+    ]
+
+    try:
+        import subprocess as _sp
+        proc = _sp.Popen(
+            cmd, stdout=_sp.PIPE, stderr=_sp.PIPE,
+            text=True, cwd=project_root,
+        )
+
+        _wsl_procs[job_id] = proc
+
+        for line in iter(proc.stdout.readline, ""):
+            if _is_cancelled(job_id):
+                proc.terminate()
+                break
+            line = line.strip()
+            if line.startswith("[WSL_PROGRESS:"):
+                try:
+                    rest = line[len("[WSL_PROGRESS:"):]
+                    parts = rest.split(":", 2)
+                    if len(parts) >= 3:
+                        _, evt_name, data_str = parts
+                        data_str = data_str.rstrip("]")
+                        data = json.loads(data_str)
+                        _pub(evt_name, job_id, data)
+                        emit_event(evt_name, job_id=job_id, **data)
+                except Exception:
+                    pass
+            elif line.startswith("[WSL_EVENT:"):
+                try:
+                    rest = line[len("[WSL_EVENT:"):]
+                    parts = rest.split(":", 2)
+                    if len(parts) >= 3:
+                        _, evt_name, msg = parts
+                        msg = msg.rstrip("]")
+                        _pub(evt_name, job_id, {"message": msg})
+                except Exception:
+                    pass
+
+        proc.wait(timeout=30)
+        _wsl_procs.pop(job_id, None)
+
+        rc = proc.returncode
+        if rc != 0:
+            stderr_output = proc.stderr.read()
+            raise RuntimeError(f"WSL process exited with code {rc}: {stderr_output[:500]}")
+
+        result = {
+            "pair": config.get("pair"),
+            "models": models,
+            "config": config,
+            "metrics": [],
+            "runtime": "wsl_gpu",
+        }
+        jm.update_status(job_id, "completed", result=result)
+        _pub("job_complete", job_id, {"metrics": []})
+        emit_event("job_complete", job_id=job_id, n_models=len(models))
+        return True
+
+    except Exception as e:
+        _wsl_procs.pop(job_id, None)
+        tb = traceback.format_exc()
+        jm.update_status(job_id, "failed", error=f"WSL error: {e}\n{tb}")
+        _pub("job_failed", job_id, {"error": str(e)})
+        emit_event("job_failed", job_id=job_id, error=str(e)[:200])
+        return True
+    finally:
+        if job_file_path and os.path.exists(job_file_path):
+            try:
+                os.unlink(job_file_path)
+            except Exception:
+                pass
+
+
+_wsl_procs: dict = {}
 
 if not IS_DESKTOP:
     try:
@@ -532,6 +670,10 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             })
 
     all_metrics = []
+
+    # Dispatch GPU models to WSL2 if available (returns True if handled)
+    if _run_backtest_via_wsl(job_id, config):
+        return
 
     try:
         for cycle_idx, model_type in enumerate(models):
@@ -982,16 +1124,19 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
 
             _pub("model_training", job_id, {"model": model_type, "status": "complete", "metrics": metrics_row})
 
-            # Save trained model snapshot for deployment
+            # Persist model snapshot to disk during execution (silent — model
+            # object will be freed after the backtest finishes). Only visible
+            # when the user explicitly clicks "Save Model" on the Results page.
+            _snap_path = None
             try:
                 from pipeline.model_persistence import save_snapshot
-                _model_obj = getattr(bt, "model", None)
+                _model_obj = getattr(bt, "_last_trained_model", None) or getattr(bt, "model", None)
                 if _model_obj is not None:
                     _cov_thr = getattr(bt, "_coverage_conf_thr", None) or getattr(bt, "_deep_coverage_thr", None)
                     _feat_names = getattr(bt, "_diagnostics_feature_names", None) or []
                     _fc = getattr(bt, "features_config", None) or {}
                     _cal_method = _fc.get("calibrate_method", "sigmoid") if _fc else "sigmoid"
-                    save_snapshot(
+                    _snap_path = save_snapshot(
                         model=_model_obj,
                         model_type=model_type,
                         best_params=_fc,
@@ -1008,6 +1153,8 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                     )
             except Exception:
                 pass
+
+            metrics_row["snapshot_path"] = _snap_path
 
             bt.free(release_data=True)
             del bt

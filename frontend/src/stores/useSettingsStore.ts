@@ -6,6 +6,7 @@ interface SettingsState {
   apiUrl: string;
   dataDir: string;
   oandaApiKey: string | null;
+  oandaAccountId: string | null;
   threadBudget: number;
   mixedPrecision: boolean;
   sidebarCollapsed: boolean;
@@ -26,6 +27,7 @@ const DEFAULTS: SettingsState = {
   apiUrl: "http://localhost:8000",
   dataDir: "",
   oandaApiKey: null,
+  oandaAccountId: null,
   threadBudget: 4,
   mixedPrecision: true,
   sidebarCollapsed: false,
@@ -58,10 +60,10 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()((set, 
 
   saveToStorage: () => {
     try {
-      const { verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, dataDir } = get();
+      const { verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, oandaAccountId, dataDir } = get();
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, dataDir }),
+        JSON.stringify({ verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, oandaAccountId, dataDir }),
       );
     } catch {
       /* ignore */

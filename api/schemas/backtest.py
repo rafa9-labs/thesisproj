@@ -318,6 +318,7 @@ class BacktestResultMetrics(BaseModel):
     walkforward_periods: Optional[List[WalkForwardPeriod]] = None
     diagnostics: Optional[TrainingDiagnostics] = None
     summary_text: Optional[str] = None
+    snapshot_path: Optional[str] = None
 
 
 class BacktestResultsResponse(BaseModel):

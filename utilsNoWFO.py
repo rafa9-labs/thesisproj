@@ -92,7 +92,7 @@ def validate_metrics_shape(x, context: str | None = None):
         raise ValueError(f"Metrics must be a sequence of length {N_METRICS}{ctx}")
     if n != N_METRICS:
         raise ValueError(f"Metric arity != {N_METRICS} (got {n}){ctx}")
-    # Cast to floats but DO NOT pad/trim — the whole point is to catch drift.
+    # Cast to floats but DO NOT pad/trim -- the whole point is to catch drift.
     seq = list(x)
     return tuple(float(v) if v is not None else float("nan") for v in seq)
 
@@ -222,8 +222,8 @@ def compute_metrics(
     """
     Computes Sharpe (annualized), max drawdown, and trade count with robust guards:
     - annualization uses *estimated* bars-per-year from the index unless provided,
-    - std can use HAC (Newey–West) to handle autocorrelation,
-    - degenerate samples (too few active obs / near-zero vol) → Sharpe = 0,
+    - std can use HAC (Newey-West) to handle autocorrelation,
+    - degenerate samples (too few active obs / near-zero vol) -> Sharpe = 0,
     - optional soft cap on Sharpe (env SHARPE_CAP or passed-in).
     """
     import os, numpy as np
@@ -525,7 +525,7 @@ def init_study_tree(run_dir: str):
     """
     import os
     os.makedirs(run_dir, exist_ok=True)
-    # NOTE: do **not** create `<run>/All` here — it was an unused legacy
+    # NOTE: do **not** create `<run>/All` here -- it was an unused legacy
     # folder and only produced an empty, confusing directory.
 
 
@@ -610,9 +610,9 @@ def ensure_model_dirs(base_run_dir: str, model_type: str, model_name: str | None
 
     NEW layout (no family, no per-month folders):
       <run>/<ModelDisplay>/
-        ├── csv/
-        ├── graphs/
-        └── heatmaps/
+        |-- csv/
+        |-- graphs/
+        +-- heatmaps/
 
     All per-month / per-repetition files go into these subfolders and encode
     the month / rep in the *filename* (e.g. csv_month_1.csv, monthly_equity_1.png).
@@ -621,7 +621,7 @@ def ensure_model_dirs(base_run_dir: str, model_type: str, model_name: str | None
 
     display = friendly_model_name(model_name or model_type)
 
-    # Each model now lives directly under the run directory, no "Classical/RL/…" family.
+    # Each model now lives directly under the run directory, no "Classical/RL/..." family.
     model_base = os.path.join(base_run_dir, display)
 
     csv_dir = os.path.join(model_base, "csv")
@@ -650,9 +650,9 @@ def comparison_dirs(run_dir):
     NEW layout: a single aggregated bucket:
 
       <run>/ALL/
-        ├── csv/
-        ├── graphs/
-        └── heatmaps/
+        |-- csv/
+        |-- graphs/
+        +-- heatmaps/
 
     Per-model outputs live in <run>/<ModelDisplay>/... created by ensure_model_dirs().
     """
@@ -802,7 +802,7 @@ def build_model_monthly_pivots(combined_df):
             .rename("gm_factor")
             .reset_index())
 
-    # 2) Pivot geometric means → monthly factors table
+    # 2) Pivot geometric means -> monthly factors table
     gm_pivot = (gm.pivot(index="month_dt", columns="model_type", values="gm_factor")
                   .sort_index())
 
@@ -858,10 +858,10 @@ def build_model_ranking(combined_df, min_months: int = 1):
     by `real_trading_simulation` across repeats.
 
     Uses:
-      • Final cumulative equity built from the *geometric mean* of monthly factors (per month).
-      • HAC (Newey–West) Sharpe on monthly *simple* returns (12/yr).
-      • PSR (probability SR > 0) and a cross-model DSR-like deflation on the SR vector.
-      • Calmar from annualized return / max drawdown on the GM equity curve.
+      [0x2022] Final cumulative equity built from the *geometric mean* of monthly factors (per month).
+      [0x2022] HAC (Newey-West) Sharpe on monthly *simple* returns (12/yr).
+      [0x2022] PSR (probability SR > 0) and a cross-model DSR-like deflation on the SR vector.
+      [0x2022] Calmar from annualized return / max drawdown on the GM equity curve.
 
     Returns a DataFrame with one row per model_type and columns:
       ['rank','model','months','trades','active','SR','PSR','DSR','Calmar',
@@ -905,7 +905,7 @@ def build_model_ranking(combined_df, min_months: int = 1):
 
         # Monthly simple returns vector (across repeats)
         r = pd.to_numeric(sub["strategy_return"], errors="coerce").dropna()
-        # HAC Sharpe (Newey–West) → sr_hat annualized (12/yr)
+        # HAC Sharpe (Newey-West) -> sr_hat annualized (12/yr)
         if len(r) >= 3:
             mu = float(r.mean())
             sd_hac = float(hac_std(r.values, max_lag="andrews"))
@@ -971,7 +971,7 @@ def build_model_ranking(combined_df, min_months: int = 1):
     else:
         rank_df["DSR"] = float("nan")
 
-    # Sort: DSR desc → PSR desc → SR desc → FinalEq desc → Calmar desc
+    # Sort: DSR desc -> PSR desc -> SR desc -> FinalEq desc -> Calmar desc
     rank_df = rank_df.sort_values(
         by=["DSR","PSR","SR","FinalEq","Calmar"], ascending=[False]*5
     ).reset_index(drop=True)
@@ -990,7 +990,7 @@ def save_model_ranking_csv(df_rank, out_dir, filename="model_ranking_final.csv")
 
 def _set_even_time_ticks(ax, idx, n_parts=10, fmt=None, rotation=None):
     """
-    Put exactly n_parts+1 evenly spaced ticks from first→last timestamp in idx.
+    Put exactly n_parts+1 evenly spaced ticks from first->last timestamp in idx.
 
     Parameters
     ----------
@@ -1051,7 +1051,7 @@ def _set_even_time_ticks(ax, idx, n_parts=10, fmt=None, rotation=None):
 # --- helper: compute drawdown series -----------------------------------------
 def _compute_drawdown(equity: "pd.Series") -> "pd.Series":
     """
-    Return drawdown series (in fraction, negative values) from an equity curve (×).
+    Return drawdown series (in fraction, negative values) from an equity curve ([0xd7]).
     """
     import pandas as pd, numpy as np
     if equity is None or len(equity) == 0:
@@ -1169,7 +1169,7 @@ def build_trade_log_from_df(df, bar_minutes=None):
             entry_i = i
         elif current_side != 0.0:
             if side == 0.0:
-                # Closing into flat → close using this bar
+                # Closing into flat -> close using this bar
                 close_trade(i)
             elif side != current_side:
                 # Flip: close old trade at i-1, open new one at i
@@ -1349,7 +1349,7 @@ def save_model_bar_comparison_outputs(
     import os, numpy as np, pandas as pd, matplotlib.pyplot as plt
 
     if not bt_dict:
-        print("⚠️ Empty bt_dict passed to save_model_bar_comparison_outputs.")
+        print("[WARN][0xfe0f] Empty bt_dict passed to save_model_bar_comparison_outputs.")
         return None
 
     # ---- build comparison DataFrame -----------------------------------------
@@ -1364,7 +1364,7 @@ def save_model_bar_comparison_outputs(
     # ------------------------------------------------------------------ df ---
     df = _build_df_from_bt_dict(bt_dict, models_filter=models)
     if df is None or df.empty:
-        print("⚠️ No data to plot (per-bar comparison).")
+        print("[WARN][0xfe0f] No data to plot (per-bar comparison).")
         return None
 
     # Filter to requested models (keep BH if present)
@@ -1378,7 +1378,7 @@ def save_model_bar_comparison_outputs(
             keep = (["BH"] if "BH" in df.columns else []) + wanted
             df = df.loc[:, [c for c in keep if c in df.columns]]
         else:
-            print(f"⚠️ None of the requested models found for per-bar plot: {models}")
+            print(f"[WARN][0xfe0f] None of the requested models found for per-bar plot: {models}")
             return None
 
     # Ensure datetime index & sorted
@@ -1410,7 +1410,7 @@ def save_model_bar_comparison_outputs(
         df_plot = df.replace([np.inf, -np.inf], np.nan).ffill()
 
     if df_plot.empty:
-        print("⚠️ No overlapping data for per-bar plot.")
+        print("[WARN][0xfe0f] No overlapping data for per-bar plot.")
         return None
 
     # ---- output paths (respect <run>/<Model>/graphs/) -----------------------
@@ -1437,7 +1437,7 @@ def save_model_bar_comparison_outputs(
         try:
             df_plot.to_csv(csv_path, index=True, float_format="%.10f")
         except Exception as e:
-            print(f"⚠️ Could not save model comparison CSV: {e}")
+            print(f"[WARN][0xfe0f] Could not save model comparison CSV: {e}")
 
     # === NEW: (optional future use) derived paths for underwater/rolling ===
     base_png, ext = os.path.splitext(png_path)
@@ -1499,7 +1499,7 @@ def save_model_bar_comparison_outputs(
 
         ax.set_title("Per-bar Cumulative Equity (Intersection)", pad=12)
         ax.set_xlabel("Date")
-        ax.set_ylabel("Cumulative Equity (× start capital)")
+        ax.set_ylabel("Cumulative Equity ([0xd7] start capital)")
         ax.grid(True)
 
         # 10 equal segments, dates like '03/03/25'
@@ -1542,7 +1542,7 @@ def save_model_bar_comparison_outputs(
 def _short_model_label(name: str) -> str:
     """
     Map long internal model names to short labels for figure band captions.
-    This does not affect any logic – only the text shown on the plots.
+    This does not affect any logic - only the text shown on the plots.
     """
     if not isinstance(name, str):
         return str(name)
@@ -1650,7 +1650,7 @@ def apply_academic_style(
     def _style_context():
         with mpl.rc_context(rc):
             if colors is not None and not bw_line_styles:
-                # Set color cycle only if we have one and we’re not in BW mode
+                # Set color cycle only if we have one and we're not in BW mode
                 mpl.rcParams["axes.prop_cycle"] = mpl.cycler("color", colors)
             yield
 
@@ -1699,7 +1699,7 @@ def save_optuna_progress_from_study(
                     })
 
     if not complete_rows and not pruned_rows:
-        print("⚠️ No eligible trials to plot.")
+        print("[WARN][0xfe0f] No eligible trials to plot.")
         return None, None
 
     df_c = pd.DataFrame(complete_rows)
@@ -1753,7 +1753,7 @@ def save_optuna_progress_from_study(
         # Labels & title
         ax.set_xlabel("Trial")
         ax.set_ylabel(metric_name)
-        ax.set_title(f"Optuna Optimization Progress — {metric_name}")
+        ax.set_title(f"Optuna Optimization Progress -- {metric_name}")
         ax.grid(True)
 
         # Legend with subtle frame, consistent with other plots
@@ -1982,7 +1982,7 @@ def save_feature_frequency_from_trials(
             completed.append(t)
 
     if not completed:
-        print("⚠️ No COMPLETE trials with scores.")
+        print("[WARN][0xfe0f] No COMPLETE trials with scores.")
         return None
 
     scores = np.array(scores, dtype=float)
@@ -2007,7 +2007,7 @@ def save_feature_frequency_from_trials(
                 rows.append({"feature": _normalize_name(f), "w": float(w)})
 
     # if not rows:
-    #     print("⚠️ No features found in selected trials.")
+    #     print("[WARN][0xfe0f] No features found in selected trials.")
     #     return None
 
     df = pd.DataFrame(rows)
@@ -2087,7 +2087,7 @@ def save_feature_frequency_from_monthly_results(
     # Load input
     df = pd.read_csv(df_or_csv) if isinstance(df_or_csv, str) else (df_or_csv.copy() if df_or_csv is not None else None)
     if df is None or getattr(df, "empty", True):
-        print("⚠️ No data for feature-frequency heatmap.")
+        print("[WARN][0xfe0f] No data for feature-frequency heatmap.")
         return None
 
     # Collect features per month (expects 'features_used' column from log_simulation_result)
@@ -2109,7 +2109,7 @@ def save_feature_frequency_from_monthly_results(
             elif isinstance(feats, (list, tuple, set, np.ndarray, pd.Series)):
                 feats = list(feats)
             else:
-                # Any other weird scalar → ignore
+                # Any other weird scalar -> ignore
                 feats = []
 
         feats = feats or []
@@ -2126,7 +2126,7 @@ def save_feature_frequency_from_monthly_results(
                 pd.DataFrame().to_csv(out_csv, index=False)
             except Exception:
                 pass
-        print("⚠️ No features survived filtering; nothing to plot.")
+        print("[WARN][0xfe0f] No features survived filtering; nothing to plot.")
         return None
 
     # Build month x feature count matrix
@@ -2138,7 +2138,7 @@ def save_feature_frequency_from_monthly_results(
         try:
             mat.to_csv(out_csv, index=False)
         except Exception as e:
-            print(f"⚠️ Could not write feature-frequency CSV: {e}")
+            print(f"[WARN][0xfe0f] Could not write feature-frequency CSV: {e}")
 
     # Rank features by total usage
     totals = mat.sum(axis=0).sort_values(ascending=False)
@@ -2153,7 +2153,7 @@ def save_feature_frequency_from_monthly_results(
     mat_plot = mat.loc[:, keep_cols]
 
     if mat_plot.shape[1] == 0:
-        print("⚠️ No features to plot after top_k/top_percent filtering.")
+        print("[WARN][0xfe0f] No features to plot after top_k/top_percent filtering.")
         return out_png
 
     # Plot (robust for single row)
@@ -2265,12 +2265,12 @@ def save_group_equity_curves(
                 pad = 0.02 * span
                 ax.set_ylim(bottom=bottom - pad, top=y_max + pad)
         except Exception as e:
-            print(f"⚠️ Could not set group-equity y-limits: {e}")
+            print(f"[WARN][0xfe0f] Could not set group-equity y-limits: {e}")
 
         # 4) Labels, grid, ticks
         ax.set_title(title)
         ax.set_xlabel("Month")
-        ax.set_ylabel("Equity (×)")
+        ax.set_ylabel("Equity ([0xd7])")
         ax.grid(True, alpha=0.25)
         ax.margins(x=0)
 
@@ -2372,7 +2372,7 @@ def build_features_from_params(df, params: dict, base_features):
         if name in df.columns and name not in features:
             features.append(name)
         # elif name not in df.columns:
-        #     print(f"⚠️ build_features_from_params: '{name}' not in df.columns, skipping.")
+        #     print(f"[WARN][0xfe0f] build_features_from_params: '{name}' not in df.columns, skipping.")
 
     # 1) One-off indicators (controlled by toggles in params)
     if params.get("use_sma", False) and "sma" in ind_win:
@@ -2710,7 +2710,7 @@ class RollingStandardizer:
     min_periods: int = 50
 
     def fit_transform(self, X_train: pd.DataFrame) -> Tuple[pd.DataFrame, dict]:
-        # Single copy to avoid mutating caller’s DataFrame; operate in-place on it
+        # Single copy to avoid mutating caller's DataFrame; operate in-place on it
         X = X_train.astype(float).copy()
 
         mu_roll = X.rolling(self.window, min_periods=self.min_periods).mean()
@@ -2743,7 +2743,7 @@ def calibrate_prefit_and_predict_proba(
         return base_estimator.predict_proba(X_pred), None
     try:
         from sklearn.base import clone
-        # Fresh, unfitted copy — we calibrate with k-fold CV on the train window
+        # Fresh, unfitted copy -- we calibrate with k-fold CV on the train window
         est = clone(base_estimator)
         calibrator = CalibratedClassifierCV(estimator=est, method=method, cv=3)
         calibrator.fit(X_train, y_train)
@@ -2907,7 +2907,7 @@ def estimate_frequency_per_year(index) -> float:
     """
     Estimate bars-per-year from a DateTimeIndex:
     - compute median bars/day,
-    - detect if weekends are mostly present → use 365, otherwise ~252 trading days.
+    - detect if weekends are mostly present -> use 365, otherwise ~252 trading days.
     """
     import numpy as np
     import pandas as pd
@@ -2937,7 +2937,7 @@ def estimate_frequency_per_year(index) -> float:
 def _auto_nw_lag(n: int, mode: str = "sqrt", x=None) -> int:
     """
     mode: "sqrt" (default) or "andrews".
-    If "andrews", use a light plug-in via AR(1) rho → q ≈ c * n**(1/5).
+    If "andrews", use a light plug-in via AR(1) rho -> q [0x2248] c * n**(1/5).
     """
     import numpy as np
     n = int(max(1, n))
@@ -2962,7 +2962,7 @@ def _auto_nw_lag(n: int, mode: str = "sqrt", x=None) -> int:
 
 def hac_std(x, max_lag="auto") -> float:
     """
-    Newey–West (HAC) standard deviation for a 1D array/Series x.
+    Newey-West (HAC) standard deviation for a 1D array/Series x.
     max_lag: int | "auto" (sqrt(n)) | "andrews" (plug-in).
     """
     import numpy as np
@@ -3000,7 +3000,7 @@ def compute_dsr_scores(scores):
     """
     Deflated 'Sharpe' proxy over an array of trial scores.
     Returns a list of DSR-like probabilities (higher is better), one per score.
-    Approximates multiple-testing via a Šidák-style family correction.
+    Approximates multiple-testing via a [0x160]id[0xe1]k-style family correction.
     """
     x = _np.asarray(scores, dtype=float)
     n = int(_np.isfinite(x).sum())
@@ -3021,7 +3021,7 @@ def compute_dsr_scores(scores):
             p_single = 0.5 * (1.0 - _m.erf(z / _m.sqrt(2.0)))  # 1 - Phi(z)
         else:
             p_single = 1.0 - float(_norm.cdf(z))
-        # family-wise correction across n tests (Šidák)
+        # family-wise correction across n tests ([0x160]id[0xe1]k)
         p_family = 1.0 - (1.0 - max(1e-12, min(1.0, p_single))) ** n
         dsr = 1.0 - p_family
         out.append(float(dsr))
@@ -3050,7 +3050,7 @@ def save_optuna_learning_summary(study, out_path, n_startup=10, penalty_value: f
         payload = {"note": "no complete trials with valid scores"}
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         with open(out_path, "w") as f: json.dump(payload, f, indent=2)
-        print(f"⚠️ No eligible trials for learning summary → {out_path}")
+        print(f"[WARN][0xfe0f] No eligible trials for learning summary -> {out_path}")
         return out_path
 
     vals.sort(key=lambda x: x[0])
@@ -3152,7 +3152,7 @@ def _norm_cdf(x):
 
 def probabilistic_sharpe_ratio(returns, sr_benchmark=0.0, periods_per_year=12):
     """
-    Bailey & López de Prado (2012) style PSR (simplified, iid assumption).
+    Bailey & L[0xf3]pez de Prado (2012) style PSR (simplified, iid assumption).
     Returns probability that SR > sr_benchmark.
     """
     import numpy as np
@@ -3182,14 +3182,14 @@ def save_month_equity_graph(
 ):
     """
     Thesis-grade monthly equity:
-      • Top: strategy (solid) vs BH (dashed)
-      • Bottom: strategy drawdown (%)
+      [0x2022] Top: strategy (solid) vs BH (dashed)
+      [0x2022] Bottom: strategy drawdown (%)
     Also writes a per-bar CSV (suffix `_bars.csv` when given csv_month_k.csv).
     """
     import os, numpy as np, pandas as pd, matplotlib.pyplot as plt
     from matplotlib.ticker import PercentFormatter
     if df is None or len(df) == 0 or not {"cstrategy_cont","creturns_cont"} <= set(df.columns):
-        print("⚠️ save_month_equity_graph: empty or missing columns — skipping.")
+        print("[WARN][0xfe0f] save_month_equity_graph: empty or missing columns -- skipping.")
         return None
 
     # Optional bars CSV (avoid overwriting the monthly summary CSV)
@@ -3202,7 +3202,7 @@ def save_month_equity_graph(
             os.makedirs(os.path.dirname(out_csv) or ".", exist_ok=True)
             df[["cstrategy_cont","creturns_cont"]].to_csv(out_csv, index=True, float_format="%.10f")
         except Exception as e:
-            print(f"⚠️ Could not write monthly bars CSV: {e}")
+            print(f"[WARN][0xfe0f] Could not write monthly bars CSV: {e}")
 
     os.makedirs(os.path.dirname(out_png) or ".", exist_ok=True)
 
@@ -3231,7 +3231,7 @@ def save_month_equity_graph(
         ax.set_ylim(bottom=bottom - pad, top=y_top + pad)
         ax.margins(x=0)
         ax.set_title(title or "Monthly Equity", pad=10)
-        ax.set_ylabel("Equity (×)")
+        ax.set_ylabel("Equity ([0xd7])")
         ax.grid(True, alpha=0.25)
         ax.legend(loc="lower right", ncol=1, fontsize=9, frameon=False)
 
@@ -3268,14 +3268,14 @@ def save_feature_heatmap_for_single_month(
 ):
     """
     df_row: DataFrame with a single row (the month summary), ideally containing 'features_used'.
-    Produces a 1×K heatmap (counts) and saves to out_png.
+    Produces a 1[0xd7]K heatmap (counts) and saves to out_png.
     """
     import os, json, ast, numpy as np, pandas as pd, matplotlib.pyplot as plt
 
     os.makedirs(os.path.dirname(out_png) or ".", exist_ok=True)
 
     if df_row is None or len(df_row) == 0:
-        print("⚠️ Single-month heatmap: empty df_row — skipping.")
+        print("[WARN][0xfe0f] Single-month heatmap: empty df_row -- skipping.")
         return None
 
     row = df_row.iloc[0]
@@ -3295,7 +3295,7 @@ def save_feature_heatmap_for_single_month(
         except Exception:
             feats = None
 
-    # Fallback: mine booleans like use_rsi=True → 'use_rsi'
+    # Fallback: mine booleans like use_rsi=True -> 'use_rsi'
     if not feats:
         feats = []
         for c in df_row.columns:
@@ -3317,7 +3317,7 @@ def save_feature_heatmap_for_single_month(
 
     feats = [_norm(f) for f in (feats or []) if _keep(str(f))]
     if not feats:
-        print("⚠️ Single-month heatmap: no features found — skipping.")
+        print("[WARN][0xfe0f] Single-month heatmap: no features found -- skipping.")
         return None
 
     # Count & take top_k
@@ -3338,7 +3338,7 @@ def save_feature_heatmap_for_single_month(
     try:
         plt.tight_layout()
     except Exception:
-        # Some figures with many labels can’t satisfy tight_layout; continue anyway
+        # Some figures with many labels can't satisfy tight_layout; continue anyway
         pass
 
     plt.savefig(out_png, dpi=140, bbox_inches="tight")  # <- added bbox
@@ -3827,7 +3827,7 @@ def _build_bar_compare_dict(all_bt: dict) -> dict:
 
 def compute_drawdown_curve(equity: "pd.Series") -> "pd.Series":
     """
-    Public helper: convert an equity curve (×) into a drawdown curve in percent.
+    Public helper: convert an equity curve ([0xd7]) into a drawdown curve in percent.
 
     Uses the internal _compute_drawdown (fractional drawdown, negative values)
     and scales by 100.
@@ -3845,12 +3845,12 @@ def compute_rolling_sharpe_series(
     frequency_per_year: float | None = None,
 ) -> "pd.Series":
     """
-    Compute an annualised rolling Sharpe ratio from an equity curve (×).
+    Compute an annualised rolling Sharpe ratio from an equity curve ([0xd7]).
 
     Parameters
     ----------
     equity : pd.Series
-        Cumulative equity (×), strictly positive.
+        Cumulative equity ([0xd7]), strictly positive.
     window : int
         Rolling window length in bars.
     frequency_per_year : float or None
@@ -3931,13 +3931,13 @@ def save_model_underwater_outputs(
     Multi-model underwater/drawdown plot across models + BH.
 
     bt_dict can be either:
-      - {name: Series} with cumulative equity (×) per model and 'BH', or
+      - {name: Series} with cumulative equity ([0xd7]) per model and 'BH', or
       - {name: MLBacktester} with .bar_concat containing cstrategy_cont/creturns_cont.
     """
     import os, numpy as np, pandas as pd, matplotlib.pyplot as plt
 
     if not bt_dict:
-        print("⚠️ Empty bt_dict passed to save_model_underwater_outputs.")
+        print("[WARN][0xfe0f] Empty bt_dict passed to save_model_underwater_outputs.")
         return None
 
     # Same logic as bar comparison for building the DataFrame
@@ -3948,7 +3948,7 @@ def save_model_underwater_outputs(
 
     df = _build_df_from_bt_dict(bt_dict, models_filter=models)
     if df is None or df.empty:
-        print("⚠️ No data to plot (underwater).")
+        print("[WARN][0xfe0f] No data to plot (underwater).")
         return None
 
     # Filter to requested models (keep BH if present)
@@ -3962,7 +3962,7 @@ def save_model_underwater_outputs(
             keep = (["BH"] if "BH" in df.columns else []) + wanted
             df = df.loc[:, [c for c in keep if c in df.columns]]
         else:
-            print(f"⚠️ None of the requested models found for underwater plot: {models}")
+            print(f"[WARN][0xfe0f] None of the requested models found for underwater plot: {models}")
             return None
 
     # Ensure datetime index & sorted
@@ -4022,7 +4022,7 @@ def save_model_underwater_outputs(
     try:
         dd_df.to_csv(csv_path, index=True, float_format="%.10f")
     except Exception as e:
-        print(f"⚠️ Could not save underwater CSV: {e}")
+        print(f"[WARN][0xfe0f] Could not save underwater CSV: {e}")
 
     # If you already swapped to set_paper_style in the previous step,
     with set_paper_style(
@@ -4097,7 +4097,7 @@ def save_model_underwater_outputs(
                 df_plot.index,
                 n_parts=n_time_parts,
                 fmt="%d/%m/%y",
-                rotation=30,   # was 45°, a bit cleaner tilted less
+                rotation=30,   # was 45[0xb0], a bit cleaner tilted less
             )
         except Exception:
             pass
@@ -4153,13 +4153,13 @@ def save_model_rolling_performance_outputs(
     Multi-model rolling Sharpe plot across models + BH.
 
     bt_dict can be either:
-      - {name: Series} with cumulative equity (×) per model and 'BH', or
+      - {name: Series} with cumulative equity ([0xd7]) per model and 'BH', or
       - {name: MLBacktester} with .bar_concat containing cstrategy_cont/creturns_cont.
     """
     import os, numpy as np, pandas as pd, matplotlib.pyplot as plt
 
     if not bt_dict:
-        print("⚠️ Empty bt_dict passed to save_model_rolling_performance_outputs.")
+        print("[WARN][0xfe0f] Empty bt_dict passed to save_model_rolling_performance_outputs.")
         return None
 
     def _build_df_from_bt_dict(d, models_filter=None):
@@ -4218,7 +4218,7 @@ def save_model_rolling_performance_outputs(
 
     df = _build_df_from_bt_dict(bt_dict, models_filter=models)
     if df is None or df.empty:
-        print("⚠️ No data to plot (rolling performance).")
+        print("[WARN][0xfe0f] No data to plot (rolling performance).")
         return None
 
     # Filter to requested models (keep BH if present)
@@ -4232,7 +4232,7 @@ def save_model_rolling_performance_outputs(
             keep = (["BH"] if "BH" in df.columns else []) + wanted
             df = df.loc[:, [c for c in keep if c in df.columns]]
         else:
-            print(f"⚠️ None of the requested models found for rolling performance plot: {models}")
+            print(f"[WARN][0xfe0f] None of the requested models found for rolling performance plot: {models}")
             return None
 
     # Ensure datetime index & sorted
@@ -4257,7 +4257,7 @@ def save_model_rolling_performance_outputs(
         df_plot = df.replace([np.inf, -np.inf], np.nan).ffill()
 
     if df_plot.empty:
-        print("⚠️ No overlapping data for rolling performance plot.")
+        print("[WARN][0xfe0f] No overlapping data for rolling performance plot.")
         return None
 
     # Infer frequency & default window if needed
@@ -4312,7 +4312,7 @@ def save_model_rolling_performance_outputs(
     try:
         rs_df.to_csv(csv_path, index=True, float_format="%.10f")
     except Exception as e:
-        print(f"⚠️ Could not save rolling Sharpe CSV: {e}")
+        print(f"[WARN][0xfe0f] Could not save rolling Sharpe CSV: {e}")
 
     with set_paper_style(
         style=style,
@@ -4475,7 +4475,7 @@ def _extend_index_to_calendar_start(df):
     # Create empty rows (NaN) for all columns on those dates
     extra_df = pd.DataFrame(index=extra_index, columns=df.columns, dtype=float)
 
-    # Concatenate and sort – later we neutral-fill these NaNs
+    # Concatenate and sort - later we neutral-fill these NaNs
     df_ext = pd.concat([extra_df, df]).sort_index()
 
     return df_ext
@@ -4514,11 +4514,11 @@ def _sanitize_for_json(obj):
     """
     import math
 
-    # Dict → sanitize values
+    # Dict -> sanitize values
     if isinstance(obj, dict):
         return {k: _sanitize_for_json(v) for k, v in obj.items()}
 
-    # List / tuple → sanitize each element
+    # List / tuple -> sanitize each element
     if isinstance(obj, (list, tuple)):
         return [_sanitize_for_json(v) for v in obj]
 
@@ -4540,7 +4540,7 @@ def _sanitize_for_json(obj):
     except Exception:
         pass
 
-    # Everything else (str, bool, None, etc.) → keep as is
+    # Everything else (str, bool, None, etc.) -> keep as is
     return obj
 
 
@@ -4570,9 +4570,9 @@ def save_hpo_config_to_disk(
         try:
             # log_print is defined later in this module; it's fine to call here
 
-            log_print(f"[HPO] Saved best config for {model_type} → {path}", level="COMPACT")
+            log_print(f"[HPO] Saved best config for {model_type} -> {path}", level="COMPACT")
         except Exception:
-            print(f"[HPO] Saved best config for {model_type} → {path}")
+            print(f"[HPO] Saved best config for {model_type} -> {path}")
     except Exception as e:
         try:
             log_print(f"[HPO] Failed to save best config for {model_type}: {e}", level="COMPACT")

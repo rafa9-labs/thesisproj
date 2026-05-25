@@ -166,6 +166,7 @@ export interface Metrics {
   walkforward_periods: WalkForwardPeriod[] | null;
   diagnostics: TrainingDiagnostics | null;
   summary_text: string | null;
+  snapshot_path?: string | null;
 }
 
 export interface LlmAnalysis {

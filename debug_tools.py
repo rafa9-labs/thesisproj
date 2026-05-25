@@ -63,7 +63,7 @@ def print_feature_stats(df, label):
 def validate_result_shape(result, source=""):
     if isinstance(result, tuple) and len(result) in (12, 14):
         return True
-    print(f"❌ Invalid result shape from {source}: got tuple of length {len(result)}")
+    print(f"[ERR] Invalid result shape from {source}: got tuple of length {len(result)}")
     return False
 
 def compute_composite_score(
@@ -115,9 +115,9 @@ def verify_mtf_no_future_leak(df, column, long_tf, long_window):
     diff = np.abs(df[mtf_col].values - safe_mtf)
     leakage_rows = np.where(diff > 1e-8)[0]
     if len(leakage_rows) > 0:
-        print(f"⚠️ Potential future leakage detected in {mtf_col} at rows: {leakage_rows}")
+        print(f"[WARN] Potential future leakage detected in {mtf_col} at rows: {leakage_rows}")
     else:
-        print(f"✅ No future leakage detected in {mtf_col}.")
+        print(f"[OK] No future leakage detected in {mtf_col}.")
         
 def multi_timeframe_ma_safe(df, column='price', short_window=10, long_window=50, short_tf='30T', long_tf='4H'):
     short_ma = df[column].rolling(short_window).mean()

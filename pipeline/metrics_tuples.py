@@ -272,7 +272,7 @@ CLASS_DEFAULTS = {
         "risk_max_open_positions": 1,
 
         # --- CV-time caps for keras models (early stopping regime) ---
-        "deep_cv_max_epochs": 12,
+        "deep_cv_max_epochs": 8,
         "deep_cv_batch_size": 256,
         "deep_cv_patience": 6,
 
@@ -498,7 +498,7 @@ CLASS_DEFAULTS = {
         
         # --- CV geometry ---
         "cv_mode": "mini_block",
-        "cv_blocks": 5,
+        "cv_blocks": 3,
         "cv_min_train_frac": 0.75,
         "cv_val_frac": 0.05,
         "cv_embargo_bars": 0,

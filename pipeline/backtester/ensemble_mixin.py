@@ -942,8 +942,16 @@ class EnsembleMixin:
                 xgb_cfg.setdefault("use_oof_meta", False)
                 xgb_cfg.setdefault("oof_splits", 3)
 
-                # Match global XGB policy: env-gated GPU (XGB_USE_GPU=1) else CPU.
-                use_gpu = (os.environ.get("XGB_USE_GPU", "0") == "1")
+                # Auto-detect GPU for XGBoost; env var XGB_USE_GPU can override
+                _xgb_env_gpu = os.environ.get("XGB_USE_GPU")
+                if _xgb_env_gpu is not None:
+                    use_gpu = _xgb_env_gpu == "1"
+                else:
+                    try:
+                        from pipeline.runtime import gpu_status
+                        use_gpu = gpu_status().get("available", False)
+                    except Exception:
+                        use_gpu = False
                 xgb_cfg.setdefault("tree_method", "hist")
                 xgb_cfg.pop("predictor", None)
                 if use_gpu:

@@ -17,7 +17,7 @@ SAVE_METRICS = {
 }
 
 # Trial counts per model type (from original MLBacktesterNoWFO.py)
-TRIAL_COUNTS = {
+_TRIAL_COUNTS_FULL = {
     "logistic":                    {"random": 5,  "bayes": 5},
     "svm":                         {"random": 5,  "bayes": 5},
     "random_forest":               {"random": 5,  "bayes": 10},
@@ -30,6 +30,23 @@ TRIAL_COUNTS = {
     "ensemble_cnn_lstm_xgboost":   {"random": 2,  "bayes": 3},
     "ensemble_adaptive_regime":    {"random": 2,  "bayes": 3},
 }
+
+# Fast mode: reduced trials for rapid iteration (HURRY=1 env var or low HPO intensity)
+_TRIAL_COUNTS_FAST = {
+    "logistic":                    {"random": 2,  "bayes": 2},
+    "svm":                         {"random": 2,  "bayes": 2},
+    "random_forest":               {"random": 2,  "bayes": 3},
+    "decision_tree":               {"random": 2,  "bayes": 2},
+    "xgboost":                     {"random": 2,  "bayes": 4},
+    "lstm":                        {"random": 2,  "bayes": 4},
+    "cnn":                         {"random": 2,  "bayes": 4},
+    "transformer":                 {"random": 2,  "bayes": 4},
+    "dqn":                         {"random": 2,  "bayes": 2},
+    "ensemble_cnn_lstm_xgboost":   {"random": 2,  "bayes": 2},
+    "ensemble_adaptive_regime":    {"random": 2,  "bayes": 2},
+}
+
+TRIAL_COUNTS = dict(_TRIAL_COUNTS_FULL)
 
 def main() ->  None:
     """
@@ -67,9 +84,12 @@ def main() ->  None:
     # -- Smoke-test mode: override config for fast validation --
     _SMOKE = os.environ.get("SMOKE_TEST", "0") == "1"
 
+    _HURRY = os.environ.get("HURRY", "0") == "1"
     if _SMOKE:
         global TRIAL_COUNTS
         TRIAL_COUNTS = {k: {"random": 1, "bayes": 1} for k in TRIAL_COUNTS}
+    elif _HURRY:
+        TRIAL_COUNTS = dict(_TRIAL_COUNTS_FAST)
 
     N_REAL_MONTHS = int(os.environ.get("N_MONTHS", "1" if _SMOKE else "3"))  # default 36 for full run
     END_DATE = "2025-12-01 00:00:00"   # end-of-Aug 2025, inclusive-ish for bar data

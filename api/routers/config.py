@@ -53,3 +53,35 @@ def store_api_key(payload: ApiKeyPayload):
         return {"status": "ok", "key_name": payload.name}
     except Exception as e:
         raise HTTPException(500, f"Failed to store API key: {e}")
+
+
+class KvPayload(BaseModel):
+    key: str
+    value: str
+
+
+@router.post("/kv")
+def store_kv(payload: KvPayload):
+    try:
+        from api.licensing.storage import SecureStorage
+        secure = SecureStorage()
+        secure.set_kv(payload.key, payload.value)
+        return {"status": "ok", "key": payload.key}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to store value: {e}")
+
+
+@router.get("/credential-status")
+def credential_status():
+    token, account_id = None, None
+    try:
+        from api.licensing.storage import SecureStorage
+        secure = SecureStorage()
+        token = secure.get_api_key("oanda")
+        account_id = secure.get_kv("oanda_account_id")
+    except Exception:
+        pass
+    return {
+        "oanda_token_configured": bool(token),
+        "oanda_account_id_configured": bool(account_id),
+    }

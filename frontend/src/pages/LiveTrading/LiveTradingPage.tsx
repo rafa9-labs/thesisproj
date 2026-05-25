@@ -461,7 +461,7 @@ export function LiveTradingPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Model</span>
-                <span className="text-[10px] font-medium" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>{selectedModel}</span>
+                <span className="text-[10px] font-medium" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>{deployedModels?.find((m) => m.id === selectedModelId)?.model_type ?? selectedModelId ?? "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Timeframe</span>

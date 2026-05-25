@@ -3344,6 +3344,7 @@ class StrategyMixin:
                 if model_type in deep_models:
                     try:
                         if getattr(self, "model", None) is not None:
+                            self._last_trained_model = self.model
                             self.model = None
                     except Exception:
                         pass
@@ -3419,6 +3420,7 @@ class StrategyMixin:
             # Drop model reference before clearing TF session to improve release behavior.
             try:
                 if getattr(self, "model", None) is not None:
+                    self._last_trained_model = self.model
                     self.model = None
             except Exception:
                 pass

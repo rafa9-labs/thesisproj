@@ -18,7 +18,7 @@ sys.stderr.reconfigure(line_buffering=True)
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _project_root)
 
-# ── All registered model types ──
+# -- All registered model types --
 ALL_MODELS = [
     "logistic",
     "svm",
@@ -45,10 +45,10 @@ def check_tensorflow():
         print(f"  TensorFlow {tf.__version__} available")
         return True
     except ImportError:
-        print("  TensorFlow NOT installed — deep models will be skipped")
+        print("  TensorFlow NOT installed -- deep models will be skipped")
         return False
     except Exception as e:
-        print(f"  TensorFlow error: {e} — deep models will be skipped")
+        print(f"  TensorFlow error: {e} -- deep models will be skipped")
         return False
 
 
@@ -59,10 +59,10 @@ def check_rl_deps():
         print("  RL module available")
         return True
     except ImportError:
-        print("  RL module NOT available — DQN will be skipped")
+        print("  RL module NOT available -- DQN will be skipped")
         return False
     except Exception as e:
-        print(f"  RL module error: {e} — DQN will be skipped")
+        print(f"  RL module error: {e} -- DQN will be skipped")
         return False
 
 
@@ -167,18 +167,18 @@ def main():
     quick = "--quick" in sys.argv
     
     print(SEPARATOR)
-    print("MODEL VALIDATION — All Model Types Smoke Test")
+    print("MODEL VALIDATION -- All Model Types Smoke Test")
     print(f"Mode: {'QUICK (logistic + xgboost)' if quick else 'FULL (all 11 models)'}")
     print(f"Python: {sys.version.split()[0]}")
     print(f"CWD: {os.getcwd()}")
     print(SEPARATOR)
     
-    # ── Pre-flight checks ──
-    print("\n── Pre-flight Dependency Check ──")
+    # -- Pre-flight checks --
+    print("\n-- Pre-flight Dependency Check --")
     tf_ok = check_tensorflow()
     rl_ok = check_rl_deps()
     
-    # ── Select models to test ──
+    # -- Select models to test --
     models = QUICK_MODELS if quick else ALL_MODELS
     
     # Skip models that can't run without deps
@@ -199,14 +199,14 @@ def main():
     to_run = [m for m in models if m not in skip_reasons]
     
     if skip_reasons:
-        print(f"\n⚠️  Skipping {len(skip_reasons)} models:")
+        print(f"\n[WARN][0xfe0f]  Skipping {len(skip_reasons)} models:")
         for m, reason in skip_reasons.items():
             print(f"   - {m}: {reason}")
     
-    print(f"\n── Running {len(to_run)} models ──")
+    print(f"\n-- Running {len(to_run)} models --")
     print("-" * 60)
     
-    # ── Run each model ──
+    # -- Run each model --
     results = []
     for i, model in enumerate(to_run, 1):
         print(f"\n[{i}/{len(to_run)}] Testing: {model}")
@@ -215,7 +215,7 @@ def main():
         result = run_one_model(model)
         results.append(result)
         
-        status_icon = "✅" if result["status"] == "PASS" else "❌"
+        status_icon = "[OK]" if result["status"] == "PASS" else "[ERR]"
         print(f"{status_icon} {result['model']}: {result['status']} ({result['elapsed']:.1f}s)")
         
         if result["error"]:
@@ -230,7 +230,7 @@ def main():
         except Exception:
             pass
     
-    # ── Summary ──
+    # -- Summary --
     print("\n" + SEPARATOR)
     print("VALIDATION SUMMARY")
     print(SEPARATOR)
@@ -243,17 +243,17 @@ def main():
     print("-" * 55)
     
     for r in results:
-        icon = "✅" if r["status"] == "PASS" else "❌"
+        icon = "[OK]" if r["status"] == "PASS" else "[ERR]"
         print(f"{icon} {r['model']:<33} {r['status']:<8} {r['elapsed']:.1f}s")
     
     for m, reason in skipped.items():
-        print(f"⏭️  {m:<33} {'SKIP':<8} {reason}")
+        print(f"[0x23ed][0xfe0f]  {m:<33} {'SKIP':<8} {reason}")
     
     print("-" * 55)
     print(f"Total: {len(passed)} passed, {len(failed)} failed, {len(skipped)} skipped")
     
     if failed:
-        print("\n❌ FAILURES:")
+        print("\n[ERR] FAILURES:")
         for r in failed:
             print(f"   {r['model']}: {r['error'][:300]}")
     

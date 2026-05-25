@@ -208,6 +208,28 @@ export function useStoreApiKey() {
   });
 }
 
+export function useStoreKv() {
+  return useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      await apiClient.post("/config/kv", { key, value });
+    },
+  });
+}
+
+export function useCredentialStatus() {
+  return useQuery({
+    queryKey: ["credential-status"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{
+        oanda_token_configured: boolean;
+        oanda_account_id_configured: boolean;
+      }>("/config/credential-status");
+      return data;
+    },
+    staleTime: 30_000,
+  });
+}
+
 export function useUploadCsv() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -600,5 +622,21 @@ export function useLlmAnalysis(jobId: string | null, model: string | null) {
     enabled: false,
     staleTime: 60_000,
     retry: 1,
+  });
+}
+
+export function useSaveModelFromJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ jobId, modelName }: { jobId: string; modelName?: string }) => {
+      const params = modelName ? `?model_name=${encodeURIComponent(modelName)}` : "";
+      const { data } = await apiClient.post<{ status: string; model_id: string; snapshot_path: string }>(
+        `/models/save-from-job/${jobId}${params}`
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deployed-models"] });
+    },
   });
 }

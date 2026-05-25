@@ -805,7 +805,7 @@ class RunMixin:
                         cfg["deep_eval_mode"] = "cv_fast"
 
                         # CV-only caps: install as defaults (won't override trial-set keys)
-                        cfg.setdefault("deep_cv_max_epochs", 12)
+                        cfg.setdefault("deep_cv_max_epochs", 8)
                         cfg.setdefault("deep_cv_batch_size", 256)
                         cfg.setdefault("deep_cv_patience", 6)
 
