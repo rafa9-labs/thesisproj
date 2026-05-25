@@ -14,7 +14,7 @@ export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
   return (
     <div
       className="flex items-end"
-      style={{ borderBottom: "1px solid var(--color-glass-border)", gap: 32 }}
+      style={{ gap: 32 }}
     >
       {tabs.map((tab) => {
         const disabled = disabledTabs?.has(tab.key);

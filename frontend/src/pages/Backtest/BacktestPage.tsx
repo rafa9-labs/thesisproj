@@ -68,7 +68,7 @@ export function BacktestPage() {
   };
 
   return (
-    <div className="flex flex-col" style={{ minHeight: "100%" }}>
+    <div className="flex flex-col flex-1" style={{ minHeight: "100%" }}>
       {/* Status strip */}
       <ConfigSummaryBar />
 
@@ -79,6 +79,9 @@ export function BacktestPage() {
 
       {/* 24px gap between tab nav and main content */}
       <div style={{ height: 24, flexShrink: 0 }} />
+
+      {/* Content area grows to fill remaining space */}
+      <div className="flex flex-col flex-1">
 
       {/* Quick Start */}
       {activeTab === "quickstart" && (
@@ -128,6 +131,8 @@ export function BacktestPage() {
 
       {/* Forward Test */}
       {activeTab === "forwardtest" && <ForwardTestTab />}
+
+      </div>{/* end flex-1 content area */}
 
       {/* Bottom spacer so content clears the sticky footer */}
       <div style={{ height: 72, flexShrink: 0 }} />

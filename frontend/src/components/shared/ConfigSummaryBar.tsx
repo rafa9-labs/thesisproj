@@ -54,7 +54,6 @@ export function ConfigSummaryBar() {
             flex: 1,
             paddingLeft: i === 0 ? 0 : 24,
             paddingRight: 24,
-            borderLeft: i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)",
           }}
         >
           <span

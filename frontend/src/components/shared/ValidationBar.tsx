@@ -134,7 +134,7 @@ export function ValidationBar({
               style={{
                 fontSize: 11,
                 fontFamily: "var(--font-mono)",
-                color: "var(--color-brand)",
+                color: "var(--color-text-secondary)",
               }}
             >
               Ready to deploy
