@@ -5,7 +5,6 @@ const routeLabels: Record<string, string> = {
   "": "Dashboard",
   "backtest": "Backtest",
   "results": "Results",
-  "compare": "Compare",
   "models": "Models",
   "settings": "Settings",
 };

@@ -12,9 +12,6 @@ const ResultsPage = lazy(() =>
 const ResultsHistoryPage = lazy(() =>
   import("./pages/Results/ResultsHistoryPage").then((m) => ({ default: m.ResultsHistoryPage })),
 );
-const ComparePage = lazy(() =>
-  import("./pages/Compare/ComparePage").then((m) => ({ default: m.ComparePage })),
-);
 const NewsPage = lazy(() =>
   import("./pages/News/NewsPage").then((m) => ({ default: m.NewsPage })),
 );
@@ -69,10 +66,6 @@ export default function App() {
         <Route
           path="results/:jobId"
           element={<Suspense fallback={<PageSpinner />}><ResultsPage /></Suspense>}
-        />
-        <Route
-          path="compare"
-          element={<Suspense fallback={<PageSpinner />}><ComparePage /></Suspense>}
         />
         <Route
           path="news"
