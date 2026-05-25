@@ -75,6 +75,8 @@ class BacktestRequest(BaseModel):
     repeats: int = 1
     seed: int = 42
     hpo_intensity: HPOIntensity = "quick"
+    n_trials: Optional[int] = None
+    parent_job_id: Optional[str] = None
     config_overrides: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -200,6 +202,95 @@ class BacktestStatusResponse(BaseModel):
     progress: Optional[Dict[str, Any]] = None
 
 
+class BacktestEventsResponse(BaseModel):
+    events: list
+    total: int
+
+
+class OverfittingCI(BaseModel):
+    low: Optional[float] = None
+    high: Optional[float] = None
+    mean: Optional[float] = None
+
+
+class OverfittingReport(BaseModel):
+    overfit_score: float = 0.0
+    risk_level: str = "low"
+    risk_color: str = "green"
+    train_oos_gap_pct: float = 0.0
+    temporal_degradation_pct: float = 0.0
+    sharpe_ci: Optional[OverfittingCI] = None
+    return_ci: Optional[OverfittingCI] = None
+    maxdd_ci: Optional[OverfittingCI] = None
+    cv_sharpe_mean: Optional[float] = None
+    cv_sharpe_std: Optional[float] = None
+    cv_return_mean: Optional[float] = None
+    cv_return_std: Optional[float] = None
+    min_trl_trades: int = 10
+    sufficient_trades: bool = False
+    n_periods: int = 0
+    n_signal_periods: int = 0
+    signal_gap_pct: float = 0.0
+    is_mean_sharpe: Optional[float] = None
+    oos_mean_sharpe: Optional[float] = None
+    dsr_min_sharpe: Optional[float] = None
+    interaction_effects: Optional[List[Dict[str, Any]]] = None
+
+
+class WalkForwardPeriod(BaseModel):
+    period_start: str = ""
+    period_end: str = ""
+    train_start: Optional[str] = None
+    train_end: Optional[str] = None
+    test_sharpe: Optional[float] = None
+    train_sharpe: Optional[float] = None
+    strategy_return: Optional[float] = None
+    bh_return: Optional[float] = None
+    trades: int = 0
+    signals_raw: int = 0
+    signals_passed_gate: int = 0
+    pct_sideways: Optional[float] = None
+    pct_trend: Optional[float] = None
+    pct_volatile: Optional[float] = None
+    sharpe_gap_pct: Optional[float] = None
+    return_gap_pct: Optional[float] = None
+
+
+class FeatureImportanceEntry(BaseModel):
+    feature: str
+    importance: float
+
+
+class PredictionHistogramBin(BaseModel):
+    bin_start: float
+    bin_end: float
+    bin_center: float
+    count: int
+
+
+class ConfusionMatrixData(BaseModel):
+    matrix: Optional[List[List[int]]] = None
+    labels: List[str] = ["Short", "Flat", "Long"]
+
+
+class ConfidenceBand(BaseModel):
+    band_min: float
+    band_max: float
+    count: int
+    accuracy: float
+    mean_return: float
+
+
+class TrainingDiagnostics(BaseModel):
+    feature_importance: Optional[List[FeatureImportanceEntry]] = None
+    prediction_histogram: Optional[List[PredictionHistogramBin]] = None
+    confusion_matrix: Optional[ConfusionMatrixData] = None
+    confidence_bands: Optional[List[ConfidenceBand]] = None
+    importance_method: Optional[str] = None
+    feature_families: Optional[Dict[str, int]] = None
+    vif_warnings: Optional[List[Dict[str, Any]]] = None
+
+
 class BacktestResultMetrics(BaseModel):
     model: str
     sharpe: Optional[float] = None
@@ -223,6 +314,11 @@ class BacktestResultMetrics(BaseModel):
     trades: Optional[List[Dict[str, Any]]] = None
     hpo_param_importance: Optional[List[Dict[str, Any]]] = None
     hpo_trials: Optional[List[Dict[str, Any]]] = None
+    overfitting: Optional[OverfittingReport] = None
+    walkforward_periods: Optional[List[WalkForwardPeriod]] = None
+    diagnostics: Optional[TrainingDiagnostics] = None
+    summary_text: Optional[str] = None
+    snapshot_path: Optional[str] = None
 
 
 class BacktestResultsResponse(BaseModel):

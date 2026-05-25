@@ -1,122 +1,201 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { useJobStore } from "@/stores/useJobStore";
 import { useValidation } from "@/hooks/useValidation";
 import { useSubmitBacktest } from "@/api/queries";
-import { useBacktestWebSocket } from "@/hooks/useBacktestWebSocket";
+import { ConfigSummaryBar } from "@/components/shared/ConfigSummaryBar";
+import { TabBar } from "@/components/shared/TabBar";
+import { ValidationBar } from "@/components/shared/ValidationBar";
+import { RuntimeEstimate } from "@/components/shared/RuntimeEstimate";
 import { AssetSelector } from "./AssetSelector";
 import { ModelSelector } from "./ModelSelector";
+import { HpoPanel } from "./HpoPanel";
 import { FeaturesPanel } from "./FeaturesPanel";
 import { LabelsPanel } from "./LabelsPanel";
-import { HpoPanel } from "./HpoPanel";
 import { ExecutionPanel } from "./ExecutionPanel";
+import { HyperparamsTab } from "./HyperparamsTab";
+import { QuickStartTab } from "./QuickStartTab";
 import { RunSummary } from "./RunSummary";
-import { BacktestProgress } from "./BacktestProgress";
-import { QuickTestBar } from "./QuickTestBar";
-import { ValidationAlert } from "@/components/shared/ValidationAlert";
-import { RuntimeEstimate } from "@/components/shared/RuntimeEstimate";
+
+import { ForwardTestTab } from "./ForwardTestTab";
+
+const TABS = [
+  { key: "quickstart", label: "Quick Start" },
+  { key: "asset", label: "Asset & Model" },
+  { key: "study", label: "Study & HPO" },
+  { key: "features", label: "Features" },
+  { key: "hyperparams", label: "Hyperparameters" },
+  { key: "execution", label: "Execution" },
+  { key: "forwardtest", label: "Forward Test" },
+];
 
 export function BacktestPage() {
   const navigate = useNavigate();
   const selectedModels = useBacktestStore((s) => s.selectedModels);
   const toPayload = useBacktestStore((s) => s.toRequestPayload);
+  const saveCustomPreset = useBacktestStore((s) => s.saveCustomPreset);
   const startJob = useJobStore((s) => s.startJob);
   const { warnings, errors, ok } = useValidation();
   const submit = useSubmitBacktest();
 
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [advancedMode, setAdvancedMode] = useState(false);
+  const [activeTab, setActiveTab] = useState("quickstart");
+  const [advancedHpo, setAdvancedHpo] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  const [showSavePreset, setShowSavePreset] = useState(false);
 
-  useBacktestWebSocket(activeJobId);
-
-  const activeJob = useJobStore((s) => (activeJobId ? s.activeJobs.get(activeJobId) : undefined));
-
-  useEffect(() => {
-    if (activeJob?.status === "completed" && activeJobId) {
-      const timer = setTimeout(() => navigate(`/results/${activeJobId}`), 800);
-      return () => clearTimeout(timer);
-    }
-  }, [activeJob?.status, activeJobId, navigate]);
+  const isSubmitting = submit.isPending;
+  const hasModels = selectedModels.length > 0;
+  const canDeploy = hasModels && ok;
 
   const handleDeploy = async () => {
     try {
       const payload = toPayload();
       const result = await submit.mutateAsync(payload);
-      setActiveJobId(result.job_id);
       startJob(result.job_id, payload.pair, payload.models);
       setSummaryOpen(false);
+      navigate("/monitor");
     } catch (err) {
       console.error("Deploy failed:", err);
     }
   };
 
-  const hasModels = selectedModels.length > 0;
+  const handleSavePreset = () => {
+    if (!presetName.trim()) return;
+    saveCustomPreset(presetName.trim(), "");
+    setPresetName("");
+    setShowSavePreset(false);
+  };
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header row */}
+    <div className="flex flex-col gap-5">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <RuntimeEstimate />
-          <button
-            onClick={() => hasModels && ok && setSummaryOpen(true)}
-            disabled={!hasModels || submit.isPending}
-            className="rounded-md px-7 py-2.5 text-xs font-semibold uppercase transition-all duration-300 hover:brightness-110"
-            style={{
-              background: hasModels
-                ? "linear-gradient(135deg, #00E5FF 0%, #22D3EE 100%)"
-                : "var(--color-glass-border)",
-              color: hasModels ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-              letterSpacing: "0.08em",
-              cursor: hasModels ? "pointer" : "not-allowed",
-              opacity: submit.isPending ? 0.6 : 1,
-              boxShadow: hasModels
-                ? "0 0 24px rgba(0,229,255,0.2)"
-                : "none",
-            }}
-          >
-            {submit.isPending ? "Submitting…" : "Deploy Backtest"}
-          </button>
-        </div>
+        <RuntimeEstimate />
       </div>
 
+      <ConfigSummaryBar />
+
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+
       {/* Quick Start */}
-      <QuickTestBar />
-
-      {/* Active progress */}
-      {activeJobId && (
-        <BacktestProgress jobId={activeJobId} />
+      {activeTab === "quickstart" && (
+        <QuickStartTab
+          onDeploy={() => setSummaryOpen(true)}
+          canDeploy={canDeploy}
+          isSubmitting={isSubmitting}
+        />
       )}
 
-      {/* Validation alerts */}
-      {(warnings.length > 0 || errors.length > 0) && hasModels && (
-        <ValidationAlert warnings={warnings} errors={errors} />
+      {/* Asset & Model */}
+      {activeTab === "asset" && (
+        <div className="flex flex-col gap-5 pt-1">
+          <AssetSelector />
+          <ModelSelector />
+        </div>
       )}
 
-      {/* Config sections */}
-      <AssetSelector />
-      <ModelSelector />
+      {/* Study & HPO */}
+      {activeTab === "study" && (
+        <div className="flex flex-col gap-5 pt-1">
+          <HpoPanel advancedMode={advancedHpo} onToggleAdvanced={() => setAdvancedHpo(!advancedHpo)} />
+        </div>
+      )}
 
-      {advancedMode ? (
-        <>
+      {/* Features */}
+      {activeTab === "features" && (
+        <div className="flex flex-col gap-5 pt-1">
           <FeaturesPanel />
           <LabelsPanel />
-          <HpoPanel advancedMode={advancedMode} onToggleAdvanced={() => setAdvancedMode(!advancedMode)} />
-          <ExecutionPanel />
-        </>
-      ) : (
-        <HpoPanel advancedMode={advancedMode} onToggleAdvanced={() => setAdvancedMode(!advancedMode)} />
+        </div>
       )}
 
-      {/* Run summary modal */}
+      {/* Hyperparameters */}
+      {activeTab === "hyperparams" && (
+        <div className="flex flex-col gap-5 pt-1">
+          <HyperparamsTab />
+        </div>
+      )}
+
+      {/* Execution */}
+      {activeTab === "execution" && (
+        <div className="flex flex-col gap-5 pt-1">
+          <ExecutionPanel defaultOpen={true} />
+        </div>
+      )}
+
+      {/* Forward Test */}
+      {activeTab === "forwardtest" && <ForwardTestTab />}
+
+      {/* Validation bar */}
+      <ValidationBar
+        warnings={warnings.length}
+        errors={errors.length}
+        canDeploy={canDeploy}
+        isSubmitting={isSubmitting}
+        hasModels={hasModels}
+        hasPair={true}
+        hasDates={true}
+        onDeploy={() => setSummaryOpen(true)}
+        onSavePreset={hasModels ? () => setShowSavePreset(true) : undefined}
+      />
+
+      {/* Save Preset dialog */}
+      {showSavePreset && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
+          onClick={() => setShowSavePreset(false)}
+        >
+          <div
+            className="flex w-[400px] flex-col gap-4 rounded-lg border p-5"
+            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
+              Save as Quick Start Preset
+            </h3>
+            <input
+              placeholder="Preset name"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSavePreset()}
+              className="rounded-md border px-3 py-2 text-xs w-full"
+              style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-elevated)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", outline: "none" }}
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowSavePreset(false)}
+                className="rounded-md px-4 py-1.5 text-xs font-semibold uppercase"
+                style={{ border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSavePreset}
+                disabled={!presetName.trim()}
+                className="rounded-md px-4 py-1.5 text-xs font-semibold uppercase"
+                style={{
+                  backgroundColor: presetName.trim() ? "var(--color-brand)" : "var(--color-border)",
+                  color: presetName.trim() ? "var(--color-text-inverse)" : "var(--color-text-muted)",
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <RunSummary
         open={summaryOpen}
         onClose={() => setSummaryOpen(false)}
         onDeploy={handleDeploy}
         warnings={warnings.length}
         errors={errors.length}
+        isSubmitting={isSubmitting}
       />
     </div>
   );

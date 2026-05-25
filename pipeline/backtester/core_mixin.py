@@ -19,6 +19,8 @@ class CoreMixin:
         slippage_factor: float = 0.5,
         features_config: dict | None = None,
         use_oof: bool = False,
+        data_store = None,
+        db_path: str = "data/forex.db",
     ):
         """
         Initialize the backtester for a specific instrument and date range.
@@ -41,16 +43,20 @@ class CoreMixin:
             Configuration for feature generation (indicator windows, toggles, etc.).
         use_oof : bool
             If True, enables Out-of-Fold stacking (for ensemble models).
+        data_store : DataStore, optional
+            Pre-existing DataStore instance. Takes priority over db_path.
+        db_path : str
+            Path to SQLite database. Used to create DataStore if data_store not provided.
         """
         self.symbol = symbol
         self.start = start
         self.end = end
 
         # --- Resolve pair-specific config (S3.2) ---
-        from pipeline.pair_config import get_pair_config, resolve_csv_paths
+        from pipeline.pair_config import get_pair_config
+        from pipeline.data_sqlite import DataStore, DataNotAvailableError
         try:
             self._pair_config = get_pair_config(symbol)
-            self._csv_paths = resolve_csv_paths(symbol)
         except ValueError:
             from pipeline.pair_config import PairConfig
             self._pair_config = PairConfig(
@@ -58,7 +64,22 @@ class CoreMixin:
                 oanda_name=symbol[:3] + "_" + symbol[3:] if len(symbol) == 6 else symbol,
                 pip_value=0.0001,
             )
-            self._csv_paths = {}
+
+        # --- DataStore: use provided instance or create one ---
+        if data_store is not None:
+            self._store = data_store
+        else:
+            self._store = DataStore(db_path)
+
+        # --- Validate required timeframes exist ---
+        _tfs = self._store.list_timeframes(self.symbol)
+        _required = {"M30", "H1", "H4"}
+        _missing = _required - set(_tfs)
+        if _missing:
+            raise DataNotAvailableError(
+                f"Pair '{self.symbol}' is missing required timeframes: {sorted(_missing)}. "
+                "Download data before running backtests."
+            )
 
         # If trading_costs is explicitly provided at construction, it must not be overwritten
         # by any loaded/merged config later (GlobalHPO reuse, etc.).

@@ -122,71 +122,65 @@ def get_pair_config(symbol: str) -> PairConfig:
     return cfg
 
 
-def resolve_csv_paths(
+def register_custom_pair(
     symbol: str,
-    years: int = 10,
-    data_dir: str = "csv_data",
-) -> Dict[str, str]:
-    """Resolve CSV file paths for a given pair and timeframe set.
+    pip_value: float,
+    decimal_places: int,
+    store = None,
+) -> PairConfig:
+    """Register a new currency pair that is not in the built-in registry.
 
     Parameters
     ----------
     symbol : str
-        Currency pair symbol (e.g. ``"GBPUSD"``).
-    years : int
-        Number of years in the data file name.
-    data_dir : str
-        Directory containing CSV files.
+        Currency pair symbol (e.g. ``"NZDUSD"``).
+    pip_value : float
+        Value of one pip (e.g. 0.0001 for most XXX/USD pairs).
+    decimal_places : int
+        Number of decimal places in the quote (4 for most pairs, 2 for JPY pairs).
+    store : DataStore, optional
+        If provided, persists the pair to the ``pairs`` SQLite table.
 
     Returns
     -------
-    dict[str, str]
-        Keys: ``"base"`` (M30), ``"H1"``, ``"H4"``.
-        Values: full relative paths to CSV files.
+    PairConfig
+
+    Raises
+    ------
+    ValueError
+        If symbol length is not 6 or pip_value is not positive.
     """
-    cfg = get_pair_config(symbol)
-    s = cfg.symbol
-    return {
-        "base": os.path.join(data_dir, f"{s}_{years}_years_M30_OANDA.csv"),
-        "H1": os.path.join(data_dir, f"{s}_{years}_years_H1_OANDA.csv"),
-        "H4": os.path.join(data_dir, f"{s}_{years}_years_H4_OANDA.csv"),
-    }
+    key = symbol.upper().replace("_", "").replace("-", "").replace("/", "")
+    if len(key) != 6:
+        raise ValueError("Symbol must be a 6-character currency pair code (e.g. EURUSD).")
+    if pip_value <= 0:
+        raise ValueError("pip_value must be positive.")
 
+    base = key[:3]
+    quote = key[3:]
+    oanda_name = f"{base}_{quote}"
+    lot_size = 100000.0
+    typical_spread_bps = 1.0
 
-def find_best_csv_path(
-    symbol: str,
-    granularity: str,
-    data_dir: str = "csv_data",
-) -> Optional[str]:
-    """Find a matching CSV file for a pair, trying multiple year spans.
+    cfg = PairConfig(
+        symbol=key,
+        oanda_name=oanda_name,
+        pip_value=pip_value,
+        lot_size=lot_size,
+        base_currency=base,
+        quote_currency=quote,
+        typical_spread_bps=typical_spread_bps,
+    )
 
-    Checks for 10-year files first, then falls back to any matching file.
+    if store is not None:
+        store.insert_pairs([{
+            "symbol": cfg.symbol,
+            "oanda_name": cfg.oanda_name,
+            "pip_value": cfg.pip_value,
+            "lot_size": cfg.lot_size,
+            "base_currency": cfg.base_currency,
+            "quote_currency": cfg.quote_currency,
+            "typical_spread_bps": cfg.typical_spread_bps,
+        }])
 
-    Parameters
-    ----------
-    symbol : str
-        Currency pair symbol.
-    granularity : str
-        Candle granularity (e.g. ``"M30"``, ``"H1"``, ``"H4"``).
-    data_dir : str
-        Directory containing CSV files.
-
-    Returns
-    -------
-    str or None
-        Path to the CSV file, or None if not found.
-    """
-    cfg = get_pair_config(symbol)
-    s = cfg.symbol
-
-    for years in (10, 5, 3, 1):
-        path = os.path.join(data_dir, f"{s}_{years}_years_{granularity}_OANDA.csv")
-        if os.path.isfile(path):
-            return path
-
-    if os.path.isdir(data_dir):
-        for fname in sorted(os.listdir(data_dir), reverse=True):
-            if fname.startswith(f"{s}_") and fname.endswith(f"_{granularity}_OANDA.csv"):
-                return os.path.join(data_dir, fname)
-
-    return None
+    return cfg

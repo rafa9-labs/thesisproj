@@ -8,9 +8,10 @@ interface RunSummaryProps {
   onDeploy: () => void;
   warnings: number;
   errors: number;
+  isSubmitting?: boolean;
 }
 
-export function RunSummary({ open, onClose, onDeploy, warnings, errors }: RunSummaryProps) {
+export function RunSummary({ open, onClose, onDeploy, warnings, errors, isSubmitting }: RunSummaryProps) {
   const store = useBacktestStore.getState();
 
   if (!open) return null;
@@ -118,16 +119,17 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors }: RunSum
           </button>
           <button
             onClick={onDeploy}
-            disabled={errors > 0}
+            disabled={errors > 0 || isSubmitting}
             className="rounded-md px-6 py-2 text-xs font-bold uppercase transition-colors"
             style={{
-              backgroundColor: errors > 0 ? "var(--color-border)" : "var(--color-brand)",
-              color: errors > 0 ? "var(--color-text-muted)" : "var(--color-text-inverse)",
+              backgroundColor: errors > 0 || isSubmitting ? "var(--color-border)" : "var(--color-brand)",
+              color: errors > 0 || isSubmitting ? "var(--color-text-muted)" : "var(--color-text-inverse)",
               letterSpacing: "0.05em",
-              cursor: errors > 0 ? "not-allowed" : "pointer",
+              cursor: errors > 0 || isSubmitting ? "not-allowed" : "pointer",
+              opacity: isSubmitting ? 0.7 : 1,
             }}
           >
-            Deploy Backtest
+            {isSubmitting ? "Submitting..." : "Deploy Backtest"}
           </button>
         </div>
       </div>

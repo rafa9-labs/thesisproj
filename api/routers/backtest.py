@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from api.config import settings
 from api.dependencies import get_data_store
 from api.schemas.backtest import (
     CLASSIC_QUICK_TEST,
@@ -180,25 +181,36 @@ def submit_backtest(req: BacktestRequest):
         "repeats": req.repeats,
         "seed": req.seed,
         "hpo_intensity": req.hpo_intensity,
+        "n_trials": req.n_trials,
+        "parent_job_id": req.parent_job_id,
         "trading_costs": req.trading_costs,
         "config_overrides": req.config_overrides,
     }
 
-    jm.create_job(job_id, "backtest", config)
+    try:
+        jm.create_job_atomic(job_id, "backtest", config, max_active=settings.max_concurrent_backtests)
+    except RuntimeError:
+        raise HTTPException(status_code=409, detail="A backtest is already running. Please wait for completion.")
 
     if IS_DESKTOP:
-        # Desktop mode: run synchronously, return completed result
-        try:
-            result = run_backtest_task._func(job_id, config)
-        except Exception as exc:
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(500, f"Backtest failed: {exc}")
-        jm2 = JobManager(get_data_store())
-        completed = jm2.get_job(job_id)
+        import threading
+        from api.tasks import _cancellation_events
+
+        def _run_desktop():
+            evt = threading.Event()
+            _cancellation_events[job_id] = evt
+            try:
+                run_backtest_task._func(job_id, config)
+            except Exception as exc:
+                import traceback
+                traceback.print_exc()
+            finally:
+                _cancellation_events.pop(job_id, None)
+
+        threading.Thread(target=_run_desktop, daemon=True).start()
         return BacktestSubmitResponse(
             job_id=job_id,
-            status="completed" if completed and completed.get("status") == "completed" else "failed",
+            status="pending",
             pair=pair,
             models=req.models,
         )
@@ -392,6 +404,53 @@ def get_results_summary(
     return BacktestSummaryResponse(results=paged, total=total, offset=offset, limit=limit)
 
 
+@router.get("/active", response_model=BacktestListResponse)
+def get_active_backtests():
+    store = get_data_store()
+    jm = JobManager(store)
+    jobs = jm.get_active_jobs("backtest")
+    items = []
+    for j in jobs:
+        cfg = j.get("config", {})
+        items.append(BacktestListItem(
+            job_id=j["id"],
+            type=j["type"],
+            status=j["status"],
+            pair=cfg.get("pair", ""),
+            models=cfg.get("models", []),
+            created_at=j["created_at"],
+        ))
+    return BacktestListResponse(jobs=items, total=len(items), offset=0, limit=len(items))
+
+
+@router.post("/{job_id}/force-stop", response_model=BacktestStatusResponse)
+def force_stop_backtest(job_id: str):
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if job["status"] not in ("pending", "running"):
+        raise HTTPException(400, f"Job status is '{job['status']}', not pending or running")
+    jm.force_stop_job(job_id)
+    # Revoke the running Celery task
+    try:
+        from api.tasks import revoke_task
+        revoke_task(job_id)
+    except Exception:
+        pass
+    updated = jm.get_job(job_id)
+    return BacktestStatusResponse(
+        job_id=updated["id"],
+        type=updated["type"],
+        status=updated["status"],
+        created_at=updated["created_at"],
+        updated_at=updated["updated_at"],
+        error=updated.get("error"),
+        progress=updated.get("result"),
+    )
+
+
 @router.get("/{job_id}", response_model=BacktestStatusResponse)
 def get_backtest_status(job_id: str):
     store = get_data_store()
@@ -411,6 +470,15 @@ def get_backtest_status(job_id: str):
     )
 
 
+@router.get("/{job_id}/events")
+def get_backtest_events(job_id: str, after: int = 0):
+    from api.tasks import get_job_events
+    import logging as _logging
+    events = get_job_events(job_id, after=after)
+    _logging.info(f"[EVENTS-API] job={job_id[:8]} after={after} returned={len(events)} total={after + len(events)}")
+    return {"events": events, "total": after + len(events)}
+
+
 def _coerce_curve(raw):
     if raw is None:
         return None
@@ -422,6 +490,48 @@ def _coerce_curve(raw):
     if isinstance(first, (int, float)):
         return [{"time": i, "value": float(v)} for i, v in enumerate(raw)]
     return raw
+
+
+def _parse_diagnostics(raw):
+    if raw is None or not isinstance(raw, dict):
+        return None
+    from api.schemas.backtest import (
+        TrainingDiagnostics, FeatureImportanceEntry,
+        PredictionHistogramBin, ConfusionMatrixData, ConfidenceBand,
+    )
+    fi = None
+    if "feature_importance" in raw and raw["feature_importance"]:
+        try:
+            fi = [FeatureImportanceEntry(**e) for e in raw["feature_importance"]]
+        except Exception:
+            fi = None
+    hist = None
+    if "prediction_histogram" in raw and raw["prediction_histogram"]:
+        try:
+            hist = [PredictionHistogramBin(**e) for e in raw["prediction_histogram"]]
+        except Exception:
+            hist = None
+    cm = None
+    if "confusion_matrix" in raw and raw["confusion_matrix"]:
+        try:
+            cm = ConfusionMatrixData(**raw["confusion_matrix"])
+        except Exception:
+            cm = None
+    bands = None
+    if "confidence_bands" in raw and raw["confidence_bands"]:
+        try:
+            bands = [ConfidenceBand(**e) for e in raw["confidence_bands"]]
+        except Exception:
+            bands = None
+    return TrainingDiagnostics(
+        feature_importance=fi,
+        prediction_histogram=hist,
+        confusion_matrix=cm,
+        confidence_bands=bands,
+        importance_method=raw.get("importance_method"),
+        feature_families=raw.get("feature_families"),
+        vif_warnings=raw.get("vif_warnings"),
+    )
 
 
 @router.get("/{job_id}/results", response_model=BacktestResultsResponse)
@@ -440,6 +550,64 @@ def get_backtest_results(job_id: str):
 
     metrics = []
     for m in raw_metrics:
+        overfit_data = m.get("overfitting")
+        overfit = None
+        if overfit_data and isinstance(overfit_data, dict):
+            from api.schemas.backtest import OverfittingReport as OFReport, OverfittingCI
+            sharpe_ci = None
+            if overfit_data.get("sharpe_ci"):
+                sharpe_ci = OverfittingCI(**overfit_data["sharpe_ci"])
+            return_ci = None
+            if overfit_data.get("return_ci"):
+                return_ci = OverfittingCI(**overfit_data["return_ci"])
+            maxdd_ci = None
+            if overfit_data.get("maxdd_ci"):
+                maxdd_ci = OverfittingCI(**overfit_data["maxdd_ci"])
+            overfit = OFReport(
+                overfit_score=overfit_data.get("overfit_score", 0.0),
+                risk_level=overfit_data.get("risk_level", "low"),
+                risk_color=overfit_data.get("risk_color", "green"),
+                train_oos_gap_pct=overfit_data.get("train_oos_gap_pct", 0.0),
+                temporal_degradation_pct=overfit_data.get("temporal_degradation_pct", 0.0),
+                sharpe_ci=sharpe_ci,
+                return_ci=return_ci,
+                maxdd_ci=maxdd_ci,
+                cv_sharpe_mean=overfit_data.get("cv_sharpe_mean"),
+                cv_sharpe_std=overfit_data.get("cv_sharpe_std"),
+                cv_return_mean=overfit_data.get("cv_return_mean"),
+                cv_return_std=overfit_data.get("cv_return_std"),
+                min_trl_trades=overfit_data.get("min_trl_trades", 10),
+                sufficient_trades=overfit_data.get("sufficient_trades", False),
+                n_periods=overfit_data.get("n_periods", 0),
+                n_signal_periods=overfit_data.get("n_signal_periods", 0),
+                signal_gap_pct=overfit_data.get("signal_gap_pct", 0.0),
+                is_mean_sharpe=overfit_data.get("is_mean_sharpe"),
+                oos_mean_sharpe=overfit_data.get("oos_mean_sharpe"),
+                dsr_min_sharpe=overfit_data.get("dsr_min_sharpe"),
+                interaction_effects=overfit_data.get("interaction_effects"),
+            )
+
+        wf_periods_raw = m.get("walkforward_periods", [])
+        wf_periods = []
+        for wp in (wf_periods_raw or []):
+            from api.schemas.backtest import WalkForwardPeriod
+            wf_periods.append(WalkForwardPeriod(
+                period_start=str(wp.get("period_start", "")),
+                period_end=str(wp.get("period_end", "")),
+                train_start=wp.get("train_start"),
+                train_end=wp.get("train_end"),
+                test_sharpe=wp.get("test_sharpe"),
+                train_sharpe=wp.get("train_sharpe"),
+                strategy_return=wp.get("strategy_return"),
+                bh_return=wp.get("bh_return"),
+                trades=int(wp.get("trades", 0) or 0),
+                signals_raw=int(wp.get("signals_raw", 0) or 0),
+                signals_passed_gate=int(wp.get("signals_passed_gate", 0) or 0),
+                pct_sideways=wp.get("pct_sideways"),
+                pct_trend=wp.get("pct_trend"),
+                pct_volatile=wp.get("pct_volatile"),
+            ))
+
         metrics.append(BacktestResultMetrics(
             model=m.get("model", ""),
             sharpe=m.get("sharpe"),
@@ -463,6 +631,11 @@ def get_backtest_results(job_id: str):
             trades=m.get("trades"),
             hpo_param_importance=m.get("hpo_param_importance"),
             hpo_trials=m.get("hpo_trials"),
+            overfitting=overfit,
+            walkforward_periods=wf_periods,
+            diagnostics=_parse_diagnostics(m.get("diagnostics")),
+            summary_text=m.get("summary_text"),
+            snapshot_path=m.get("snapshot_path"),
         ))
 
     return BacktestResultsResponse(
@@ -472,6 +645,124 @@ def get_backtest_results(job_id: str):
         config=cfg,
         metrics=metrics,
     )
+
+
+@router.post("/{job_id}/analyze")
+def analyze_backtest_results(job_id: str, model: str = Query("", description="Model to analyze")):
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if job["status"] != "completed":
+        raise HTTPException(400, f"Job status is '{job['status']}', not 'completed'")
+
+    result = job.get("result", {})
+    cfg = job.get("config", {})
+    raw_metrics = result.get("metrics", [])
+
+    target = raw_metrics[0] if raw_metrics else {}
+    if model:
+        for m in raw_metrics:
+            if isinstance(m, dict) and m.get("model") == model:
+                target = m
+                break
+
+    try:
+        from pipeline.llm.advisor import analyze_backtest
+        analysis = analyze_backtest(target, cfg)
+        return {"job_id": job_id, "model": target.get("model", ""), "analysis": analysis}
+    except Exception as e:
+        return {"job_id": job_id, "model": target.get("model", ""), "analysis": {"error": str(e)}}
+
+
+# ────────────────────────────────────────────────────────────
+#  Experiment diff & tags (Phase B: experiment tracking)
+# ────────────────────────────────────────────────────────────
+from pydantic import BaseModel
+
+
+class TagsUpdateRequest(BaseModel):
+    action: str
+    tag: str
+
+
+@router.get("/experiments/{job_id}/diff")
+def get_experiment_diff(job_id: str, compare: str = Query(..., description="Job ID to compare against")):
+    store = get_data_store()
+    jm = JobManager(store)
+    a = jm.get_job(job_id)
+    b = jm.get_job(compare)
+    if a is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if b is None:
+        raise HTTPException(404, f"Comparison job {compare} not found")
+
+    cfg_a = a.get("config", {}) if isinstance(a.get("config"), dict) else {}
+    cfg_b = b.get("config", {}) if isinstance(b.get("config"), dict) else {}
+    overrides_a = cfg_a.get("config_overrides", {}) or {}
+    overrides_b = cfg_b.get("config_overrides", {}) or {}
+
+    def _flatten(cfg, overrides, prefix=""):
+        flat = {}
+        for k in ["pair", "models", "months", "repeats", "seed", "hpo_intensity"]:
+            if k in cfg:
+                flat[prefix + k] = cfg[k]
+        for k, v in overrides.items():
+            flat[prefix + k] = v
+        return flat
+
+    flat_a = _flatten(cfg_a, overrides_a)
+    flat_b = _flatten(cfg_b, overrides_b)
+    all_keys = sorted(set(flat_a.keys()) | set(flat_b.keys()))
+
+    added_keys = {}
+    removed_keys = {}
+    changed_values = {}
+    unchanged_count = 0
+
+    for k in all_keys:
+        va = flat_a.get(k)
+        vb = flat_b.get(k)
+        if k not in flat_a and k in flat_b:
+            added_keys[k] = vb
+        elif k in flat_a and k not in flat_b:
+            removed_keys[k] = va
+        elif va != vb:
+            changed_values[k] = {"from": va, "to": vb}
+        else:
+            unchanged_count += 1
+
+    return {
+        "base": {"job_id": job_id, "created_at": a.get("created_at", "")},
+        "compare": {"job_id": compare, "created_at": b.get("created_at", "")},
+        "added_keys": added_keys,
+        "removed_keys": removed_keys,
+        "changed_values": changed_values,
+    "unchanged_count": unchanged_count,
+}
+
+
+@router.patch("/experiments/{job_id}/tags")
+def update_experiment_tags(job_id: str, req: TagsUpdateRequest):
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+
+    import json as _json
+    existing = _json.loads(job.get("result", "{}") or "{}")
+    tags = list(existing.get("tags", []) if isinstance(existing.get("tags"), list) else [])
+
+    if req.action == "add" and req.tag not in tags:
+        tags.append(req.tag)
+    elif req.action == "remove":
+        tags = [t for t in tags if t != req.tag]
+
+    existing["tags"] = tags
+    jm.update_status(job_id, job.get("status", "completed"), result=existing)
+    return {"tags": tags}
 
 
 @router.get("/{job_id}/trades/chart-data")
@@ -602,6 +893,60 @@ def get_trade_chart_data(job_id: str, model: str = Query(..., description="Model
         "candles": candles,
         "trades": trades,
         "equity_curve": equity_curve,
+    }
+
+
+@router.get("/{job_id}/debug/events")
+def debug_job_events(job_id: str, limit: int = Query(50, ge=1, le=500)):
+    """Debug endpoint: return raw events from SQLite for a job, with metadata."""
+    from api.dependencies import get_data_store
+    from pipeline.data_sqlite import DataStore
+    import logging
+
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    job_exists = job is not None
+
+    sqlite_available = False
+    sqlite_count = 0
+    sqlite_events = []
+    try:
+        ds = DataStore(store.db_path)
+        sqlite_count = ds.get_job_event_count(job_id)
+        raw = ds.get_job_events(job_id, after=0)
+        sqlite_events = raw[-limit:]
+        sqlite_available = True
+    except Exception as e:
+        logging.warning(f"[debug] SQLite read failed for {job_id}: {e}")
+
+    in_memory_events = []
+    in_memory_count = 0
+    try:
+        from api.tasks import _job_events
+        buf = _job_events.get(job_id, [])
+        in_memory_count = len(buf)
+        in_memory_events = list(buf)
+    except Exception:
+        pass
+
+    from api.routers.ws import _get_ws_connections
+    ws_connections = _get_ws_connections(job_id)
+
+    return {
+        "job_id": job_id,
+        "job_exists": job_exists,
+        "job_status": job.get("status") if job else None,
+        "sqlite": {
+            "available": sqlite_available,
+            "total_count": sqlite_count,
+            "recent_events": sqlite_events,
+        },
+        "in_memory": {
+            "total_count": in_memory_count,
+            "recent_events": in_memory_events[-limit:],
+        },
+        "websocket_connections": ws_connections,
     }
 
 

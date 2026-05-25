@@ -241,14 +241,14 @@ SEARCH_SPACE = {
     # -- SVM --
     "svm": {
         "C": (1e-2, 1e2, True),            # narrowed from [1e-3, 1e3]
-        "gamma": (1e-4, 1e1, True),         # narrowed from [1e-5, 10]
+        "gamma": [1e-4, 1e-3, 1e-2, 0.1, 0.5],  # categorical from literature; removes degenerate high-gamma noise-memorization
         "kernel": "rbf",                    # fixed: standard for FX
         "class_weight": "balanced",         # fixed: standard for imbalanced FX
     },
     # -- Random Forest --
     "random_forest": {
         "n_estimators": (300, 1000, 100),
-        "max_depth": [None, 8, 12, 16],
+        "max_depth": [8, 12, 16, 20],         # removed None (unconstrained -> perfect IS fit -> coverage rejection)
         "min_samples_leaf": (1, 10),
         "max_features": ["sqrt", 0.33, 0.5],
         # Fixed: bootstrap=True, class_weight=None, n_jobs=-1
@@ -278,6 +278,11 @@ SEARCH_SPACE = {
         "learning_rate": (1e-4, 5e-3, True),
         # Fixed: num_blocks=1, ff_multiple=2, dense_units=128,
         #        pooling="cls", use_time2vec=False, batch_size=256
+    },
+    # -- Meta Ensemble (Signal Committee) --
+    "meta_ensemble": {
+        "meta_combination_method": ["majority", "soft", "weighted"],
+        # sub-models selected by user in frontend, not tuned by HPO
     },
 }
 
@@ -327,7 +332,7 @@ PIPELINE_CONSTANTS = {
     # Deep model training
     "deep_cv_batch_size": 256,
     "deep_cv_patience": 6,
-    "deep_cv_max_epochs": 12,
+    "deep_cv_max_epochs": 8,
 
     # News & sentiment
     "use_news": True,
@@ -336,7 +341,7 @@ PIPELINE_CONSTANTS = {
     "news_event_flags": True,
 
     # LLM sentiment
-    "llm_sentiment_enabled": True,
+    "llm_sentiment_enabled": False,    # off by default — only useful for live trading, not backtesting
     "llm_backend": "ollama",
     "llm_model": "llama3",
     "llm_api_key": "",

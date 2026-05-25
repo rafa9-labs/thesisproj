@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "./client";
+import { useJobStore } from "@/stores/useJobStore";
 import type {
   PairInfo,
   ModelInfo,
@@ -17,6 +18,11 @@ import type {
   HeatmapResponse,
   NewsEvent,
   LicenseStatusResponse,
+  DataStatusResponse,
+  DefinePairRequest,
+  DefinePairResponse,
+  WsEvent,
+  LlmAnalysisResponse,
 } from "./schemas";
 
 export function useHealth() {
@@ -85,7 +91,12 @@ export function useJobStatus(jobId: string | null) {
       return data;
     },
     enabled: !!jobId,
+    retry: 1,
     refetchInterval: (query) => {
+      const error = query.state.error;
+      if (error && (error as { response?: { status?: number } })?.response?.status === 404) {
+        return false;
+      }
       const status = query.state.data?.status;
       if (status === "pending" || status === "running") return 2_000;
       return false;
@@ -108,6 +119,37 @@ export function useJobResults(jobId: string | null) {
   });
 }
 
+export function useActiveBacktests() {
+  return useQuery({
+    queryKey: ["active-backtests"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ jobs: JobSummary[]; total: number }>("/backtest/active");
+      return data;
+    },
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+}
+
+export function useForceStopJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (jobId: string) => {
+      const { data } = await apiClient.post<{ job_id: string; status: string }>(`/backtest/${jobId}/force-stop`);
+      return data;
+    },
+    onSuccess: (_, jobId) => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["active-backtests"] });
+      queryClient.invalidateQueries({ queryKey: ["job", jobId] });
+      // Allow DB update to propagate, then refetch to clear any stale 409 state
+      setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: ["active-backtests"] });
+      }, 800);
+    },
+  });
+}
+
 export function useSubmitBacktest() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -122,6 +164,7 @@ export function useSubmitBacktest() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["active-backtests"] });
     },
   });
 }
@@ -162,6 +205,28 @@ export function useStoreApiKey() {
     mutationFn: async ({ name, value }: { name: string; value: string }) => {
       await apiClient.post("/config/api-key", { name, value });
     },
+  });
+}
+
+export function useStoreKv() {
+  return useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      await apiClient.post("/config/kv", { key, value });
+    },
+  });
+}
+
+export function useCredentialStatus() {
+  return useQuery({
+    queryKey: ["credential-status"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{
+        oanda_token_configured: boolean;
+        oanda_account_id_configured: boolean;
+      }>("/config/credential-status");
+      return data;
+    },
+    staleTime: 30_000,
   });
 }
 
@@ -447,5 +512,131 @@ export function useLiveSessions() {
     },
     refetchInterval: 10_000,
     staleTime: 5_000,
+  });
+}
+
+export function useDataStatus(pair: string) {
+  return useQuery({
+    queryKey: ["data-status", pair],
+    queryFn: async () => {
+      const { data } = await apiClient.get<DataStatusResponse>(`/pairs/${pair}/data-status`);
+      return data;
+    },
+    enabled: !!pair && pair.length === 6,
+    staleTime: 30_000,
+  });
+}
+
+export function useDefinePair() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: DefinePairRequest) => {
+      const { data } = await apiClient.post<DefinePairResponse>("/pairs/define", req);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pairs"] });
+      queryClient.invalidateQueries({ queryKey: ["data-status"] });
+    },
+  });
+}
+
+export function useDownloadData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ pair, years = 10 }: { pair: string; years?: number }) => {
+      const { data } = await apiClient.post<{
+        job_id: string;
+        pair: string;
+        status: string;
+      }>("/data/download", { pair, years });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pairs"] });
+      queryClient.invalidateQueries({ queryKey: ["data-status"] });
+    },
+  });
+}
+
+export function useDownloadJobStatus(jobId: string | null) {
+  return useQuery({
+    queryKey: ["download-job", jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<JobStatus>(`/backtest/${jobId}`);
+      return data;
+    },
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === "pending" || status === "running") return 2_000;
+      return false;
+    },
+  });
+}
+
+const _progressCursors = new Map<string, number>();
+
+export function useBacktestProgress(jobId: string | null) {
+  const handleWsEvent = useJobStore((s) => s.handleWsEvent);
+  const activeJobs = useJobStore((s) => s.activeJobs);
+
+  return useQuery({
+    queryKey: ["backtest-progress", jobId],
+    queryFn: async () => {
+      if (!jobId) return null;
+      const cursor = _progressCursors.get(jobId) ?? 0;
+      const { data } = await apiClient.get<{ events: WsEvent[]; total: number }>(
+        `/backtest/${jobId}/events?after=${cursor}`,
+      );
+      if (data.events && data.events.length > 0) {
+        if (import.meta.env.DEV) {
+          console.log("[POLL] events:", data.events.length, "total:", data.total, "cursor:", cursor);
+        }
+        for (const evt of data.events) {
+          handleWsEvent(evt as WsEvent);
+        }
+        _progressCursors.set(jobId, data.total);
+      }
+      return data;
+    },
+    enabled:
+      !!jobId &&
+      activeJobs.has(jobId) &&
+      (activeJobs.get(jobId)?.status === "pending" || activeJobs.get(jobId)?.status === "running"),
+    refetchInterval: 2_000,
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+}
+
+export function useLlmAnalysis(jobId: string | null, model: string | null) {
+  return useQuery({
+    queryKey: ["llm-analysis", jobId, model],
+    queryFn: async () => {
+      const { data } = await apiClient.post<LlmAnalysisResponse>(
+        `/backtest/${jobId}/analyze?model=${encodeURIComponent(model ?? "")}`
+      );
+      return data;
+    },
+    enabled: false,
+    staleTime: 60_000,
+    retry: 1,
+  });
+}
+
+export function useSaveModelFromJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ jobId, modelName }: { jobId: string; modelName?: string }) => {
+      const params = modelName ? `?model_name=${encodeURIComponent(modelName)}` : "";
+      const { data } = await apiClient.post<{ status: string; model_id: string; snapshot_path: string }>(
+        `/models/save-from-job/${jobId}${params}`
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deployed-models"] });
+    },
   });
 }

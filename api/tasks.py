@@ -9,15 +9,17 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import traceback
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 
 import numpy as np
 import pandas as pd
 
 from api.config import settings
+from pipeline.data_sqlite import DataStore
 
 HYPERPARAM_ALIASES: Dict[str, Dict[str, str]] = {
     "logistic": {
@@ -118,17 +120,19 @@ def _get_trial_counts(hpo_intensity: str | None, model: str) -> Dict[str, int]:
             return model_map[model]
     return _TRIAL_COUNTS_FALLBACK.get(model, {"random": 3, "bayes": 3})
 
-CV_BLOCKS_DEFAULT = 5
+CV_BLOCKS_DEFAULT = 3
 
 
-def _compute_total_work(models: list[str], months: int, hpo_intensity: str | None = None, cv_blocks: int = CV_BLOCKS_DEFAULT, period_unit: str = "months") -> int:
+def _compute_total_work(models: list[str], months: int, hpo_intensity: str | None = None, cv_blocks: int = CV_BLOCKS_DEFAULT, period_unit: str = "months", n_trials_override: int | None = None) -> int:
     from config import convert_month_count_to_periods
     n_periods = convert_month_count_to_periods(months, period_unit)
     total = 0
     for m in models:
-        tc = _get_trial_counts(hpo_intensity, m)
-        n_trials = tc.get("random", 3) + tc.get("bayes", 3)
-        n_trials = max(n_trials, 10)
+        if n_trials_override is not None and n_trials_override >= 0:
+            n_trials = n_trials_override
+        else:
+            tc = _get_trial_counts(hpo_intensity, m)
+            n_trials = tc.get("random", 3) + tc.get("bayes", 3)
         hpo_work = n_trials * cv_blocks
         sim_work = n_periods
         total += hpo_work + sim_work
@@ -136,6 +140,202 @@ def _compute_total_work(models: list[str], months: int, hpo_intensity: str | Non
 
 celery_app = None
 _celery_available = False
+
+# In-memory mapping of job_id → celery_task_id for force-stop revocation
+_JOB_TASK_IDS: Dict[str, str] = {}
+
+# Desktop mode: threading.Event per job for thread-safe cancellation
+import threading as _threading
+_cancellation_events: Dict[str, _threading.Event] = {}
+
+
+def request_cancellation(job_id: str) -> bool:
+    """Signal cancellation for a running job (desktop mode)."""
+    evt = _cancellation_events.get(job_id)
+    if evt is not None:
+        evt.set()
+        return True
+    return False
+
+
+def _is_cancelled(job_id: str) -> bool:
+    """Check if job has been cancelled via DB flag OR threading event."""
+    evt = _cancellation_events.get(job_id)
+    if evt is not None and evt.is_set():
+        return True
+    try:
+        store = DataStore(settings.db_full_path)
+        from api.services import JobManager as _JM
+        jm = _JM(store)
+        job = jm.get_job(job_id)
+        if job and job.get("status") == "failed" and "stopped" in str(job.get("error", "")).lower():
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def revoke_task(job_id: str) -> bool:
+    """Revoke the Celery task / signal cancellation for a job_id (force stop)."""
+    task_id = _JOB_TASK_IDS.pop(job_id, None)
+    revoked = False
+    if task_id and _celery_available and celery_app is not None:
+        try:
+            celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
+            revoked = True
+        except Exception:
+            pass
+    evt = _cancellation_events.get(job_id)
+    if evt is not None:
+        evt.set()
+        revoked = True
+    return revoked
+
+
+def _check_force_stopped(job_id: str):
+    """Check if the job has been force-stopped. Raises SystemExit if stopped."""
+    if _is_cancelled(job_id):
+        import sys as _sys
+        _sys.exit(0)
+
+
+_wsl_available_cache = None
+
+
+def _wsl_available() -> bool:
+    global _wsl_available_cache
+    if _wsl_available_cache is not None:
+        return _wsl_available_cache
+    try:
+        import subprocess as _sp
+        result = _sp.run(["wsl", "--status"], capture_output=True, text=True, timeout=10)
+        _wsl_available_cache = result.returncode == 0
+    except Exception:
+        _wsl_available_cache = False
+    return _wsl_available_cache
+
+
+def _has_gpu_models(models: list[str]) -> bool:
+    from pipeline.runtime import GPU_RECOMMENDED_MODELS
+    return any(m in GPU_RECOMMENDED_MODELS for m in models)
+
+
+def _run_backtest_via_wsl(job_id: str, config: dict) -> bool:
+    """Run backtest in WSL2 for GPU acceleration. Returns True if dispatched, False if fallback needed."""
+    models = config.get("models", [])
+
+    if not _has_gpu_models(models):
+        return False
+
+    if not _wsl_available():
+        _pub("wsl_fallback", job_id, {"reason": "WSL2 not available, using CPU fallback"})
+        emit_event("wsl_fallback", job_id=job_id, reason="WSL2 not available")
+        return False
+
+    from api.services import JobManager
+    from pipeline.data_sqlite import DataStore
+
+    store = DataStore(settings.db_full_path)
+    jm = JobManager(store)
+    jm.update_status(job_id, "running", error=None)
+    _pub("job_started", job_id, {"pair": config.get("pair"), "models": models, "runtime": "wsl_gpu"})
+    emit_event("job_started", job_id=job_id, runtime="wsl_gpu")
+
+    project_root = settings.project_root
+    results_dir = os.path.join(project_root, "results")
+
+    import tempfile
+    job_file_path = None
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", prefix=f"wsl_job_{job_id}_", delete=False) as f:
+        wsl_config = dict(config)
+        wsl_config["results_dir"] = results_dir
+        json.dump(wsl_config, f)
+        job_file_path = f.name
+
+    wsl_job_path_unix = job_file_path.replace("\\", "/").replace("C:", "/mnt/c")
+
+    cmd = [
+        "wsl", "bash", "-c",
+        f"cd /mnt/c/Users/rafa/ML_Trading/thesisproj && "
+        f"export PYTHONPATH=/mnt/c/Users/rafa/ML_Trading/thesisproj && "
+        f"export MLB_THREADS=1 && "
+        f"~/thesisproj-venv/bin/python pipeline/wsl_runner.py "
+        f"--job-file={wsl_job_path_unix} --job-id={job_id}"
+    ]
+
+    try:
+        import subprocess as _sp
+        proc = _sp.Popen(
+            cmd, stdout=_sp.PIPE, stderr=_sp.PIPE,
+            text=True, cwd=project_root,
+        )
+
+        _wsl_procs[job_id] = proc
+
+        for line in iter(proc.stdout.readline, ""):
+            if _is_cancelled(job_id):
+                proc.terminate()
+                break
+            line = line.strip()
+            if line.startswith("[WSL_PROGRESS:"):
+                try:
+                    rest = line[len("[WSL_PROGRESS:"):]
+                    parts = rest.split(":", 2)
+                    if len(parts) >= 3:
+                        _, evt_name, data_str = parts
+                        data_str = data_str.rstrip("]")
+                        data = json.loads(data_str)
+                        _pub(evt_name, job_id, data)
+                        emit_event(evt_name, job_id=job_id, **data)
+                except Exception:
+                    pass
+            elif line.startswith("[WSL_EVENT:"):
+                try:
+                    rest = line[len("[WSL_EVENT:"):]
+                    parts = rest.split(":", 2)
+                    if len(parts) >= 3:
+                        _, evt_name, msg = parts
+                        msg = msg.rstrip("]")
+                        _pub(evt_name, job_id, {"message": msg})
+                except Exception:
+                    pass
+
+        proc.wait(timeout=30)
+        _wsl_procs.pop(job_id, None)
+
+        rc = proc.returncode
+        if rc != 0:
+            stderr_output = proc.stderr.read()
+            raise RuntimeError(f"WSL process exited with code {rc}: {stderr_output[:500]}")
+
+        result = {
+            "pair": config.get("pair"),
+            "models": models,
+            "config": config,
+            "metrics": [],
+            "runtime": "wsl_gpu",
+        }
+        jm.update_status(job_id, "completed", result=result)
+        _pub("job_complete", job_id, {"metrics": []})
+        emit_event("job_complete", job_id=job_id, n_models=len(models))
+        return True
+
+    except Exception as e:
+        _wsl_procs.pop(job_id, None)
+        tb = traceback.format_exc()
+        jm.update_status(job_id, "failed", error=f"WSL error: {e}\n{tb}")
+        _pub("job_failed", job_id, {"error": str(e)})
+        emit_event("job_failed", job_id=job_id, error=str(e)[:200])
+        return True
+    finally:
+        if job_file_path and os.path.exists(job_file_path):
+            try:
+                os.unlink(job_file_path)
+            except Exception:
+                pass
+
+
+_wsl_procs: dict = {}
 
 if not IS_DESKTOP:
     try:
@@ -157,22 +357,148 @@ if not IS_DESKTOP:
             task_acks_late=True,
             worker_prefetch_multiplier=1,
             broker_connection_retry_on_startup=True,
+            task_time_limit=3600,
         )
         _celery_available = True
     except Exception:
         _celery_available = False
 
+    if _celery_available:
+        try:
+            from celery.signals import worker_shutdown
 
-def _pub(event: str, job_id: str, data: Dict[str, Any]):
-    """Publish a progress event to Redis pub/sub."""
+            @worker_shutdown.connect
+            def _on_worker_shutdown(**kwargs):
+                print("[Celery] Worker shutting down, cleaning up...")
+                try:
+                    from api.shutdown import shutdown_cleanup
+                    shutdown_cleanup(settings.db_full_path)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+
+_redis_client = None
+_redis_available: bool | None = None
+
+
+def _get_redis():
+    global _redis_client, _redis_available
+    if _redis_available is False:
+        raise ConnectionError("Redis unavailable")
+    if _redis_client is None:
+        import redis as _redis_mod
+        _redis_client = _redis_mod.from_url(settings.redis_url, socket_connect_timeout=2)
+        try:
+            _redis_client.ping()
+            _redis_available = True
+        except Exception:
+            _redis_available = False
+            _redis_client = None
+            raise
+    return _redis_client
+
+
+_job_events: Dict[str, List[Dict]] = {}
+_job_events_lock = threading.Lock()
+_JOB_EVENTS_MAX = 5000
+
+
+def _append_event(job_id: str, event: Dict):
+    evt_name = event.get("event", "unknown")
+    model = event.get("model", "-")
+    import logging as _logging
+    _logging.debug(f"[EVENT-WRITE] job={job_id[:8]} event={evt_name} model={model}")
+    with _job_events_lock:
+        if job_id not in _job_events:
+            _job_events[job_id] = []
+        lst = _job_events[job_id]
+        lst.append(event)
+        if len(lst) > _JOB_EVENTS_MAX:
+            _job_events[job_id] = lst[-_JOB_EVENTS_MAX:]
+    # Persist to SQLite so events are visible cross-process (API server <-> Celery worker)
     try:
-        import redis as _redis
+        store = DataStore(settings.db_full_path)
+        store.append_job_event(job_id, json.dumps(_sanitize_for_json(event)))
+        store.trim_job_events(job_id, _JOB_EVENTS_MAX)
+    except Exception as _e:
+        _logging.warning(f"[event-store] SQLite append failed for {job_id}: {_e}")
+    # Also push to Redis list as a fast-path optimization when Redis is up
+    try:
+        r = _get_redis()
+        r.rpush(f"job_events:{job_id}", json.dumps(_sanitize_for_json(event)))
+        r.ltrim(f"job_events:{job_id}", -_JOB_EVENTS_MAX, -1)
+        r.expire(f"job_events:{job_id}", 86400)
+    except Exception:
+        global _redis_client, _redis_available
+        _redis_client = None
+        _redis_available = False
 
-        r = _redis.from_url(settings.redis_url)
-        msg = json.dumps({"event": event, "job_id": job_id, **data})
-        r.publish(f"job:{job_id}", msg)
+
+def get_job_events(job_id: str, after: int = 0) -> List[Dict]:
+    # SQLite is the authoritative cross-process store
+    try:
+        store = DataStore(settings.db_full_path)
+        events = store.get_job_events(job_id, after=after)
+        import logging as _logging
+        _logging.debug(f"[EVENT-READ] job={job_id[:8]} after={after} count={len(events)}")
+        return events
+    except Exception as _e:
+        import logging as _logging
+        _logging.warning(f"[event-store] SQLite read failed for {job_id} after={after}: {_e}")
+    # Fallback to in-memory (desktop mode / SQLite unavailable)
+    with _job_events_lock:
+        lst = _job_events.get(job_id, [])
+        return lst[after:]
+
+
+def clear_job_events(job_id: str):
+    with _job_events_lock:
+        _job_events.pop(job_id, None)
+    try:
+        store = DataStore(settings.db_full_path)
+        store.clear_job_events(job_id)
     except Exception:
         pass
+    try:
+        r = _get_redis()
+        r.delete(f"job_events:{job_id}")
+    except Exception:
+        global _redis_client, _redis_available
+        _redis_client = None
+        _redis_available = False
+
+
+def _sanitize_for_json(obj):
+    """Recursively replace NaN/Inf with null for valid JSON serialization."""
+    if isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
+        return None
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    return obj
+
+
+def _pub(event: str, job_id: str, data: Dict[str, Any]):
+    """Publish a progress event to Redis pub/sub and in-memory buffer."""
+    msg = {"event": event, "job_id": job_id, **data}
+    msg = _sanitize_for_json(msg)
+    _append_event(job_id, msg)
+    try:
+        r = _get_redis()
+        r.publish(f"job:{job_id}", json.dumps(msg))
+    except Exception:
+        global _redis_client, _redis_available
+        _redis_client = None
+        _redis_available = False
 
 
 def _sanitize_metrics(metrics_list: list) -> list:
@@ -204,6 +530,19 @@ def _sanitize_metrics(metrics_list: list) -> list:
     return safe
 
 
+def _capture_environment() -> str:
+    """Capture the current Python environment as a pip freeze string."""
+    try:
+        import subprocess
+        return subprocess.check_output(
+            [sys.executable, "-m", "pip", "freeze"],
+            text=True, stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+    except Exception:
+        return ""
+
+
 def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     """Core backtest logic -- executed by Celery worker or in-process (desktop mode)."""
     project_root = settings.project_root
@@ -211,12 +550,19 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
         sys.path.insert(0, project_root)
 
     os.chdir(project_root)
+    _dbg = settings.debug
 
     from api.services import JobManager
     from pipeline.data_sqlite import DataStore
 
     store = DataStore(settings.db_full_path)
     jm = JobManager(store)
+
+    # Track this task for force-stop revocation
+    _current_task_id = getattr(_run_backtest_impl, "request", None)
+    if _current_task_id and hasattr(_current_task_id, "id"):
+        _JOB_TASK_IDS[job_id] = _current_task_id.id
+    jm.update_status(job_id, "running", error=None)
 
     pair = config.get("pair", "EURUSD")
     models = config.get("models", ["logistic"])
@@ -226,8 +572,11 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     repeats = config.get("repeats", 1)
     seed = config.get("seed", 42)
     hpo_intensity = config.get("hpo_intensity", "quick")
+    n_trials_override = config.get("n_trials")
     trading_costs = config.get("trading_costs", True)
     period_unit = config.get("period_unit", "months")
+    parent_job_id = config.get("parent_job_id")
+    pip_freeze = _capture_environment()
 
     if end is None:
         from datetime import date
@@ -249,7 +598,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     except Exception:
         pass
 
-    total_work = _compute_total_work(models, months, hpo_intensity, period_unit=period_unit)
+    total_work = _compute_total_work(models, months, hpo_intensity, period_unit=period_unit, n_trials_override=n_trials_override)
     jm.update_status(job_id, "running")
     _pub("job_started", job_id, {"pair": pair, "models": models, "total_work": total_work})
     emit_event("job_started", job_id=job_id, pair=pair, models=",".join(models), total_work=total_work)
@@ -281,10 +630,60 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
         _pub(evt_name, job_id, data)
         emit_event(evt_name, job_id=job_id, pct=pct, **data)
 
+        if phase == "simulation_started" and detail:
+            _pub("simulation_started", job_id, {
+                "model": model,
+                "n_periods": detail["n_periods"],
+                "bh_curve": detail["bh_curve"],
+            })
+
+        elif phase == "hpo_trial" and detail:
+            _pub("hpo_trial_result", job_id, {
+                "model": model,
+                "trial_number": detail.get("trial", 0),
+                "score": detail.get("score"),
+                "params": detail.get("params", {}),
+                "best_score_so_far": detail.get("best_score_so_far"),
+                "trial_state": detail.get("trial_state", "COMPLETE"),
+            })
+
+        elif phase in ("month", "period") and detail:
+            _pub("oos_result", job_id, {
+                "model": model,
+                "period": detail.get("period", 0),
+                "total_periods": detail.get("total_periods", 0),
+                "equity": detail.get("equity_strategy"),
+                "equity_bh": detail.get("equity_bh"),
+                "sharpe": detail.get("sharpe"),
+                "return_pct": detail.get("return_pct"),
+                "trades": detail.get("trades"),
+                "drawdown": detail.get("drawdown"),
+                "win_rate": detail.get("win_rate"),
+                "precision": detail.get("precision_macro"),
+                "f1": detail.get("f1_macro"),
+                "directional_accuracy": detail.get("directional_accuracy"),
+                "active_rate": detail.get("active_rate"),
+                "train_sharpe": detail.get("train_sharpe"),
+                "sharpe_gap_pct": detail.get("sharpe_gap_pct"),
+                "signals_raw": detail.get("signals_raw"),
+                "signals_passed_gate": detail.get("signals_passed_gate"),
+            })
+
     all_metrics = []
 
+    # Dispatch GPU models to WSL2 if available (returns True if handled)
+    if _run_backtest_via_wsl(job_id, config):
+        return
+
     try:
-        for model_type in models:
+        for cycle_idx, model_type in enumerate(models):
+            _check_force_stopped(job_id)
+
+            _pub("cycle_started", job_id, {
+                "model": model_type,
+                "cycle_number": cycle_idx + 1,
+                "total_cycles": len(models) * int(repeats),
+            })
             _pub("model_training", job_id, {"model": model_type, "status": "starting"})
             _pub("model_phase", job_id, {"model": model_type, "phase": "hpo", "total_work": total_work})
 
@@ -295,89 +694,104 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             feat_cfg = deepcopy(CLASS_DEFAULTS["features"])
             feat_cfg.update(_convert_model_overrides(config.get("config_overrides", {})))
 
-            tc = _get_trial_counts(hpo_intensity, model_type)
-            n_trials_hdr = max(tc.get("random", 3) + tc.get("bayes", 3), 10)
+            # Resolve trial count: override (0–150) or intensity-based lookup
+            if n_trials_override is not None and n_trials_override >= 0:
+                n_trials_hdr = n_trials_override
+                n_startup_hdr = max(n_trials_override // 2, 1) if n_trials_override > 0 else 0
+            else:
+                tc = _get_trial_counts(hpo_intensity, model_type)
+                n_trials_hdr = max(tc.get("random", 3) + tc.get("bayes", 3), 10)
+                n_startup_hdr = tc.get("random", 3)
 
-            bt = MLBacktester(
-                symbol=pair,
-                start=start,
-                end=end,
-                trading_costs=trading_costs,
-                model_type=model_type,
-                features_config=feat_cfg,
-            )
-            bt._progress_callback = _progress_cb
+            # Run repeats: each gets a different seed for HPO reproducibility
+            rep_metrics = []
+            for rep in range(1, int(repeats) + 1):
+                if repeats > 1:
+                    print(f"[REPEAT] {model_type}: rep {rep}/{repeats}")
+                    _progress_cb(f"repeat", model_type, {"rep": rep, "total_repeats": repeats, "model": model_type})
 
-            # --- Inject news & sentiment data if enabled ---
-            if feat_cfg.get("use_news", True):
-                try:
-                    from news.scraper import NewsScraper
-                    from news.sentiment import SentimentAnalyzer
+                rep_seed = int(seed) + rep - 1
 
-                    scraper = NewsScraper()
-                    articles = scraper.fetch_all()
-                    pair_val = pair or "EURUSD"
-                    filtered = NewsScraper.filter_by_pair(articles, pair_val)
-                    backend = feat_cfg.get("news_sentiment_backend", "vader")
-                    analyzer = SentimentAnalyzer(backend=backend)
-                    scored = analyzer.score_articles(filtered)
-                    news_aggregated = analyzer.aggregate_to_df(scored, freq="1h")
-                    econ_events = scraper.economic_calendar_events()
-                    bt._news_aggregated = news_aggregated
-                    bt._news_economic_events = econ_events
-                    _pub("news_loaded", job_id, {"articles": len(filtered), "backend": backend})
-                except Exception as _news_err:
-                    _pub("news_skip", job_id, {"reason": str(_news_err)[:200]})
+                bt = MLBacktester(
+                    symbol=pair,
+                    start=start,
+                    end=end,
+                    trading_costs=trading_costs,
+                    model_type=model_type,
+                    features_config=feat_cfg,
+                    db_path=settings.db_full_path,
+                )
+                bt._progress_callback = _progress_cb
+                bt._force_stop_checker = lambda: _is_cancelled(job_id)
 
-            # --- Inject LLM sentiment data if enabled ---
-            if feat_cfg.get("llm_sentiment_enabled", True):
-                try:
-                    from pipeline.llm.sentiment import LLMSentimentEngine
-
-                    llm_engine = LLMSentimentEngine(config=feat_cfg)
-                    llm_articles = getattr(bt, "_news_raw_articles", [])
-                    if not llm_articles:
+                # --- Inject news & sentiment data if enabled (only on rep 1, reused across reps) ---
+                if rep == 1:
+                    if feat_cfg.get("use_news", True):
                         try:
                             from news.scraper import NewsScraper
+                            from news.sentiment import SentimentAnalyzer
+
                             scraper = NewsScraper()
-                            llm_articles = scraper.fetch_all()
-                        except Exception:
-                            pass
+                            articles = scraper.fetch_all()
+                            pair_val = pair or "EURUSD"
+                            filtered = NewsScraper.filter_by_pair(articles, pair_val)
+                            backend = feat_cfg.get("news_sentiment_backend", "vader")
+                            analyzer = SentimentAnalyzer(backend=backend)
+                            scored = analyzer.score_articles(filtered)
+                            news_aggregated = analyzer.aggregate_to_df(scored, freq="1h")
+                            econ_events = scraper.economic_calendar_events()
+                            bt._news_aggregated = news_aggregated
+                            bt._news_economic_events = econ_events
+                            _pub("news_loaded", job_id, {"articles": len(filtered), "backend": backend})
+                        except Exception as _news_err:
+                            _pub("news_skip", job_id, {"reason": str(_news_err)[:200]})
 
-                    pair_val = pair or "EURUSD"
-                    llm_filtered = NewsScraper.filter_by_pair(llm_articles, pair_val)
-                    scored_llm = llm_engine.score_articles(llm_filtered, pair=pair_val)
-                    llm_aggregated = llm_engine.aggregate_to_df(scored_llm, freq="1h")
-                    bt._llm_aggregated = llm_aggregated
-                    _pub("llm_loaded", job_id, {
-                        "articles": len(llm_filtered),
-                        "backend": feat_cfg.get("llm_backend", "ollama"),
-                    })
-                    llm_engine.close()
-                except Exception as _llm_err:
-                    _pub("llm_skip", job_id, {"reason": str(_llm_err)[:200]})
+                    if feat_cfg.get("llm_sentiment_enabled", True):
+                        try:
+                            from pipeline.llm.sentiment import LLMSentimentEngine
 
-            base_cfg = deepcopy(CLASS_DEFAULTS["features"])
-            base_cfg.update(deepcopy(CLASS_DEFAULTS["cv"]))
-            base_cfg["model_type"] = model_type
-            base_cfg["rep"] = 1
-            base_cfg["trading_costs"] = trading_costs
-            base_cfg["n_trials"] = n_trials_hdr
-            base_cfg["n_startup_trials"] = tc.get("random", 3)
-            base_cfg["seed"] = seed
-            base_cfg["period_unit"] = period_unit
-            base_cfg.update(_convert_model_overrides(config.get("config_overrides", {})))
+                            llm_engine = LLMSentimentEngine(config=feat_cfg)
+                            llm_articles = getattr(bt, "_news_raw_articles", [])
+                            if not llm_articles:
+                                try:
+                                    from news.scraper import NewsScraper
+                                    scraper = NewsScraper()
+                                    llm_articles = scraper.fetch_all()
+                                except Exception:
+                                    pass
 
-            df_sim = bt.real_trading_simulation(
-                base_cfg,
-                models_to_test=[model_type],
-                months=months,
-            )
+                            pair_val = pair or "EURUSD"
+                            llm_filtered = NewsScraper.filter_by_pair(llm_articles, pair_val)
+                            scored_llm = llm_engine.score_articles(llm_filtered, pair=pair_val)
+                            llm_aggregated = llm_engine.aggregate_to_df(scored_llm, freq="1h")
+                            bt._llm_aggregated = llm_aggregated
+                            _pub("llm_loaded", job_id, {"articles": len(llm_filtered), "backend": feat_cfg.get("llm_backend", "ollama")})
+                            llm_engine.close()
+                        except Exception as _llm_err:
+                            _pub("llm_skip", job_id, {"reason": str(_llm_err)[:200]})
 
-            metrics_row = {"model": model_type}
-            equity_series = pd.Series(dtype=np.float64)
-            buyhold_series = pd.Series(dtype=np.float64)
-            bar_concat = getattr(bt, "bar_concat", None)
+                base_cfg = deepcopy(CLASS_DEFAULTS["features"])
+                base_cfg.update(deepcopy(CLASS_DEFAULTS["cv"]))
+                base_cfg["model_type"] = model_type
+                base_cfg["rep"] = rep
+                base_cfg["trading_costs"] = trading_costs
+                base_cfg["n_trials"] = n_trials_hdr
+                base_cfg["n_startup_trials"] = n_startup_hdr
+                base_cfg["use_cached_global_hpo"] = (n_trials_hdr <= 0)
+                base_cfg["seed"] = rep_seed
+                base_cfg["period_unit"] = period_unit
+                base_cfg.update(_convert_model_overrides(config.get("config_overrides", {})))
+
+                df_sim = bt.real_trading_simulation(
+                    base_cfg,
+                    models_to_test=[model_type],
+                    months=months,
+                )
+
+                metrics_row = {"model": model_type, "rep": rep, "seed": rep_seed}
+                equity_series = pd.Series(dtype=np.float64)
+                buyhold_series = pd.Series(dtype=np.float64)
+                bar_concat = getattr(bt, "bar_concat", None)
             if bar_concat is not None and not bar_concat.empty and "cstrategy_cont" in bar_concat.columns:
                 equity_series = bar_concat["cstrategy_cont"].astype(np.float64)
                 if "creturns_cont" in bar_concat.columns:
@@ -487,6 +901,11 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 metrics_row["buy_hold_curve"] = []
                 metrics_row["drawdown_curve"] = []
                 metrics_row["monthly_results"] = []
+                metrics_row["total_return_pct"] = 0.0
+                metrics_row["max_drawdown"] = 0.0
+                metrics_row["sharpe"] = 0.0
+                metrics_row["total_trades"] = 0
+                metrics_row["win_rate"] = 0.0
 
             if trade_log is not None and not trade_log.empty:
                 safe_trades = trade_log.reset_index(drop=True)
@@ -534,8 +953,208 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             except Exception:
                 pass
 
+            try:
+                from pipeline.overfitting import compute_overfitting_report, compute_period_breakdown
+                wfo_records = getattr(bt, "_wfo_monthly_records", [])
+                hpo_best = None
+                if hasattr(bt, "_optuna_study") and bt._optuna_study is not None:
+                    hpo_best = float(bt._optuna_study.best_value)
+                overfit = compute_overfitting_report(wfo_records, model_type, hpo_best_value=hpo_best,
+                                                     n_hpo_trials=n_trials_hdr)
+                # S16.7: fANOVA interaction effects from Optuna study
+                try:
+                    if hasattr(bt, "_optuna_study") and bt._optuna_study is not None:
+                        from pipeline.overfitting import compute_fanova_interactions
+                        overfit.interaction_effects = compute_fanova_interactions(bt._optuna_study)
+                except Exception:
+                    pass
+                metrics_row["overfitting"] = {
+                    "overfit_score": overfit.overfit_score,
+                    "risk_level": overfit.risk_level,
+                    "risk_color": overfit.risk_color,
+                    "train_oos_gap_pct": overfit.train_oos_gap_pct,
+                    "temporal_degradation_pct": overfit.temporal_degradation_pct,
+                    "sharpe_ci": overfit.sharpe_ci,
+                    "return_ci": overfit.return_ci,
+                    "maxdd_ci": overfit.maxdd_ci,
+                    "cv_sharpe_mean": overfit.cv_sharpe_mean,
+                    "cv_sharpe_std": overfit.cv_sharpe_std,
+                    "cv_return_mean": overfit.cv_return_mean,
+                    "cv_return_std": overfit.cv_return_std,
+                    "min_trl_trades": overfit.min_trl_trades,
+                    "sufficient_trades": overfit.sufficient_trades,
+                    "n_periods": overfit.n_periods,
+                    "n_signal_periods": overfit.n_signal_periods,
+                    "signal_gap_pct": overfit.signal_gap_pct,
+                    "is_mean_sharpe": overfit.is_mean_sharpe,
+                    "oos_mean_sharpe": overfit.oos_mean_sharpe,
+                    "dsr_min_sharpe": overfit.dsr_min_sharpe,
+                    "interaction_effects": overfit.interaction_effects,
+                }
+                metrics_row["walkforward_periods"] = compute_period_breakdown(wfo_records)
+            except Exception as _overfit_err:
+                if settings.debug:
+                    print(f"[overfitting] compute failed for {model_type}: {_overfit_err}")
+                metrics_row["overfitting"] = None
+                metrics_row["walkforward_periods"] = []
+
+            # S16.4: Plain-English backtest summary
+            try:
+                from pipeline.summary_generator import generate_summary
+                metrics_row["summary_text"] = generate_summary(metrics_row, config)
+            except Exception:
+                metrics_row["summary_text"] = None
+
+            # S16.3: Training diagnostics (feature importance, confusion matrix, confidence bands)
+            try:
+                from pipeline.diagnostics import (
+                    compute_feature_importance,
+                    compute_prediction_histogram,
+                    compute_confidence_bands,
+                    aggregate_confusion_matrices,
+                    TrainingDiagnosticsData,
+                )
+                _diag = {}
+                # Feature importance from per-period capture
+                _fi_tuples = getattr(bt, "_diagnostics_feature_importance", [])
+                if _fi_tuples:
+                    from pipeline.diagnostics import FeatureImportanceEntry
+                    _diag["feature_importance"] = [
+                        {"feature": f, "importance": float(i)} for f, i in _fi_tuples
+                    ]
+                else:
+                    _diag["feature_importance"] = []
+
+                # Importance method + feature family distribution
+                try:
+                    from pipeline.diagnostics import get_importance_method, classify_feature_families
+                    _diag["importance_method"] = get_importance_method(model_type)
+                    _feat_names = getattr(bt, "_diagnostics_feature_names", None)
+                    if not _feat_names:
+                        _feat_names = [f for f, _ in _fi_tuples] if _fi_tuples else []
+                    _diag["feature_families"] = classify_feature_families(_feat_names) if _feat_names else {}
+                except Exception:
+                    _diag["importance_method"] = "unknown"
+                    _diag["feature_families"] = {}
+
+                # S16: VIF collinearity check for logistic models
+                _diag["vif_warnings"] = []
+                if model_type in ("logistic", "logit") and _fi_tuples:
+                    try:
+                        from pipeline.diagnostics import compute_vif
+                        _vif_feats = [f for f, _ in _fi_tuples]
+                        _res = getattr(bt, "results", None)
+                        if _res is not None and hasattr(_res, "columns") and _vif_feats:
+                            _cols = [c for c in _vif_feats if c in _res.columns]
+                            if _cols:
+                                _X_vif = np.asarray(_res[_cols].dropna()[:500], dtype=np.float64)
+                                _vif = compute_vif(_X_vif)
+                                for i, v in zip(_cols, _vif):
+                                    if np.isfinite(v) and v > 10:
+                                        _diag["vif_warnings"].append({"feature": i, "vif": round(float(v), 1)})
+                    except Exception:
+                        pass
+
+                # Confusion matrix from results attrs
+                _cm = None
+                try:
+                    _res = getattr(bt, "results", None)
+                    if _res is not None and hasattr(_res, "attrs") and "confusion_matrix" in _res.attrs:
+                        _cm_raw = _res.attrs["confusion_matrix"]
+                        _cm = aggregate_confusion_matrices([_cm_raw]).matrix if _cm_raw is not None else None
+                except Exception:
+                    pass
+                _diag["confusion_matrix"] = {
+                    "matrix": _cm,
+                    "labels": ["Short", "Flat", "Long"],
+                } if _cm is not None else None
+
+                # Prediction histogram & confidence bands from max_conf
+                _conf = getattr(bt, "_last_conf_stats_max_conf", None)
+                _res = getattr(bt, "results", None)
+                if _conf is not None and len(_conf) > 0 and _res is not None and hasattr(_res, "columns"):
+                    _hist = compute_prediction_histogram([_conf])
+                    _diag["prediction_histogram"] = [
+                        {"bin_start": b.bin_start, "bin_end": b.bin_end, "bin_center": b.bin_center, "count": b.count}
+                        for b in _hist
+                    ]
+                    # Confidence bands: need outcome_arrays and return_arrays
+                    _outcome_arr = None
+                    _ret_arr = None
+                    try:
+                        if "pred" in _res.columns and "true_direction" in _res.columns:
+                            _pred_dir = _res["pred"].fillna(0).values
+                            _true_dir = _res["true_direction"].fillna(0).values
+                            _outcome_arr = ((_pred_dir * _true_dir) > 0).astype(float)
+                        if "returns" in _res.columns:
+                            _ret_arr = _res["returns"].fillna(0).values
+                    except Exception:
+                        pass
+                    if _outcome_arr is not None and _ret_arr is not None:
+                        _min_len = min(len(_conf), len(_outcome_arr), len(_ret_arr))
+                        _bands = compute_confidence_bands(
+                            [_conf[:_min_len]],
+                            [_outcome_arr[:_min_len]],
+                            [_ret_arr[:_min_len]],
+                        )
+                        _diag["confidence_bands"] = [
+                            {"band_min": b.band_min, "band_max": b.band_max, "count": b.count,
+                             "accuracy": b.accuracy, "mean_return": b.mean_return}
+                            for b in _bands
+                        ]
+                    else:
+                        _diag["confidence_bands"] = []
+                else:
+                    _diag["prediction_histogram"] = []
+                    _diag["confidence_bands"] = []
+
+                metrics_row["diagnostics"] = _diag
+            except Exception as _diag_err:
+                if _dbg:
+                    print(f"[diagnostics] compute failed for {model_type}: {_diag_err}")
+                metrics_row["diagnostics"] = None
+
             all_metrics.append(metrics_row)
+
+            try:
+                from api.shutdown import wal_checkpoint_periodic
+                wal_checkpoint_periodic(settings.db_full_path)
+            except Exception:
+                pass
+
             _pub("model_training", job_id, {"model": model_type, "status": "complete", "metrics": metrics_row})
+
+            # Persist model snapshot to disk during execution (silent — model
+            # object will be freed after the backtest finishes). Only visible
+            # when the user explicitly clicks "Save Model" on the Results page.
+            _snap_path = None
+            try:
+                from pipeline.model_persistence import save_snapshot
+                _model_obj = getattr(bt, "_last_trained_model", None) or getattr(bt, "model", None)
+                if _model_obj is not None:
+                    _cov_thr = getattr(bt, "_coverage_conf_thr", None) or getattr(bt, "_deep_coverage_thr", None)
+                    _feat_names = getattr(bt, "_diagnostics_feature_names", None) or []
+                    _fc = getattr(bt, "features_config", None) or {}
+                    _cal_method = _fc.get("calibrate_method", "sigmoid") if _fc else "sigmoid"
+                    _snap_path = save_snapshot(
+                        model=_model_obj,
+                        model_type=model_type,
+                        best_params=_fc,
+                        coverage_conf_thr=float(_cov_thr) if _cov_thr is not None else None,
+                        feature_names=list(_feat_names) if _feat_names else None,
+                        features_config=_fc,
+                        calibrate_method=str(_cal_method),
+                        train_start=str(start)[:10] if start else None,
+                        train_end=str(end)[:10] if end else None,
+                        seed=int(rep_seed) if rep_seed is not None else None,
+                        pip_freeze=pip_freeze,
+                        parent_job_id=parent_job_id,
+                        metrics=metrics_row,
+                    )
+            except Exception:
+                pass
+
+            metrics_row["snapshot_path"] = _snap_path
 
             bt.free(release_data=True)
             del bt
@@ -552,12 +1171,26 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
         emit_event("job_complete", job_id=job_id, n_models=len(all_metrics))
         return result
 
-    except Exception as e:
+    except (Exception, KeyboardInterrupt) as e:
+        if isinstance(e, KeyboardInterrupt):
+            _JOB_TASK_IDS.pop(job_id, None)
+            jm.update_status(job_id, "failed", error="Force stopped by user")
+            _pub("job_failed", job_id, {"error": "Stopped by user"})
+            emit_event("job_failed", job_id=job_id, error="Stopped by user")
+            return
         tb = traceback.format_exc()
         jm.update_status(job_id, "failed", error=f"{e}\n{tb}")
         _pub("job_failed", job_id, {"error": str(e)})
         emit_event("job_failed", job_id=job_id, error=str(e)[:200])
         raise
+    except BaseException:
+        _JOB_TASK_IDS.pop(job_id, None)
+        jm.update_status(job_id, "failed", error="Task killed or interrupted")
+        _pub("job_failed", job_id, {"error": "Task killed or interrupted"})
+        emit_event("job_failed", job_id=job_id, error="Task killed or interrupted")
+        raise
+    finally:
+        _JOB_TASK_IDS.pop(job_id, None)
 
 
 def _download_data_impl(job_id: str, pair: str, years: int = 10):
@@ -570,6 +1203,7 @@ def _download_data_impl(job_id: str, pair: str, years: int = 10):
 
     from api.services import JobManager
     from pipeline.data_sqlite import DataStore
+    from pipeline.pair_config import get_pair_config, PAIR_REGISTRY
 
     store = DataStore(settings.db_full_path)
     jm = JobManager(store)
@@ -579,29 +1213,130 @@ def _download_data_impl(job_id: str, pair: str, years: int = 10):
 
     try:
         from pipeline.data_downloader import download_pair
-        from pipeline.pair_config import get_pair_config
 
-        cfg = get_pair_config(pair)
+        try:
+            cfg = get_pair_config(pair)
+        except ValueError:
+            db_pair = store.get_pair(pair)
+            if db_pair is None:
+                raise
+            class _PairCfg:
+                symbol = db_pair["symbol"]
+                oanda_name = db_pair["oanda_name"]
+                pip_value = db_pair["pip_value"]
+                lot_size = db_pair.get("lot_size", 100000.0)
+                base_currency = db_pair.get("base_currency", pair[:3])
+                quote_currency = db_pair.get("quote_currency", pair[3:])
+                typical_spread_bps = db_pair.get("typical_spread_bps", 1.0)
+            cfg = _PairCfg()
+
+        store.insert_pairs([{
+            "symbol": cfg.symbol,
+            "oanda_name": cfg.oanda_name,
+            "pip_value": cfg.pip_value,
+            "lot_size": cfg.lot_size,
+            "base_currency": cfg.base_currency,
+            "quote_currency": cfg.quote_currency,
+            "typical_spread_bps": cfg.typical_spread_bps,
+        }])
+
         saved = download_pair(
             instrument=cfg.oanda_name,
+            store=store,
             granularities=["M30", "H1", "H4"],
             years=years,
-            output_dir=settings.csv_data_dir,
+            pair_symbol=cfg.symbol,
         )
 
-        from pipeline.data_migrator import migrate_pair
-        for gran in ["M30", "H1", "H4"]:
-            csv_key = f"{gran}"
-            if csv_key in saved:
-                migrate_pair(store, saved[csv_key], pair, gran, force=True)
-
-        jm.update_status(job_id, "completed", result={"pair": pair, "files": list(saved.keys())})
+        jm.update_status(job_id, "completed", result={"pair": pair, "granularities": saved})
         _pub("download_complete", job_id, {"pair": pair})
-        return {"pair": pair, "files": list(saved.keys())}
+        return {"pair": pair, "granularities": saved}
 
     except Exception as e:
         jm.update_status(job_id, "failed", error=str(e))
         _pub("download_failed", job_id, {"error": str(e)})
+        raise
+
+
+def _run_forward_test_impl(job_id: str, config: dict):
+    """Execute a forward test: load saved model, run prediction-only on date range."""
+    project_root = settings.project_root
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    os.chdir(project_root)
+
+    from api.services import JobManager
+    from pipeline.data_sqlite import DataStore
+
+    store = DataStore(settings.db_full_path)
+    jm = JobManager(store)
+
+    jm.update_status(job_id, "running")
+    _pub("job_started", job_id, {"type": "forward_test"})
+
+    try:
+        from pipeline.forward_test import run_forward_test
+        from pipeline.model_registry_disk import get_all_deployed
+
+        model_id = config.get("model_id", "")
+        snapshot_path = config.get("snapshot_path", "")
+        pair = config.get("pair", "EURUSD")
+        timeframe = config.get("timeframe", "H1")
+        start_date = config.get("start_date", "")
+        end_date = config.get("end_date", "")
+        position_sizing = config.get("position_sizing", "fixed")
+        trading_costs = config.get("trading_costs", True)
+
+        if not snapshot_path or not os.path.isdir(snapshot_path):
+            # Try to resolve from deployed models
+            rows = get_all_deployed(settings.db_full_path)
+            for r in rows:
+                if r.get("id") == model_id:
+                    snapshot_path = r.get("snapshot_path", "")
+                    break
+
+        if not snapshot_path or not os.path.isdir(snapshot_path):
+            raise FileNotFoundError(f"Snapshot path not found for model {model_id}")
+
+        result = run_forward_test(
+            snapshot_path=snapshot_path,
+            pair=pair,
+            timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date,
+            position_sizing=position_sizing,
+            trading_costs=trading_costs,
+        )
+
+        jm.update_status(job_id, "completed", result={
+            "pair": pair,
+            "models": [result.get("model_type", "unknown")],
+            "config": config,
+            "metrics": [{
+                "model": result.get("model_type", "unknown"),
+                "sharpe": result["metrics"]["sharpe"],
+                "total_return_pct": result["metrics"]["total_return_pct"],
+                "win_rate": result["metrics"]["win_rate"],
+                "max_drawdown_pct": result["metrics"]["max_drawdown_pct"],
+                "total_trades": result["metrics"]["total_trades"],
+                "diagnostics": result.get("diagnostics"),
+            }],
+            "forward_test": result,
+        })
+        _pub("job_complete", job_id, {"metrics": result["metrics"]})
+        emit_event("job_complete", job_id=job_id, n_models=1)
+        return result
+
+    except (Exception, KeyboardInterrupt) as e:
+        if isinstance(e, KeyboardInterrupt):
+            jm.update_status(job_id, "failed", error="Force stopped by user")
+            _pub("job_failed", job_id, {"error": "Stopped by user"})
+            emit_event("job_failed", job_id=job_id, error="Stopped by user")
+            return
+        tb = traceback.format_exc()
+        jm.update_status(job_id, "failed", error=f"{e}\n{tb}")
+        _pub("job_failed", job_id, {"error": str(e)})
+        emit_event("job_failed", job_id=job_id, error=str(e)[:200])
         raise
 
 
@@ -610,6 +1345,7 @@ def _download_data_impl(job_id: str, pair: str, years: int = 10):
 if _celery_available and celery_app is not None:
     run_backtest_task = celery_app.task(name="run_backtest")(_run_backtest_impl)
     download_data_task = celery_app.task(name="download_data")(_download_data_impl)
+    run_forward_test_task = celery_app.task(name="run_forward_test")(_run_forward_test_impl)
 else:
     class _SyncTask:
         """Celery-compatible task interface for synchronous (desktop) execution."""

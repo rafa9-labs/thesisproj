@@ -95,6 +95,30 @@ SAVE_FEATURES = {
 }
 
 # ---------------------------------------------------------------------
+# Feature family taxonomy for per-family budgeting.
+# Maps feature name prefixes to indicator families.
+# Used by prefilter_features_train to prevent one family from dominating.
+# ---------------------------------------------------------------------
+FEATURE_FAMILIES = {
+    "trend":      ["sma", "ema", "adx", "donchian", "sar", "ma_cross", "trend_confirm"],
+    "momentum":   ["macd", "rsi", "stoch", "slope", "price_ma_z", "ma_spread", "reentry_mom",
+                   "crossover_bins", "ext_atr_low_adx", "vm_mom"],
+    "volatility": ["bb", "atr", "rv", "bpv", "squeeze", "bbw", "vol_score", "vol_state"],
+    "composite":  ["atr_channel", "vol_managed_mom", "macd_atr", "mtf_align", "mtf_alignment",
+                   "triple_confirm"],
+    "regime":     ["trend_score", "vol_score", "regime_id", "regime_trend", "regime_sideways",
+                   "regime_volatile"],
+    "returns":    ["returns", "fracdiff", "cum_return"],
+    "news":       ["news_", "event_flag", "llm_"],
+    "time":       ["hour", "minute", "day_of"],
+    "rolling":    ["rollmean", "rollstd", "rollslope", "lag"],
+}
+MAX_FEATURES_PER_FAMILY = {
+    "trend": 8, "momentum": 6, "volatility": 4, "composite": 4,
+    "regime": 4, "returns": 4, "news": 4, "time": 3, "rolling": 20,
+}
+
+# ---------------------------------------------------------------------
 # Global defaults (single source of truth) -- module-level
 # ---------------------------------------------------------------------
 CLASS_DEFAULTS = {
@@ -248,7 +272,7 @@ CLASS_DEFAULTS = {
         "risk_max_open_positions": 1,
 
         # --- CV-time caps for keras models (early stopping regime) ---
-        "deep_cv_max_epochs": 12,
+        "deep_cv_max_epochs": 8,
         "deep_cv_batch_size": 256,
         "deep_cv_patience": 6,
 
@@ -333,6 +357,8 @@ CLASS_DEFAULTS = {
         "prefilter_prefer_prefixes": ["rv", "ema", "sma", "macd", "adx"],
         "mutual_info_top_k": "sqrt",
         "prefilter_random_state": 42,
+        "use_feature_family_budget": True,
+        "use_lightgbm_prefilter": False,
 
         # --- Ensemble throttles & fusion ---
         "ensemble_train_stride": 1,
@@ -472,7 +498,7 @@ CLASS_DEFAULTS = {
         
         # --- CV geometry ---
         "cv_mode": "mini_block",
-        "cv_blocks": 5,
+        "cv_blocks": 3,
         "cv_min_train_frac": 0.75,
         "cv_val_frac": 0.05,
         "cv_embargo_bars": 0,
@@ -579,7 +605,7 @@ CLASS_DEFAULTS = {
         "cv_cscv_min_rank_corr": 0.20,
         "cv_cscv_disqualify": False,
         "cv_strict_pruning": False,
-        "cv_prune_relax": 0.50,
+        "cv_prune_relax": 0.75,                # was 0.50 — raised to reduce degenerate CV passes
 
         "cv_prune_precision_intent": False,
 

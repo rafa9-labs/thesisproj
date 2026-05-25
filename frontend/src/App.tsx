@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { DashboardPage } from "./pages/Dashboard/DashboardPage";
 import { BacktestPage } from "./pages/Backtest/BacktestPage";
+import { MonitorPage } from "./pages/Monitor/MonitorPage";
 import { WelcomePage } from "./pages/Welcome/WelcomePage";
 
 const ResultsPage = lazy(() =>
@@ -10,9 +11,6 @@ const ResultsPage = lazy(() =>
 );
 const ResultsHistoryPage = lazy(() =>
   import("./pages/Results/ResultsHistoryPage").then((m) => ({ default: m.ResultsHistoryPage })),
-);
-const ComparePage = lazy(() =>
-  import("./pages/Compare/ComparePage").then((m) => ({ default: m.ComparePage })),
 );
 const NewsPage = lazy(() =>
   import("./pages/News/NewsPage").then((m) => ({ default: m.NewsPage })),
@@ -22,6 +20,9 @@ const SettingsPage = lazy(() =>
 );
 const LiveTradingPage = lazy(() =>
   import("./pages/LiveTrading/LiveTradingPage").then((m) => ({ default: m.LiveTradingPage })),
+);
+const DeployedModelsPage = lazy(() =>
+  import("./pages/Models/DeployedModelsPage").then((m) => ({ default: m.DeployedModelsPage })),
 );
 
 function PageSpinner() {
@@ -57,6 +58,7 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route index element={<DashboardPage />} />
         <Route path="backtest" element={<BacktestPage />} />
+        <Route path="monitor" element={<MonitorPage />} />
         <Route
           path="results"
           element={<Suspense fallback={<PageSpinner />}><ResultsHistoryPage /></Suspense>}
@@ -64,10 +66,6 @@ export default function App() {
         <Route
           path="results/:jobId"
           element={<Suspense fallback={<PageSpinner />}><ResultsPage /></Suspense>}
-        />
-        <Route
-          path="compare"
-          element={<Suspense fallback={<PageSpinner />}><ComparePage /></Suspense>}
         />
         <Route
           path="news"
@@ -80,6 +78,10 @@ export default function App() {
         <Route
           path="live-trading"
           element={<Suspense fallback={<PageSpinner />}><LiveTradingPage /></Suspense>}
+        />
+        <Route
+          path="models"
+          element={<Suspense fallback={<PageSpinner />}><DeployedModelsPage /></Suspense>}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

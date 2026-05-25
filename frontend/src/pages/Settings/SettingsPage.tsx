@@ -13,7 +13,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
-import { useConfig, useSaveConfig, useStoreApiKey } from "@/api/queries";
+import { useConfig, useSaveConfig, useStoreApiKey, useStoreKv } from "@/api/queries";
 
 interface SectionProps {
   icon: React.ReactNode;
@@ -271,7 +271,9 @@ export function SettingsPage() {
   const { data: remoteConfig } = useConfig();
   const saveConfig = useSaveConfig();
   const storeApiKey = useStoreApiKey();
+  const storeKv = useStoreKv();
   const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [accountIdSaved, setAccountIdSaved] = useState(false);
   const synced = useRef(false);
 
   useEffect(() => {
@@ -295,6 +297,18 @@ export function SettingsPage() {
         onSuccess: () => {
           setApiKeySaved(true);
           setTimeout(() => setApiKeySaved(false), 2000);
+        },
+      });
+    }
+  };
+
+  const handleAccountIdBlur = () => {
+    const acc = store.oandaAccountId;
+    if (acc) {
+      storeKv.mutate({ key: "oanda_account_id", value: acc }, {
+        onSuccess: () => {
+          setAccountIdSaved(true);
+          setTimeout(() => setAccountIdSaved(false), 2000);
         },
       });
     }
@@ -400,6 +414,31 @@ export function SettingsPage() {
               }}
             />
             {apiKeySaved && (
+              <span className="text-[10px] font-medium" style={{ color: "var(--color-accent-success)" }}>
+                Saved
+              </span>
+            )}
+          </div>
+        </FieldRow>
+        <FieldRow label="OANDA Account ID">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={store.oandaAccountId ?? ""}
+              onChange={(e) => store.setField("oandaAccountId", e.target.value || null)}
+              onBlur={handleAccountIdBlur}
+              placeholder="Enter account ID…"
+              className="rounded-md border px-3 py-1.5 text-xs transition-all duration-200 focus:outline-none"
+              style={{
+                borderColor: "var(--color-glass-border)",
+                backgroundColor: "var(--color-glass)",
+                color: "var(--color-text-primary)",
+                fontFamily: "var(--font-mono)",
+                width: 240,
+                backdropFilter: "blur(8px)",
+              }}
+            />
+            {accountIdSaved && (
               <span className="text-[10px] font-medium" style={{ color: "var(--color-accent-success)" }}>
                 Saved
               </span>

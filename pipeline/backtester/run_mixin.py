@@ -1,6 +1,14 @@
 """Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
+from pipeline.printer import HPOProgress
+
+import logging as _logging
+try:
+    _optuna_logger = _logging.getLogger("optuna")
+    _optuna_logger.setLevel(_logging.WARNING)
+except Exception:
+    pass
 
 
 class RunMixin:
@@ -9,6 +17,34 @@ class RunMixin:
 
     Auto-extracted from MLBacktesterNoWFO.py lines 11191-15358.
     """
+
+    def _store_fold_cv_data(self, final_score, block_scores, valid_mask, coverage, calib_brier_sum, calib_n_samples, block_cov_thr):
+        """Store fold SRs and CV result on self for progress tracking."""
+        try:
+            dummy = block_scores  # noqa: F841 — verify in scope
+        except NameError:
+            self._last_fold_srs = None
+            self._last_cv_result = None
+            return
+        try:
+            fold_srs = []
+            for i, sc in enumerate(block_scores):
+                if i < len(valid_mask) and valid_mask[i] and np.isfinite(sc):
+                    fold_srs.append(float(sc))
+                else:
+                    fold_srs.append(float("nan"))
+            self._last_fold_srs = fold_srs
+            brier = (calib_brier_sum / calib_n_samples) if calib_n_samples > 0 else float("nan")
+            self._last_cv_result = {
+                "sr": float(final_score) if np.isfinite(final_score) else float("nan"),
+                "sr_std": float(np.nanstd(np.asarray(block_scores, dtype=float)[valid_mask])) if np.any(valid_mask) else float("nan"),
+                "brier": float(brier) if np.isfinite(brier) else float("nan"),
+                "coverage": float(coverage) if np.isfinite(coverage) else 0.0,
+            }
+        except Exception:
+            self._last_fold_srs = None
+            self._last_cv_result = None
+
     def run_strategy(self, config, models_to_test=None, n_trials=30, n_startup_trials=10): 
         """
         Run walk-forward optimization (WFO): for each split, tune with Optuna (sliding CV or mini-block CV),
@@ -52,7 +88,18 @@ class RunMixin:
             return None, None
 
         log_print(f"Models to test in this WFO: {models_to_test}", level="COMPACT")
-        log_print("\n[LAUNCH] Running unified strategy tuner with walk-forward optimization...", level="COMPACT")
+
+        self._progress = HPOProgress()
+        try:
+            self._progress.draw_header(
+                model=config.get("model_type", "?"),
+                pair=getattr(self, "symbol", "?"),
+                timeframe=config.get("timeframe", config.get("tf", "?")),
+                date_range=(str(walk_data.index[0])[:10], str(walk_data.index[-1])[:10]),
+                cv_info=f"mode={config.get('cv_mode', 'mini_block')}"
+            )
+        except Exception:
+            pass
 
         model_type = config.get("model_type", "svm")
         use_proba = config.get("use_proba", True)  # currently unused here, kept for parity
@@ -185,7 +232,13 @@ class RunMixin:
         if min_train_window_first + val_window_first > len(first_train_df):
             val_window_first = len(first_train_df) - min_train_window_first
         cv_config_first = {"min_train_window": min_train_window_first, "val_window": val_window_first}
-        cv_config_first["cv_n_jobs"] = int(os.environ.get("CV_JOBS", os.cpu_count() or 1))
+        if isinstance(config, dict) and "_progress_callback" in config:
+            cv_config_first["_progress_callback"] = config["_progress_callback"]
+        _cv_jobs_raw = (os.environ.get("CV_JOBS", "") or "").strip()
+        try:
+            cv_config_first["cv_n_jobs"] = int(_cv_jobs_raw) if _cv_jobs_raw else (os.cpu_count() or 1)
+        except (ValueError, TypeError):
+            cv_config_first["cv_n_jobs"] = os.cpu_count() or 1
         cv_config_first["score_for_no_trades"] = -1.0
 
         # [POINT] Make CV knobs visible to the nested _single_study_cv via self.config
@@ -259,6 +312,15 @@ class RunMixin:
                 # First CV call in this process: create the attribute
                 self._cv_fold_eval_frames = []
 
+            # Suppress verbose per-fold block summaries unless KODAQUANT_VERBOSE
+            _block_verbose = getattr(self, "_progress", None) and self._progress.verbose
+            if _block_verbose:
+                _print_pruned_summary = print_pruned_block_summary
+                _print_block_summary = print_block_summary
+            else:
+                _print_pruned_summary = lambda *a, **kw: None
+                _print_block_summary = lambda *a, **kw: None
+
             # ---- Minimal pretty table helper ----
             def _fmt_table(headers, rows, title=None):
                 col_w = [max(len(str(h)), *(len(str(r[i])) for r in rows)) for i, h in enumerate(headers)] if rows else [len(str(h)) for h in headers]
@@ -292,21 +354,7 @@ class RunMixin:
                 return out
 
             def _print_trial_header_table(params, cfg, trial):
-                if trial is None:
-                    return
-                core = dict(params)
-                if "lags" not in core and "lags_range" in core:
-                    core["lags"] = int(core.get("lags_range", 0))
-                core_tbl = _quantifiable_items(core)
-                ind = (cfg or {}).get("indicator_windows", {}) or {}
-                ta_rows = []
-                for name, val in sorted(ind.items()):
-                    flag = cfg.get(f"use_{name}", None)
-                    ta_rows.append((name, (val if isinstance(val, (int, float)) else str(val)),
-                                (flag if isinstance(flag, bool) else "")))
-                print(_fmt_table(["Param","Value"], core_tbl, title=f"[LIST] Trial #{getattr(trial, 'number', '?')} -- Hyperparameters"))
-                if ta_rows:
-                    print(_fmt_table(["Indicator","Window/Value","Enabled"], ta_rows, title="[MEASURE] Indicators (trial view)"))
+                pass  # Suppressed: was dumping 50+ params per trial, creating noise
                     
             _prev_cv  = getattr(self, "_in_cv", False)
             _prev_dbg = getattr(self, "_dbg_first_bars", False)
@@ -482,23 +530,24 @@ class RunMixin:
                 # Header (if Optuna)
                 try:
                     _print_trial_header_table(params, cfg, trial)
-                    if monthly_roll_requested:
-                        print(
-                            f"[SEARCH] CV geometry: mode={cv_mode_effective} "
-                            f"| cv_blocks={int(config.get('cv_blocks', 5))} "
-                            f"| val_months={float(config.get('cv_val_months', 1.0)):.2f} "
-                            f"| cv_train_months={config.get('cv_train_months', None)}"
-                    )
-                    else:
-                        print(
-                            f"[SEARCH] CV geometry: mode={cv_mode_effective} | K={int(config.get('cv_blocks', 5))} "
-                            f"| embargo={int(config.get('cv_embargo_bars', 0))} "
-                            f"| val_frac={float(config.get('cv_val_frac', 0.09)):.3f} "
-                            f"| min_train_frac={float(config.get('cv_min_train_frac', 0.80)):.3f}"
+                    if bool(config.get("print_cv_debug", False)):
+                        if monthly_roll_requested:
+                            print(
+                                f"[SEARCH] CV geometry: mode={cv_mode_effective} "
+                                f"| cv_blocks={int(config.get('cv_blocks', 5))} "
+                                f"| val_months={float(config.get('cv_val_months', 1.0)):.2f} "
+                                f"| cv_train_months={config.get('cv_train_months', None)}"
                         )
-                    print(f"[LOCK] Confidence threshold (requested): {conf_thr:.3f} "
-                        f"| backoff_cv={bool(cfg.get('allow_conf_backoff_cv', False))} "
-                        f"| floor_cv={float(cfg.get('conf_backoff_floor_cv', 0.33)):.2f}")
+                        else:
+                            print(
+                                f"[SEARCH] CV geometry: mode={cv_mode_effective} | K={int(config.get('cv_blocks', 5))} "
+                                f"| embargo={int(config.get('cv_embargo_bars', 0))} "
+                                f"| val_frac={float(config.get('cv_val_frac', 0.09)):.3f} "
+                                f"| min_train_frac={float(config.get('cv_min_train_frac', 0.80)):.3f}"
+                            )
+                        print(f"[LOCK] Confidence threshold (requested): {conf_thr:.3f} "
+                            f"| backoff_cv={bool(cfg.get('allow_conf_backoff_cv', False))} "
+                            f"| floor_cv={float(cfg.get('conf_backoff_floor_cv', 0.33)):.2f}")
                 except Exception:
                     pass
                 
@@ -756,7 +805,7 @@ class RunMixin:
                         cfg["deep_eval_mode"] = "cv_fast"
 
                         # CV-only caps: install as defaults (won't override trial-set keys)
-                        cfg.setdefault("deep_cv_max_epochs", 12)
+                        cfg.setdefault("deep_cv_max_epochs", 8)
                         cfg.setdefault("deep_cv_batch_size", 256)
                         cfg.setdefault("deep_cv_patience", 6)
 
@@ -1236,7 +1285,7 @@ class RunMixin:
                                 pass
 
                             # Pretty debug card for this invalid fold
-                            print_pruned_block_summary(
+                            _print_pruned_summary(
                                 block_id=j,
                                 reason="MiniBlockCV reject split (insufficient rows)",
                                 rows=rows_i,
@@ -1313,7 +1362,7 @@ class RunMixin:
                                 block_all_hold.append(True)
                                 block_reasons.append("BadMetrics")
 
-                                print_pruned_block_summary(
+                                _print_pruned_summary(
                                     block_id=j,
                                     reason="MiniBlockCV metrics malformed",
                                     rows=rows_i,
@@ -1396,7 +1445,7 @@ class RunMixin:
                                 reason_tag = "NoTrades" if trades_int <= 0 else "InvalidSR"
                                 
                                 try:
-                                    print_pruned_block_summary(
+                                    _print_pruned_summary(
                                         block_id=j,
                                         reason=reason_tag,
                                         rows=rows_i,
@@ -1632,7 +1681,7 @@ class RunMixin:
                             block_neff.append(float("nan"))
 
                             # Pretty card for this invalid/pruned fold
-                            print_pruned_block_summary(
+                            _print_pruned_summary(
                                 block_id=j,
                                 reason=reason,
                                 rows=rows_i,
@@ -1745,7 +1794,7 @@ class RunMixin:
                             block_reasons.append(reason_tag)
                             
 
-                            print_pruned_block_summary(
+                            _print_pruned_summary(
                                 block_id=j,
                                 reason=reason_tag,
                                 rows=rows_i,
@@ -2083,7 +2132,7 @@ class RunMixin:
                                 )
 
                                 # Pretty card explaining *why* this fold was hard-pruned
-                                print_pruned_block_summary(
+                                _print_pruned_summary(
                                     block_id=j,
                                     reason=reason,
                                     rows=rows_i,
@@ -2566,8 +2615,8 @@ class RunMixin:
                             }
  
 
-                            if LOG_MODE in {"COMPACT", "DEBUG"}:
-                                print_block_summary(
+                            if getattr(self, "_progress", None) and self._progress.verbose:
+                                _print_block_summary(
                                     block_id=j,
                                     calib_info=calib_info,
                                     gate_info=gate_info,
@@ -3502,23 +3551,24 @@ class RunMixin:
                             trial.set_user_attr("per_regime_cv_per_fold", per_fold_rows)
                             trial.set_user_attr("per_regime_cv_median", agg)
 
-                            # Print table like final metric table (compact)
+                            # Print per-regime CV table only in verbose mode
                             try:
-                                log_print("\nPer-regime CV table (per-fold rows + median):", level="COMPACT")
-                                header = f"{'FOLD':>4} {'REGIME':<10} {'CSTRAT':>10} {'SHARPE':>8} {'TRADES':>8} {'ACTIVE%':>8}"
-                                log_print(header)
-                                for r in per_fold_rows:
-                                    fidx = r["fold"]
+                                if getattr(self, "_progress", None) and self._progress.verbose:
+                                    log_print("\nPer-regime CV table (per-fold rows + median):", level="COMPACT")
+                                    header = f"{'FOLD':>4} {'REGIME':<10} {'CSTRAT':>10} {'SHARPE':>8} {'TRADES':>8} {'ACTIVE%':>8}"
+                                    log_print(header)
+                                    for r in per_fold_rows:
+                                        fidx = r["fold"]
+                                        for rn in ("sideways", "trend", "volatile"):
+                                            v = r[rn]
+                                            ar_pct = (v["active_rate"] * 100) if (v["active_rate"] == v["active_rate"]) else float("nan")
+                                            log_print(f"{fidx:4d} {rn:<10} {v['cstrategy']:10.4f} {v['sharpe']:8.3f} {int(v['trades']):8d} {ar_pct:8.2f}")
+                                    log_print("-" * len(header))
                                     for rn in ("sideways", "trend", "volatile"):
-                                        v = r[rn]
-                                        ar_pct = (v["active_rate"] * 100) if (v["active_rate"] == v["active_rate"]) else float("nan")
-                                        log_print(f"{fidx:4d} {rn:<10} {v['cstrategy']:10.4f} {v['sharpe']:8.3f} {int(v['trades']):8d} {ar_pct:8.2f}")
-                                log_print("-" * len(header))
-                                for rn in ("sideways", "trend", "volatile"):
-                                    a = agg[rn]
-                                    ar_pct = (a["active_rate"] * 100) if (a["active_rate"] == a["active_rate"]) else float("nan")
-                                    log_print(f"{'MED':>4} {rn:<10} {a['cstrategy']:10.4f} {a['sharpe']:8.3f} {int(a['trades']):8d} {ar_pct:8.2f}")
-                                log_print("")
+                                        a = agg[rn]
+                                        ar_pct = (a["active_rate"] * 100) if (a["active_rate"] == a["active_rate"]) else float("nan")
+                                        log_print(f"{'MED':>4} {rn:<10} {a['cstrategy']:10.4f} {a['sharpe']:8.3f} {int(a['trades']):8d} {ar_pct:8.2f}")
+                                    log_print("")
                             except Exception:
                                 pass
                         except Exception as e:
@@ -3605,6 +3655,7 @@ class RunMixin:
                     except Exception:
                         pass
 
+                    self._store_fold_cv_data(final_score, block_scores, valid_mask, coverage, calib_brier_sum, calib_n_samples, block_cov_thr)
                     return final_score
                 
                 # --- Aggregate CV-derived coverage thresholds across blocks (median) ---
@@ -3612,13 +3663,15 @@ class RunMixin:
                     if block_cov_thr:
                         _agg_thr = float(np.nanmedian(np.asarray(block_cov_thr, dtype=float)))
                         setattr(self, "_cv_coverage_thr_agg", _agg_thr)
-                        print(
-                            f"[CV] Aggregated coverage conf_thr (median of blocks) = {_agg_thr:.3f} | "
-                            f"_cv_coverage_thr_agg={_agg_thr:.6f}"
-                        )
+                        if self._progress.verbose:
+                            print(
+                                f"[CV] Aggregated coverage conf_thr (median of blocks) = {_agg_thr:.3f} | "
+                                f"_cv_coverage_thr_agg={_agg_thr:.6f}"
+                            )
 
                 except Exception as _ee:
-                    print(f"[CV] Coverage threshold aggregation skipped: {_ee}")
+                    if self._progress.verbose:
+                        print(f"[CV] Coverage threshold aggregation skipped: {_ee}")
 
                 # --- Attach calibration metrics to Optuna trial 
                 if trial is not None and calib_n_samples > 0:
@@ -3627,16 +3680,18 @@ class RunMixin:
                         nll_avg   = calib_nll_sum   / calib_n_samples
                         trial.set_user_attr("brier", float(brier_avg))
                         trial.set_user_attr("nll",   float(nll_avg))
-                        if bool(config.get("print_cv_debug", False)):
+                        if self._progress.verbose:
                             print(
                                 f"[CV-Calib] Trial {trial.number}: "
                                 f"brier={brier_avg:.6f} | nll={nll_avg:.6f} "
                                 f"| n={calib_n_samples}"
                             )
                     except Exception as _e:
-                        print(f"[CV-Calib] Failed to attach calibration metrics to trial: {_e}")
+                        if self._progress.verbose:
+                            print(f"[CV-Calib] Failed to attach calibration metrics to trial: {_e}")
 
                 # Successful mini-block CV: return the aggregated score
+                self._store_fold_cv_data(final_score, block_scores, valid_mask, coverage, calib_brier_sum, calib_n_samples, block_cov_thr)
                 return float(final_score)
 
             finally:
@@ -3687,10 +3742,31 @@ class RunMixin:
             rt_n = int(cfg_local.get("topN_default", 3))
         rt_n = max(1, rt_n)
 
+        self._progress.set_n_trials(int(config.get("n_trials", 1)))
+
+        # Wrap objective function for per-trial progress tracking
+        _cv_objective = _single_study_cv
+        def _progress_tracking_objective(train_data, params, min_train_window, val_window, trial=None, cv_config_override=None):
+            result = _cv_objective(train_data, params, min_train_window, val_window, trial=trial, cv_config_override=cv_config_override)
+            try:
+                if trial is not None and hasattr(self, "_progress"):
+                    best_val = float("nan")
+                    try:
+                        best_val = float(trial.study.best_value)
+                    except Exception:
+                        if result is not None and (isinstance(result, (int, float)) and math.isfinite(result)):
+                            best_val = float(result)
+                    fold_srs = getattr(self, "_last_fold_srs", None)
+                    cv_res = getattr(self, "_last_cv_result", None)
+                    self._progress.update_trial(trial.number + 1, best_val, fold_srs, cv_res)
+            except Exception:
+                pass
+            return result
+
         _common_kwargs = dict(
             train_data=first_train_df,
             base_features=base_features_first,
-            evaluate_cv_func=_single_study_cv,
+            evaluate_cv_func=_progress_tracking_objective,
             cv_config=cv_config_first,
             models_to_test=models_to_test,
             n_trials=int(config.get("n_trials", 1)),
@@ -3823,6 +3899,8 @@ class RunMixin:
             if min_train_window + val_window > len(train_data):
                 val_window = len(train_data) - min_train_window
             cv_config = {"min_train_window": min_train_window, "val_window": val_window}
+            if isinstance(config, dict) and "_progress_callback" in config:
+                cv_config["_progress_callback"] = config["_progress_callback"]
             cv_config["score_for_no_trades"] = -1.0
 
             # Per-trial CV objective (kept here so second-study fallback can reuse it)
@@ -4087,7 +4165,8 @@ class RunMixin:
         backend = "threading" if is_gpu_model else "loky"
 
         if model_type in GPU_MODELS:
-            print("[WARN] Serializing TF-based trials to avoid GPU contention.")
+            if self._progress and self._progress.verbose:
+                print("[WARN] Serializing TF-based trials to avoid GPU contention.")
             n_jobs_actual = 1
         else:
             # Use our unified CPU-centric thread knob
@@ -4101,11 +4180,18 @@ class RunMixin:
         )
 
 
-        print(f"[OK] Parallel walk-forward completed in {time.time() - start:.2f} seconds.")
+        elapsed_wfo = time.time() - start
+        print(f"[OK] Parallel walk-forward completed in {elapsed_wfo:.2f} seconds.")
 
         all_results = [r for r in all_results if r is not None]
         if not all_results:
             print("[ERR] WFO failed completely.")
+            try:
+                getattr(self, "_progress", None) and self._progress.draw_final(
+                    elapsed=time.time() - start, trades=0, sr=0.0, sharpe=0.0, dd=0.0,
+                )
+            except Exception:
+                pass
             return None, None
 
         # Serialize config dicts for grouping
@@ -4181,6 +4267,18 @@ class RunMixin:
                     best_combo[key] = json.loads(best_combo[key])
                 except Exception:
                     pass
+
+        # Draw final summary
+        try:
+            _sharpe = float(best_combo.get("sharpe", 0))
+            _dd = float(best_combo.get("drawdown", 0))
+            _trades = int(best_combo.get("trades", 0))
+            getattr(self, "_progress", None) and self._progress.draw_final(
+                elapsed=elapsed_wfo, trades=_trades,
+                sr=_sharpe, sharpe=_sharpe, dd=_dd,
+            )
+        except Exception:
+            pass
 
         return df_wfo, best_combo
 

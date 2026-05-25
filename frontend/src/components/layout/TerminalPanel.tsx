@@ -91,14 +91,14 @@ export function TerminalPanel() {
         </div>
         <div className="flex items-center gap-2">
           {open && (
-            <button
+            <span
               onClick={(e) => { e.stopPropagation(); clear(); }}
               className="rounded p-0.5"
               style={{ color: "var(--color-text-muted)", cursor: "pointer" }}
               title="Clear logs"
             >
               <Trash2 size={11} />
-            </button>
+            </span>
           )}
           {open ? (
             <ChevronDown size={12} style={{ color: "var(--color-text-muted)" }} />

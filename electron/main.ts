@@ -189,6 +189,16 @@ app.on("before-quit", async () => {
   await cleanup();
 });
 
-app.on("will-quit", () => {
-  cleanup();
+app.on("will-quit", async () => {
+  await cleanup();
+});
+
+process.on("SIGTERM", async () => {
+  await cleanup();
+  app.quit();
+});
+
+process.on("SIGINT", async () => {
+  await cleanup();
+  app.quit();
 });

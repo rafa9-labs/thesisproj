@@ -441,3 +441,32 @@ def _build_ensemble_adaptive_regime(*, use_proba=True, **params):
             else None
         ),
     )
+
+
+@register_model("meta_ensemble")
+def _build_meta_ensemble(*, use_proba=True, **params):
+    """Signal committee: wraps N model types, combines via voting."""
+    from models.meta_ensemble import MetaEnsemble
+
+    sub_types = params.get("meta_sub_models", ["logistic", "xgboost"])
+    if isinstance(sub_types, str):
+        sub_types = [t.strip() for t in sub_types.split(",") if t.strip()]
+    method = str(params.get("meta_combination_method", "majority")).lower()
+    weights_raw = params.get("meta_weights")
+    weights = [float(w) for w in weights_raw] if weights_raw and isinstance(weights_raw, list) else None
+
+    sub_models = []
+    for t in sub_types:
+        m = build_model(t, use_proba=True, **params)
+        if m is not None:
+            sub_models.append(m)
+
+    if not sub_models:
+        raise ValueError(f"No valid sub-models built for types: {sub_types}")
+
+    return MetaEnsemble(
+        sub_models=sub_models,
+        method=method,
+        weights=weights,
+        meta_sub_models=sub_types,
+    )

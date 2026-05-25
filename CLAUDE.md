@@ -27,7 +27,7 @@
 - **ALWAYS** push all work to GitHub before ending a session.
 - Before completing a task, check for uncommitted changes.
 - Commit with descriptive messages. Push to `origin <current-branch>`.
-- Current branch: `feature/phase2-api-bridge`
+- Current branch: `feature/sprint16.6-ui-redesign` — Tab-based Backtest Setup UI redesign
 - Remote: `https://github.com/rafa9-labs/thesisproj.git`
 
 ## Architecture Overview
@@ -238,6 +238,27 @@ cd frontend; npm run dev
 # Run all tests
 .\run_all_tests.bat
 ```
+
+### GPU Backtests (WSL2)
+
+**Setup** (one-time):
+- WSL2 Ubuntu-22.04 with RTX 3090 (CUDA 13.1 driver on Windows host)
+- Python venv: `~/thesisproj-venv` in WSL home (NOT under /mnt/c/)
+- TF 2.18 bundles CUDA 12.x libs — no separate CUDA toolkit needed in WSL
+- All project pip deps installed in the venv (pandas, scikit-learn, optuna, xgboost, etc.)
+- `results/` directory must be owned by `benji`, not root. If broken, delete from Windows and recreate: `wsl bash -c "mkdir -p /mnt/c/Users/rafa/ML_Trading/thesisproj/results"`
+
+**Run from PowerShell**:  
+```powershell
+wsl bash -c "cd /mnt/c/Users/rafa/ML_Trading/thesisproj && export MLB_THREADS=1 && MODEL_LIST=lstm,cnn SEEDS=42 REPEATS=3 N_MONTHS=12 SMOKE_TEST=0 PYTHONPATH=. ~/thesisproj-venv/bin/python pipeline/main_cli.py 2>&1"
+```
+
+**Verify GPU**:  
+```powershell
+wsl bash -c "~/thesisproj-venv/bin/python -c 'import tensorflow as tf; print(tf.config.list_physical_devices(\"GPU\"))'" 2>&1
+```
+
+> Frontend, API, and Celery remain on Windows. Only the GPU-accelerated Python pipeline runs in WSL2. Project source stays on `/mnt/c/` (Windows filesystem).
 
 ## Key Files Quick Reference
 

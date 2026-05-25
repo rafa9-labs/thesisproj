@@ -1,6 +1,6 @@
 # KodaQuant — Product Roadmap
 
-> **Last Updated**: 2026-05-10
+> **Last Updated**: 2026-05-14
 > **Branch**: `feature/phase2-api-bridge`
 > **Revenue Target**: £500–2K/month within 3 months of launch
 > **Philosophy**: Optimize → Feature Parity → Polish → Secure → Deploy → Scale → Enrich → Automate
@@ -820,49 +820,148 @@
 
 ---
 
-## Sprint 16: Trading Logic, Overfitting & Backtest Transparency
+## Sprint 16: Trading Logic, Overfitting & Backtest Transparency ✅ COMPLETE
 
 > **Goal**: Improve core backtest quality — better training logic, overfitting detection, and results that users can actually understand and trust.
 > **Est**: 12-16h
 
-- [ ] **S16.1** Overfitting detection & reporting
+- [x] **S16.1** Overfitting detection & reporting ✅ DONE
   - Train/test score divergence detection (e.g. Sharpe drops > 40% from train to OOS)
   - Bootstrap confidence intervals for key metrics (Sharpe, return, max DD)
   - Overfitting risk score per model in results (color-coded: green/yellow/red)
   - Cross-validation fold stability report (std of Sharpe across folds)
   - **Files**: `pipeline/backtester/evaluation_mixin.py`, `pipeline/metrics_eval.py`, new `pipeline/overfitting.py`
-  - **Est**: 4h
 
-- [ ] **S16.2** Walk-forward transparency panel
+- [x] **S16.2** Walk-forward transparency panel ✅ DONE
   - Per-period breakdown: train Sharpe vs test Sharpe, train return vs test return
   - Visual timeline showing which months are train vs test (interactive)
   - Signal count per period (was the model trading or sitting out?)
   - Regime overlay: which market regime each period fell into
   - **Files**: `frontend/src/pages/Results/WalkForwardPanel.tsx`, new `api/routers/backtest.py` endpoint
-  - **Est**: 3h
 
-- [ ] **S16.3** Training diagnostics — what the model actually learned
+- [x] **S16.3** Training diagnostics — what the model actually learned ✅ DONE
   - Feature importance heatmap per model (gain-based for tree models, permutation for others)
   - Prediction distribution: histogram of predicted probabilities vs actual outcomes
   - Confusion matrix per walk-forward period
   - "Was this model confident?" — filter trades by prediction confidence bands
   - **Files**: `pipeline/backtester/real_trading_mixin.py`, `frontend/src/pages/Results/TrainingDiagnostics.tsx`
-  - **Est**: 4h
 
-- [ ] **S16.4** Plain-English backtest summary generator
+- [x] **S16.4** Plain-English backtest summary generator ✅ DONE
   - Auto-generate a 3-sentence natural-language summary: "This backtest ran XGBoost on EURUSD H1 from Jan 2023 to Dec 2025. It achieved a Sharpe of 1.2 with 58% win rate and -8.3% max drawdown. The model was most confident during low-volatility trending periods."
   - Key findings bullets (best period, worst period, regime performance)
   - Copy-to-clipboard for sharing
   - **Files**: new `pipeline/summary_generator.py`, `frontend/src/pages/Results/BacktestSummary.tsx`
-  - **Est**: 2h
 
-- [ ] **S16.5** Better default training parameters
+- [x] **S16.5** Better default training parameters ✅ DONE
   - Audit search space bounds — tighten ranges that allow degenerate configs
   - Add early stopping patience defaults (stop if 20 trials without improvement)
   - Minimum trade count filter (reject configs that trade < 10 times/month)
   - Default to `calibrate=True` for production runs
   - **Files**: `config.py` (SEARCH_SPACE), `pipeline/tuning/runner.py`
-  - **Est**: 2h
+
+- [x] **S16.6** Backtest Setup UI redesign ✅ DONE
+  - 6-tab layout: Quick Start, Asset & Model, Study & HPO, Features, Hyperparameters, Execution
+  - ConfigSummaryBar with always-visible 5-column preview
+  - Quick Start: categorized presets (Debug, Classical, Deep, Ensemble, RL)
+  - ValidationBar: missing-config indicator, save preset, deploy button
+  - **Files**: `frontend/src/pages/Backtest/BacktestPage.tsx`, `QuickStartTab.tsx`, `HyperparamsTab.tsx`, `ConfigSummaryBar.tsx`, `ValidationBar.tsx`
+
+- [x] **S16.7** Parameter Intelligence (Guide + Explorer + fANOVA + LLM Advisor) ✅ DONE
+  - Parameter Guide: dynamic warnings per model from store values
+  - Parameter Explorer: ParallelCoordinates + ContourPlot on ResultsPage
+  - fANOVA interaction effects in OverfittingPanel
+  - LLM Advisor: "Analyze Results" button → AI suggests next study → "Apply Study" one-click
+  - Hyperparameters tab: ModelHyperparamsPanel + ParameterGuideInline
+  - **Files**: `ParameterGuide.tsx`, `ParallelCoordinates.tsx`, `ContourPlot.tsx`, `LLMAdvisor.tsx`, `pipeline/overfitting.py`, `pipeline/llm/advisor.py`
+
+**Sprint 16 complete** when: All 7 sub-tasks complete. Overfitting detection works, summary is human-readable, training diagnostics are transparent, UI is tab-based with parameter intelligence. ✅ ALL DONE
+
+---
+
+## Sprint 16.8: Model Persistence, Deployment & Experiment Tracking ✅ COMPLETE
+
+> **Goal**: Save trained models as deployable artifacts, track experiment lineage, and enable model sharing across KodaQuant installations.
+> **Dependencies**: Zero. Everything uses existing `joblib`, SQLite, sklearn.
+> **Est**: 15-19h
+> **Branch**: `feature/sprint16.8-model-persistence`
+> **Completed**: 2026-05-21 — All 4 phases (A-D) implemented + tested (64 fast tests pass)
+
+### Phase A: Model Snapshot System ✅ DONE
+- [x] **A.1-A.6**: `save_snapshot()`, `load_snapshot()`, metadata schema, pip_freeze, auto-save per walk-forward cycle, parent_job_id lineage
+- **Files**: `pipeline/model_persistence.py`, `models/base_model.py`, `api/tasks.py`, `pipeline/data_sqlite.py`
+
+### Phase B: Deployment Registry ✅ DONE
+- [x] **B.1-B.6**: `deployed_models` table, `model_registry_disk.py` (scan/register/activate/delete/tags), API endpoints, DeployedModelsPage UI, TagEditor
+- **Files**: `pipeline/model_registry_disk.py`, `api/routers/models.py`, `DeployedModelsPage.tsx`, `TagEditor.tsx`
+
+### Phase C: Multi-Model Signal Engine ✅ DONE
+- [x] **C.1-C.4**: `MetaEnsemble` (majority/soft/weighted voting), registry entry, search space, frontend ModelSelector
+- **Files**: `models/meta_ensemble.py`, `models/registry.py`, `config.py`, `ModelSelector.tsx`
+
+### Phase D: Live Prediction Bridge ✅ DONE
+- [x] **D.1-D.3**: `.active` pointer, `/active/predict`, `/active/predict-with-data`, `/active/compare`
+- **Files**: `pipeline/model_persistence.py`, `api/routers/models.py`, `pipeline/data_sqlite.py`
+
+**Results**: 160 total tests (72 backend + 88 frontend), zero TS errors. All 4 phases deployed to `feature/sprint16.8-model-persistence`.
+
+---
+
+## Sprint 16.9: Saved Model — Forward Test & Live Trading Bridge
+
+> **Goal**: Make saved models actually usable. Add a Forward Test tab for temporal testing and bridge deployed models into live trading.
+> **Dependencies**: Sprint 16.8 (model persistence + registry).
+> **Est**: 5-7h
+> **Branch**: `feature/sprint16.8-model-persistence`
+
+### Phase 1: Forward Test Engine + UI (3-4h)
+
+- [ ] **P1.1** `pipeline/forward_test.py` — `run_forward_test(snapshot_path, pair, tf, start, end, sizing)`
+  - Loads snapshot, creates MLBacktester, injects model, runs `real_trading_simulation()` with `skip_hpo=True, skip_training=True`
+  - Returns full metrics/equity/trades (same schema as backtest results)
+  - Also produces `generate_forecast_errors()` for future DM test (Phase 3 deferral)
+  - **Files**: New `pipeline/forward_test.py`
+
+- [ ] **P1.2** API endpoint — `POST /models/{id}/forward-test`
+  - Validates model exists, launches Celery job via `_run_forward_test_impl`
+  - Returns `job_id` → frontend navigates to Monitor → Results
+  - **Files**: `api/routers/models.py`, `api/tasks.py`
+
+- [ ] **P1.3** Frontend — "Forward Test" tab (7th tab on BacktestPage)
+  - Model selector dropdown from `/models/deployed`
+  - Date range picker, pair/timeframe selectors, position sizing dropdown
+  - "Run Forward Test" button → creates job → navigates to Monitor
+  - **Files**: New `ForwardTestTab.tsx`, modify `BacktestPage.tsx`
+
+### Phase 2: Live Trading with Saved Models (1-2h)
+
+- [ ] **P2.1** Modify `POST /live/deploy` — add `model_id` parameter
+  - If provided: load snapshot via `load_snapshot(model_id)`, skip `_run_backtest_for_model()`
+  - Signal loop unchanged (already uses `session["model_obj"]`)
+  - **Files**: `api/routers/live.py`
+
+- [ ] **P2.2** Frontend — LiveTradingPage saved model selector
+  - Replace model type dropdown with deployed model list (from `/models/deployed?status=active`)
+  - Pass `model_id` in deploy request
+  - **Files**: `LiveTradingPage.tsx`
+
+### Phase 3 (DEFERRED): Validation Gate with DM/SPA/Chow Tests
+> Full statistical validation gate for auto-promotion. Deferred to Sprint 17+.
+
+- [ ] DM Test (Diebold-Mariano) — compare forecast errors of candidate vs benchmark
+- [ ] SPA Test (Hansen) — control for data snooping bias across K configurations  
+- [ ] Chow Test — structural break detection before promotion
+- [ ] Dual-lock gate: candidate must beat Active Model AND Naive Baseline
+
+### Test Specifications (8 tests)
+
+- [ ] `test_forward_test_engine` — load saved model, run on test range, verify metrics
+- [ ] `test_forward_test_no_trades` — model that predicts flat → clean zero-trade result
+- [ ] `test_forward_test_endpoint` — POST /models/{id}/forward-test returns valid job_id
+- [ ] `test_live_deploy_with_model_id` — deploy saved model → signal loop starts
+- [ ] `test_live_deploy_no_model_id` — backward compat: train-fresh path still works
+- [ ] `test_forward_test_tab_renders` — tab shows model list + date picker
+- [ ] `test_live_page_model_selector` — saved model dropdown renders active models
+- [ ] `test_forward_test_results_page` — results page renders forward test output identically
 
 ---
 
@@ -1152,13 +1251,16 @@ cd frontend && npm run dev
 | **S13** | Beta & Launch | 6-8h | TODO |
 | **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
 | **S15** | KodaQuant Branding | 4-6h | ✅ COMPLETE (2026-05-10, 37 tests) |
-| **S16** | Trading Logic, Overfitting & Backtest Transparency | 12-16h | TODO |
+| **S16** | Trading Logic, Overfitting & Backtest Transparency | 12-16h | ✅ DONE |
+| **S16.8** | Model Persistence, Deployment & Experiment Tracking | 15-19h | ✅ COMPLETE (2026-05-21, 64 tests) |
+| **S16.9** | Forward Test + Live Trading Bridge | 5-7h | IN PROGRESS |
 | **S17** | UI Polish, Tabs Flow & Search | 8-10h | TODO |
 | **S18** | Live News & Market Data Integration | 10-14h | TODO |
 | **S19** | Ensemble Models & Model Extensibility | 8-10h | TODO |
 | **S20** | LLM / AI Integration & Intelligent Trading | 10-14h | TODO |
 | **S21** | Live Trading with OANDA | 12-16h | TODO |
 | **S22** | Commercial Infrastructure (deferred from S12) | 8-10h | TODO |
+| **S23** | Pipeline Stability & Live Monitor UX | 6-8h | ✅ DONE (2026-05-14) |
 
 ## Completion Criteria Summary
 
@@ -1175,13 +1277,62 @@ cd frontend && npm run dev
 | S12 | News pipeline works, LLM sentiment is ML feature, Results shows all history, Dashboard has live price ticker + candlestick charts + Market Pulse, backtest trade visualization on Results detail, live monitor with multi-pair grid |
 | S13 | Beta tested, publicly launched, first sales |
 | S15 | All user-facing text says "KodaQuant", professional branding | ✅ DONE — 37 tests, 12 files cleaned, icons regenerated |
-| S16 | Overfitting detection works, backtest summary is human-readable, training is transparent |
+| S16 | Overfitting detection works, backtest summary is human-readable, training is transparent | ✅ DONE |
+| S16.8 | Model persistence complete — snapshots save/load/export/import, deployed models registry with CRUD, MetaEnsemble signal committee, live prediction bridge with compare endpoint | ✅ DONE |
+| S16.9 | Forward Test tab operational — saved models tested on any date range; Live Trading deploys saved models instead of training fresh |
 | S17 | Cmd+K search, tab-style navigation, consistent UI, no dead code |
 | S18 | Live news feed + live OANDA prices feed into backtesting + dashboard |
 | S19 | All ensemble types working, plugin system for custom models |
 | S20 | LLM commentary, strategy suggestions, AI-augmented features |
 | S21 | Paper trading on OANDA demo, live trading with risk controls |
 | S22 | Product listed on Paddle, landing page live, docs published, legal complete, analytics active |
+| S23 | Log noise reduced 98%, live equity chart shows BH from origin with model grouping, no double-submit, no TypeError crash |
+
+---
+
+## Sprint 23: Pipeline Stability & Live Monitor UX ✅ COMPLETE (2026-05-14)
+
+> **Goal**: Eliminate log noise, fix live monitor equity chart, prevent double-submission bugs.
+> **Branch**: `feature/phase2-api-bridge`
+> **Est**: 6-8h
+
+- [x] **S23.1** Double-submission guard ✅ DONE (2026-05-14)
+  - RunSummary deploy button was `disabled={errors > 0}` but didn't check `isSubmitting`
+  - `isSubmitting` was never passed from BacktestPage to RunSummary (TS prop was added to interface but not destructured)
+  - Fixed: pass `isSubmitting` prop + gate button + show "Submitting..." text
+  - **Files**: `frontend/src/pages/Backtest/RunSummary.tsx`, `frontend/src/pages/Backtest/BacktestPage.tsx`
+
+- [x] **S23.2** Structured HPO progress display ✅ DONE (2026-05-14)
+  - New `pipeline/printer.py` — `HPOProgress` class replaces 550 lines of per-trial noise with ~10 structured lines
+  - Progress bar with `\r` in TTY mode, compact fold summaries in Celery (non-TTY) mode
+  - `KODAQUANT_VERBOSE=1` re-enables the full firehose for debugging
+  - **Files**: `pipeline/printer.py`, `pipeline/backtester/run_mixin.py`
+
+- [x] **S23.3** Per-fold/per-trial noise suppression ✅ DONE (2026-05-14)
+  - Suppressed `print_pruned_block_summary` (8-line boxes × 6 call sites)
+  - Suppressed `print_block_summary` (per-fold tables), `print_trial_header_table` (50+ param table)
+  - Gated `[Eligibility]`, `[Calib][Coverage]`, `[DEBUG][Costs]` behind `KODAQUANT_VERBOSE`
+  - Suppressed `[WARN] Skipping fold: Not enough samples` per-trial
+  - Gated news/LLM warnings (`use_news=True but no data`) to fire once per instance
+  - Suppressed Optuna default `[I ...] Trial N finished` log lines
+  - **Files**: `pipeline/backtester/run_mixin.py`, `pipeline/backtester/strategy_mixin.py`, `pipeline/backtester/features_mixin.py`
+
+- [x] **S23.4** `cv_config_override` TypeError fix ✅ DONE (2026-05-14)
+  - `_progress_tracking_objective` wrapper didn't accept `cv_config_override` kwarg
+  - Every HPO trial crashed with `TypeError: got an unexpected keyword argument 'cv_config_override'`
+  - All 10 trials were pruned → "Global HPO failed: No completed Optuna trials"
+  - Fixed: add `cv_config_override=None` parameter + forward it to the wrapped objective
+  - **Files**: `pipeline/backtester/run_mixin.py`
+
+- [x] **S23.5** Walk-forward equity chart fixes ✅ DONE (2026-05-14)
+  - **Scale mismatch**: BH values stored as raw cumulative equity (1.05) while strategy lines converted to percentage (5) — plotted on different Y scales. Fixed: BH goes through same `toChartVal()` conversion.
+  - **Zero-height SVG**: `minHeight: 320` doesn't give `ResponsiveContainer` a measurable height → SVG rendered at 0px. Fixed: explicit `height: 320` on wrapper + `height={320}` on `ResponsiveContainer`.
+  - **Period-0 origin**: Chart now starts at 0% before period M1 (synthetic origin point added to chartData).
+  - **Model grouping**: Per-month summary table now groups by model with 6px separators and model name in brand-colored first column. Added `model` field to `OosPeriodResult`.
+  - **Stale-job 404 loop**: `useJobStatus` polled every 2s for stale job IDs from React Query cache. Fixed: return `false` from `refetchInterval` when error is 404.
+  - **Files**: `frontend/src/pages/Monitor/EquityChart.tsx`, `frontend/src/api/schemas.ts`, `frontend/src/stores/useJobStore.ts`, `frontend/src/api/queries.ts`
+
+**Sprint 23 complete**: All 127 tests pass (39 backend + 88 frontend). Log noise reduced ~98% during HPO. Live monitor chart shows BH line from period 0, grouped by model with separators.
 
 ---
 

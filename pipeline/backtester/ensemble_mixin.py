@@ -942,8 +942,16 @@ class EnsembleMixin:
                 xgb_cfg.setdefault("use_oof_meta", False)
                 xgb_cfg.setdefault("oof_splits", 3)
 
-                # Match global XGB policy: env-gated GPU (XGB_USE_GPU=1) else CPU.
-                use_gpu = (os.environ.get("XGB_USE_GPU", "0") == "1")
+                # Auto-detect GPU for XGBoost; env var XGB_USE_GPU can override
+                _xgb_env_gpu = os.environ.get("XGB_USE_GPU")
+                if _xgb_env_gpu is not None:
+                    use_gpu = _xgb_env_gpu == "1"
+                else:
+                    try:
+                        from pipeline.runtime import gpu_status
+                        use_gpu = gpu_status().get("available", False)
+                    except Exception:
+                        use_gpu = False
                 xgb_cfg.setdefault("tree_method", "hist")
                 xgb_cfg.pop("predictor", None)
                 if use_gpu:
@@ -1083,6 +1091,17 @@ class EnsembleMixin:
                 proba = self.model.predict_proba(X_seq_test, X_flat_test)
 
             finally:
+                # S16.3: Capture XGB feature importance before freeing model
+                try:
+                    from pipeline.diagnostics import compute_feature_importance
+                    _feat_names = list(features) if isinstance(features, (list, tuple)) else None
+                    _fi = compute_feature_importance(self.model, str(model_type or ""), feature_names=_feat_names)
+                    if _fi:
+                        self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi]
+                    else:
+                        self._diagnostics_feature_importance = []
+                except Exception:
+                    self._diagnostics_feature_importance = []
                 try:
                     if hasattr(self.model, "free"):
                         self.model.free()
@@ -1472,6 +1491,16 @@ class EnsembleMixin:
                     X_seq_test, X_flat_test, regime_source=regime_source_test
                 )
             finally:
+                # S16.3: Capture feature importance for adaptive regime (RF+Logit)
+                try:
+                    from pipeline.diagnostics import compute_feature_importance
+                    _fi_adapt = compute_feature_importance(self.model, "ensemble_adaptive_regime", feature_names=list(features) if isinstance(features, (list, tuple)) else None)
+                    if _fi_adapt:
+                        self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi_adapt]
+                    else:
+                        self._diagnostics_feature_importance = []
+                except Exception:
+                    self._diagnostics_feature_importance = []
                 try:
                     import gc as _gc
                     tf.keras.backend.clear_session()

@@ -789,7 +789,7 @@ class DeepMixin:
     # ------------------------------------------------------------------
     # Lazy singleton ProcessPoolExecutor for deep model isolation.
     # Reusing the same worker process avoids repeated TF import (~15-30s
-    # per call).  Created on first use, shut down in __del__ or atexit.
+    # per call).  Created on first use, shut down via atexit.
     # ------------------------------------------------------------------
     _deep_pool: "concurrent.futures.ProcessPoolExecutor | None" = None
 
@@ -901,4 +901,8 @@ class DeepMixin:
         except Exception as e:
             print(f"[WARN] [DEEP_WORKER] load outputs failed: {e}")
             return None, None
+
+
+import atexit
+atexit.register(DeepMixin._shutdown_deep_pool)
 

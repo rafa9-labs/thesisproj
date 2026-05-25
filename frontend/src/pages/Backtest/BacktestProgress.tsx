@@ -1,43 +1,57 @@
 import { useEffect } from "react";
 import { useJobStore } from "@/stores/useJobStore";
-import { useJobStatus } from "@/api/queries";
+import { useJobStatus, useBacktestProgress } from "@/api/queries";
+import { HpoMonitor } from "./HpoMonitor";
+import { OosPerformanceChart } from "./OosPerformanceChart";
+import { TradeLog } from "./TradeLog";
 
-interface ModelProgressLocal {
-  phase: "pending" | "hpo" | "simulation" | "complete" | "failed";
-  hpoTrial: number;
-  hpoTotalTrials: number;
-  simMonth: number;
-  simTotalMonths: number;
+type Tab = "hpo-and-results" | "trade";
+
+function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      className="px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors"
+      style={{
+        backgroundColor: active ? "var(--color-brand)" : "transparent",
+        color: active ? "white" : "var(--color-text-muted)",
+        border: active ? "1px solid var(--color-brand)" : "1px solid var(--color-border)",
+      }}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
 }
 
-function PhaseBar({
-  label,
-  current,
-  total,
-  color,
-}: {
-  label: string;
-  current: number;
-  total: number;
-  color: string;
-}) {
-  const pct = total > 0 ? Math.min((current / total) * 100, 100) : 0;
+function ProgressBar({ pct, text }: { pct: number; text: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-8 text-[10px] uppercase" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-        {label}
-      </span>
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ backgroundColor: "var(--color-elevated)" }}>
-        <div className="h-full rounded-full transition-all duration-300" style={{ width: `${pct}%`, backgroundColor: color }} />
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-3">
+        <div
+          className="h-2 flex-1 overflow-hidden rounded-full"
+          style={{ backgroundColor: "var(--color-elevated)" }}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{
+              width: `${pct}%`,
+              backgroundColor:
+                pct >= 100 ? "var(--color-accent-success)" : "var(--color-brand)",
+            }}
+          />
+        </div>
+        <span className="text-xs min-w-[36px] text-right" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+          {Math.round(pct)}%
+        </span>
       </div>
-      <span className="w-8 text-right text-[10px]" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>
-        {current}/{total}
-      </span>
+      <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+        {text}
+      </p>
     </div>
   );
 }
 
-function ModelPill({ model, mp, done, current }: { model: string; mp?: ModelProgressLocal; done: boolean; current: boolean }) {
+function ModelPill({ model, mp, done, current }: { model: string; mp?: { phase: string; hpoTrial: number; hpoTotalTrials: number; simMonth: number; simTotalMonths: number }; done: boolean; current: boolean }) {
   return (
     <div
       className="flex flex-col gap-1 rounded-md border px-2.5 py-1.5"
@@ -83,10 +97,13 @@ function ModelPill({ model, mp, done, current }: { model: string; mp?: ModelProg
 export function BacktestProgress({ jobId }: { jobId: string | null }) {
   const job = useJobStore((s) => (jobId ? s.activeJobs.get(jobId) : undefined));
   const handleWsEvent = useJobStore((s) => s.handleWsEvent);
+  const setActiveTab = useJobStore((s) => s.setActiveTab);
 
   const jobStatus = job?.status;
   const shouldPoll = jobId != null && (jobStatus === "pending" || jobStatus === "running");
   const { data: restStatus } = useJobStatus(shouldPoll ? jobId : null);
+
+  useBacktestProgress(shouldPoll ? jobId : null);
 
   useEffect(() => {
     if (!restStatus || !jobId) return;
@@ -99,14 +116,15 @@ export function BacktestProgress({ jobId }: { jobId: string | null }) {
 
   if (!job) return null;
 
-  const currentModelPhase = job.currentModel ? job.modelPhases.get(job.currentModel) : undefined;
+  const activeTab: Tab = job.activeTab || "hpo-and-results";
 
   return (
     <div
       className="rounded-lg border p-4"
       style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
     >
-      <div className="mb-2 flex items-center justify-between">
+      {/* Header */}
+      <div className="mb-3 flex items-center justify-between">
         <h3
           className="text-xs font-semibold uppercase tracking-[0.1em]"
           style={{ color: "var(--color-text-secondary)" }}
@@ -118,62 +136,49 @@ export function BacktestProgress({ jobId }: { jobId: string | null }) {
         </span>
       </div>
 
-      {/* Main progress bar */}
-      <div className="mb-2 flex items-center gap-3">
-        <div
-          className="h-2.5 flex-1 overflow-hidden rounded-full"
-          style={{ backgroundColor: "var(--color-elevated)" }}
-        >
-          <div
-            className="h-full rounded-full transition-all duration-300"
-            style={{
-              width: `${job.progress}%`,
-              backgroundColor:
-                job.status === "failed"
-                  ? "var(--color-accent-danger)"
-                  : job.status === "completed"
-                    ? "var(--color-accent-success)"
-                    : "var(--color-brand)",
-            }}
-          />
-        </div>
-        <span className="text-xs tabular-nums" style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", minWidth: 36, textAlign: "right" }}>
-          {Math.round(job.progress)}%
-        </span>
-      </div>
+      {/* Progress bar */}
+      <ProgressBar pct={job.progress} text={job.progressText} />
 
-      {/* Two-segment phase bars */}
-      {currentModelPhase && job.status === "running" && (
-        <div className="mb-2 flex flex-col gap-1 pl-1">
-          <PhaseBar
-            label="HPO"
-            current={currentModelPhase.hpoTrial}
-            total={currentModelPhase.hpoTotalTrials}
-            color="var(--color-accent-warning)"
-          />
-          <PhaseBar
-            label="SIM"
-            current={currentModelPhase.simMonth}
-            total={currentModelPhase.simTotalMonths}
-            color="var(--color-accent-success)"
-          />
-        </div>
-      )}
-
-      <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-        {job.progressText}
-      </p>
-
-      {/* Model status pills with sub-progress */}
+      {/* Model pills */}
       <div className="mt-3 flex flex-wrap gap-2">
         {(job.models ?? []).map((m) => {
           const done = (job.completedModels ?? []).includes(m);
           const current = job.currentModel === m;
-          const mp = job.modelPhases.get(m);
+          const mp = job.modelPhases.get(m) as { phase: string; hpoTrial: number; hpoTotalTrials: number; simMonth: number; simTotalMonths: number } | undefined;
           return <ModelPill key={m} model={m} mp={mp} done={done} current={current} />;
         })}
       </div>
 
+      {/* Tab bar */}
+      <div className="mt-4 flex gap-2">
+        <TabButton label="HPO and Results" active={activeTab === "hpo-and-results"} onClick={() => setActiveTab(jobId!, "hpo-and-results")} />
+        <TabButton label="Trade Log" active={activeTab === "trade"} onClick={() => setActiveTab(jobId!, "trade")} />
+      </div>
+
+      {/* Tab content */}
+      <div className="mt-3">
+        {activeTab === "hpo-and-results" && (
+          <div className="flex flex-col gap-4">
+            <HpoMonitor
+              model={job.currentModel ?? ""}
+              trials={job.hpoTrials}
+              bestTrial={job.bestTrial}
+              totalTrials={job.modelPhases.get(job.currentModel ?? "")?.hpoTotalTrials}
+            />
+            <OosPerformanceChart
+              model={job.currentModel ?? ""}
+              equity={job.oosEquity}
+              totalPeriods={job.oosPeriods.length > 0 ? job.oosPeriods[job.oosPeriods.length - 1].total_periods : 0}
+              currentPeriod={job.oosPeriods.length}
+              bestTrial={job.bestTrial}
+              periods={job.oosPeriods}
+            />
+          </div>
+        )}
+        {activeTab === "trade" && <TradeLog />}
+      </div>
+
+      {/* Error */}
       {job.error && (
         <div className="mt-3 rounded-md border p-2" style={{ borderColor: "var(--color-accent-danger)", backgroundColor: "rgba(242,54,69,0.05)" }}>
           <p className="text-xs" style={{ color: "var(--color-accent-danger)" }}>{job.error}</p>

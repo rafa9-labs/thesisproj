@@ -25,6 +25,120 @@ export interface ModelInfo {
   description: string;
 }
 
+export interface OverfittingCI {
+  low: number | null;
+  high: number | null;
+  mean: number | null;
+}
+
+export interface OverfittingReportData {
+  overfit_score: number;
+  risk_level: "low" | "medium" | "high";
+  risk_color: "green" | "yellow" | "red";
+  train_oos_gap_pct: number;
+  temporal_degradation_pct: number;
+  sharpe_ci: OverfittingCI | null;
+  return_ci: OverfittingCI | null;
+  maxdd_ci: OverfittingCI | null;
+  cv_sharpe_mean: number | null;
+  cv_sharpe_std: number | null;
+  cv_return_mean: number | null;
+  cv_return_std: number | null;
+  min_trl_trades: number;
+  sufficient_trades: boolean;
+  n_periods: number;
+  n_signal_periods: number;
+  signal_gap_pct: number;
+  is_mean_sharpe: number | null;
+  oos_mean_sharpe: number | null;
+  dsr_min_sharpe: number | null;
+  interaction_effects: Array<{ param: string; main_pct: number; interaction_pct: number; total_pct: number }> | null;
+}
+
+export interface WalkForwardPeriod {
+  period_start: string;
+  period_end: string;
+  train_start: string | null;
+  train_end: string | null;
+  test_sharpe: number | null;
+  train_sharpe: number | null;
+  strategy_return: number | null;
+  bh_return: number | null;
+  trades: number;
+  signals_raw: number;
+  signals_passed_gate: number;
+  pct_sideways: number | null;
+  pct_trend: number | null;
+  pct_volatile: number | null;
+  sharpe_gap_pct: number | null;
+  return_gap_pct: number | null;
+}
+
+export interface FeatureImportanceEntry {
+  feature: string;
+  importance: number;
+}
+
+export interface PredictionHistogramBin {
+  bin_start: number;
+  bin_end: number;
+  bin_center: number;
+  count: number;
+}
+
+export interface ConfusionMatrixData {
+  matrix: number[][] | null;
+  labels: string[];
+}
+
+export interface ConfidenceBand {
+  band_min: number;
+  band_max: number;
+  count: number;
+  accuracy: number;
+  mean_return: number;
+}
+
+export interface TrainingDiagnostics {
+  feature_importance: FeatureImportanceEntry[] | null;
+  prediction_histogram: PredictionHistogramBin[] | null;
+  confusion_matrix: ConfusionMatrixData | null;
+  confidence_bands: ConfidenceBand[] | null;
+  importance_method: string | null;
+  feature_families: Record<string, number> | null;
+  vif_warnings: Array<{ feature: string; vif: number }> | null;
+}
+
+export interface DataStatusSingle {
+  available: boolean;
+  start: string | null;
+  end: string | null;
+  bars: number;
+}
+
+export interface DataStatusResponse {
+  symbol: string;
+  timeframes: Record<string, DataStatusSingle>;
+  ready: boolean;
+  missing: string[];
+}
+
+export interface DefinePairRequest {
+  symbol: string;
+  pip_value: number;
+  decimal_places: number;
+}
+
+export interface DefinePairResponse {
+  symbol: string;
+  oanda_name: string;
+  pip_value: number;
+  lot_size: number;
+  base_currency: string;
+  quote_currency: string;
+  typical_spread_bps: number;
+}
+
 export interface Metrics {
   model: string;
   sharpe: number | null;
@@ -48,6 +162,28 @@ export interface Metrics {
   trades: TradeRecord[] | null;
   hpo_param_importance: HpoParamImportance[] | null;
   hpo_trials: HpoTrial[] | null;
+  overfitting: OverfittingReportData | null;
+  walkforward_periods: WalkForwardPeriod[] | null;
+  diagnostics: TrainingDiagnostics | null;
+  summary_text: string | null;
+  snapshot_path?: string | null;
+}
+
+export interface LlmAnalysis {
+  insight?: string;
+  recommended_preset?: string;
+  reason?: string;
+  parameter_changes?: string[];
+  predicted_improvement?: string;
+  warning?: string | null;
+  error?: string;
+  raw_text?: string;
+}
+
+export interface LlmAnalysisResponse {
+  job_id: string;
+  model: string;
+  analysis: LlmAnalysis;
 }
 
 export interface BacktestRequest {
@@ -60,6 +196,8 @@ export interface BacktestRequest {
   repeats?: number;
   seed?: number;
   hpo_intensity?: HpoIntensity;
+  n_trials?: number;
+  parent_job_id?: string;
   config_overrides: Record<string, unknown>;
 }
 
@@ -206,12 +344,44 @@ export type WsEvent =
   | { event: "model_training"; job_id: string; model: string; status: "complete"; metrics: Partial<Metrics> }
   | { event: "model_phase"; job_id: string; model: string; phase: "hpo" | "simulation"; total_work?: number }
   | { event: "hpo_progress"; job_id: string; model: string; trial?: number; total_trials?: number; n_trials?: number; cv_blocks: number; completed_work: number; total_work: number; progress_pct: number }
+  | { event: "hpo_trial_result"; job_id: string; model: string; trial_number: number; score: number | null; params: Record<string, unknown>; best_score_so_far: number | null; trial_state: string }
   | { event: "month_progress"; job_id: string; model: string; month?: number; total_months?: number; period?: number; total_periods?: number; sharpe?: number; trades?: number; completed_work: number; total_work: number; progress_pct: number }
+  | { event: "oos_result"; job_id: string; model: string; period: number; total_periods: number; equity: number | null; equity_bh: number | null; sharpe: number | null; return_pct: number | null; trades: number | null; drawdown: number | null; win_rate: number | null; precision: number | null; f1: number | null; directional_accuracy: number | null; active_rate: number | null; flat?: boolean; train_sharpe?: number | null; sharpe_gap_pct?: number | null; signals_raw?: number; signals_passed_gate?: number }
   | { event: "job_complete"; job_id: string; metrics: Partial<Metrics>[] }
   | { event: "job_failed"; job_id: string; error: string }
+  | { event: "cycle_started"; job_id: string; model: string; cycle_number: number; total_cycles: number }
   | { event: "download_started"; job_id: string; pair: string }
   | { event: "download_complete"; job_id: string; pair: string }
-  | { event: "download_failed"; job_id: string; error: string };
+  | { event: "download_failed"; job_id: string; error: string }
+  | { event: "simulation_started"; job_id: string; model: string; n_periods: number; bh_curve: { period: number; bh: number }[] };
+
+export interface HpoTrialRow {
+  trial_number: number;
+  score: number | null;
+  params: Record<string, unknown>;
+  best_score_so_far: number | null;
+  trial_state: string;
+}
+
+export interface OosPeriodResult {
+  period: number;
+  total_periods: number;
+  model?: string;
+  equity: number | null;
+  equity_bh: number | null;
+  sharpe: number | null;
+  return_pct: number | null;
+  trades: number | null;
+  drawdown: number | null;
+  win_rate: number | null;
+  precision: number | null;
+  f1: number | null;
+  flat?: boolean;
+  train_sharpe?: number | null;
+  sharpe_gap_pct?: number | null;
+  signals_raw?: number;
+  signals_passed_gate?: number;
+}
 
 export interface HealthResponse {
   status: string;

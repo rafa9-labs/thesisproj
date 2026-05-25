@@ -40,7 +40,7 @@ class TestMacroPrecF1:
 
         y_true = np.array([-1, 0, 1, -1, 0, 1])
         y_pred = np.array([-1, 0, 1, -1, 0, 1])
-        prec, f1 = _macro_prec_f1_from_confusion(y_true, y_pred)
+        prec, f1, cm = _macro_prec_f1_from_confusion(y_true, y_pred)
         assert prec == pytest.approx(1.0, abs=1e-6)
         assert f1 == pytest.approx(1.0, abs=1e-6)
 
@@ -49,7 +49,7 @@ class TestMacroPrecF1:
 
         y_true = np.array([1, 1, 1])
         y_pred = np.array([-1, -1, -1])
-        prec, f1 = _macro_prec_f1_from_confusion(y_true, y_pred)
+        prec, f1, cm = _macro_prec_f1_from_confusion(y_true, y_pred)
         # For class -1: precision=0 (none of predicted -1 were actually -1)
         # For class 1: precision=0 (none predicted)
         assert prec == pytest.approx(0.0, abs=1e-6)
@@ -60,7 +60,7 @@ class TestMacroPrecF1:
         rng = np.random.RandomState(0)
         y_true = rng.choice([-1, 0, 1], size=300)
         y_pred = rng.choice([-1, 0, 1], size=300)
-        prec, f1 = _macro_prec_f1_from_confusion(y_true, y_pred)
+        prec, f1, cm = _macro_prec_f1_from_confusion(y_true, y_pred)
         # With random labels, macro-averaged precision/F1 ≈ 0.33
         assert 0.15 < prec < 0.55
         assert 0.15 < f1 < 0.55

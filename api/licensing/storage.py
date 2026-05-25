@@ -104,6 +104,16 @@ class SecureStorage:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_SCHEMA_V1)
 
+    def close(self) -> None:
+        """Explicitly close the database connection."""
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
+    def __del__(self):
+        self.close()
+
     def _encrypt(self, plaintext: str) -> str:
         return self._fernet.encrypt(plaintext.encode()).decode()
 

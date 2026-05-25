@@ -1,16 +1,35 @@
 import { create } from "zustand";
-import { DEFAULTS } from "@/lib/constants";
+import { DEFAULTS, STUDY_PRESETS, QUICK_START_CATEGORIES } from "@/lib/constants";
 import type { BacktestRequest, HpoIntensity } from "@/api/schemas";
+
+const _CUSTOM_PRESETS_KEY = "kodaquant-custom-presets";
+
+function _loadCustomPresets(): Record<string, { name: string; subtitle: string; date: string }> {
+  try {
+    return JSON.parse(localStorage.getItem(_CUSTOM_PRESETS_KEY) || "{}");
+  } catch { return {}; }
+}
+function _saveCustomPresets(data: Record<string, { name: string; subtitle: string; date: string }>) {
+  try { localStorage.setItem(_CUSTOM_PRESETS_KEY, JSON.stringify(data)); } catch {}
+}
 
 type Widen<T> = T extends boolean ? boolean : T extends string ? string : T extends number ? number : T;
 type BacktestState = { -readonly [K in keyof typeof DEFAULTS]: Widen<(typeof DEFAULTS)[K]> } & {
   hpoIntensity: HpoIntensity;
+  hpoManualOverride: boolean;
+  parentJobId: string | null;
+  activePreset: string | null;
+  customPresets: Record<string, { name: string; subtitle: string; date: string }>;
 };
 type BacktestActions = {
   setField: <K extends keyof BacktestState>(key: K, value: BacktestState[K]) => void;
   toggleModel: (model: string) => void;
   resetToDefaults: () => void;
   applyPreset: (preset: { pair?: string; timeframe?: string; models?: string[]; months?: number; hpo_intensity?: HpoIntensity; seed?: number; start_date?: string; end_date?: string }) => void;
+  applyStudyPreset: (presetKey: string) => void;
+  applyQuickPreset: (presetKey: string) => void;
+  saveCustomPreset: (name: string, subtitle: string) => void;
+  removeCustomPreset: (key: string) => void;
   toRequestPayload: () => BacktestRequest;
 };
 
@@ -19,6 +38,10 @@ const DEFAULT_HPO_INTENSITY: HpoIntensity = "quick";
 export const useBacktestStore = create<BacktestState & BacktestActions>()((set, get) => ({
   ...structuredClone(DEFAULTS) as BacktestState,
   hpoIntensity: DEFAULT_HPO_INTENSITY,
+  hpoManualOverride: false,
+  parentJobId: null,
+  activePreset: null,
+  customPresets: _loadCustomPresets(),
 
   setField: (key, value) => set({ [key]: value } as Partial<BacktestState>),
 
@@ -33,7 +56,7 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       return { selectedModels: next };
     }),
 
-  resetToDefaults: () => set({ ...structuredClone(DEFAULTS), hpoIntensity: DEFAULT_HPO_INTENSITY } as Partial<BacktestState>),
+  resetToDefaults: () => set({ ...structuredClone(DEFAULTS), hpoIntensity: DEFAULT_HPO_INTENSITY, hpoManualOverride: false, parentJobId: null } as Partial<BacktestState>),
 
   applyPreset: (preset) =>
     set((state) => {
@@ -46,7 +69,62 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       if (preset.seed !== undefined) updates.seed = preset.seed;
       if (preset.start_date !== undefined) updates.startDate = preset.start_date;
       if (preset.end_date !== undefined) updates.endDate = preset.end_date;
-      return updates;
+      return { ...updates, activePreset: null };
+    }),
+
+  applyStudyPreset: (presetKey) =>
+    set((state) => {
+      const p = STUDY_PRESETS[presetKey as keyof typeof STUDY_PRESETS];
+      if (!p) return state;
+      return {
+        hpoIntensity: p.hpoIntensity,
+        hpoManualOverride: false,
+        repeats: p.repeats,
+        trainMonths: p.trainMonths,
+        testMonths: p.testMonths,
+        confidenceThreshold: p.confidenceThreshold,
+        targetActiveRate: p.targetActiveRate,
+        targetCoverage: p.targetCoverage,
+        activePreset: presetKey,
+      };
+    }),
+
+  applyQuickPreset: (presetKey) =>
+    set((state) => {
+      for (const cat of QUICK_START_CATEGORIES) {
+        for (const opt of cat.options) {
+          if (opt.key === presetKey) {
+            return {
+              selectedModels: opt.models,
+              hpoIntensity: opt.hpoIntensity,
+              hpoManualOverride: false,
+              nTrials: opt.nTrials,
+              repeats: opt.repeats,
+              trainMonths: opt.trainMonths,
+              testMonths: opt.testMonths,
+              confidenceThreshold: opt.confidenceThreshold,
+              activePreset: null,
+            };
+          }
+        }
+      }
+      return { selectedModels: [] };
+    }),
+
+  saveCustomPreset: (name, subtitle) =>
+    set((state) => {
+      const key = `custom-${Date.now()}`;
+      const next = { ...state.customPresets, [key]: { name, subtitle, date: new Date().toISOString().slice(0, 10) } };
+      _saveCustomPresets(next);
+      return { customPresets: next };
+    }),
+
+  removeCustomPreset: (key) =>
+    set((state) => {
+      const next = { ...state.customPresets };
+      delete next[key];
+      _saveCustomPresets(next);
+      return { customPresets: next };
     }),
 
   toRequestPayload: () => {
@@ -140,9 +218,11 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       end_date: s.endDate || undefined,
       trading_costs: s.evalUseTradingCosts,
       months: s.testMonths,
-      repeats: 1,
+      repeats: s.repeats ?? 1,
       seed: s.seed,
       hpo_intensity: s.hpoIntensity,
+      ...(s.hpoManualOverride && { n_trials: s.nTrials }),
+      ...(s.parentJobId && { parent_job_id: s.parentJobId }),
       config_overrides: configOverrides,
     };
   },

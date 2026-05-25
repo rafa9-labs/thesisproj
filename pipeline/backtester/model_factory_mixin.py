@@ -400,7 +400,16 @@ class ModelFactoryMixin:
             )
 
             # ---- GPU CONTROL (XGBoost >= 2.0 style) ----
-            use_gpu = os.environ.get("XGB_USE_GPU", "0") == "1"
+            # Auto-detect GPU; env var XGB_USE_GPU can override (0=force CPU, 1=force GPU)
+            _xgb_env_gpu = os.environ.get("XGB_USE_GPU")
+            if _xgb_env_gpu is not None:
+                use_gpu = _xgb_env_gpu == "1"
+            else:
+                try:
+                    from pipeline.runtime import gpu_status
+                    use_gpu = gpu_status().get("available", False)
+                except Exception:
+                    use_gpu = False
 
             if use_gpu:
                 # New-style: tree_method + device

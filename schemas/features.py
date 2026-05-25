@@ -227,7 +227,7 @@ class CVConfig(BaseModel):
     
     # ── CV geometry ──
     cv_mode: str = Field(default="mini_block")
-    cv_blocks: int = Field(default=5, ge=2, le=20)
+    cv_blocks: int = Field(default=3, ge=2, le=20)
     cv_min_train_frac: float = Field(default=0.75, ge=0.1, le=0.99)
     cv_val_frac: float = Field(default=0.05, ge=0.01, le=0.5)
     cv_embargo_bars: int = Field(default=0, ge=0)

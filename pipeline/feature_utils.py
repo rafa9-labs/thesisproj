@@ -463,10 +463,12 @@ def prefilter_features_train(
       1) near-constant drop
       2) high-corr pruning
       3) MI top-K gate (optional)
+      4) per-family budget cap (optional, enabled via config)
 
     Notes:
     - y must be aligned with X (same index); we silently align to the intersection.
     - MI step uses your existing select_topk_by_mutual_info() if present.
+    - Per-family budget uses FEATURE_FAMILIES + MAX_FEATURES_PER_FAMILY from metrics_tuples.
     """
     try:
         from utilsNoWFO import select_topk_by_mutual_info
@@ -480,6 +482,7 @@ def prefilter_features_train(
     prefer   = cfg.get("prefilter_prefer_prefixes", ["rv", "ema", "sma", "macd", "adx"])
     mi_topk  = cfg.get("mutual_info_top_k", "sqrt")
     rng      = int(cfg.get("prefilter_random_state", 42))
+    use_family_budget = bool(cfg.get("use_feature_family_budget", True))
 
     # 0) ensure alignment (in case caller forgot)
     if not X.empty and not y.empty:
@@ -521,13 +524,64 @@ def prefilter_features_train(
         K = min(max(1, K), Xmi.shape[1])
 
     if K >= Xmi.shape[1]:
-        return list(Xmi.columns)
+        keep_final = list(Xmi.columns)
+    else:
+        idxs = select_topk_by_mutual_info(
+            Xmi, ymi.astype(int), top_k=K, random_state=rng
+        )
+        keep_final = [Xmi.columns[i] for i in idxs]
 
-    idxs = select_topk_by_mutual_info(
-        Xmi, ymi.astype(int), top_k=K, random_state=rng
-    )
-    keep3 = [Xmi.columns[i] for i in idxs]
-    return keep3
+    # 4) Per-family budget cap
+    if use_family_budget and len(keep_final) > 1:
+        try:
+            from pipeline.metrics_tuples import FEATURE_FAMILIES, MAX_FEATURES_PER_FAMILY
+            keep_final = _apply_per_family_budget(keep_final, Xmi, ymi)
+        except Exception:
+            pass
+
+    return keep_final
+
+
+def _classify_feature(col: str, families: dict) -> str:
+    """Return the family name for a feature column, or 'other'."""
+    col_lower = col.lower()
+    for family, prefixes in sorted(families.items(), key=lambda x: -max(len(p) for p in x[1])):
+        for prefix in prefixes:
+            if col_lower.startswith(prefix):
+                return family
+    return "other"
+
+
+def _apply_per_family_budget(features: list[str], X: pd.DataFrame, y: pd.Series) -> list[str]:
+    """Reduce features so each family stays within MAX_FEATURES_PER_FAMILY."""
+    from pipeline.metrics_tuples import FEATURE_FAMILIES, MAX_FEATURES_PER_FAMILY
+
+    groups: dict[str, list[str]] = {}
+    for col in features:
+        family = _classify_feature(col, FEATURE_FAMILIES)
+        groups.setdefault(family, []).append(col)
+
+    kept: list[str] = []
+    for family, cols in sorted(groups.items()):
+        cap = MAX_FEATURES_PER_FAMILY.get(family, 10)
+        if len(cols) <= cap:
+            kept.extend(cols)
+            continue
+
+        # Need to select within family: compute MI for these columns
+        sub_X = X[cols].fillna(X[cols].mean())
+        sub_y = y.loc[sub_X.index]
+        try:
+            if mutual_info_classif is None:
+                kept.extend(cols[:cap])
+            else:
+                mi = mutual_info_classif(sub_X, sub_y.astype(int), random_state=42)
+                ranked = [cols[i] for i in np.argsort(mi)[::-1]]
+                kept.extend(ranked[:cap])
+        except Exception:
+            kept.extend(cols[:cap])
+
+    return kept
 
 
 def realized_vol(ser, window=96):

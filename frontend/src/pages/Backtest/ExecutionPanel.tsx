@@ -15,10 +15,10 @@ const sectionTitleStyle: React.CSSProperties = { color: "var(--color-text-second
 const explainerClass = "mb-5 text-[11px] font-light leading-relaxed max-w-[720px]";
 const explainerStyle: React.CSSProperties = { color: "var(--color-text-muted)" };
 
-export function ExecutionPanel() {
+export function ExecutionPanel({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const setField = useBacktestStore((s) => s.setField);
   const s = useBacktestStore.getState();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div

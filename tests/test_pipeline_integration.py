@@ -6,7 +6,6 @@ import numpy as np
 def test_imports_expose_standalone_utils():
     """pipeline._imports re-exports standalone_utils symbols."""
     import pipeline._imports as pi
-    assert hasattr(pi, "_load_csv_cached")
     assert hasattr(pi, "_norm_class_counts")
     assert hasattr(pi, "print_block_summary")
 

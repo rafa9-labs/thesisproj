@@ -48,13 +48,6 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.utils.class_weight import compute_class_weight
 
-# -- Data paths & constants --
-CSV_1H    = "csv_data/EURUSD_10_years_H1_OANDA.csv"
-CSV_4H    = "csv_data/EURUSD_10_years_H4_OANDA.csv"
-CSV_15MIN = os.environ.get("CSV_15MIN", "csv_data/EURUSD_10_years_M15_OANDA.csv")
-CSV_30MIN = os.environ.get("CSV_30MIN", "csv_data/EURUSD_10_years_M30_OANDA.csv")
-BASE_CSV  = CSV_30MIN  # switch base timeframe by changing this line
-
 # -- DQN paths --
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DQN_GRID_CONFIG_PATH = os.path.join(_REPO_ROOT, "configs", "dqn_grid_config.json")
@@ -113,7 +106,7 @@ from pipeline.runtime import SAFE_CORES, CPU_TOTAL
 
 # -- Pipeline utility modules --
 from pipeline.standalone_utils import (
-    _load_csv_cached, _norm_class_counts,
+    _norm_class_counts,
     print_block_summary, print_pruned_block_summary,
 )
 from pipeline.memory_utils import _hard_free, _apply_low_ram_overrides
@@ -233,7 +226,7 @@ import sys as _sys
 _mod = _sys.modules[__name__]
 _public_names = [n for n in dir(_mod) if not n.startswith('_')]
 _underscore_exports = [
-    '_load_csv_cached', '_norm_class_counts',
+    '_norm_class_counts',
     '_hard_free', '_apply_low_ram_overrides',
     '_load_default_dqn_cfg', '_coerce_dqn_cfg',
     '_apply_temperature_to_proba', '_psr', '_dsr_sign',

@@ -496,6 +496,44 @@ class RealTradingMixin:
             # Hard-fail would be silly; the system can always fall back to per-slice TA.
             pass
 
+        # Pre-compute BH curve and fire simulation_started BEFORE HPO
+        # so the frontend can show the buy-and-hold line immediately
+        try:
+            _mt_for_bh = model_type
+            _train_m = get_first(config.get("train_months"), TRAIN_TEST_MONTHS[_mt_for_bh]["train"][0])
+            _test_m = get_first(config.get("test_months"), TRAIN_TEST_MONTHS[_mt_for_bh]["test"][0])
+            _pu_bh = config.get("period_unit", "months")
+            from config import convert_month_count_to_periods as _cvt_bh, period_offset as _po_bh
+            _np_bh = _cvt_bh(months, _pu_bh)
+            if _np_bh > 0:
+                bh_curve = []
+                _start_dt_bh = pd.to_datetime(self.start) if self.start is not None else self.data.index[0]
+                _warmup_bh = _cvt_bh(37, _pu_bh)  # same conversion as month loop
+                _test_p_bh = _cvt_bh(_test_m, _pu_bh)
+                cum_bh = 1.0
+                for i in range(_np_bh):
+                    test_s = _start_dt_bh + _po_bh(_warmup_bh + i, unit=_pu_bh)
+                    test_e = test_s + _po_bh(_test_p_bh, unit=_pu_bh)
+                    td = full_data.loc[(full_data.index >= test_s) & (full_data.index < test_e)]
+                    if len(td) > 1 and "mid_close" in td.columns:
+                        cum_bh *= float((1 + td["mid_close"].pct_change().dropna()).prod())
+                    elif len(td) > 1 and "close" in td.columns:
+                        cum_bh *= float((1 + td["close"].pct_change().dropna()).prod())
+                    bh_curve.append({"period": i + 1, "bh": round(float(cum_bh), 6)})
+                _progress_cb_pre = getattr(self, "_progress_callback", None)
+                if _progress_cb_pre:
+                    _progress_cb_pre("simulation_started", _mt_for_bh, {
+                        "n_periods": _np_bh,
+                        "bh_curve": bh_curve,
+                    })
+                if _np_bh > 0:
+                    log_print(
+                        f"[BH] Pre-computed {_np_bh} BH points for {_mt_for_bh} "
+                        f"(last_bh={bh_curve[-1]['bh']})",
+                        level="COMPACT",
+                    )
+        except Exception as _bh_err:
+            log_print(f"[BH] Pre-computation skipped for {model_type}: {_bh_err}", level="COMPACT")
 
         # --- Global HPO: tune once per run, reuse hyperparameters every month (non-DQN only) ---
         global_hpo_best = None
@@ -780,8 +818,37 @@ class RealTradingMixin:
             except Exception:
                 return "na", {}
 
+        # S16.1: Helpers to extract in-sample CV metrics from the selected candidate
+        def _safe_get_cv_value(candidate):
+            if not isinstance(candidate, dict):
+                return float("nan")
+            for key in ("__cv_value", "__hpo_best_score", "__verify_best_score"):
+                try:
+                    v = float(candidate.get(key, float("nan")))
+                    if np.isfinite(v):
+                        return v
+                except (TypeError, ValueError):
+                    continue
+            return float("nan")
+
+        def _safe_get_cv_return(candidate):
+            if not isinstance(candidate, dict):
+                return float("nan")
+            try:
+                v = float(candidate.get("__cv_return", float("nan")))
+                if np.isfinite(v):
+                    return v
+            except (TypeError, ValueError):
+                pass
+            return float("nan")
+
         for i in range(n_periods):
             period_idx = i + 1
+
+            if getattr(self, "_force_stop_checker", None) is not None:
+                if self._force_stop_checker():
+                    print(f"[CANCELLED] Force-stop requested at month {period_idx}/{n_periods}")
+                    raise KeyboardInterrupt("Force stopped by user")
             
             # V2 export safety: always define, then overwrite if evaluator provides it
             _signal_coverage_month = float("nan")
@@ -2220,6 +2287,25 @@ class RealTradingMixin:
                         prev_eq_strategy=prev_eq_strategy,
                         prev_eq_bh=prev_eq_bh,
                     )
+                    _progress_cb = getattr(self, "_progress_callback", None)
+                    if _progress_cb:
+                        phase = "month" if period_unit == "months" else "period"
+                        _progress_cb(phase, model_type, {
+                            "period": period_idx + 1,
+                            "total_periods": n_periods,
+                            "sharpe": 0.0,
+                            "trades": 0,
+                            "equity_strategy": prev_eq_strategy,
+                            "equity_bh": prev_eq_bh,
+                            "drawdown": 0.0,
+                            "win_rate": 0.0,
+                            "precision_macro": 0.0,
+                            "f1_macro": 0.0,
+                            "return_pct": 0.0,
+                            "directional_accuracy": 0.0,
+                            "active_rate": 0.0,
+                            "flat": True,
+                        })
                     continue
 
 
@@ -2388,6 +2474,10 @@ class RealTradingMixin:
 
                         # save continuous curves for the cross-month plot (incremental to avoid list growth)
                         _month_df = eval_df_cont[["cstrategy_cont", "creturns_cont"]].copy()
+                        try:
+                            _month_df.attrs = {}
+                        except Exception:
+                            pass
                         if self._monthly_all_dfs_concat is None:
                             self._monthly_all_dfs_concat = _month_df
                         else:
@@ -2398,6 +2488,10 @@ class RealTradingMixin:
                             if self._monthly_trade_dfs_concat is None:
                                 self._monthly_trade_dfs_concat = trade_df_month
                             else:
+                                try:
+                                    trade_df_month.attrs = {}
+                                except Exception:
+                                    pass
                                 self._monthly_trade_dfs_concat = pd.concat(
                                     [self._monthly_trade_dfs_concat, trade_df_month], ignore_index=True
                                 )
@@ -2551,6 +2645,8 @@ class RealTradingMixin:
 
 
                 result = {
+                    "train_start": train_start,
+                    "train_end": train_end,
                     "test_start": test_start,
                     "test_end": test_end,
                     "train_months": train_months,
@@ -2606,6 +2702,12 @@ class RealTradingMixin:
                     # model metadata
                     "model_type": model_type,
 
+                    # S16.1: Overfitting detection — in-sample metrics from CV
+                    "train_sharpe": _safe_get_cv_value(best_combo),
+                    "train_return": _safe_get_cv_return(best_combo),
+                    "sharpe_gap_pct": 0.0,   # populated below after sharpe is computed
+                    "return_gap_pct": 0.0,   # populated below
+
                     # performance snapshot (continuous month + carried equities)
                     "cstrategy":           round(float(perf), 6),
                     "creturns":            round(float(monthly_bh_factor), 6),
@@ -2632,6 +2734,63 @@ class RealTradingMixin:
                     # trace features actually used this month
                     "features_used": features_used,
                 }
+
+                # S16.1: Compute per-period train/OOS divergence
+                try:
+                    _train = result["train_sharpe"]
+                    _test = result["sharpe"]
+                    if np.isfinite(_train) and np.isfinite(_test):
+                        result["sharpe_gap_pct"] = round((_train - _test) / max(abs(_train), 0.01) * 100.0, 2)
+                    _tret = result["train_return"]
+                    _sret = result["strategy_return"]
+                    if np.isfinite(_tret) and np.isfinite(_sret):
+                        result["return_gap_pct"] = round((_tret - _sret) / max(abs(_tret), 0.01) * 100.0, 2)
+                except Exception:
+                    pass
+                # S16.1: Persist CV fold-level sharpes for overfitting report
+                try:
+                    cf = getattr(self, "_last_fold_srs", None)
+                    if cf is not None and isinstance(cf, (list, np.ndarray)):
+                        result["cv_fold_sharpes"] = [float(v) if np.isfinite(v) else float("nan") for v in cf]
+                except Exception:
+                    pass
+
+                # --- S16.2: Walk-forward transparency data ---
+                # Signal counts: how many bars had predictions vs passed confidence gate
+                _signals_raw = 0
+                _signals_passed = 0
+                try:
+                    _res_df = getattr(self, "results", None)
+                    if _res_df is not None and isinstance(_res_df, pd.DataFrame) and not _res_df.empty:
+                        if "pred" in _res_df.columns:
+                            _preds = _res_df["pred"].dropna()
+                            _signals_raw = int((_preds != 0).sum())
+                        if "position_exec" in _res_df.columns:
+                            _positions = _res_df["position_exec"].dropna()
+                            _signals_passed = int((_positions != 0).sum())
+                except Exception:
+                    pass
+                result["signals_raw"] = _signals_raw
+                result["signals_passed_gate"] = _signals_passed
+
+                # Regime distribution: percentage of bars in sideways/trend/volatile
+                _pct_sideways = float("nan")
+                _pct_trend = float("nan")
+                _pct_volatile = float("nan")
+                try:
+                    _res_df = getattr(self, "results", None)
+                    if _res_df is not None and isinstance(_res_df, pd.DataFrame) and not _res_df.empty and "regime_id" in _res_df.columns:
+                        _rid = _res_df["regime_id"].dropna()
+                        if len(_rid) > 0:
+                            _vc = _rid.value_counts(normalize=True)
+                            _pct_sideways = float(_vc.get(0, 0.0))
+                            _pct_trend = float(_vc.get(1, 0.0))
+                            _pct_volatile = float(_vc.get(2, 0.0))
+                except Exception:
+                    pass
+                result["pct_sideways"] = _pct_sideways
+                result["pct_trend"] = _pct_trend
+                result["pct_volatile"] = _pct_volatile
 
                 # Only try to serialize sub-configs if best_combo is a dict
                 if isinstance(best_combo, dict):
@@ -2661,7 +2820,25 @@ class RealTradingMixin:
                 _progress_cb = getattr(self, "_progress_callback", None)
                 if _progress_cb:
                     phase = "month" if period_unit == "months" else "period"
-                    _progress_cb(phase, model_type, {"period": i + 1, "total_periods": n_periods, "sharpe": result.get("sharpe", None), "trades": result.get("trades", None)})
+                    _progress_cb(phase, model_type, {
+                        "period": i + 1,
+                        "total_periods": n_periods,
+                        "sharpe": result.get("sharpe"),
+                        "trades": result.get("trades"),
+                        "equity_strategy": result.get("equity_strategy"),
+                        "equity_bh": result.get("equity_bh"),
+                        "drawdown": result.get("drawdown"),
+                        "win_rate": result.get("win_rate"),
+                        "precision_macro": result.get("precision_macro"),
+                        "f1_macro": result.get("f1_macro"),
+                        "return_pct": result.get("cstrategy"),
+                        "directional_accuracy": result.get("directional_accuracy"),
+                        "active_rate": result.get("active_rate"),
+                        "train_sharpe": result.get("train_sharpe"),
+                        "sharpe_gap_pct": result.get("sharpe_gap_pct"),
+                        "signals_raw": result.get("signals_raw"),
+                        "signals_passed_gate": result.get("signals_passed_gate"),
+                    })
                 
                 # PBO/MCS monthly bookkeeping (does not affect trading logic)
                 try:

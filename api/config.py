@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     project_root: str = str(Path(__file__).resolve().parent.parent)
 
     model_check_interval: float = 2.0
-    max_concurrent_backtests: int = 2
+    max_concurrent_backtests: int = 1
 
     paddle_vendor_id: str = ""
     paddle_product_id: str = ""

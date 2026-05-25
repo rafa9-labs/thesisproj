@@ -85,7 +85,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
         # --- (B) Calibration knobs ---
         params["calibrate_method"] = trial.suggest_categorical(
-            "calibrate_method", ["sigmoid", "isotonic"]
+            "calibrate_method", ["sigmoid"]
         )
 
         deep_models = {"lstm", "cnn", "transformer"}
@@ -261,7 +261,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     if _hpo_stage == "A_signal":
          params["calibrate_method"] = str(_stage_cfg.get("stageA_calibrate_method", "sigmoid") or "sigmoid")
     else:
-        params["calibrate_method"] = trial.suggest_categorical("calibrate_method", ["sigmoid", "isotonic"])
+        params["calibrate_method"] = trial.suggest_categorical("calibrate_method", ["sigmoid"])
 
     # === Feature engineering toggles ===
     params["use_fracdiff"]     = trial.suggest_categorical("use_fracdiff", [False, True])

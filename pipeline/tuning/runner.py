@@ -117,7 +117,11 @@ def run_optuna_tuning(
     if "cv_n_jobs" not in cv_config:
         import os
         import multiprocessing
-        cv_config["cv_n_jobs"] = int(os.getenv("CV_JOBS", str(multiprocessing.cpu_count() or 16)))
+        _cv_jobs_raw = (os.getenv("CV_JOBS", "") or "").strip()
+        try:
+            cv_config["cv_n_jobs"] = int(_cv_jobs_raw) if _cv_jobs_raw else (multiprocessing.cpu_count() or 16)
+        except (ValueError, TypeError):
+            cv_config["cv_n_jobs"] = multiprocessing.cpu_count() or 16
         
     # ------------------------------------------------------------
     # Fast path: n_trials <= 0 => load cached HPO config (no Optuna)
@@ -230,6 +234,14 @@ def run_optuna_tuning(
     else:
         _n_startup = _n_startup_arg
 
+    # Clamp startup trials to total trials — avoid 15 startup + 10 total = all random
+    try:
+        _total = int(n_trials)
+        if _n_startup > _total:
+            _n_startup = max(1, _total // 2)
+    except Exception:
+        pass
+
     tpe_ei = int(os.environ.get("TPE_EI_CANDIDATES", "64"))
     sampler = TPESampler(
         n_startup_trials=_n_startup,
@@ -295,18 +307,47 @@ def run_optuna_tuning(
     )
 
     def _func_with_progress(trial):
-        result = func(trial)
         _trial_counter[0] += 1
+        pruned = None
+        _prune_reason = None
+        _exc = None
+        result = None
+        try:
+            result = func(trial)
+        except optuna.TrialPruned as _e:
+            pruned = "PRUNED"
+            _prune_reason = str(_e)[:120]
+            _exc = _e
+        except Exception as _e:
+            pruned = "FAIL"
+            _prune_reason = str(_e)[:120]
+            _exc = _e
+
         if _progress_cb:
             try:
+                best_so_far = None
+                if pruned is None:
+                    try:
+                        best_so_far = float(study.best_value)
+                    except Exception:
+                        pass
+                trial_state = str(trial.state) if hasattr(trial, "state") else "COMPLETE"
+                if _prune_reason:
+                    trial_state = f"{pruned}:{_prune_reason}"
                 _progress_cb("hpo_trial", _model_name_for_cb, {
                     "trial": _trial_counter[0],
                     "total_trials": _n_trials_for_cb,
                     "cv_blocks": _cv_blocks_for_cb,
                     "score": result,
+                    "params": dict(trial.params) if trial.params else {},
+                    "best_score_so_far": best_so_far,
+                    "trial_state": trial_state,
                 })
             except Exception:
                 pass
+
+        if _exc is not None:
+            raise _exc
         return result
 
 
@@ -346,7 +387,7 @@ def run_optuna_tuning(
         # Stop if best_value hasn't improved by >= plateau_delta for
         # plateau_patience consecutive trials.
         # ------------------------------------------------------------
-        plateau_patience = int(cv_config.get("plateau_patience", 0) or 0)
+        plateau_patience = int(cv_config.get("plateau_patience", 15) or 15)
         plateau_delta = float(cv_config.get("plateau_delta", 0.0) or 0.0)
         plateau_min_trials = int(cv_config.get("plateau_min_trials", 0) or 0)
 
@@ -371,7 +412,10 @@ def run_optuna_tuning(
             for _i in range(_target_trials):
                 study.optimize(_func_with_progress, n_trials=1, n_jobs=n_jobs, gc_after_trial=True)
 
-                _after = getattr(study, "best_value", None)
+                try:
+                    _after = study.best_value
+                except (AttributeError, ValueError):
+                    _after = None
                 if _after is None:
                     continue
 

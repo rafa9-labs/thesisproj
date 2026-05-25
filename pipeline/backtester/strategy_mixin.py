@@ -152,6 +152,7 @@ class StrategyMixin:
                 pass
         
             self.model = None
+            self._diagnostics_feature_importance = []
 
             # Clear any sticky feature cache from previous evals
             self._clear_feature_cache()
@@ -398,8 +399,29 @@ class StrategyMixin:
                     y_pref = y_pre.loc[common_idx]
 
                     # 3-stage prefilter (near-constant -> high-corr collapse -> MI top-K)
+                    # Optional LightGBM SHAP pre-filter (stage 0) — reduces features before the 3-stage pipeline
+                    _use_lgbm = bool(cfg.get("use_lightgbm_prefilter", False))
+                    if _use_lgbm and len(features) > 40:
+                        try:
+                            from pipeline.lightgbm_proxy import LightGBMProxy
+                            _lg_proxy = LightGBMProxy(top_k=40, n_estimators=200)
+                            _pref = _lg_proxy.select(X_pref, y_pref)
+                            if _pref and len(_pref) < len(features):
+                                if self._is_debug():
+                                    print(f"[LightGBM Proxy] Reduced {len(features)} -> {len(_pref)} features via SHAP")
+                                X_pref = X_pref[_pref]
+                                features_subset = _pref
+                            else:
+                                features_subset = features
+                        except Exception as _lgbm_err:
+                            if self._is_debug():
+                                print(f"[LightGBM Proxy] Skipped: {_lgbm_err}")
+                            features_subset = features
+                    else:
+                        features_subset = features
+
                     keep = prefilter_features_train(
-                        X=X_pref,
+                        X=X_pref[features_subset],
                         y=y_pref,
                         cfg=(self.features_config or {}),
                     )
@@ -417,6 +439,12 @@ class StrategyMixin:
             else:
                 if self._is_debug():
                     print("[Prefilter] No change to feature set.")
+
+            # S16: Store full retained feature list for family distribution in diagnostics
+            try:
+                self._diagnostics_feature_names = list(features)
+            except Exception:
+                self._diagnostics_feature_names = []
 
             # Impute on TRAIN, then apply to both TRAIN and TEST
             imputer = SimpleImputer(strategy="mean")
@@ -571,9 +599,10 @@ class StrategyMixin:
             class_counts = dict(zip(unique, counts))
             too_few = [cls for cls, count in class_counts.items() if count < MIN_CLASS_SAMPLES]
             if len(too_few) > 0 or len(class_counts) < 2:
-                msg = (f"[WARN] Skipping fold: Not enough samples for classes {too_few} "
-                       f"or only one class present: {class_counts}")
-                print(msg)
+                if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                    msg = (f"[WARN] Skipping fold: Not enough samples for classes {too_few} "
+                           f"or only one class present: {class_counts}")
+                    print(msg)
 
                 # Early prune (CV only): don't waste compute on a broken label regime
                 _in_cv_mode = bool(getattr(self, "_in_optuna_cv", False) or getattr(self, "_in_cv", False))
@@ -695,24 +724,23 @@ class StrategyMixin:
 
                 self._last_eligibility_diag = _diag_pf
                 # ------------------------------------------------------------
-                # Explicit eligibility audit log (no behavior change)
-                # Confirms: post-feature denominator, warmup dropped, eval anchor.
+                # Explicit eligibility audit log (KODAQUANT_VERBOSE only)
                 # ------------------------------------------------------------
                 try:
-                    _ctx = "eval"
-                    if bool(getattr(self, "_in_optuna_cv", False)):
-                        _ctx = "cv"
-                    elif bool(getattr(self, "_in_real_sim", False)):
-                        _mx = getattr(self, "_rt_month_idx", None)
-                        _ctx = f"real_m{int(_mx)}" if _mx is not None else "real"
-
-                    print(
-                        f"[Eligibility] post_feature_bars_total={int(bars_total)} "
-                        f"eligible={int(eligible_bars_pf)} "
-                        f"warmup_dropped={int(warmup_dropped_pf)} "
-                        f"anchor={str(eval_anchor_ts)} "
-                        f"ctx={_ctx}"
-                    )
+                    if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                        _ctx = "eval"
+                        if bool(getattr(self, "_in_optuna_cv", False)):
+                            _ctx = "cv"
+                        elif bool(getattr(self, "_in_real_sim", False)):
+                            _mx = getattr(self, "_rt_month_idx", None)
+                            _ctx = f"real_m{int(_mx)}" if _mx is not None else "real"
+                        print(
+                            f"[Eligibility] post_feature_bars_total={int(bars_total)} "
+                            f"eligible={int(eligible_bars_pf)} "
+                            f"warmup_dropped={int(warmup_dropped_pf)} "
+                            f"anchor={str(eval_anchor_ts)} "
+                            f"ctx={_ctx}"
+                        )
                 except Exception:
                     pass
             except Exception as _e:
@@ -974,6 +1002,16 @@ class StrategyMixin:
                             extra_callbacks=None,
                         )
                     
+                        # S16.3: Capture feature importance for deep models
+                        try:
+                            from pipeline.diagnostics import compute_feature_importance
+                            _X_fi = X_seq_train[:64] if len(X_seq_train) > 64 else X_seq_train
+                            _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
+                            _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
+                            self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi] if _fi else []
+                        except Exception:
+                            pass
+
                         # Unified deep calibration + coverage threshold (works in CV too)
                         X_cal = X_seq_train
                         y_cal = y_seq_train
@@ -1073,6 +1111,16 @@ class StrategyMixin:
                             extra_callbacks=None,
                         )
 
+                        # S16.3: Capture feature importance for deep models
+                        try:
+                            from pipeline.diagnostics import compute_feature_importance
+                            _X_fi = X_seq_train[:64] if len(X_seq_train) > 64 else X_seq_train
+                            _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
+                            _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
+                            self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi] if _fi else []
+                        except Exception:
+                            pass
+
                         X_cal = X_seq_train
                         y_cal = y_seq_train
 
@@ -1150,6 +1198,16 @@ class StrategyMixin:
                             validation_split_if_needed=0.10,
                             extra_callbacks=None,
                         )
+
+                        # S16.3: Capture feature importance for deep models (LSTM 3D)
+                        try:
+                            from pipeline.diagnostics import compute_feature_importance
+                            _X_fi = X_train_3d[:64] if len(X_train_3d) > 64 else X_train_3d
+                            _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
+                            _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
+                            self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi] if _fi else []
+                        except Exception:
+                            pass
 
                         # Calibration inputs for shared block
                         X_cal  = X_train_3d
@@ -1244,9 +1302,19 @@ class StrategyMixin:
                             extra_callbacks=None,
                         )
 
+                        # S16.3: Capture feature importance for deep models (LSTM 3D)
+                        try:
+                            from pipeline.diagnostics import compute_feature_importance
+                            _X_fi = X_train_3d[:64] if len(X_train_3d) > 64 else X_train_3d
+                            _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
+                            _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
+                            self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi] if _fi else []
+                        except Exception:
+                            pass
+
                         # Calibration inputs for shared block
-                        X_cal  = X_seq_train
-                        y_cal  = y_seq_train
+                        X_cal  = X_train_3d
+                        y_cal  = y_train_eff
                         pred_fn = lambda X: self.model.predict(X, verbose=0, batch_size=batch_size)
 
                     else:
@@ -1291,6 +1359,16 @@ class StrategyMixin:
                             validation_split_if_needed=0.10,
                             extra_callbacks=None,
                         )
+
+                        # S16.3: Capture feature importance for deep models (CNN 3D)
+                        try:
+                            from pipeline.diagnostics import compute_feature_importance
+                            _X_fi = X_train_3d[:64] if len(X_train_3d) > 64 else X_train_3d
+                            _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
+                            _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
+                            self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi] if _fi else []
+                        except Exception:
+                            pass
 
                         # Calibration inputs for shared block
                         X_cal  = X_train_3d
@@ -1340,6 +1418,30 @@ class StrategyMixin:
                 # Fit FIRST (required for sklearn Pipelines / predict_proba).
                 self.model.fit(X_train, y_train)
 
+                # --- S16.3: Capture feature importance for classical models ---
+                try:
+                    from pipeline.diagnostics import compute_feature_importance
+                    _feat_names = list(features) if isinstance(features, (list, tuple)) else None
+                    _X_val = None
+                    _y_val = None
+                    try:
+                        _X_val = np.asarray(self.data[_feat_names][:500]) if _feat_names is not None and hasattr(self, "data") else None
+                        _y_val = np.asarray(y_train[:500]) if y_train is not None else None
+                    except Exception:
+                        pass
+                    _fi = compute_feature_importance(
+                        self.model, model_type,
+                        feature_names=_feat_names,
+                        X_val=_X_val,
+                        y_val=_y_val,
+                    )
+                    if _fi:
+                        self._diagnostics_feature_importance = [(e.feature, e.importance) for e in _fi]
+                    else:
+                        self._diagnostics_feature_importance = []
+                except Exception:
+                    self._diagnostics_feature_importance = []
+
                 # ------------------------------------------------------------
                 # Classical coverage-threshold (train-anchored, causal)
                 # IMPORTANT: must run AFTER fit, otherwise sklearn Pipelines
@@ -1379,12 +1481,13 @@ class StrategyMixin:
                                         _ctx = f"real_m{mx}"
                                 except Exception:
                                     pass
-                            print(
-                                f"[Calib][Coverage] conf_thr={float(self._coverage_conf_thr):.6f} "
-                                f"target_active_rate={float(tgt):.6f} cal_rows={int(ncal)} ctx={_ctx}"
-                            )
+                            if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                                print(
+                                    f"[Calib][Coverage] conf_thr={float(self._coverage_conf_thr):.6f} "
+                                    f"target_active_rate={float(tgt):.6f} cal_rows={int(ncal)} ctx={_ctx}"
+                                )
                 except Exception as _e:
-                    if self._is_debug():
+                    if self._is_debug() and bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
                         print(f"[WARN] [Calib][Classical] Coverage fit skipped: {_e}")
 
 
@@ -2823,15 +2926,18 @@ class StrategyMixin:
                                         _ctx = f"real_m{mx}"
                                 except Exception:
                                     pass
-                            print(
-                                f"[Calib][Coverage] conf_thr={float(coverage_thr):.6f} "
-                                f"target_active_rate={float(_tgt):.6f} "
-                                f"cal_rows={int(getattr(cal_X, 'shape', [0])[0])} ctx={_ctx}"
-                            )
+                            if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                                print(
+                                    f"[Calib][Coverage] conf_thr={float(coverage_thr):.6f} "
+                                    f"target_active_rate={float(_tgt):.6f} "
+                                    f"cal_rows={int(getattr(cal_X, 'shape', [0])[0])} ctx={_ctx}"
+                                )
                         except Exception as _ee:
-                            print(f"[WARN] Coverage threshold fit skipped in CV: {_ee}")
+                            if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                                print(f"[WARN] Coverage threshold fit skipped in CV: {_ee}")
                 except Exception as _e:
-                    print(f"[Calib] Classical coverage threshold skipped: {_e}")
+                    if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                        print(f"[Calib] Classical coverage threshold skipped: {_e}")
 
                 # Coverage should be based on **trade intent**, not certainty about "flat".
                 if proba.shape[1] >= 3:
@@ -2857,7 +2963,8 @@ class StrategyMixin:
                 base_thr = float(self._resolve_conf_thr(conf0))
                 self._last_conf_thr_init = float(conf0)
 
-                print(f"[DEBUG][Costs] high_vol_thr_train={high_vol_thr_train} | cfg_high_vol_thr={cfg_f.get('high_vol_thr')}")
+                if bool(int(os.getenv("KODAQUANT_VERBOSE", "0"))):
+                    print(f"[DEBUG][Costs] high_vol_thr_train={high_vol_thr_train} | cfg_high_vol_thr={cfg_f.get('high_vol_thr')}")
                 
                 # Persist for *all* downstream paths this month (TopN, consensus, cont-metrics)
                 try:
@@ -3237,6 +3344,7 @@ class StrategyMixin:
                 if model_type in deep_models:
                     try:
                         if getattr(self, "model", None) is not None:
+                            self._last_trained_model = self.model
                             self.model = None
                     except Exception:
                         pass
@@ -3312,6 +3420,7 @@ class StrategyMixin:
             # Drop model reference before clearing TF session to improve release behavior.
             try:
                 if getattr(self, "model", None) is not None:
+                    self._last_trained_model = self.model
                     self.model = None
             except Exception:
                 pass

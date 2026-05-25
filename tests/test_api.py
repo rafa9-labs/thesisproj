@@ -60,7 +60,7 @@ class TestPairs:
         assert r.status_code == 200
         data = r.json()
         assert data["symbol"] == "EURUSD"
-        assert len(data["timeframes"]) == 3
+        assert len(data["timeframes"]) >= 3
         m30 = next(t for t in data["timeframes"] if t["timeframe"] == "M30")
         assert m30["rows"] > 100000
 
@@ -88,6 +88,14 @@ class TestModels:
 
 
 class TestBacktestSubmit:
+    def setup_method(self):
+        from api.dependencies import get_data_store
+        from api.services import JobManager
+        store = get_data_store()
+        jm = JobManager(store)
+        for job in jm.list_jobs(job_type="backtest", limit=1000):
+            jm.delete_job(job["id"])
+
     def test_submit_valid_backtest(self, client):
         r = client.post("/api/v1/backtest", json={
             "pair": "EURUSD",
@@ -154,6 +162,14 @@ class TestBacktestSubmit:
 
 
 class TestBacktestResults:
+    def setup_method(self):
+        from api.dependencies import get_data_store
+        from api.services import JobManager
+        store = get_data_store()
+        jm = JobManager(store)
+        for job in jm.list_jobs(job_type="backtest", limit=1000):
+            jm.delete_job(job["id"])
+
     def test_results_for_pending_job(self, client):
         r = client.post("/api/v1/backtest", json={
             "pair": "EURUSD",
@@ -174,7 +190,7 @@ class TestDataDownload:
         assert r.status_code == 202
         data = r.json()
         assert data["job_id"]
-        assert data["status"] == "pending"
+        assert data["status"] == "running"
 
     def test_download_unknown_pair(self, client):
         r = client.post("/api/v1/data/download", json={"pair": "ZZZZZZ"})

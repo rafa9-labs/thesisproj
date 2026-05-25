@@ -1,7 +1,9 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, Play, Square, AlertTriangle, TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react";
+import { Activity, Play, Square, AlertTriangle, TrendingUp, TrendingDown, Minus, Loader2, Box } from "lucide-react";
 import { usePairs, useModels, useLivePrices, useDeployLiveSession, useStopLiveSession } from "@/api/queries";
+import { useQuery } from "@tanstack/react-query";
+import apiClient from "@/api/client";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";
 import type { OverlayLine } from "@/components/charts/CandlestickChart";
 import { TIMEFRAMES } from "@/lib/constants";
@@ -93,7 +95,6 @@ function SignalLog({ signals }: { signals: TradeSignal[] }) {
 export function LiveTradingPage() {
   const navigate = useNavigate();
   const { data: pairs } = usePairs();
-  const { data: models } = useModels();
   const deployMutation = useDeployLiveSession();
   const stopMutation = useStopLiveSession();
 
@@ -102,13 +103,27 @@ export function LiveTradingPage() {
     [pairs],
   );
   const pairList = availablePairs.length > 0 ? availablePairs : DEFAULT_PAIRS;
-  const modelList = useMemo(
-    () => (models ?? []).map((m) => ({ name: m.name, display: m.display_name })),
-    [models],
-  );
+
+  const { data: deployedModels, isLoading: loadingDeployed } = useQuery<Array<{
+    id: string;
+    model_type: string;
+    best_sharpe: number | null;
+    best_return: number | null;
+    status: string;
+    tags: string[];
+    created_at: string;
+    missing_on_disk?: boolean;
+  }>>({
+    queryKey: ["deployed-models-for-live"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ models: Array<{ id: string; model_type: string; best_sharpe: number | null; best_return: number | null; status: string; tags: string[]; created_at: string; missing_on_disk?: boolean }> }>("/models/deployed", { params: { status: "active" } });
+      return data.models;
+    },
+    refetchOnMount: true,
+  });
 
   const [selectedPair, setSelectedPair] = useState("EURUSD");
-  const [selectedModel, setSelectedModel] = useState("logistic");
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState("M30");
   const [live, setLive] = useState<LiveState>(INITIAL_LIVE_STATE);
 
@@ -190,13 +205,16 @@ export function LiveTradingPage() {
   }, [live.sessionId]);
 
   const handleDeploy = useCallback(async () => {
+    if (!selectedModelId) return;
     setLive((prev) => ({ ...prev, deploying: true, error: null }));
     try {
+      const selected = deployedModels?.find((m) => m.id === selectedModelId);
       const result = await deployMutation.mutateAsync({
         pair: selectedPair,
-        model: selectedModel,
+        model: selected?.model_type ?? "logistic",
         timeframe: timeframe,
         initial_equity: 10000,
+        model_id: selectedModelId,
       });
       setLive({
         running: true,
@@ -219,7 +237,7 @@ export function LiveTradingPage() {
         error: detail ?? message ?? "Deploy failed",
       }));
     }
-  }, [selectedPair, selectedModel, timeframe, deployMutation]);
+  }, [selectedPair, selectedModelId, timeframe, deployMutation, deployedModels]);
 
   const handleStop = useCallback(async () => {
     if (!live.sessionId) return;
@@ -298,11 +316,33 @@ export function LiveTradingPage() {
 
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>Model</span>
-          <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} disabled={live.running || live.deploying}
-            className="rounded-md border px-2.5 py-1 text-xs transition focus:outline-none disabled:opacity-50"
-            style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>
-            {modelList.map((m) => <option key={m.name} value={m.name}>{m.display}</option>)}
-          </select>
+          {loadingDeployed ? (
+            <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>Loading...</span>
+          ) : !deployedModels?.length ? (
+            <span className="text-xs flex items-center gap-1" style={{ color: "var(--color-accent-warning)" }}>
+              <AlertTriangle size={10} />
+              No active models —{" "}
+              <button onClick={() => navigate("/models")} className="underline" style={{ color: "var(--color-brand)" }}>
+                activate one
+              </button>
+            </span>
+          ) : (
+            <select
+              value={selectedModelId ?? ""}
+              onChange={(e) => setSelectedModelId(e.target.value || null)}
+              disabled={live.running || live.deploying}
+              className="rounded-md border px-2.5 py-1 text-xs transition focus:outline-none disabled:opacity-50"
+              style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}
+            >
+              <option value="">Select...</option>
+              {deployedModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.model_type} — SR: {m.best_sharpe != null ? (m.best_sharpe >= 0 ? "+" : "") + m.best_sharpe.toFixed(2) : "—"}
+                  {m.tags.length > 0 ? ` [${m.tags.join(",")}]` : ""}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 ml-2">
@@ -322,7 +362,7 @@ export function LiveTradingPage() {
 
         <div className="flex-1" />
 
-        <button onClick={live.running ? handleStop : handleDeploy} disabled={live.deploying}
+        <button onClick={live.running ? handleStop : handleDeploy} disabled={live.deploying || !selectedModelId}
           className="flex items-center gap-1.5 rounded-md border px-4 py-1.5 text-[11px] font-semibold uppercase transition-all duration-200 disabled:opacity-50"
           style={{
             borderColor: live.running ? "var(--color-accent-danger)" : "var(--color-accent-success)",
@@ -421,7 +461,7 @@ export function LiveTradingPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Model</span>
-                <span className="text-[10px] font-medium" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>{selectedModel}</span>
+                <span className="text-[10px] font-medium" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>{deployedModels?.find((m) => m.id === selectedModelId)?.model_type ?? selectedModelId ?? "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Timeframe</span>

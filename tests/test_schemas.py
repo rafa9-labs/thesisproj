@@ -346,7 +346,7 @@ class TestCVConfig:
         from schemas.features import CVConfig
         config = CVConfig()
         assert config.cv_mode == "mini_block"
-        assert config.cv_blocks == 5
+        assert config.cv_blocks == 3
         assert config.n_trials == 0
     
     def test_from_class_defaults(self):
