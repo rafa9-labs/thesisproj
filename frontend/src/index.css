@@ -12,25 +12,25 @@
   --color-koda-elevated: #11151C;
   --color-koda-gold: #D4AF37;
 
-  /* Base canvas — deeper blacks */
-  --color-app: #050608;
-  --color-surface: #0A0D12;
-  --color-elevated: #11151C;
+  /* Base canvas — institutional dark mode */
+  --color-app: #131722;
+  --color-surface: #1E222D;
+  --color-elevated: #252934;
 
   /* Glass surfaces */
-  --color-glass: rgba(255, 255, 255, 0.03);
-  --color-glass-border: rgba(255, 255, 255, 0.06);
-  --color-glass-hover: rgba(255, 255, 255, 0.05);
+  --color-glass: #1E222D;
+  --color-glass-border: #2A2E39;
+  --color-glass-hover: rgba(255, 255, 255, 0.04);
 
   /* Borders */
-  --color-border: #1A1F2A;
-  --color-border-subtle: #131820;
+  --color-border: #2A2E39;
+  --color-border-subtle: #1E222D;
   --color-border-active: rgba(0, 229, 255, 0.25);
 
   /* Typography */
   --color-text-primary: #E8ECF1;
   --color-text-secondary: #7A8494;
-  --color-text-muted: #4A5568;
+  --color-text-muted: #787B86;
   --color-text-inverse: #050608;
 
   /* Primary action — cyan (energy, precision) */
@@ -43,8 +43,8 @@
 
   /* Semantic accents — tuned for dark backgrounds */
   --color-accent: #00E5FF;
-  --color-accent-success: #22C55E;
-  --color-accent-danger: #EF4444;
+  --color-accent-success: #089981;
+  --color-accent-danger: #F23645;
   --color-accent-warning: #F59E0B;
   --color-accent-info: #00E5FF;
   --color-accent-classical: #22D3EE;

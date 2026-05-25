@@ -11,19 +11,21 @@ import { formatMetric, formatPercent } from "@/lib/formatters";
 import { useDashboardKPIs } from "./DashboardKPIs";
 import { RecentJobsTable } from "./RecentJobsTable";
 import { QuickActions } from "./QuickActions";
-import { MarketPulsePanel } from "./MarketPulsePanel";
+import { MarketPulsePanel, NewsArticlesPanel } from "./MarketPulsePanel";
 import { PriceTicker } from "./PriceTicker";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";
 
 function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-6 animate-pulse">
+      <div className="h-10" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+      <div className="h-[80px] rounded-lg" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+      <div className="h-[360px] rounded-lg" style={{ backgroundColor: "var(--color-glass-hover)" }} />
       <div className="grid grid-cols-3 gap-4">
         {Array.from({ length: 3 }, (_, i) => (
-          <div key={i} className="h-28 rounded-lg" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+          <div key={i} className="h-[300px] rounded-lg" style={{ backgroundColor: "var(--color-glass-hover)" }} />
         ))}
       </div>
-      <div className="h-[200px] rounded-lg" style={{ backgroundColor: "var(--color-glass-hover)" }} />
     </div>
   );
 }
@@ -99,68 +101,125 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <QuickActions />
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>
-          Pair
-        </span>
-        <select
-          value={activePair}
-          onChange={(e) => setActivePair(e.target.value)}
-          className="rounded-md border px-2.5 py-1 text-xs transition focus:outline-none"
+      {/* ── Header row: Title + pair selector + QuickActions ─────────────────── */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1">
+          <h1 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>
+            Trading Dashboard
+          </h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>
+              Pair
+            </span>
+            <select
+              value={activePair}
+              onChange={(e) => setActivePair(e.target.value)}
+              className="rounded-md border px-2.5 py-1 text-xs transition focus:outline-none"
+              style={{
+                borderColor: "var(--color-glass-border)",
+                backgroundColor: "var(--color-glass)",
+                color: "var(--color-text-primary)",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              {(availablePairs.length > 0 ? availablePairs : ["EURUSD", "GBPUSD", "USDJPY"]).map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <QuickActions />
+        </div>
+      </div>
+
+      {/* ── Ticker ribbon ──────────────────────────────────────────────────── */}
+      <PriceTicker pairs={availablePairs.length > 0 ? [activePair, ...availablePairs.filter((p) => p !== activePair).slice(0, 2)] : ["EURUSD", "GBPUSD", "USDJPY"]} />
+
+      {/* ── Full-width candlestick chart ────────────────────────────────────── */}
+      <div
+        className="rounded-lg border"
+        style={{
+          borderColor: "var(--color-glass-border)",
+          backgroundColor: "var(--color-glass)",
+          padding: "16px",
+        }}
+      >
+        <CandlestickChart pair={activePair} timeframe="M30" limit={150} height={360} />
+      </div>
+
+      {/* ── 3-column widget grid ───────────────────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-4">
+        {/* Col 1: ALGO Metrics KPIs */}
+        <div
+          className="rounded-lg border flex flex-col gap-3"
           style={{
             borderColor: "var(--color-glass-border)",
             backgroundColor: "var(--color-glass)",
-            color: "var(--color-text-primary)",
-            fontFamily: "var(--font-mono)",
+            padding: "16px",
           }}
         >
-          {(availablePairs.length > 0 ? availablePairs : ["EURUSD", "GBPUSD", "USDJPY"]).map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-      </div>
-      </div>
+          <span
+            className="text-[10px] font-medium uppercase tracking-[0.12em]"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            ALGO Metrics
+          </span>
+          <MetricCard
+            label="Avg Sharpe"
+            value={formatMetric(kpis.avgSharpe)}
+            icon={<BarChart3 size={16} strokeWidth={1.5} />}
+            delta={kpis.avgSharpe !== null ? (kpis.avgSharpe >= 1 ? "Strong" : kpis.avgSharpe >= 0.5 ? "Moderate" : "Weak") : null}
+            deltaType={(kpis.avgSharpe ?? 0) >= 1 ? "positive" : (kpis.avgSharpe ?? 0) >= 0.5 ? "neutral" : "negative"}
+          />
+          <MetricCard
+            label="Win Rate"
+            value={formatPercent(kpis.avgWinRate, 1)}
+            icon={<Activity size={16} strokeWidth={1.5} />}
+            delta="Fraction of winning trades"
+            deltaType="neutral"
+          />
+          <MetricCard
+            label="Profitable Months"
+            value={formatPercent(kpis.profitableMonthsPct, 0)}
+            icon={<TrendingUp size={16} strokeWidth={1.5} />}
+            delta="Months with positive return"
+            deltaType="neutral"
+          />
+        </div>
 
-      <PriceTicker pairs={availablePairs.length > 0 ? [activePair, ...availablePairs.filter((p) => p !== activePair).slice(0, 2)] : ["EURUSD", "GBPUSD", "USDJPY"]} />
-
-      <CandlestickChart pair={activePair} timeframe="M30" limit={150} height={360} />
-
-      <div>
-        <h3
-          className="text-[11px] font-medium uppercase tracking-[0.12em] mb-3"
-          style={{ color: "var(--color-text-muted)" }}
+        {/* Col 2: Market Sentiment */}
+        <div
+          className="rounded-lg border flex flex-col"
+          style={{
+            borderColor: "var(--color-glass-border)",
+            backgroundColor: "var(--color-glass)",
+            padding: "16px",
+          }}
         >
-          Market Pulse
-        </h3>
-        <MarketPulsePanel pair={activePair} />
+          <span
+            className="text-[10px] font-medium uppercase tracking-[0.12em] mb-3"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            Market Sentiment
+          </span>
+          <MarketPulsePanel pair={activePair} />
+        </div>
+
+        {/* Col 3: Top News Articles */}
+        <div
+          className="rounded-lg border flex flex-col"
+          style={{
+            borderColor: "var(--color-glass-border)",
+            backgroundColor: "var(--color-glass)",
+            padding: "16px",
+          }}
+        >
+          <NewsArticlesPanel pair={activePair} />
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <MetricCard
-          label="Avg Sharpe"
-          value={formatMetric(kpis.avgSharpe)}
-          icon={<BarChart3 size={16} strokeWidth={1.5} />}
-          delta={kpis.avgSharpe !== null ? (kpis.avgSharpe >= 1 ? "Strong" : kpis.avgSharpe >= 0.5 ? "Moderate" : "Weak") : null}
-          deltaType={(kpis.avgSharpe ?? 0) >= 1 ? "positive" : (kpis.avgSharpe ?? 0) >= 0.5 ? "neutral" : "negative"}
-        />
-        <MetricCard
-          label="Avg Win Rate"
-          value={formatPercent(kpis.avgWinRate, 1)}
-          icon={<Activity size={16} strokeWidth={1.5} />}
-          delta="Fraction of winning trades across all completed model-runs"
-          deltaType="neutral"
-        />
-        <MetricCard
-          label="Profitable Months"
-          value={formatPercent(kpis.profitableMonthsPct, 0)}
-          icon={<TrendingUp size={16} strokeWidth={1.5} />}
-          delta="Months with positive return across all runs and models"
-          deltaType="neutral"
-        />
-      </div>
-
+      {/* ── Recent Activity table ─────────────────────────────────────────── */}
       <RecentJobsTable jobs={completedJobs} equityData={equityDataMap} />
 
       {!hasCompleted && (
