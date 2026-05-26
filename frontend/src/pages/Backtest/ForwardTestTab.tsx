@@ -321,8 +321,6 @@ function DeploymentSummary() {
 /* ── main component ─────────────────────────────────────────────── */
 
 export function ForwardTestTab() {
-  const pair = useBacktestStore((s) => s.pair);
-  const timeframe = useBacktestStore((s) => s.timeframe);
   const startDate = useBacktestStore((s) => s.startDate);
   const endDate = useBacktestStore((s) => s.endDate);
   const setField = useBacktestStore((s) => s.setField);

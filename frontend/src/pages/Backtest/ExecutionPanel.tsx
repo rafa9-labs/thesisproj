@@ -140,8 +140,8 @@ function NumericInput({
 }) {
   const [raw, setRaw] = useState(String(value));
 
-  // keep in sync when store changes externally
-  useEffect(() => setRaw(String(value)), [value]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setRaw(String(value)); }, [value]);
 
   function commit(str: string) {
     const n = parseFloat(str);
@@ -218,7 +218,7 @@ function SectionHeader({ label }: { label: string }) {
 
 // ─── Main panel ──────────────────────────────────────────────────────────────
 
-export function ExecutionPanel({ defaultOpen: _defaultOpen = false }: { defaultOpen?: boolean }) {
+export function ExecutionPanel() {
   const setField = useBacktestStore((s) => s.setField);
   const initialEquity = useBacktestStore((s) => s.initialEquity as number);
   const maxLeverage = useBacktestStore((s) => s.maxLeverage as number);

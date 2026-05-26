@@ -1,6 +1,5 @@
 import { useCallback, useState, useRef, useEffect } from "react";
 import { useBacktestStore } from "@/stores/useBacktestStore";
-import { ParamToggle } from "@/components/shared/ParamToggle";
 import { RANGES, SELECT_OPTIONS, STUDY_PRESETS } from "@/lib/constants";
 import { ModelHyperparamsPanel } from "./ModelHyperparamsPanel";
 

@@ -259,7 +259,6 @@ function SectionHeader({ label, sub }: { label: string; sub?: string }) {
 // Main component
 // ---------------------------------------------------------------------------
 export function FeaturesPanel() {
-  const s = useBacktestStore.getState();
   const setField = useBacktestStore((st) => st.setField);
   const [advOpen, setAdvOpen] = useState(false);
 

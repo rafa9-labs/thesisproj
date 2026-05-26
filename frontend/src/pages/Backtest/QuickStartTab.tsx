@@ -4,9 +4,6 @@ import { QUICK_START_CATEGORIES } from "@/lib/constants";
 import { modelDescriptions } from "@/lib/tokens";
 import { Trash2, Bug, Cpu, Network, Layers, Bot, Info } from "lucide-react";
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-interface Props {}
-
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   debug: <Bug size={11} />,
   classical: <Cpu size={11} />,
@@ -23,7 +20,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   rl:       "#F59E0B",
 };
 
-export function QuickStartTab(_props: Props) {
+export function QuickStartTab() {
   const applyQuickPreset  = useBacktestStore((s) => s.applyQuickPreset);
   const removeCustomPreset = useBacktestStore((s) => s.removeCustomPreset);
   const customPresets      = useBacktestStore((s) => s.customPresets);
