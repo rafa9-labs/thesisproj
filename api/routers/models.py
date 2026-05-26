@@ -434,6 +434,7 @@ def save_model_from_job(job_id: str, model_name: str = Query("", description="Mo
     in the Models page. The user decides when to save.
     """
     store = get_data_store()
+    from api.services import JobManager
     jm = JobManager(store)
     job = jm.get_job(job_id)
     if job is None:
@@ -466,6 +467,7 @@ def save_model_from_job(job_id: str, model_name: str = Query("", description="Mo
         raise HTTPException(500, f"Snapshot invalid: {reason}")
 
     from pipeline.model_registry_disk import register_snapshot
-    model_id = register_snapshot(snapshot_path, DB_PATH)
+    from api.config import settings
+    model_id = register_snapshot(snapshot_path, settings.db_full_path)
 
     return SaveFromJobResponse(status="ok", model_id=model_id, snapshot_path=snapshot_path)

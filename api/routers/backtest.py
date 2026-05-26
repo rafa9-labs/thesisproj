@@ -3,6 +3,8 @@ import uuid
 from datetime import date, timedelta
 from typing import Optional
 
+import pandas as pd
+
 from fastapi import APIRouter, HTTPException, Query
 
 from api.config import settings
