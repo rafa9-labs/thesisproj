@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { ChevronLeft, Upload, Key, Zap } from "lucide-react";
+import { ChevronLeft, Upload, Key, Zap, Database } from "lucide-react";
 
-type DataSourceMode = "choice" | "oanda" | "demo";
+type DataSourceMode = "choice" | "oanda" | "csv" | "demo";
 
 interface DataSourceModalProps {
   isOpen: boolean;
@@ -18,6 +18,14 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
 
   if (!isOpen) return null;
 
+  const handleStartDemo = () => {
+    setLoading(true);
+    setTimeout(() => {
+      onStart("demo");
+      setLoading(false);
+    }, 500);
+  };
+
   const handleStartOanda = () => {
     if (!oandaKey.trim()) {
       setError("Please enter your OANDA API key");
@@ -30,14 +38,14 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
     }, 500);
   };
 
-  const handleStartDemo = () => {
+  const handleStartCsv = () => {
     if (!csvFile) {
       setError("Please select a CSV file");
       return;
     }
     setLoading(true);
     setTimeout(() => {
-      onStart("demo", csvFile.name);
+      onStart("csv", csvFile.name);
       setLoading(false);
     }, 500);
   };
@@ -86,25 +94,32 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
           <div className="flex items-center justify-between">
             <div className="flex-1">
               {step === "choice" ? (
-                <h1
-                  className="text-lg font-bold"
-                  style={{ color: "#E8ECF1", letterSpacing: "0.5px" }}
-                >
-                  Connect Your Data
-                </h1>
-              ) : step === "oanda" ? (
-                <h1
-                  className="text-lg font-bold"
-                  style={{ color: "#E8ECF1", letterSpacing: "0.5px" }}
-                >
-                  Enter OANDA API Key
-                </h1>
-              ) : (
-                <h1
-                  className="text-lg font-bold"
-                  style={{ color: "#E8ECF1", letterSpacing: "0.5px" }}
-                >
-                  Upload CSV Data
+              <h1
+                className="text-lg font-bold"
+                style={{ color: "#E8ECF1", letterSpacing: "0.5px" }}
+              >
+                Connect Your Data
+              </h1>
+            ) : step === "demo" ? (
+              <h1
+                className="text-lg font-bold"
+                style={{ color: "#E8ECF1", letterSpacing: "0.5px" }}
+              >
+                Demo Mode
+              </h1>
+            ) : step === "oanda" ? (
+              <h1
+                className="text-lg font-bold"
+                style={{ color: "#E8ECF1", letterSpacing: "0.5px" }}
+              >
+                Enter OANDA API Key
+              </h1>
+            ) : (
+              <h1
+                className="text-lg font-bold"
+                style={{ color: "#E8ECF1", letterSpacing: "0.5px" }}
+              >
+                Upload CSV Data
                 </h1>
               )}
               <p
@@ -113,9 +128,11 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
               >
                 {step === "choice"
                   ? "Select your data source to begin backtesting"
-                  : step === "oanda"
-                    ? "Provide your API key for live market data"
-                    : "Select a CSV file with your historical data"}
+                  : step === "demo"
+                    ? "Get started instantly with pre-loaded market data"
+                    : step === "oanda"
+                      ? "Provide your API key for live market data"
+                      : "Select a CSV file with your historical data"}
               </p>
             </div>
             {step !== "choice" && (
@@ -145,6 +162,51 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
           {/* ── CHOICE STEP ── */}
           {step === "choice" && (
             <div className="flex flex-col gap-3">
+              {/* Demo Option */}
+              <button
+                onClick={() => {
+                  setError("");
+                  handleStartDemo();
+                }}
+                disabled={loading}
+                className="flex items-center gap-4 p-4 rounded-lg border transition-all text-left"
+                style={{
+                  backgroundColor: "#0F1825",
+                  borderColor: "#1E2A3A",
+                  cursor: loading ? "not-allowed" : "pointer",
+                  opacity: loading ? 0.7 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!loading) {
+                    e.currentTarget.style.borderColor = "#00E5FF";
+                    e.currentTarget.style.backgroundColor = "rgba(0, 229, 255, 0.03)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "#1E2A3A";
+                  e.currentTarget.style.backgroundColor = "#0F1825";
+                }}
+              >
+                <div
+                  className="p-2.5 rounded-lg"
+                  style={{ backgroundColor: "rgba(0, 229, 255, 0.12)" }}
+                >
+                  <Database size={18} style={{ color: "#00E5FF" }} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold" style={{ color: "#E8ECF1" }}>
+                    Demo Mode
+                  </p>
+                  <p className="text-xs" style={{ color: "#787B86" }}>
+                    Pre-loaded sample market data
+                  </p>
+                </div>
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: "#00E5FF" }}
+                />
+              </button>
+
               {/* Live OANDA Option */}
               <button
                 onClick={() => {
@@ -186,10 +248,10 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
                 />
               </button>
 
-              {/* Demo CSV Option */}
+              {/* CSV Upload Option */}
               <button
                 onClick={() => {
-                  setStep("demo");
+                  setStep("csv");
                   setError("");
                 }}
                 className="flex items-center gap-4 p-4 rounded-lg border transition-all text-left"
@@ -289,8 +351,8 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
             </div>
           )}
 
-          {/* ── DEMO STEP ── */}
-          {step === "demo" && (
+          {/* ── CSV STEP ── */}
+          {step === "csv" && (
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <label
@@ -345,7 +407,7 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
               )}
 
               <button
-                onClick={handleStartDemo}
+                onClick={handleStartCsv}
                 disabled={loading || !csvFile}
                 className="px-4 py-3 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2"
                 style={{
@@ -358,6 +420,36 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
               >
                 <Zap size={16} />
                 {loading ? "Loading..." : "Start Backtesting"}
+              </button>
+            </div>
+          )}
+
+          {/* ── DEMO MODE STEP (No inputs, just confirmation) ── */}
+          {step === "demo" && (
+            <div className="flex flex-col gap-4">
+              <div className="rounded-lg p-4" style={{ backgroundColor: "rgba(0, 229, 255, 0.08)", borderLeft: "3px solid #00E5FF" }}>
+                <p className="text-sm" style={{ color: "#E8ECF1", lineHeight: "1.5" }}>
+                  You&apos;re about to start backtesting with pre-loaded sample market data. This includes historical OHLC prices and volume data to help you explore the platform&apos;s capabilities.
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setError("");
+                  handleStartDemo();
+                }}
+                disabled={loading}
+                className="px-4 py-3 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                style={{
+                  backgroundColor: "#00E5FF",
+                  color: "#050608",
+                  cursor: loading ? "not-allowed" : "pointer",
+                  opacity: loading ? 0.7 : 1,
+                  boxShadow: loading ? "none" : "0 0 12px rgba(0, 229, 255, 0.4)",
+                }}
+              >
+                <Zap size={16} />
+                {loading ? "Loading..." : "Start with Demo Data"}
               </button>
             </div>
           )}
