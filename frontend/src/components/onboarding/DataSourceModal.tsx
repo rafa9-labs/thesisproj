@@ -7,7 +7,6 @@ interface DataSourceModalProps {
   isOpen: boolean;
   onBack: () => void;
   onStart: (mode: DataMode, value?: string) => void;
-  onSkip?: () => void;
 }
 
 const TABS: { id: DataMode; label: string; icon: React.ReactNode }[] = [
@@ -16,7 +15,7 @@ const TABS: { id: DataMode; label: string; icon: React.ReactNode }[] = [
   { id: "DEMO",       label: "Demo Sandbox",  icon: <FlaskConical size={14} /> },
 ];
 
-export function DataSourceModal({ isOpen, onBack, onStart, onSkip }: DataSourceModalProps) {
+export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProps) {
   const [activeTab, setActiveTab]   = useState<DataMode>("LIVE_API");
   const [apiKey,    setApiKey]      = useState("");
   const [csvPath,   setCsvPath]     = useState("");
@@ -296,17 +295,7 @@ export function DataSourceModal({ isOpen, onBack, onStart, onSkip }: DataSourceM
               </button>
             </div>
 
-            {onSkip && (
-              <button
-                onClick={onSkip}
-                className="text-center text-[11px] transition-colors"
-                style={{ color: "#2A3A50", cursor: "pointer", background: "none", border: "none" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#4E5870"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "#2A3A50"; }}
-              >
-                Skip for now
-              </button>
-            )}
+
           </div>
         </div>
       </div>

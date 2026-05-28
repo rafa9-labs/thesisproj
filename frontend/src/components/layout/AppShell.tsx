@@ -27,7 +27,6 @@ export function AppShell() {
         isOpen={showDataSource}
         onBack={() => setShowDataSource(false)}
         onStart={(_mode, _value) => setShowDataSource(false)}
-        onSkip={() => setShowDataSource(false)}
       />
 
       <Sidebar />
