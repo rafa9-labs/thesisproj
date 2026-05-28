@@ -8,6 +8,7 @@ import type { JobResults } from "@/api/schemas";
 import { formatMetric, formatPercent } from "@/lib/formatters";
 import { useDashboardKPIs } from "./DashboardKPIs";
 import { RecentJobsTable } from "./RecentJobsTable";
+import { QuickActions } from "./QuickActions";
 import { MarketPulsePanel, NewsArticlesPanel } from "./MarketPulsePanel";
 import { PriceTicker } from "./PriceTicker";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";
@@ -102,59 +103,59 @@ export function DashboardPage() {
   const hasCompleted = completedJobs.length > 0;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 p-6">
+      {/* ── Header row: Title + pair selector + QuickActions ─────────────────── */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1">
+          <h1 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>
+            Trading Dashboard
+          </h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>
+              Pair
+            </span>
+            <select
+              value={activePair}
+              onChange={(e) => setActivePair(e.target.value)}
+              className="rounded-md border px-2.5 py-1 text-xs transition focus:outline-none"
+              style={{
+                borderColor: "var(--color-glass-border)",
+                backgroundColor: "var(--color-glass)",
+                color: "var(--color-text-primary)",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              {(availablePairs.length > 0 ? availablePairs : ["EURUSD", "GBPUSD", "USDJPY"]).map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <QuickActions />
+        </div>
+      </div>
+
       {/* ── Ticker ribbon ──────────────────────────────────────────────────── */}
       <PriceTicker pairs={availablePairs.length > 0 ? [activePair, ...availablePairs.filter((p) => p !== activePair).slice(0, 2)] : ["EURUSD", "GBPUSD", "USDJPY"]} />
 
-      {/* ── Full-width candlestick chart with embedded pair selector ──────── */}
+      {/* ── Full-width candlestick chart ────────────────────────────────────── */}
       <div
-        className="rounded-lg border flex flex-col"
+        className="rounded-lg border"
         style={{
           borderColor: "var(--color-glass-border)",
           backgroundColor: "var(--color-glass)",
+          padding: "16px",
         }}
       >
-        {/* Chart panel header */}
-        <div
-          className="flex items-center justify-between px-4"
-          style={{
-            height: 40,
-            borderBottom: "1px solid var(--color-glass-border)",
-          }}
-        >
-          <span
-            className="text-[10px] font-medium uppercase tracking-[0.12em]"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            Price Chart
-          </span>
-          <select
-            value={activePair}
-            onChange={(e) => setActivePair(e.target.value)}
-            className="rounded border px-2 text-[11px] transition focus:outline-none"
-            style={{
-              height: 26,
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "var(--color-elevated)",
-              color: "var(--color-text-primary)",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            {(availablePairs.length > 0 ? availablePairs : ["EURUSD", "GBPUSD", "USDJPY"]).map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </div>
-        <div className="p-4">
-          <CandlestickChart pair={activePair} timeframe="M30" limit={150} height={440} />
-        </div>
+        <CandlestickChart pair={activePair} timeframe="M30" limit={150} height={360} />
       </div>
 
       {/* ── 3-column widget grid ───────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-4">
-        {/* Col 1: ALGO Metrics — flat label/value list, no nested boxes */}
+        {/* Col 1: ALGO Metrics KPIs */}
         <div
-          className="rounded-lg border flex flex-col"
+          className="rounded-lg border flex flex-col gap-3"
           style={{
             borderColor: "var(--color-glass-border)",
             backgroundColor: "var(--color-glass)",
@@ -162,69 +163,32 @@ export function DashboardPage() {
           }}
         >
           <span
-            className="text-[10px] font-medium uppercase tracking-[0.12em] mb-3"
+            className="text-[10px] font-medium uppercase tracking-[0.12em]"
             style={{ color: "var(--color-text-muted)" }}
           >
             ALGO Metrics
           </span>
-          <div className="flex flex-col divide-y" style={{ borderColor: "var(--color-glass-border)" }}>
-            {[
-              {
-                label: "AVG SHARPE",
-                value: formatMetric(kpis.avgSharpe),
-                color: (kpis.avgSharpe ?? 0) >= 1
-                  ? "var(--color-accent-success)"
-                  : (kpis.avgSharpe ?? 0) >= 0.5
-                  ? "var(--color-accent-warning)"
-                  : "var(--color-accent-danger)",
-              },
-              {
-                label: "WIN RATE",
-                value: formatPercent(kpis.avgWinRate, 1),
-                color: (kpis.avgWinRate ?? 0) >= 0.5
-                  ? "var(--color-accent-success)"
-                  : "var(--color-accent-danger)",
-              },
-              {
-                label: "PROFIT. MONTHS",
-                value: formatPercent(kpis.profitableMonthsPct, 0),
-                color: (kpis.profitableMonthsPct ?? 0) >= 0.6
-                  ? "var(--color-accent-success)"
-                  : "var(--color-text-secondary)",
-              },
-              {
-                label: "AVG RETURN",
-                value: formatPercent(kpis.avgReturn, 2),
-                color: (kpis.avgReturn ?? 0) >= 0
-                  ? "var(--color-accent-success)"
-                  : "var(--color-accent-danger)",
-              },
-              {
-                label: "MAX DRAWDOWN",
-                value: formatPercent(kpis.maxDrawdown, 2),
-                color: "var(--color-accent-danger)",
-              },
-            ].map(({ label, value, color }) => (
-              <div
-                key={label}
-                className="flex items-center justify-between py-2"
-                style={{ borderColor: "var(--color-glass-border)" }}
-              >
-                <span
-                  className="text-[10px] font-medium uppercase tracking-[0.08em]"
-                  style={{ color: "var(--color-text-muted)" }}
-                >
-                  {label}
-                </span>
-                <span
-                  className="text-[13px] font-semibold tabular-nums"
-                  style={{ fontFamily: "var(--font-mono)", color }}
-                >
-                  {value}
-                </span>
-              </div>
-            ))}
-          </div>
+          <MetricCard
+            label="Avg Sharpe"
+            value={formatMetric(kpis.avgSharpe)}
+            icon={<BarChart3 size={16} strokeWidth={1.5} />}
+            delta={kpis.avgSharpe !== null ? (kpis.avgSharpe >= 1 ? "Strong" : kpis.avgSharpe >= 0.5 ? "Moderate" : "Weak") : null}
+            deltaType={(kpis.avgSharpe ?? 0) >= 1 ? "positive" : (kpis.avgSharpe ?? 0) >= 0.5 ? "neutral" : "negative"}
+          />
+          <MetricCard
+            label="Win Rate"
+            value={formatPercent(kpis.avgWinRate, 1)}
+            icon={<Activity size={16} strokeWidth={1.5} />}
+            delta="Fraction of winning trades"
+            deltaType="neutral"
+          />
+          <MetricCard
+            label="Profitable Months"
+            value={formatPercent(kpis.profitableMonthsPct, 0)}
+            icon={<TrendingUp size={16} strokeWidth={1.5} />}
+            delta="Months with positive return"
+            deltaType="neutral"
+          />
         </div>
 
         {/* Col 2: Market Sentiment */}
