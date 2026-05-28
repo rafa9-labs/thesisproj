@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { createChart, type IChartApi, CandlestickSeries, LineSeries, ColorType, createSeriesMarkers } from "lightweight-charts";
+import { createChart, type IChartApi, CandlestickSeries, LineSeries, ColorType } from "lightweight-charts";
 import { useTradeChartData } from "@/api/queries";
 
 interface BacktestChartProps {
@@ -78,7 +78,7 @@ export function BacktestChart({ jobId, model, height = 520 }: BacktestChartProps
     }));
 
     if (markers.length > 0) {
-      createSeriesMarkers(candleSeries, markers);
+      candleSeries.setMarkers(markers);
     }
 
     chart.timeScale().fitContent();
