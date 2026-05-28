@@ -28,30 +28,24 @@ export function OverfittingPanel({ overfitting, walkforwardPeriods }: Props) {
   const hasGaps = gapPeriods.some((g) => g.gap != null);
 
   return (
-    <div
-      className="rounded-xl border p-5"
-      style={{
-        borderColor: "var(--color-glass-border)",
-        backgroundColor: "var(--color-glass)",
-      }}
-    >
-      <div className="flex items-center justify-between mb-4">
-        <h3
-          className="text-xs font-semibold uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-text-secondary)" }}
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span
+          className="text-[10px] font-semibold uppercase tracking-[0.1em]"
+          style={{ color: "#787B86" }}
         >
-          Overfitting Assessment
-        </h3>
+          Score
+        </span>
         <div className="flex items-center gap-2">
           <div
-            className="w-3 h-3 rounded-full"
-            style={{ backgroundColor: RISK_COLORS[overfitting.risk_color] ?? "var(--color-text-muted)" }}
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: RISK_COLORS[overfitting.risk_color] ?? "#787B86" }}
           />
           <span
             className="text-sm font-bold"
             style={{
-              fontFamily: "var(--font-mono)",
-              color: RISK_COLORS[overfitting.risk_color] ?? "var(--color-text-muted)",
+              fontFamily: "JetBrains Mono, monospace",
+              color: RISK_COLORS[overfitting.risk_color] ?? "#787B86",
             }}
           >
             {overfitting.overfit_score.toFixed(0)}
