@@ -1,47 +1,72 @@
 import { useState } from "react";
-import { Wifi, FolderOpen, FlaskConical, Eye, EyeOff, ChevronRight, ArrowLeft } from "lucide-react";
+import { ChevronLeft, Upload, Key, Zap } from "lucide-react";
 
-type DataMode = "LIVE_API" | "LOCAL_CSV" | "DEMO";
+type DataSourceMode = "choice" | "oanda" | "demo";
 
 interface DataSourceModalProps {
   isOpen: boolean;
   onBack: () => void;
-  onStart: (mode: DataMode, value?: string) => void;
+  onStart: (mode: string, value?: string) => void;
 }
 
-const TABS: { id: DataMode; label: string; icon: React.ReactNode }[] = [
-  { id: "LIVE_API",   label: "Live API",      icon: <Wifi size={14} /> },
-  { id: "LOCAL_CSV",  label: "Local CSV",     icon: <FolderOpen size={14} /> },
-  { id: "DEMO",       label: "Demo Sandbox",  icon: <FlaskConical size={14} /> },
-];
-
 export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProps) {
-  const [activeTab, setActiveTab]   = useState<DataMode>("LIVE_API");
-  const [apiKey,    setApiKey]      = useState("");
-  const [csvPath,   setCsvPath]     = useState("");
-  const [showKey,   setShowKey]     = useState(false);
+  const [step, setStep] = useState<DataSourceMode>("choice");
+  const [oandaKey, setOandaKey] = useState("");
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  /* ── readiness gate ── */
-  const canStart =
-    (activeTab === "LIVE_API"  && apiKey.trim().length > 0) ||
-    (activeTab === "LOCAL_CSV" && csvPath.trim().length > 0) ||
-     activeTab === "DEMO";
+  const handleStartOanda = () => {
+    if (!oandaKey.trim()) {
+      setError("Please enter your OANDA API key");
+      return;
+    }
+    setLoading(true);
+    setTimeout(() => {
+      onStart("oanda", oandaKey);
+      setLoading(false);
+    }, 500);
+  };
 
-  const handleStart = () => {
-    if (!canStart) return;
-    const value =
-      activeTab === "LIVE_API"  ? apiKey.trim()  :
-      activeTab === "LOCAL_CSV" ? csvPath.trim() :
-      undefined;
-    onStart(activeTab, value);
+  const handleStartDemo = () => {
+    if (!csvFile) {
+      setError("Please select a CSV file");
+      return;
+    }
+    setLoading(true);
+    setTimeout(() => {
+      onStart("demo", csvFile.name);
+      setLoading(false);
+    }, 500);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.name.endsWith(".csv")) {
+      setCsvFile(file);
+      setError("");
+    } else {
+      setError("Please select a valid CSV file");
+    }
+  };
+
+  const goBack = () => {
+    if (step !== "choice") {
+      setStep("choice");
+      setError("");
+      setOandaKey("");
+      setCsvFile(null);
+    } else {
+      onBack();
+    }
   };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(5,6,8,0.82)", backdropFilter: "blur(4px)" }}
+      style={{ backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(2px)" }}
     >
       <div
         className="relative w-full max-w-[480px] rounded-xl overflow-hidden shadow-2xl"
@@ -57,246 +82,285 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
         />
 
         <div className="px-8 pt-7 pb-8 flex flex-col gap-5">
-          {/* ── header ── */}
-          <div className="flex flex-col gap-1">
-            <h2
-              className="text-[18px] font-bold tracking-tight"
-              style={{ color: "#E8ECF1", letterSpacing: "-0.01em" }}
-            >
-              Connect Your Data
-            </h2>
-            <p className="text-[12px] leading-relaxed" style={{ color: "#4E5870" }}>
-              A data source is required to initialize the terminal workspace.
-            </p>
-          </div>
-
-          {/* ── tab row ── */}
-          <div
-            className="flex rounded-lg overflow-hidden"
-            style={{ border: "1px solid #1E2A3A", backgroundColor: "#07090F" }}
-          >
-            {TABS.map((tab) => {
-              const active = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all"
-                  style={{
-                    backgroundColor: active ? "#00E5FF" : "transparent",
-                    color:           active ? "#07090F" : "#4E5870",
-                    borderRight:     tab.id !== "DEMO" ? "1px solid #1E2A3A" : "none",
-                    cursor:          "pointer",
-                  }}
+          {/* ── Header ── */}
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              {step === "choice" ? (
+                <h1
+                  className="text-lg font-bold"
+                  style={{ color: "#E8ECF1", letterSpacing: "0.5px" }}
                 >
-                  {tab.icon}
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* ── tab body ── */}
-          <div className="flex flex-col gap-4 min-h-[120px]">
-            {activeTab === "LIVE_API" && (
-              <div className="flex flex-col gap-3">
-                <p className="text-[11px]" style={{ color: "#4E5870" }}>
-                  Optional: provide your OANDA API key for live data. You can skip this and add it later in Settings.
-                </p>
-
-                <div className="flex flex-col gap-1.5">
-                  <label
-                    className="text-[10px] font-bold uppercase tracking-[0.1em]"
-                    style={{ color: "#00E5FF" }}
-                  >
-                    OANDA API KEY (OPTIONAL)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showKey ? "text" : "password"}
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="Enter your OANDA API key..."
-                      className="w-full rounded-md px-3 py-2.5 text-[12px] pr-9"
-                      style={{
-                        backgroundColor: "#07090F",
-                        border: "1px solid #1E2A3A",
-                        color: "#E8ECF1",
-                        fontFamily: "var(--font-mono)",
-                        outline: "none",
-                      }}
-                      onFocus={(e) => {
-                        e.currentTarget.style.borderColor = "rgba(0,229,255,0.35)";
-                      }}
-                      onBlur={(e) => {
-                        e.currentTarget.style.borderColor = "#1E2A3A";
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowKey((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2"
-                      style={{ color: "#4E5870", cursor: "pointer", background: "none", border: "none" }}
-                    >
-                      {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label
-                    className="text-[10px] font-bold uppercase tracking-[0.1em]"
-                    style={{ color: "#00E5FF" }}
-                  >
-                    DATA DIRECTORY (OPTIONAL)
-                  </label>
-                  <input
-                    type="text"
-                    value={csvPath}
-                    onChange={(e) => setCsvPath(e.target.value)}
-                    placeholder="Path to CSV data files (leave empty for default)"
-                    className="w-full rounded-md px-3 py-2.5 text-[12px]"
-                    style={{
-                      backgroundColor: "#07090F",
-                      border: "1px solid #1E2A3A",
-                      color: "#E8ECF1",
-                      fontFamily: "var(--font-mono)",
-                      outline: "none",
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = "rgba(0,229,255,0.35)";
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = "#1E2A3A";
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {activeTab === "LOCAL_CSV" && (
-              <div className="flex flex-col gap-3">
-                <p className="text-[11px]" style={{ color: "#4E5870" }}>
-                  Point the terminal to a local folder containing OHLCV CSV files. Headers must include{" "}
-                  <span style={{ color: "#00E5FF", fontFamily: "var(--font-mono)" }}>
-                    datetime, open, high, low, close, volume
-                  </span>.
-                </p>
-                <div className="flex flex-col gap-1.5">
-                  <label
-                    className="text-[10px] font-bold uppercase tracking-[0.1em]"
-                    style={{ color: "#00E5FF" }}
-                  >
-                    DATA DIRECTORY
-                  </label>
-                  <div className="relative">
-                    <FolderOpen
-                      size={13}
-                      className="absolute left-3 top-1/2 -translate-y-1/2"
-                      style={{ color: "#4E5870" }}
-                    />
-                    <input
-                      type="text"
-                      value={csvPath}
-                      onChange={(e) => setCsvPath(e.target.value)}
-                      placeholder="/home/user/trading_data/"
-                      className="w-full rounded-md pl-8 pr-3 py-2.5 text-[12px]"
-                      style={{
-                        backgroundColor: "#07090F",
-                        border: "1px solid #1E2A3A",
-                        color: "#E8ECF1",
-                        fontFamily: "var(--font-mono)",
-                        outline: "none",
-                      }}
-                      onFocus={(e) => {
-                        e.currentTarget.style.borderColor = "rgba(0,229,255,0.35)";
-                      }}
-                      onBlur={(e) => {
-                        e.currentTarget.style.borderColor = "#1E2A3A";
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === "DEMO" && (
-              <div
-                className="flex flex-col gap-3 rounded-lg p-4"
-                style={{ backgroundColor: "#07090F", border: "1px solid #1E2A3A" }}
+                  Connect Your Data
+                </h1>
+              ) : step === "oanda" ? (
+                <h1
+                  className="text-lg font-bold"
+                  style={{ color: "#E8ECF1", letterSpacing: "0.5px" }}
+                >
+                  Enter OANDA API Key
+                </h1>
+              ) : (
+                <h1
+                  className="text-lg font-bold"
+                  style={{ color: "#E8ECF1", letterSpacing: "0.5px" }}
+                >
+                  Upload CSV Data
+                </h1>
+              )}
+              <p
+                className="text-xs mt-1"
+                style={{ color: "#787B86" }}
               >
-                <div className="flex items-center gap-2">
-                  <FlaskConical size={16} style={{ color: "#00E5FF" }} />
-                  <span
-                    className="text-[12px] font-bold uppercase tracking-[0.06em]"
-                    style={{ color: "#00E5FF" }}
-                  >
-                    Demo Sandbox
-                  </span>
-                </div>
-                <p className="text-[12px] leading-relaxed" style={{ color: "#7A8494" }}>
-                  Load 30 days of historical{" "}
-                  <span style={{ color: "#E8ECF1", fontFamily: "var(--font-mono)" }}>BTC/USD</span>{" "}
-                  and{" "}
-                  <span style={{ color: "#E8ECF1", fontFamily: "var(--font-mono)" }}>EUR/USD</span>{" "}
-                  dummy data to test the interface instantly. No API key or files required.
-                </p>
-                <div
-                  className="flex items-center gap-2 text-[11px]"
-                  style={{ color: "#089981" }}
-                >
-                  <div className="w-1.5 h-1.5 rounded-full bg-current" />
-                  Ready to start immediately
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ── footer ── */}
-          <div className="flex flex-col gap-3 pt-1">
-            <div className="flex items-center gap-3">
+                {step === "choice"
+                  ? "Select your data source to begin backtesting"
+                  : step === "oanda"
+                    ? "Provide your API key for live market data"
+                    : "Select a CSV file with your historical data"}
+              </p>
+            </div>
+            {step !== "choice" && (
               <button
-                onClick={onBack}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-md text-[11px] font-semibold uppercase tracking-[0.08em] transition-all"
+                onClick={goBack}
+                className="p-2 rounded-lg transition-all"
                 style={{
-                  backgroundColor: "transparent",
+                  backgroundColor: "#0F1825",
                   border: "1px solid #1E2A3A",
-                  color: "#4E5870",
+                  color: "#787B86",
                   cursor: "pointer",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#2A3A50";
-                  e.currentTarget.style.color = "#7A8494";
+                  e.currentTarget.style.borderColor = "#00E5FF";
+                  e.currentTarget.style.color = "#00E5FF";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.borderColor = "#1E2A3A";
-                  e.currentTarget.style.color = "#4E5870";
+                  e.currentTarget.style.color = "#787B86";
                 }}
               >
-                <ArrowLeft size={13} />
-                Back
+                <ChevronLeft size={16} />
+              </button>
+            )}
+          </div>
+
+          {/* ── CHOICE STEP ── */}
+          {step === "choice" && (
+            <div className="flex flex-col gap-3">
+              {/* Live OANDA Option */}
+              <button
+                onClick={() => {
+                  setStep("oanda");
+                  setError("");
+                }}
+                className="flex items-center gap-4 p-4 rounded-lg border transition-all text-left"
+                style={{
+                  backgroundColor: "#0F1825",
+                  borderColor: "#1E2A3A",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "#00E5FF";
+                  e.currentTarget.style.backgroundColor = "rgba(0, 229, 255, 0.03)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "#1E2A3A";
+                  e.currentTarget.style.backgroundColor = "#0F1825";
+                }}
+              >
+                <div
+                  className="p-2.5 rounded-lg"
+                  style={{ backgroundColor: "rgba(41, 98, 255, 0.12)" }}
+                >
+                  <Key size={18} style={{ color: "#2962FF" }} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold" style={{ color: "#E8ECF1" }}>
+                    OANDA API
+                  </p>
+                  <p className="text-xs" style={{ color: "#787B86" }}>
+                    Live market data connection
+                  </p>
+                </div>
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: "#2962FF" }}
+                />
               </button>
 
+              {/* Demo CSV Option */}
               <button
-                onClick={handleStart}
-                disabled={!canStart}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-[11px] font-bold uppercase tracking-[0.1em] transition-all"
+                onClick={() => {
+                  setStep("demo");
+                  setError("");
+                }}
+                className="flex items-center gap-4 p-4 rounded-lg border transition-all text-left"
                 style={{
-                  backgroundColor: canStart ? "#00E5FF" : "#0E1520",
-                  color:           canStart ? "#07090F"  : "#2A3A50",
-                  border:          canStart ? "none"     : "1px solid #1E2A3A",
-                  cursor:          canStart ? "pointer"  : "not-allowed",
-                  boxShadow:       canStart ? "0 0 16px rgba(0,229,255,0.3)" : "none",
-                  transition:      "all 200ms ease",
+                  backgroundColor: "#0F1825",
+                  borderColor: "#1E2A3A",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "#00E5FF";
+                  e.currentTarget.style.backgroundColor = "rgba(0, 229, 255, 0.03)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "#1E2A3A";
+                  e.currentTarget.style.backgroundColor = "#0F1825";
                 }}
               >
-                Start Backtesting
-                <ChevronRight size={14} />
+                <div
+                  className="p-2.5 rounded-lg"
+                  style={{ backgroundColor: "rgba(0, 229, 255, 0.12)" }}
+                >
+                  <Upload size={18} style={{ color: "#00E5FF" }} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold" style={{ color: "#E8ECF1" }}>
+                    CSV Upload
+                  </p>
+                  <p className="text-xs" style={{ color: "#787B86" }}>
+                    Backtest with historical data
+                  </p>
+                </div>
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: "#00E5FF" }}
+                />
               </button>
             </div>
+          )}
 
+          {/* ── OANDA STEP ── */}
+          {step === "oanda" && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label
+                  className="text-xs font-semibold"
+                  style={{ color: "#787B86", textTransform: "uppercase", letterSpacing: "0.5px" }}
+                >
+                  OANDA API KEY
+                </label>
+                <input
+                  type="password"
+                  value={oandaKey}
+                  onChange={(e) => {
+                    setOandaKey(e.target.value);
+                    setError("");
+                  }}
+                  placeholder="Paste your API key here"
+                  className="px-3 py-2.5 rounded-lg border text-sm transition-all"
+                  style={{
+                    borderColor: error ? "#ef4444" : "#1E2A3A",
+                    backgroundColor: "#0F1825",
+                    color: "#E8ECF1",
+                    fontFamily: "var(--font-mono, monospace)",
+                    fontSize: "13px",
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleStartOanda()}
+                  onFocus={(e) => {
+                    if (!error) e.currentTarget.style.borderColor = "#00E5FF";
+                  }}
+                  onBlur={(e) => {
+                    if (!error) e.currentTarget.style.borderColor = "#1E2A3A";
+                  }}
+                />
+              </div>
 
-          </div>
+              {error && (
+                <p className="text-xs" style={{ color: "#ef4444" }}>
+                  {error}
+                </p>
+              )}
+
+              <button
+                onClick={handleStartOanda}
+                disabled={loading}
+                className="px-4 py-3 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                style={{
+                  backgroundColor: "#00E5FF",
+                  color: "#050608",
+                  cursor: loading ? "not-allowed" : "pointer",
+                  opacity: loading ? 0.7 : 1,
+                  boxShadow: loading ? "none" : "0 0 12px rgba(0, 229, 255, 0.4)",
+                }}
+              >
+                <Zap size={16} />
+                {loading ? "Connecting..." : "Start Backtesting"}
+              </button>
+            </div>
+          )}
+
+          {/* ── DEMO STEP ── */}
+          {step === "demo" && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label
+                  className="text-xs font-semibold"
+                  style={{ color: "#787B86", textTransform: "uppercase", letterSpacing: "0.5px" }}
+                >
+                  SELECT CSV FILE
+                </label>
+                <label
+                  className="px-4 py-6 rounded-lg border-2 border-dashed transition-all flex flex-col items-center justify-center gap-2 cursor-pointer"
+                  style={{
+                    borderColor: csvFile ? "#00E5FF" : "#1E2A3A",
+                    backgroundColor: csvFile ? "rgba(0, 229, 255, 0.03)" : "#0F1825",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "#00E5FF";
+                    e.currentTarget.style.backgroundColor = "rgba(0, 229, 255, 0.05)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = csvFile ? "#00E5FF" : "#1E2A3A";
+                    e.currentTarget.style.backgroundColor = csvFile ? "rgba(0, 229, 255, 0.03)" : "#0F1825";
+                  }}
+                >
+                  <Upload
+                    size={24}
+                    style={{ color: csvFile ? "#00E5FF" : "#787B86" }}
+                  />
+                  <div className="text-center">
+                    <p
+                      className="text-sm font-semibold"
+                      style={{ color: csvFile ? "#E8ECF1" : "#787B86" }}
+                    >
+                      {csvFile ? csvFile.name : "Click to select CSV file"}
+                    </p>
+                    <p className="text-xs" style={{ color: "#4E5870" }}>
+                      OHLC data with timestamps
+                    </p>
+                  </div>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {error && (
+                <p className="text-xs" style={{ color: "#ef4444" }}>
+                  {error}
+                </p>
+              )}
+
+              <button
+                onClick={handleStartDemo}
+                disabled={loading || !csvFile}
+                className="px-4 py-3 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                style={{
+                  backgroundColor: csvFile ? "#00E5FF" : "#2A3A50",
+                  color: csvFile ? "#050608" : "#787B86",
+                  cursor: csvFile && !loading ? "pointer" : "not-allowed",
+                  opacity: loading ? 0.7 : 1,
+                  boxShadow: csvFile && !loading ? "0 0 12px rgba(0, 229, 255, 0.4)" : "none",
+                }}
+              >
+                <Zap size={16} />
+                {loading ? "Loading..." : "Start Backtesting"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

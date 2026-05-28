@@ -34,7 +34,6 @@ _archive/
 
 # Virtual environments
 .venv/
-.venv-gpu/
 .venv-wsl/
 venv/
 

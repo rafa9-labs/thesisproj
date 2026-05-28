@@ -1,7 +1,7 @@
 # KodaQuant — Product Roadmap
 
-> **Last Updated**: 2026-05-28
-> **Branch**: `feature/sprint16.6-ui-redesign`
+> **Last Updated**: 2026-05-14
+> **Branch**: `feature/phase2-api-bridge`
 > **Revenue Target**: £500–2K/month within 3 months of launch
 > **Philosophy**: Optimize → Feature Parity → Polish → Secure → Deploy → Scale → Enrich → Automate
 
@@ -1238,7 +1238,7 @@ cd frontend && npm run dev
 | **S1** | Model Comparison & Leaderboard | 3-4h | DONE |
 | **S2** | Advanced Execution Models | 6-8h | DONE |
 | **S3** | Multi-Currency Expansion | 4-5h | DONE |
-| **S4** | Docker + CI/CD | 3-4h | ✅ DONE (Dockerfiles, compose, CI pipeline exist) |
+| **S4** | Docker + CI/CD | 3-4h | PARTIAL (RAM opt + CI done) |
 | **S5** | Comprehensive Tests + Benchmarks | 4-6h | ✅ DONE (496+ tests) |
 | **S6** | News & Sentiment Features | 6-8h | DONE |
 | **S7** | FastAPI Backend | 8-10h | DONE |
@@ -1248,17 +1248,17 @@ cd frontend && npm run dev
 | **S10** | Security & Licensing (Paddle) | 12-15h | ✅ DONE (2026-05-04) |
 | **S11** | Installer & Auto-Update | 6-8h | ✅ COMPLETE (2026-05-04) |
 | **S12** | Product Intelligence & UX Overhaul | 22-24h | ✅ COMPLETE (7 sub-tasks all done, 3 bug fixes applied) |
-| **S13** | Beta & Launch | 6-8h | PARTIAL (infra ready, needs beta run + final QA) |
+| **S13** | Beta & Launch | 6-8h | TODO |
 | **S14** | Pipeline Enhancements (daily WF, HPO duration) | 5-8h | ✅ DONE |
 | **S15** | KodaQuant Branding | 4-6h | ✅ COMPLETE (2026-05-10, 37 tests) |
 | **S16** | Trading Logic, Overfitting & Backtest Transparency | 12-16h | ✅ DONE |
 | **S16.8** | Model Persistence, Deployment & Experiment Tracking | 15-19h | ✅ COMPLETE (2026-05-21, 64 tests) |
-| **S16.9** | Forward Test + Live Trading Bridge | 5-7h | PARTIAL (backend + API done, UI tabs pending) |
+| **S16.9** | Forward Test + Live Trading Bridge | 5-7h | IN PROGRESS |
 | **S17** | UI Polish, Tabs Flow & Search | 8-10h | TODO |
-| **S18** | Live News & Market Data Integration | 10-14h | PARTIAL (scraper/sentiment/features/prices done, live streaming + dashboard pending) |
-| **S19** | Ensemble Models & Model Extensibility | 8-10h | PARTIAL (2 ensembles done, voting/stacking/plugins pending) |
-| **S20** | LLM / AI Integration & Intelligent Trading | 10-14h | PARTIAL (advisor/sentiment done, commentary/suggest/generate pending) |
-| **S21** | Live Trading with OANDA | 12-16h | PARTIAL (prices, live deploy, signal loop, model_id bridge done; execution client & risk controls pending) |
+| **S18** | Live News & Market Data Integration | 10-14h | TODO |
+| **S19** | Ensemble Models & Model Extensibility | 8-10h | TODO |
+| **S20** | LLM / AI Integration & Intelligent Trading | 10-14h | TODO |
+| **S21** | Live Trading with OANDA | 12-16h | TODO |
 | **S22** | Commercial Infrastructure (deferred from S12) | 8-10h | TODO |
 | **S23** | Pipeline Stability & Live Monitor UX | 6-8h | ✅ DONE (2026-05-14) |
 
@@ -1267,26 +1267,26 @@ cd frontend && npm run dev
 | Sprint | When it's done |
 |--------|---------------|
 | S1-S2 | Execution models complete, all sizing/stop/risk models work |
-| S3-S4 | Multi-currency supported, Docker builds pass, CI green | ✅ DONE
+| S3-S4 | Multi-currency supported, Docker builds pass, CI green |
 | S5-S6 | 200+ tests, >80% coverage, news features integrated | ✅ BOTH DONE — 496+ tests
 | S7 | FastAPI serves all pipeline operations via REST + WebSocket | ✅ DONE
 | S8 | React UI replaces Streamlit for all user interactions | ✅ DONE — all 8 sub-tasks complete |
 | S9 | Electron wraps React + Python into desktop app | ✅ COMPLETE (S9.1-9.5 all done) |
 | S10 | Code protected, Paddle licensing active, feature gating works | ✅ DONE
 | S11 | Windows installer + auto-update functional | ✅ COMPLETE (2026-05-04) |
-| S12 | News pipeline works, LLM sentiment is ML feature, Results shows all history, Dashboard has live price ticker + candlestick charts + Market Pulse, backtest trade visualization on Results detail, live monitor with multi-pair grid | ✅ DONE |
-| S13 | Beta tested, publicly launched, first sales | ⬜ PARTIAL (infra ready, need beta run) |
+| S12 | News pipeline works, LLM sentiment is ML feature, Results shows all history, Dashboard has live price ticker + candlestick charts + Market Pulse, backtest trade visualization on Results detail, live monitor with multi-pair grid |
+| S13 | Beta tested, publicly launched, first sales |
 | S15 | All user-facing text says "KodaQuant", professional branding | ✅ DONE — 37 tests, 12 files cleaned, icons regenerated |
 | S16 | Overfitting detection works, backtest summary is human-readable, training is transparent | ✅ DONE |
 | S16.8 | Model persistence complete — snapshots save/load/export/import, deployed models registry with CRUD, MetaEnsemble signal committee, live prediction bridge with compare endpoint | ✅ DONE |
-| S16.9 | Forward Test engine + API complete, Live Trading deploy supports saved models. UI tabs pending | 🔄 PARTIAL |
-| S17 | Cmd+K search, tab-style navigation, consistent UI, no dead code | ⬜ TODO (UI-heavy) |
-| S18 | Scraper/sentiment/features/prices endpoint exist. Live streaming + dashboard pending | 🔄 PARTIAL |
-| S19 | 2 ensembles working (cnn-lstm-xgb, adaptive regime). Voting/stacking/plugin system pending | 🔄 PARTIAL |
-| S20 | Advisor + sentiment LLM done. Commentary/suggest/generate/market-insight pending | 🔄 PARTIAL |
-| S21 | Live prices, deploy/signal loop, model_id bridge deployed. Execution client + risk controls pending | 🔄 PARTIAL |
-| S22 | Product listed on Paddle, landing page live, docs published, legal complete, analytics active | ⬜ TODO |
-| S23 | Log noise reduced 98%, live equity chart shows BH from origin with model grouping, no double-submit, no TypeError crash | ✅ DONE |
+| S16.9 | Forward Test tab operational — saved models tested on any date range; Live Trading deploys saved models instead of training fresh |
+| S17 | Cmd+K search, tab-style navigation, consistent UI, no dead code |
+| S18 | Live news feed + live OANDA prices feed into backtesting + dashboard |
+| S19 | All ensemble types working, plugin system for custom models |
+| S20 | LLM commentary, strategy suggestions, AI-augmented features |
+| S21 | Paper trading on OANDA demo, live trading with risk controls |
+| S22 | Product listed on Paddle, landing page live, docs published, legal complete, analytics active |
+| S23 | Log noise reduced 98%, live equity chart shows BH from origin with model grouping, no double-submit, no TypeError crash |
 
 ---
 
