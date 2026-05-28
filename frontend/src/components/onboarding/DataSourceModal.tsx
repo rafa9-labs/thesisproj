@@ -56,7 +56,7 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
           style={{ background: "linear-gradient(90deg, #00E5FF 0%, rgba(0,229,255,0.15) 100%)" }}
         />
 
-        <div className="px-7 pt-6 pb-7 flex flex-col gap-5">
+        <div className="px-8 pt-7 pb-8 flex flex-col gap-5">
           {/* ── header ── */}
           <div className="flex flex-col gap-1">
             <h2
