@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { X } from "lucide-react";
-import { createChart, type IChartApi, CandlestickSeries, LineSeries, ColorType } from "lightweight-charts";
+import { createChart, type IChartApi, CandlestickSeries, LineSeries, ColorType, createSeriesMarkers } from "lightweight-charts";
 import { PlaybackController } from "@/components/charts/PlaybackController";
 import type { OHLCBar, TradeChartMarker, EquityPoint, MonthlyResult, HpoTrial } from "@/api/schemas";
 
@@ -119,7 +119,7 @@ export function BacktestPlayback({
     }));
 
     if (markers.length > 0) {
-      candleSeries.setMarkers(markers);
+      const markersPlugin = createSeriesMarkers(candleSeries, markers);
     }
 
     if (visibleEquity.length > 1) {
@@ -163,7 +163,7 @@ export function BacktestPlayback({
         .filter((m): m is NonNullable<typeof m> => m !== null);
 
       if (monthMarkers.length > 0) {
-        candleSeries.setMarkers([...markers, ...monthMarkers].sort((a, b) => a.time - b.time));
+        createSeriesMarkers(candleSeries, [...markers, ...monthMarkers].sort((a, b) => a.time - b.time));
       }
     }
 

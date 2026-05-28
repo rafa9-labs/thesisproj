@@ -1,5 +1,5 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
-import { createChart, type IChartApi, ColorType, LineSeries, HistogramSeries } from "lightweight-charts";
+import { createChart, type IChartApi, ColorType, LineSeries, HistogramSeries, createSeriesMarkers } from "lightweight-charts";
 
 interface EquityCurveChartProps {
   data: { time: number; value: number }[];
@@ -108,7 +108,7 @@ export const EquityCurveChart = forwardRef<EquityCurveChartHandle, EquityCurveCh
           shape: "arrowUp" as const,
           text: m.event,
         }));
-      equitySeries.setMarkers(markers);
+      createSeriesMarkers(equitySeries, markers);
     }
 
     chart.timeScale().fitContent();
