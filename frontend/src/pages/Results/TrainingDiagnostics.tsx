@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -18,114 +18,74 @@ interface Props {
   modelName: string;
 }
 
-const FAMILY_COLORS: Record<string, string> = {
-  trend: "#22c55e",
-  momentum: "#f97316",
-  volatility: "#6366f1",
-  composite: "#a855f7",
-  regime: "#ec4899",
-  returns: "#14b8a6",
-  news: "#eab308",
-  time: "#787b86",
-  rolling: "#3b82f6",
-  other: "#6b7280",
-};
+// Muted institutional slate-blue for bars
+const BAR_BASE = "#2962FF";
+const BAR_TOP2 = "rgba(41,98,255,0.75)";
+const BAR_REST = "rgba(41,98,255,0.40)";
 
 const METHOD_COLORS: Record<string, { bg: string; fg: string }> = {
-  shap: { bg: "rgba(34,197,94,0.08)", fg: "#22c55e" },
-  gain: { bg: "rgba(34,197,94,0.08)", fg: "#22c55e" },
-  gradient: { bg: "rgba(6,182,212,0.08)", fg: "#06b6d4" },
-  coefficients: { bg: "rgba(59,130,246,0.08)", fg: "#3b82f6" },
-  permutation: { bg: "rgba(120,123,134,0.08)", fg: "#787b86" },
-  mdi: { bg: "rgba(245,158,11,0.08)", fg: "#f59e0b" },
-  submodel: { bg: "rgba(168,85,247,0.08)", fg: "#a855f7" },
-  none: { bg: "rgba(239,68,68,0.05)", fg: "#ef4444" },
-  unknown: { bg: "var(--color-elevated)", fg: "var(--color-text-muted)" },
+  shap:         { bg: "rgba(34,197,94,0.08)",   fg: "#22c55e" },
+  gain:         { bg: "rgba(34,197,94,0.08)",   fg: "#22c55e" },
+  gradient:     { bg: "rgba(6,182,212,0.08)",   fg: "#06b6d4" },
+  coefficients: { bg: "rgba(41,98,255,0.10)",   fg: "#4f83ff" },
+  permutation:  { bg: "rgba(120,123,134,0.08)", fg: "#787b86" },
+  mdi:          { bg: "rgba(245,158,11,0.08)",  fg: "#f59e0b" },
+  submodel:     { bg: "rgba(168,85,247,0.08)",  fg: "#a855f7" },
+  none:         { bg: "rgba(239,68,68,0.05)",   fg: "#ef4444" },
+  unknown:      { bg: "#1E222D",                fg: "#787b86" },
 };
 
-const METHOD_LABELS: Record<string, string> = {
-  shap: "TreeSHAP Shapley values — gold standard for tree models",
-  gain: "XGBoost gain-based importance — biased toward high-cardinality splits",
-  gradient: "Mean |gradient| via TF GradientTape — model-agnostic for deep networks",
-  coefficients: "Standardized coefficient magnitude — check VIF for collinearity",
-  permutation: "Permutation importance (3 repeats, 500 samples) — model-agnostic fallback",
-  mdi: "Mean decrease impurity (Gini) — biased toward continuous features with many splits. Prefer SHAP.",
-  submodel: "Delegated to sub-model in ensemble",
-  none: "No importance available for this model type",
-  unknown: "",
+const FAMILY_COLORS: Record<string, string> = {
+  trend: "#22c55e", momentum: "#f97316", volatility: "#6366f1",
+  composite: "#a855f7", regime: "#ec4899", returns: "#14b8a6",
+  news: "#eab308", time: "#787b86", rolling: "#3b82f6", other: "#6b7280",
 };
-
-function FeatureFamilyStrip({ families }: { families: Record<string, number> }) {
-  const entries = Object.entries(families).sort((a, b) => b[1] - a[1]);
-
-  return (
-    <div className="mt-2">
-      <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
-        Feature Families
-      </span>
-      <div className="flex items-center gap-0.5 mt-1">
-        {entries.map(([family, count]) => (
-          <div
-            key={family}
-            className="flex-1 rounded-sm"
-            style={{
-              height: 8,
-              minWidth: 4,
-              backgroundColor: FAMILY_COLORS[family] ?? FAMILY_COLORS.other,
-              opacity: 0.8,
-              cursor: "default",
-            }}
-            title={`${family}: ${count}`}
-          />
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5">
-        {entries.map(([family, count]) => (
-          <div key={family} className="flex items-center gap-1">
-            <div
-              className="w-1.5 h-1.5 rounded-full"
-              style={{ backgroundColor: FAMILY_COLORS[family] ?? FAMILY_COLORS.other }}
-            />
-            <span className="text-[9px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-              {family} {count}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function ImportanceChart({ features }: { features: { feature: string; importance: number }[] }) {
   const sorted = useMemo(() => [...features].sort((a, b) => b.importance - a.importance).slice(0, 15), [features]);
   if (sorted.length === 0) return null;
+
   return (
-    <div style={{ height: Math.max(sorted.length * 28, 120) }}>
+    // Thin compact bars — h-2 equivalent height per bar
+    <div style={{ height: Math.max(sorted.length * 22, 100) }}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={sorted} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-glass-border)" horizontal={false} />
-          <XAxis type="number" tick={{ fill: "var(--color-text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" }} />
+        <BarChart
+          data={sorted}
+          layout="vertical"
+          margin={{ left: 4, right: 8, top: 2, bottom: 2 }}
+          barCategoryGap="35%"
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#2A2E39" horizontal={false} />
+          <XAxis
+            type="number"
+            tick={{ fill: "#787B86", fontSize: 9, fontFamily: "JetBrains Mono" }}
+            axisLine={false}
+            tickLine={false}
+          />
           <YAxis
             type="category"
             dataKey="feature"
-            width={90}
-            tick={{ fill: "var(--color-text-secondary)", fontSize: 10 }}
+            width={88}
+            tick={{ fill: "#787B86", fontSize: 9, fontFamily: "Inter" }}
+            axisLine={false}
+            tickLine={false}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "var(--color-elevated)",
-              border: "1px solid var(--color-glass-border)",
+              backgroundColor: "#1E222D",
+              border: "1px solid #2A2E39",
               borderRadius: 6,
               fontSize: 11,
-              fontFamily: "var(--font-mono)",
+              fontFamily: "JetBrains Mono",
             }}
             formatter={(v: number) => [v.toFixed(4), "Importance"]}
+            cursor={{ fill: "rgba(255,255,255,0.03)" }}
           />
-          <Bar dataKey="importance" radius={[0, 3, 3, 0]}>
+          <Bar dataKey="importance" radius={[0, 2, 2, 0]} maxBarSize={8}>
             {sorted.map((_, i) => (
               <Cell
                 key={i}
-                fill={i < 3 ? "var(--color-brand)" : i < 6 ? "rgba(0,229,255,0.5)" : "rgba(0,229,255,0.2)"}
+                fill={i === 0 ? BAR_BASE : i < 3 ? BAR_TOP2 : BAR_REST}
               />
             ))}
           </Bar>
@@ -135,41 +95,95 @@ function ImportanceChart({ features }: { features: { feature: string; importance
   );
 }
 
+/** Tight, borderless 3×3 heatmap for confusion matrix */
 function ConfusionMatrix({ matrix, labels }: { matrix: number[][]; labels: string[] }) {
-  const rowMax = matrix.map((row) => Math.max(...row, 1));
+  const rowTotals = matrix.map((row) => Math.max(row.reduce((s, v) => s + v, 0), 1));
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${labels.length + 1}, 48px)` }}>
-        <div />
+    <div className="inline-flex flex-col gap-0.5">
+      {/* Column headers */}
+      <div className="flex gap-0.5 ml-8">
         {labels.map((l) => (
-          <div key={l} className="text-[9px] uppercase tracking-wider text-center font-semibold" style={{ color: "var(--color-text-muted)" }}>
+          <div
+            key={l}
+            className="flex items-center justify-center text-center"
+            style={{
+              width: 40,
+              height: 18,
+              fontSize: 9,
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              color: "#787B86",
+            }}
+          >
             {l}
           </div>
         ))}
-        {matrix.map((row, i) => (
-          <div key={`row-${i}`} className="contents">
-            <div className="text-[9px] uppercase tracking-wider font-semibold flex items-center justify-end pr-1" style={{ color: "var(--color-text-muted)" }}>
-              {labels[i]}
-            </div>
-            {row.map((val, j) => (
+      </div>
+      {/* Rows */}
+      {matrix.map((row, ri) => (
+        <div key={ri} className="flex items-center gap-0.5">
+          {/* Row label */}
+          <div
+            className="flex items-center justify-end"
+            style={{
+              width: 30,
+              fontSize: 9,
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              color: "#787B86",
+              paddingRight: 4,
+            }}
+          >
+            {labels[ri]}
+          </div>
+          {/* Cells */}
+          {row.map((val, ci) => {
+            const intensity = val / rowTotals[ri];
+            const isDiag = ri === ci;
+            const bg = isDiag
+              ? `rgba(41,98,255,${0.12 + 0.55 * intensity})`
+              : val > 0
+                ? `rgba(242,54,69,${0.06 + 0.22 * intensity})`
+                : "#131722";
+            const tc = isDiag
+              ? `rgba(79,131,255,${0.5 + 0.5 * intensity})`
+              : val > 0
+                ? "#F23645"
+                : "#4A5568";
+            return (
               <div
-                key={`${i}-${j}`}
-                className="rounded text-[11px] font-semibold flex items-center justify-center"
+                key={ci}
+                className="flex items-center justify-center font-semibold"
                 style={{
-                  fontFamily: "var(--font-mono)",
-                  backgroundColor: i === j
-                    ? `rgba(0,229,255,${0.15 + 0.55 * (val / rowMax[i])})`
-                    : val > 0 ? "rgba(239,68,68,0.08)" : "var(--color-elevated)",
-                  color: i === j ? "var(--color-brand)" : val > 0 ? "var(--color-text-secondary)" : "var(--color-text-muted)",
-                  minWidth: 48,
-                  minHeight: 32,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 3,
+                  backgroundColor: bg,
+                  color: tc,
+                  fontSize: 12,
+                  fontFamily: "JetBrains Mono, monospace",
+                  transition: "background-color 0.15s",
                 }}
+                title={`Predicted ${labels[ci]}, Actual ${labels[ri]}: ${val}`}
               >
                 {val}
               </div>
-            ))}
-          </div>
-        ))}
+            );
+          })}
+        </div>
+      ))}
+      {/* Axis labels */}
+      <div
+        className="flex items-center gap-2 mt-1"
+        style={{ fontSize: 9, color: "#4A5568", fontFamily: "Inter, sans-serif" }}
+      >
+        <span className="ml-8 uppercase tracking-wider">Predicted</span>
+        <span style={{ color: "#2A2E39" }}>|</span>
+        <span className="uppercase tracking-wider">Row = Actual</span>
       </div>
     </div>
   );
@@ -177,7 +191,6 @@ function ConfusionMatrix({ matrix, labels }: { matrix: number[][]; labels: strin
 
 function PredictionHistogram({ bins }: { bins: { bin_start: number; bin_end: number; bin_center: number; count: number }[] }) {
   if (!bins || bins.length === 0) return null;
-
   const total = bins.reduce((s, b) => s + b.count, 0);
   const above07 = bins.filter((b) => b.bin_center >= 0.7).reduce((s, b) => s + b.count, 0);
   const above08 = bins.filter((b) => b.bin_center >= 0.8).reduce((s, b) => s + b.count, 0);
@@ -186,50 +199,44 @@ function PredictionHistogram({ bins }: { bins: { bin_start: number; bin_end: num
 
   return (
     <div>
-      <ChartCard title="" subtitle="" height={160}>
+      <ChartCard title="" subtitle="" height={130}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={bins} margin={{ top: 4, right: 8, left: 0, bottom: 24 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-glass-border)" />
+          <BarChart data={bins} margin={{ top: 2, right: 6, left: -8, bottom: 16 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#2A2E39" />
             <XAxis
               dataKey="bin_center"
               tickFormatter={(v: number) => v.toFixed(2)}
-              tick={{ fill: "var(--color-text-muted)", fontSize: 9, fontFamily: "var(--font-mono)" }}
+              tick={{ fill: "#787B86", fontSize: 9, fontFamily: "JetBrains Mono" }}
             />
-            <YAxis tick={{ fill: "var(--color-text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" }} hide />
+            <YAxis tick={{ fill: "#787B86", fontSize: 9, fontFamily: "JetBrains Mono" }} hide />
             <Tooltip
               contentStyle={{
-                backgroundColor: "var(--color-elevated)",
-                border: "1px solid var(--color-glass-border)",
+                backgroundColor: "#1E222D",
+                border: "1px solid #2A2E39",
                 borderRadius: 6,
                 fontSize: 11,
-                fontFamily: "var(--font-mono)",
+                fontFamily: "JetBrains Mono",
               }}
               formatter={(v: number) => [v, "Predictions"]}
-              labelFormatter={(v: number) => `Confidence: ${v.toFixed(2)}–${(v + 0.033).toFixed(2)}`}
+              labelFormatter={(v: number) => `Conf: ${v.toFixed(2)}–${(v + 0.033).toFixed(2)}`}
             />
-            <Bar dataKey="count" radius={[2, 2, 0, 0]} maxBarSize={24}>
+            <Bar dataKey="count" radius={[2, 2, 0, 0]} maxBarSize={20}>
               {bins.map((b) => (
                 <Cell
                   key={b.bin_center}
-                  fill={
-                    b.bin_center >= 0.8
-                      ? "var(--color-accent-success)"
-                      : b.bin_center >= 0.65
-                        ? "var(--color-brand)"
-                        : "rgba(245,158,11,0.6)"
-                  }
+                  fill={b.bin_center >= 0.8 ? "#089981" : b.bin_center >= 0.65 ? BAR_TOP2 : BAR_REST}
                 />
               ))}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
-      <div className="flex items-center gap-4 mt-1.5">
-        <span className="text-[10px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-          {pct07}% above 0.7 confidence
+      <div className="flex items-center gap-4 mt-1">
+        <span className="text-[9px]" style={{ color: "#787B86", fontFamily: "JetBrains Mono" }}>
+          {pct07}% above 0.7
         </span>
-        <span className="text-[10px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-          {pct08}% above 0.8 confidence
+        <span className="text-[9px]" style={{ color: "#787B86", fontFamily: "JetBrains Mono" }}>
+          {pct08}% above 0.8
         </span>
       </div>
     </div>
@@ -239,49 +246,54 @@ function PredictionHistogram({ bins }: { bins: { bin_start: number; bin_end: num
 function ConfidenceBandTable({ bands }: { bands: { band_min: number; band_max: number; count: number; accuracy: number; mean_return: number }[] }) {
   if (!bands || bands.length === 0) return null;
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[10px]" style={{ fontFamily: "var(--font-mono)" }}>
-        <thead>
-          <tr style={{ color: "var(--color-text-muted)" }}>
-            <th className="text-left py-1 pr-2 uppercase tracking-wider">Confidence</th>
-            <th className="text-right py-1 pr-2 uppercase tracking-wider">Trades</th>
-            <th className="text-right py-1 pr-2 uppercase tracking-wider">Accuracy</th>
-            <th className="text-right py-1 uppercase tracking-wider">Avg Return</th>
-          </tr>
-        </thead>
-        <tbody>
-          {bands.map((b, i) => {
-            const accColor = b.accuracy >= 0.55 ? "var(--color-accent-success)" : b.accuracy >= 0.45 ? "var(--color-accent-warning)" : "var(--color-accent-danger)";
-            const retColor = b.mean_return > 0 ? "var(--color-accent-success)" : b.mean_return < 0 ? "var(--color-accent-danger)" : "var(--color-text-muted)";
-            return (
-              <tr key={i} className="border-t" style={{ borderColor: "var(--color-glass-border)" }}>
-                <td className="py-1 pr-2" style={{ color: "var(--color-text-primary)" }}>
-                  {(b.band_min * 100).toFixed(0)}–{(b.band_max * 100).toFixed(0)}%
-                </td>
-                <td className="text-right py-1 pr-2" style={{ color: "var(--color-text-secondary)" }}>{b.count}</td>
-                <td className="text-right py-1 pr-2" style={{ color: accColor }}>{(b.accuracy * 100).toFixed(1)}%</td>
-                <td className="text-right py-1" style={{ color: retColor }}>{b.mean_return >= 0 ? "+" : ""}{(b.mean_return * 100).toFixed(3)}%</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <table className="w-full" style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10 }}>
+      <thead>
+        <tr style={{ color: "#787B86" }}>
+          <th className="text-left py-1 pr-2" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Conf.</th>
+          <th className="text-right py-1 pr-2" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Trades</th>
+          <th className="text-right py-1 pr-2" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Acc.</th>
+          <th className="text-right py-1" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Ret.</th>
+        </tr>
+      </thead>
+      <tbody>
+        {bands.map((b, i) => {
+          const ac = b.accuracy >= 0.55 ? "#089981" : b.accuracy >= 0.45 ? "#F59E0B" : "#F23645";
+          const rc = b.mean_return > 0 ? "#089981" : b.mean_return < 0 ? "#F23645" : "#787B86";
+          return (
+            <tr key={i} style={{ borderTop: "1px solid #2A2E39" }}>
+              <td className="py-0.5 pr-2" style={{ color: "#E8ECF1" }}>
+                {(b.band_min * 100).toFixed(0)}&ndash;{(b.band_max * 100).toFixed(0)}%
+              </td>
+              <td className="text-right py-0.5 pr-2" style={{ color: "#787B86" }}>{b.count}</td>
+              <td className="text-right py-0.5 pr-2" style={{ color: ac }}>{(b.accuracy * 100).toFixed(1)}%</td>
+              <td className="text-right py-0.5" style={{ color: rc }}>
+                {b.mean_return >= 0 ? "+" : ""}{(b.mean_return * 100).toFixed(3)}%
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 
 export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
+  const [vifDismissed, setVifDismissed] = useState(false);
+
   if (!data) {
     return (
-      <div className="rounded-xl border p-5" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
-        <div className="flex items-center gap-2 mb-4">
-          <BarChart3 size={16} style={{ color: "var(--color-text-muted)" }} />
-          <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--color-text-secondary)" }}>
+      <div
+        className="rounded-lg border p-4"
+        style={{ borderColor: "#2A2E39", backgroundColor: "#1E222D" }}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <BarChart3 size={14} style={{ color: "#787B86" }} />
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: "#787B86" }}>
             Training Diagnostics
-          </h3>
+          </span>
         </div>
-        <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-          No diagnostics data available for {modelName}. Run a backtest to generate this report.
+        <p className="text-[11px]" style={{ color: "#4A5568" }}>
+          No diagnostics available for {modelName}.
         </p>
       </div>
     );
@@ -291,122 +303,141 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
   const hasHist = data.prediction_histogram && data.prediction_histogram.length > 0;
   const hasCm = data.confusion_matrix && data.confusion_matrix.matrix && data.confusion_matrix.matrix.length > 0;
   const hasBands = data.confidence_bands && data.confidence_bands.length > 0;
+  const hasVif = !vifDismissed && data.vif_warnings && data.vif_warnings.length > 0;
+  const method = data.importance_method;
 
   return (
-    <div className="rounded-xl border p-5" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
-      <div className="flex items-center gap-2 mb-5">
-        <BarChart3 size={16} style={{ color: "var(--color-brand)" }} />
-        <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--color-text-secondary)" }}>
-          Training Diagnostics
-        </h3>
-        <span className="text-[10px] ml-auto" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-          {modelName}
-        </span>
-      </div>
-
-      {hasFeatures && (
-        <div className="mb-5">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Layers size={12} style={{ color: "var(--color-text-muted)" }} />
-            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
-              Feature Importance (Top 15)
-            </span>
-            {data.importance_method && (
+    <div className="flex flex-col gap-3">
+      {/* ── VIF warning — dismissible panel ──────────────────────── */}
+      {hasVif && (
+        <div
+          className="flex items-start justify-between rounded-md px-3 py-2"
+          style={{ backgroundColor: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.2)" }}
+        >
+          <div className="flex items-start gap-2 flex-1 min-w-0">
+            <span style={{ color: "#F59E0B", fontSize: 13, lineHeight: 1 }}>&#9888;</span>
+            <div className="flex flex-col gap-1 min-w-0">
               <span
-                className="ml-1 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
-                style={{
-                  backgroundColor: METHOD_COLORS[data.importance_method]?.bg ?? "var(--color-elevated)",
-                  color: METHOD_COLORS[data.importance_method]?.fg ?? "var(--color-text-muted)",
-                  border: `1px solid ${METHOD_COLORS[data.importance_method]?.fg ?? "var(--color-border)"}`,
-                }}
-                title={METHOD_LABELS[data.importance_method] ?? ""}
+                className="text-[10px] font-semibold uppercase tracking-wider"
+                style={{ color: "#F59E0B" }}
               >
-                {data.importance_method}
+                Collinear Features (VIF &gt; 10)
               </span>
-            )}
-          </div>
-          <div className="rounded-lg p-3" style={{ backgroundColor: "var(--color-elevated)" }}>
-            <ImportanceChart features={data.feature_importance!} />
-          </div>
-          {data.feature_families && Object.keys(data.feature_families).length > 0 && (
-            <FeatureFamilyStrip families={data.feature_families} />
-          )}
-          {data.vif_warnings && data.vif_warnings.length > 0 && (
-            <div className="mt-2 rounded p-2" style={{ backgroundColor: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)" }}>
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-accent-warning)" }}>
-                  VIF Warning
-                </span>
-                <span className="text-[9px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-                  Collinear features (VIF &gt; 10)
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {data.vif_warnings.map((w) => (
+              <div className="flex flex-wrap gap-1">
+                {data.vif_warnings!.map((w) => (
                   <span
                     key={w.feature}
                     className="rounded px-1.5 py-0.5 text-[9px]"
                     style={{
-                      backgroundColor: "rgba(245,158,11,0.15)",
-                      color: "var(--color-accent-warning)",
-                      fontFamily: "var(--font-mono)",
+                      backgroundColor: "rgba(245,158,11,0.12)",
+                      color: "#F59E0B",
+                      fontFamily: "JetBrains Mono, monospace",
                     }}
-                    title={`VIF = ${w.vif} — coefficient magnitudes may be unreliable for this feature`}
+                    title={`VIF = ${w.vif}`}
                   >
-                    {w.feature} VIF={w.vif}
+                    {w.feature} {w.vif}
                   </span>
                 ))}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setVifDismissed(true)}
+            className="ml-2 flex-shrink-0"
+            style={{ color: "#787B86", cursor: "pointer", background: "none", border: "none", fontSize: 12 }}
+          >
+            &#10005;
+          </button>
+        </div>
+      )}
+
+      {/* ── Feature Importance ───────────────────────────────────── */}
+      {hasFeatures && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Layers size={11} style={{ color: "#787B86" }} />
+            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "#787B86" }}>
+              Feature Importance (Top 15)
+            </span>
+            {method && (
+              <span
+                className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+                style={{
+                  backgroundColor: METHOD_COLORS[method]?.bg ?? "#1E222D",
+                  color: METHOD_COLORS[method]?.fg ?? "#787B86",
+                  border: `1px solid ${METHOD_COLORS[method]?.fg ?? "#2A2E39"}`,
+                }}
+              >
+                {method}
+              </span>
+            )}
+          </div>
+          <ImportanceChart features={data.feature_importance!} />
+          {/* Feature family strip */}
+          {data.feature_families && Object.keys(data.feature_families).length > 0 && (
+            <div className="mt-2">
+              <div className="flex items-center gap-0.5 h-1.5">
+                {Object.entries(data.feature_families)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([fam, cnt]) => (
+                    <div
+                      key={fam}
+                      className="flex-1 rounded-sm h-full"
+                      style={{ backgroundColor: FAMILY_COLORS[fam] ?? FAMILY_COLORS.other, opacity: 0.75, minWidth: 3 }}
+                      title={`${fam}: ${cnt}`}
+                    />
+                  ))}
               </div>
             </div>
           )}
         </div>
       )}
 
+      {/* ── Prediction Confidence Histogram ──────────────────────── */}
       {hasHist && (
-        <div className="mb-5">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Activity size={12} style={{ color: "var(--color-text-muted)" }} />
-            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
-              Prediction Confidence Distribution
+        <div>
+          <div className="flex items-center gap-1.5 mb-1">
+            <Activity size={11} style={{ color: "#787B86" }} />
+            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "#787B86" }}>
+              Prediction Confidence
             </span>
           </div>
-          <div className="rounded-lg p-3" style={{ backgroundColor: "var(--color-elevated)" }}>
-            <PredictionHistogram bins={data.prediction_histogram!} />
-          </div>
+          <PredictionHistogram bins={data.prediction_histogram!} />
         </div>
       )}
 
+      {/* ── Confusion Matrix ──────────────────────────────────────── */}
       {hasCm && (
-        <div className="mb-5">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Grid3X3 size={12} style={{ color: "var(--color-text-muted)" }} />
-            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
-              Confusion Matrix (Aggregated)
-            </span>
-          </div>
-          <div className="rounded-lg p-3" style={{ backgroundColor: "var(--color-elevated)" }}>
-            <ConfusionMatrix matrix={data.confusion_matrix!.matrix!} labels={data.confusion_matrix!.labels} />
-          </div>
-        </div>
-      )}
-
-      {hasBands && (
         <div>
           <div className="flex items-center gap-1.5 mb-2">
-            <TrendingUp size={12} style={{ color: "var(--color-text-muted)" }} />
-            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
+            <Grid3X3 size={11} style={{ color: "#787B86" }} />
+            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "#787B86" }}>
+              Confusion Matrix
+            </span>
+          </div>
+          <ConfusionMatrix
+            matrix={data.confusion_matrix!.matrix!}
+            labels={data.confusion_matrix!.labels}
+          />
+        </div>
+      )}
+
+      {/* ── Confidence vs Accuracy ────────────────────────────────── */}
+      {hasBands && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <TrendingUp size={11} style={{ color: "#787B86" }} />
+            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "#787B86" }}>
               Confidence vs Accuracy
             </span>
           </div>
-          <div className="rounded-lg p-3" style={{ backgroundColor: "var(--color-elevated)" }}>
-            <ConfidenceBandTable bands={data.confidence_bands!} />
-          </div>
+          <ConfidenceBandTable bands={data.confidence_bands!} />
         </div>
       )}
 
       {!hasFeatures && !hasHist && !hasCm && !hasBands && (
-        <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-          No diagnostics data available for {modelName}. Deep learning models (CNN, LSTM, Transformer) do not produce feature importance.
+        <p className="text-[11px]" style={{ color: "#4A5568" }}>
+          No diagnostics available for {modelName}. Deep learning models do not produce feature importance.
         </p>
       )}
     </div>
