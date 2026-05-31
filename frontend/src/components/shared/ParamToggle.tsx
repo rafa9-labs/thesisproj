@@ -13,7 +13,7 @@ export function ParamToggle({
   onChange,
 }: ParamToggleProps) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5 py-3 border-b" style={{ borderColor: "var(--color-glass-border)" }}>
       <div className="flex items-center justify-between">
         <span
           className="text-[11px] font-medium uppercase tracking-[0.1em]"

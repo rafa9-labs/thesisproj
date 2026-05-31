@@ -17,7 +17,14 @@ export function HyperparamsTab() {
   }
 
   return (
-    <div className="flex flex-col gap-5 pt-1">
+    <div
+      className="flex flex-col gap-6 rounded-xl border p-6"
+      style={{
+        backgroundColor: "var(--color-glass)",
+        borderColor: "var(--color-glass-border)",
+        backdropFilter: "blur(12px)",
+      }}
+    >
       {/* Model-specific hyperparameter controls */}
       <ModelHyperparamsPanel />
 

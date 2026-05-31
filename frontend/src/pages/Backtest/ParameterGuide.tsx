@@ -46,8 +46,8 @@ export function ParameterGuideInline() {
   if (guides.length === 0) return null;
 
   return (
-    <div>
-      <div className="flex items-center gap-1.5 mb-2">
+    <div className="rounded-xl border p-6" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "rgba(255,255,255,0.02)" }}>
+      <div className="flex items-center gap-1.5 mb-4">
         <Lightbulb size={12} style={{ color: "var(--color-accent-warning)" }} />
         <span className="text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--color-text-secondary)" }}>
           Parameter Tips
@@ -69,11 +69,11 @@ function buildGuides(selectedModels: string[], s: Record<string, unknown>) {
 
 function GuideContent({ guides }: { guides: { modelKey: string; name: string; warnings: string[]; tips: string[] }[] }) {
   return (
-    <div className="flex flex-col gap-2 px-3 pb-3 pt-1">
+    <div className="flex flex-col gap-3">
       {guides.map((g) => (
         <div
           key={g.modelKey}
-          className="rounded p-2"
+          className="rounded p-3"
           style={{ backgroundColor: "var(--color-elevated)" }}
         >
           <span className="text-[10px] font-semibold uppercase tracking-[0.05em]" style={{ color: "var(--color-brand)" }}>

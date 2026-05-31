@@ -17,7 +17,7 @@ export function ModelSelector() {
 
   return (
     <div
-      className="flex flex-col gap-4 rounded-lg border p-5"
+      className="flex flex-col gap-4 rounded-xl border p-6"
       style={{
         backgroundColor: "var(--color-glass)",
         borderColor: "var(--color-glass-border)",

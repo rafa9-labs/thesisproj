@@ -45,7 +45,7 @@ const sectionStyle: React.CSSProperties = {
 };
 const sectionTitleClass = "mb-1 text-[11px] font-medium uppercase tracking-[0.12em]";
 const sectionTitleStyle: React.CSSProperties = { color: "var(--color-text-secondary)" };
-const explainerClass = "mb-5 text-[11px] font-light leading-relaxed max-w-[720px]";
+const explainerClass = "mb-3 text-[11px] font-light leading-relaxed max-w-[720px]";
 const explainerStyle: React.CSSProperties = { color: "var(--color-text-muted)" };
 
 export function FeaturesPanel() {
@@ -80,7 +80,7 @@ export function FeaturesPanel() {
         <p className={explainerClass} style={explainerStyle}>
           Standard technical indicators that form the base signal set. Toggle each to include it in the model input vector.
         </p>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col">
           {CORE_INDICATORS.map(({ key, label, description }) => (
             <ParamToggle
               key={key}
@@ -96,13 +96,13 @@ export function FeaturesPanel() {
       {/* Transformations */}
       <section className={sectionClass} style={sectionStyle}>
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-success)" }} />
+          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
           <h4 className={sectionTitleClass} style={sectionTitleStyle}>Transformations</h4>
         </div>
         <p className={explainerClass} style={explainerStyle}>
           Derived features that preprocess raw price data into more informative representations.
         </p>
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col">
           <ParamToggle
             label="FracDiff"
             checked={state.useFracdiff}
@@ -140,7 +140,7 @@ export function FeaturesPanel() {
       {/* Lag Features */}
       <section className={sectionClass} style={sectionStyle}>
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-warning)" }} />
+          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
           <h4 className={sectionTitleClass} style={sectionTitleStyle}>Lag Features</h4>
         </div>
         <p className={explainerClass} style={explainerStyle}>
@@ -171,7 +171,7 @@ export function FeaturesPanel() {
       {/* Advanced Toggles */}
       <section className={sectionClass} style={sectionStyle}>
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-deep)" }} />
+          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
           <h4 className={sectionTitleClass} style={sectionTitleStyle}>Advanced Toggles</h4>
         </div>
         <p className={explainerClass} style={explainerStyle}>
@@ -186,7 +186,7 @@ export function FeaturesPanel() {
           {ADVANCED_TOGGLES.length} features {advancedOpen ? "(collapse)" : "(expand)"}
         </button>
         {advancedOpen && (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col">
             {ADVANCED_TOGGLES.map(({ key, label, param, description }) => (
               <ParamToggle
                 key={key}
@@ -204,13 +204,13 @@ export function FeaturesPanel() {
       {/* News & Sentiment */}
       <section className={sectionClass} style={sectionStyle}>
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-info)" }} />
-          <h4 className={sectionTitleClass} style={{ color: "var(--color-accent-info)" }}>News &amp; Sentiment</h4>
+          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
+          <h4 className={sectionTitleClass} style={sectionTitleStyle}>News &amp; Sentiment</h4>
         </div>
         <p className={explainerClass} style={explainerStyle}>
           External sentiment signals from RSS feeds and economic calendars. Adds a macro-awareness layer to the model.
         </p>
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col">
           <ParamToggle
             label="News Features"
             checked={state.useNews}

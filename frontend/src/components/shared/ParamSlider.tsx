@@ -19,7 +19,7 @@ export function ParamSlider({
   onChange,
 }: ParamSliderProps) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 py-3">
       <div className="flex items-center justify-between">
         <span
           className="text-[11px] font-medium uppercase tracking-[0.1em]"
