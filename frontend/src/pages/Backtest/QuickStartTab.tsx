@@ -35,14 +35,21 @@ export function QuickStartTab(_props: Props) {
     (modelDescriptions as Record<string, { name: string }>)[m]?.name ?? m;
 
   return (
-    <div className="flex flex-col py-6 px-2">
+    <div
+      className="flex flex-col rounded-xl border p-6"
+      style={{
+        backgroundColor: "var(--color-glass)",
+        borderColor: "var(--color-glass-border)",
+        backdropFilter: "blur(12px)",
+      }}
+    >
       {QUICK_START_CATEGORIES.map((cat, idx) => {
         const catColor = CATEGORY_COLORS[cat.key] ?? "var(--color-text-muted)";
 
         return (
           <div key={cat.key}>
             {idx > 0 && (
-              <div className="my-12" style={{ borderTop: "1px solid #333333" }} />
+              <div className="my-8" style={{ borderTop: "1px solid var(--color-glass-border)" }} />
             )}
 
             {/* Category header with left accent bar */}
@@ -54,11 +61,11 @@ export function QuickStartTab(_props: Props) {
               <span style={{ color: catColor }}>{CATEGORY_ICONS[cat.key]}</span>
               <span
                 className="text-[11px] font-semibold uppercase tracking-[0.1em]"
-                style={{ color: "#FFFFFF" }}
+                style={{ color: "var(--color-text-primary)" }}
               >
                 {cat.label}
               </span>
-              <span className="text-[10px] ml-1" style={{ color: "#4B5563" }}>
+              <span className="text-[10px] ml-1" style={{ color: "var(--color-text-muted)" }}>
                 {cat.options.length} presets
               </span>
             </div>
@@ -75,21 +82,34 @@ export function QuickStartTab(_props: Props) {
                   <div
                     key={opt.key}
                     onClick={() => handlePreset(opt.key)}
-                    className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg p-6 flex flex-col cursor-pointer transition-all duration-150 hover:border-[#A8E063] hover:bg-[#1E1E1E]"
+                    className="rounded-lg border p-5 flex flex-col cursor-pointer transition-all duration-150"
+                    style={{
+                      backgroundColor: "var(--color-elevated)",
+                      borderColor: "var(--color-glass-border)",
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLDivElement).style.borderColor = "var(--color-brand)";
+                      (e.currentTarget as HTMLDivElement).style.boxShadow = "0 0 0 1px rgba(0,229,255,0.15)";
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLDivElement).style.borderColor = "var(--color-glass-border)";
+                      (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
+                    }}
                   >
                     {/* Title row: label + est time pill */}
-                    <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-start justify-between gap-3 mb-4">
                       <span
                         className="text-[13px] font-semibold tracking-wide"
-                        style={{ color: "#FFFFFF", lineHeight: 1.4 }}
+                        style={{ color: "var(--color-text-primary)", lineHeight: 1.4 }}
                       >
                         {opt.label}
                       </span>
                       <span
                         className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10px] tabular-nums font-medium"
                         style={{
-                          color: "#A8E063",
-                          backgroundColor: "rgba(168, 224, 99, 0.1)",
+                          color: "var(--color-brand)",
+                          backgroundColor: "rgba(0,229,255,0.08)",
+                          border: "1px solid rgba(0,229,255,0.2)",
                           fontFamily: "var(--font-mono)",
                           whiteSpace: "nowrap",
                         }}
@@ -98,16 +118,8 @@ export function QuickStartTab(_props: Props) {
                       </span>
                     </div>
 
-                    {/* Description */}
-                    <p
-                      className="text-[11px] flex-1"
-                      style={{ color: "#9CA3AF", lineHeight: 1.8 }}
-                    >
-                      {opt.subtitle}
-                    </p>
-
                     {/* Stat pills */}
-                    <div className="flex flex-wrap gap-1.5 mt-4">
+                    <div className="flex flex-wrap gap-1.5">
                       <StatPill label="train" value={`${opt.trainMonths}mo`} />
                       <StatPill label="test" value={`${opt.testMonths}mo`} />
                       <StatPill label="trials" value={`${opt.nTrials}`} />
@@ -115,14 +127,15 @@ export function QuickStartTab(_props: Props) {
                     </div>
 
                     {/* Model badges */}
-                    <div className="mt-6 flex flex-wrap gap-2 pt-3 border-t border-[#252525]">
+                    <div className="mt-4 flex flex-wrap gap-2 pt-3" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
                       {opt.models.slice(0, 3).map((m) => (
                         <span
                           key={m}
                           className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-medium uppercase tracking-wider"
                           style={{
-                            color: "#A8E063",
-                            backgroundColor: "rgba(168, 224, 99, 0.08)",
+                            color: "var(--color-text-secondary)",
+                            backgroundColor: "var(--color-glass)",
+                            border: "1px solid var(--color-glass-border)",
                           }}
                         >
                           {modelName(m)}
@@ -131,7 +144,7 @@ export function QuickStartTab(_props: Props) {
                       {opt.models.length > 3 && (
                         <span
                           className="inline-flex items-center text-[10px]"
-                          style={{ color: "#6B7280" }}
+                          style={{ color: "var(--color-text-muted)" }}
                         >
                           +{opt.models.length - 3}
                         </span>
@@ -148,15 +161,15 @@ export function QuickStartTab(_props: Props) {
       {/* Custom Presets */}
       {Object.keys(customPresets).length > 0 && (
         <div>
-          <div className="my-12" style={{ borderTop: "1px solid #333333" }} />
+          <div className="my-8" style={{ borderTop: "1px solid var(--color-glass-border)" }} />
           <div className="flex items-center gap-2 mt-8 mb-4 px-1">
             <span
               className="text-[11px] font-semibold uppercase tracking-[0.1em]"
-              style={{ color: "#FFFFFF" }}
+              style={{ color: "var(--color-text-primary)" }}
             >
               My Presets
             </span>
-            <span className="text-[10px] ml-1" style={{ color: "#4B5563" }}>
+            <span className="text-[10px] ml-1" style={{ color: "var(--color-text-muted)" }}>
               {Object.keys(customPresets).length} saved
             </span>
           </div>
