@@ -96,7 +96,7 @@ export function FeaturesPanel() {
       {/* Transformations */}
       <section className={sectionClass} style={sectionStyle}>
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-success)" }} />
+          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
           <h4 className={sectionTitleClass} style={sectionTitleStyle}>Transformations</h4>
         </div>
         <p className={explainerClass} style={explainerStyle}>
@@ -140,7 +140,7 @@ export function FeaturesPanel() {
       {/* Lag Features */}
       <section className={sectionClass} style={sectionStyle}>
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-warning)" }} />
+          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
           <h4 className={sectionTitleClass} style={sectionTitleStyle}>Lag Features</h4>
         </div>
         <p className={explainerClass} style={explainerStyle}>
@@ -171,7 +171,7 @@ export function FeaturesPanel() {
       {/* Advanced Toggles */}
       <section className={sectionClass} style={sectionStyle}>
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-deep)" }} />
+          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
           <h4 className={sectionTitleClass} style={sectionTitleStyle}>Advanced Toggles</h4>
         </div>
         <p className={explainerClass} style={explainerStyle}>
@@ -204,8 +204,8 @@ export function FeaturesPanel() {
       {/* News & Sentiment */}
       <section className={sectionClass} style={sectionStyle}>
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-info)" }} />
-          <h4 className={sectionTitleClass} style={{ color: "var(--color-accent-info)" }}>News &amp; Sentiment</h4>
+          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
+          <h4 className={sectionTitleClass} style={sectionTitleStyle}>News &amp; Sentiment</h4>
         </div>
         <p className={explainerClass} style={explainerStyle}>
           External sentiment signals from RSS feeds and economic calendars. Adds a macro-awareness layer to the model.

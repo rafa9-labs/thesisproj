@@ -126,7 +126,11 @@ export function BacktestPage() {
       )}
 
       {/* Forward Test */}
-      {activeTab === "forwardtest" && <ForwardTestTab />}
+      {activeTab === "forwardtest" && (
+        <div className="flex flex-col gap-5 pt-1">
+          <ForwardTestTab />
+        </div>
+      )}
 
       </div>{/* end flex-1 content area */}
 

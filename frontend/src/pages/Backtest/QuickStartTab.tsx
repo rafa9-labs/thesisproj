@@ -44,7 +44,14 @@ export function QuickStartTab(_props: Props) {
     (modelDescriptions as Record<string, { name: string }>)[m]?.name ?? m;
 
   return (
-    <div className="flex flex-col py-6 px-2">
+    <div
+      className="flex flex-col rounded-xl border p-6"
+      style={{
+        backgroundColor: "var(--color-glass)",
+        borderColor: "var(--color-glass-border)",
+        backdropFilter: "blur(12px)",
+      }}
+    >
       {QUICK_START_CATEGORIES.map((cat, idx) => {
         const catColor = CATEGORY_COLORS[cat.key] ?? "var(--color-text-muted)";
 
