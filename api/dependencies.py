@@ -1,17 +1,23 @@
-"""Shared FastAPI dependencies."""
+"""Shared FastAPI dependencies with thread-safe singleton pattern."""
 from __future__ import annotations
 
-from functools import lru_cache
+import threading
 
 from api.config import Settings, settings
 from pipeline.data_sqlite import DataStore
 
+_lock = threading.Lock()
+_store: DataStore | None = None
 
-@lru_cache
+
 def get_settings() -> Settings:
     return settings
 
 
-@lru_cache
 def get_data_store() -> DataStore:
-    return DataStore(settings.db_full_path)
+    global _store
+    if _store is None:
+        with _lock:
+            if _store is None:
+                _store = DataStore(settings.db_full_path)
+    return _store

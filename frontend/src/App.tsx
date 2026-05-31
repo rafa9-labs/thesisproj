@@ -1,10 +1,9 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { DashboardPage } from "./pages/Dashboard/DashboardPage";
 import { BacktestPage } from "./pages/Backtest/BacktestPage";
 import { MonitorPage } from "./pages/Monitor/MonitorPage";
-import { WelcomePage } from "./pages/Welcome/WelcomePage";
 
 const ResultsPage = lazy(() =>
   import("./pages/Results/ResultsPage").then((m) => ({ default: m.ResultsPage })),
@@ -19,7 +18,7 @@ const SettingsPage = lazy(() =>
   import("./pages/Settings/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
 const LiveTradingPage = lazy(() =>
-  import("./pages/LiveTrading/LiveTradingPage").then((m) => ({ default: m.LiveTradingPage })),
+  import("./pages/Trading/TradingPage").then((m) => ({ default: m.default })),
 );
 const DeployedModelsPage = lazy(() =>
   import("./pages/Models/DeployedModelsPage").then((m) => ({ default: m.DeployedModelsPage })),
@@ -44,15 +43,7 @@ function PageSpinner() {
   );
 }
 
-const WELCOME_KEY = "kodaquant-welcome-done";
-
 export default function App() {
-  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(WELCOME_KEY));
-
-  if (showWelcome) {
-    return <WelcomePage onComplete={() => setShowWelcome(false)} />;
-  }
-
   return (
     <Routes>
       <Route element={<AppShell />}>
@@ -76,7 +67,7 @@ export default function App() {
           element={<Suspense fallback={<PageSpinner />}><SettingsPage /></Suspense>}
         />
         <Route
-          path="live-trading"
+          path="trading"
           element={<Suspense fallback={<PageSpinner />}><LiveTradingPage /></Suspense>}
         />
         <Route

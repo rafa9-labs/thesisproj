@@ -10,7 +10,7 @@ const routeTitles: Record<string, string> = {
   "monitor": "Monitor",
   "results": "Results",
   "models": "Models",
-  "live-trading": "Live Trading",
+  "trading": "Trading",
   "news": "News",
   "settings": "Settings",
 };

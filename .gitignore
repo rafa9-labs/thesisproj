@@ -72,3 +72,6 @@ tests/ui_screenshots/
 
 # Unrelated projects
 Allmighty/
+
+# WSL2 GPU venv (local development)
+.venv-gpu/

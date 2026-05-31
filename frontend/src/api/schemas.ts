@@ -573,3 +573,213 @@ export interface LiveSentimentResponse {
   model: string;
   error?: string;
 }
+
+export interface PaperSessionInfo {
+  session_id: string;
+  pair: string;
+  model_type: string;
+  timeframe: string;
+  status: string;
+  equity: number;
+  position: string;
+  unrealized_pnl: number;
+  total_trades: number;
+  signal_count: number;
+  created_at: string;
+}
+
+export interface PaperTradeItem {
+  trade_id: string;
+  direction: string;
+  size: number;
+  entry_time: number;
+  entry_price: number;
+  exit_time: number | null;
+  exit_price: number | null;
+  pnl: number;
+  exit_reason: string;
+}
+
+export interface PaperSummary {
+  sharpe: number;
+  sortino: number;
+  total_return_pct: number;
+  max_drawdown_pct: number;
+  win_rate: number;
+  total_trades: number;
+  profit_factor: number;
+  avg_trade_pnl: number;
+  final_equity: number;
+  signal_count: number;
+}
+
+export interface PaperMetricComparison {
+  [key: string]: { paper: number; backtest: number | null; delta: number | null };
+}
+
+export interface PaperStopResult {
+  session_id: string;
+  status: string;
+  summary: PaperSummary;
+  comparison: PaperMetricComparison;
+}
+
+export interface PaperTradesResponse {
+  session_id: string;
+  trades: PaperTradeItem[];
+  offset: number;
+  limit: number;
+}
+
+export interface PaperSummaryResponse {
+  session_id: string;
+  summary: PaperSummary;
+  comparison: PaperMetricComparison;
+}
+
+export interface DeployPaperRequest {
+  pair: string;
+  model_id?: string | null;
+  model_type?: string;
+  timeframe?: string;
+  initial_equity?: number;
+  position_sizing?: string;
+  sizing_config?: Record<string, unknown>;
+}
+
+export interface PaperSignalEvent {
+  event: "signal" | "hold" | "trade_opened" | "trade_closed" | "heartbeat" | "stopped" | "error";
+  direction?: string;
+  confidence?: number;
+  mid_price?: number;
+  bid?: number;
+  ask?: number;
+  equity?: number;
+  unrealized_pnl?: number;
+  position?: string;
+  time?: number;
+  trade_id?: string;
+  size?: number;
+  entry_price?: number;
+  exit_price?: number;
+  pnl?: number;
+  is_win?: boolean;
+  exit_reason?: string;
+  message?: string;
+  sub_events?: PaperSignalEvent[];
+}
+
+export interface LiveSessionInfo {
+  session_id: string;
+  pair: string;
+  model_type: string;
+  timeframe: string;
+  mode: string;
+  status: string;
+  equity: number;
+  position: string;
+  unrealized_pnl: number;
+  signal_count: number;
+  killed: boolean;
+  kill_reason: string;
+}
+
+export interface LiveJournalItem {
+  trade_id: string;
+  oanda_order_id: string;
+  oanda_fill_id: string;
+  direction: string;
+  size: number;
+  entry_price: number;
+  exit_price: number | null;
+  pnl: number;
+  confidence: number;
+  is_win: boolean;
+  exit_reason: string;
+  risk_blocked: boolean;
+  risk_reason: string;
+}
+
+export interface LiveRiskState {
+  equity_peak: number;
+  current_equity: number;
+  consecutive_losses: number;
+  daily_trades: number;
+  hourly_trades: number;
+  total_trades: number;
+  total_wins: number;
+  paused: boolean;
+  pause_reason: string;
+  killed: boolean;
+  kill_reason: string;
+  kill_level: string;
+  consecutive_api_errors: number;
+  signal_age_sec: number;
+}
+
+export interface LiveStopResult {
+  session_id: string;
+  status: string;
+  equity: number;
+  events: Array<Record<string, unknown>>;
+  journal_length: number;
+  killed: boolean;
+}
+
+export interface LiveEmergencyResult {
+  session_id: string;
+  killed: boolean;
+  close_results: Array<Record<string, unknown>>;
+  stopped: boolean;
+}
+
+export interface DeployLiveRequest {
+  pair: string;
+  model_id?: string | null;
+  model_type?: string;
+  timeframe?: string;
+  initial_equity?: number;
+  position_sizing?: string;
+  sizing_config?: Record<string, unknown>;
+  mode?: string;
+  risk_config?: Record<string, unknown>;
+}
+
+export interface LiveSignalEvent {
+  event: "signal" | "hold" | "order_placed" | "risk_blocked" | "trade_closed" | "kill" | "heartbeat" | "stopped" | "error";
+  direction?: string;
+  confidence?: number;
+  mid_price?: number;
+  bid?: number;
+  ask?: number;
+  equity?: number;
+  unrealized_pnl?: number;
+  position?: string;
+  time?: number;
+  reason?: string;
+  all_reasons?: string[];
+  level?: string;
+  instrument?: string;
+  units?: number;
+  price?: number;
+  oanda_order_id?: string;
+  oanda_fill_id?: string;
+  pnl?: number;
+  is_win?: boolean;
+  error?: string;
+  message?: string;
+  sub_events?: LiveSignalEvent[];
+}
+
+export interface SeedDemoTimeframe {
+  timeframe: string;
+  rows: number;
+  start_date: string | null;
+  end_date: string | null;
+}
+
+export interface SeedDemoResponse {
+  status: string;
+  pairs: Record<string, SeedDemoTimeframe[]>;
+  total_candles: number;
+}

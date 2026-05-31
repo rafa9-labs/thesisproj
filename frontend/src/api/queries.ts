@@ -23,6 +23,7 @@ import type {
   DefinePairResponse,
   WsEvent,
   LlmAnalysisResponse,
+  SeedDemoResponse,
 } from "./schemas";
 
 export function useHealth() {
@@ -233,16 +234,13 @@ export function useCredentialStatus() {
 export function useUploadCsv() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (formData: FormData) => {
-      const { data } = await apiClient.post<{
-        status: string;
-        filename: string;
-        pair: string;
-        timeframe: string;
-      }>("/data/upload", formData, {
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      const { data } = await apiClient.post("/data/upload", form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      return data;
+      return data as { status: string; pair: string; timeframe: string; rows: number };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pairs"] });
@@ -460,42 +458,44 @@ export function useTradeChartData(jobId: string, model: string) {
   });
 }
 
-export function useDeployLiveSession() {
+export function useDeployPaperSession() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { pair: string; model: string; timeframe: string; initial_equity?: number }) => {
-      const { data } = await apiClient.post<import("./schemas").LiveSessionInfo>("/live/deploy", payload);
+    mutationFn: async (payload: import("./schemas").DeployPaperRequest) => {
+      const { data } = await apiClient.post<import("./schemas").PaperSessionInfo>(
+        "/trading/paper/start",
+        payload,
+      );
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["live-sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["paper-sessions"] });
     },
   });
 }
 
-export function useStopLiveSession() {
+export function useStopPaperSession() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (sessionId: string) => {
-      const { data } = await apiClient.post<{
-        session_id: string;
-        status: string;
-        equity: number;
-        signal_count: number;
-      }>(`/live/${sessionId}/stop`);
+      const { data } = await apiClient.post<import("./schemas").PaperStopResult>(
+        `/trading/paper/${sessionId}/stop`,
+      );
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["live-sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["paper-sessions"] });
     },
   });
 }
 
-export function useLiveSessionStatus(sessionId: string | null) {
+export function usePaperSessionStatus(sessionId: string | null) {
   return useQuery({
-    queryKey: ["live-session", sessionId],
+    queryKey: ["paper-session", sessionId],
     queryFn: async () => {
-      const { data } = await apiClient.get<import("./schemas").LiveSessionInfo>(`/live/${sessionId}/status`);
+      const { data } = await apiClient.get<import("./schemas").PaperSessionInfo>(
+        `/trading/paper/${sessionId}/status`,
+      );
       return data;
     },
     enabled: !!sessionId,
@@ -503,11 +503,40 @@ export function useLiveSessionStatus(sessionId: string | null) {
   });
 }
 
-export function useLiveSessions() {
+export function usePaperSessionTrades(sessionId: string | null) {
   return useQuery({
-    queryKey: ["live-sessions"],
+    queryKey: ["paper-session-trades", sessionId],
     queryFn: async () => {
-      const { data } = await apiClient.get<import("./schemas").LiveSessionInfo[]>("/live/sessions");
+      const { data } = await apiClient.get<import("./schemas").PaperTradesResponse>(
+        `/trading/paper/${sessionId}/trades`,
+      );
+      return data;
+    },
+    enabled: !!sessionId,
+    refetchInterval: 10_000,
+  });
+}
+
+export function usePaperSessionSummary(sessionId: string | null) {
+  return useQuery({
+    queryKey: ["paper-session-summary", sessionId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<import("./schemas").PaperSummaryResponse>(
+        `/trading/paper/${sessionId}/summary`,
+      );
+      return data;
+    },
+    enabled: !!sessionId && false,
+  });
+}
+
+export function usePaperSessions() {
+  return useQuery({
+    queryKey: ["paper-sessions"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<
+        Array<{ session_id: string; pair: string; model_type: string; timeframe: string; status: string; created_at: string }>
+      >("/trading/paper/sessions");
       return data;
     },
     refetchInterval: 10_000,
@@ -637,6 +666,117 @@ export function useSaveModelFromJob() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deployed-models"] });
+    },
+  });
+}
+
+export function useDeployLiveSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: import("./schemas").DeployLiveRequest) => {
+      const { data } = await apiClient.post<import("./schemas").LiveSessionInfo>(
+        "/trading/live/start",
+        payload,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["live-sessions"] });
+    },
+  });
+}
+
+export function useStopLiveSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (sessionId: string) => {
+      const { data } = await apiClient.post<import("./schemas").LiveStopResult>(
+        `/trading/live/${sessionId}/stop`,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["live-sessions"] });
+    },
+  });
+}
+
+export function useEmergencyKillSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (sessionId: string) => {
+      const { data } = await apiClient.post<import("./schemas").LiveEmergencyResult>(
+        `/trading/live/${sessionId}/emergency`,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["live-sessions"] });
+    },
+  });
+}
+
+export function useLiveSessionStatus(sessionId: string | null) {
+  return useQuery({
+    queryKey: ["live-session", sessionId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<import("./schemas").LiveSessionInfo>(
+        `/trading/live/${sessionId}/status`,
+      );
+      return data;
+    },
+    enabled: !!sessionId,
+    refetchInterval: 5_000,
+  });
+}
+
+export function useLiveJournal(sessionId: string | null) {
+  return useQuery({
+    queryKey: ["live-journal", sessionId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ journal: import("./schemas").LiveJournalItem[] }>(
+        `/trading/live/${sessionId}/journal`,
+      );
+      return data;
+    },
+    enabled: !!sessionId,
+    refetchInterval: 10_000,
+  });
+}
+
+export function useLiveRiskState(sessionId: string | null) {
+  return useQuery({
+    queryKey: ["live-risk", sessionId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ risk: import("./schemas").LiveRiskState }>(
+        `/trading/live/${sessionId}/risk`,
+      );
+      return data;
+    },
+    enabled: !!sessionId,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useLiveSessionsList() {
+  return useQuery({
+    queryKey: ["live-sessions"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<Array<import("./schemas").LiveSessionInfo>>(
+        "/trading/live/sessions",
+      );
+      return data;
+    },
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+}
+
+export function useDemoSeed() {
+  return useMutation({
+    mutationFn: async (payload?: { pairs?: string[]; timeframes?: string[] }) => {
+      const { data } = await apiClient.post<SeedDemoResponse>("/data/seed-demo", payload ?? {});
+      return data;
     },
   });
 }

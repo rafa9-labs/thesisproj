@@ -120,7 +120,7 @@ def _get_trial_counts(hpo_intensity: str | None, model: str) -> Dict[str, int]:
             return model_map[model]
     return _TRIAL_COUNTS_FALLBACK.get(model, {"random": 3, "bayes": 3})
 
-CV_BLOCKS_DEFAULT = 3
+CV_BLOCKS_DEFAULT = 5
 
 
 def _compute_total_work(models: list[str], months: int, hpo_intensity: str | None = None, cv_blocks: int = CV_BLOCKS_DEFAULT, period_unit: str = "months", n_trials_override: int | None = None) -> int:

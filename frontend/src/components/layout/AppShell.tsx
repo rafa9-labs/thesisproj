@@ -8,11 +8,29 @@ import { useHealth } from "@/api/queries";
 import { wsManager } from "@/api/websocket";
 import { UpdateNotification } from "../UpdateNotification/UpdateNotification";
 import { DataSourceModal } from "../onboarding/DataSourceModal";
+import { useAppStore } from "@/stores/useAppStore";
+
+const DS_CHOSEN_KEY = "fx-datasource-chosen";
+
+function hasChosenDataSource(): boolean {
+  try {
+    return localStorage.getItem(DS_CHOSEN_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function markDataSourceChosen(): void {
+  try {
+    localStorage.setItem(DS_CHOSEN_KEY, "true");
+  } catch { /* ignore */ }
+}
 
 export function AppShell() {
   const [wsConnected, setWsConnected] = useState(false);
-  const [showDataSource, setShowDataSource] = useState(true);
+  const [showDataSource, setShowDataSource] = useState(!hasChosenDataSource());
   const { data: health } = useHealth();
+  const { setDemoMode } = useAppStore();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -21,12 +39,20 @@ export function AppShell() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleStart = (mode: string) => {
+    markDataSourceChosen();
+    if (mode === "demo") {
+      setDemoMode(true);
+    }
+    setShowDataSource(false);
+  };
+
   return (
     <div className="flex h-full w-full" style={{ backgroundColor: "var(--color-app)" }}>
       <DataSourceModal
         isOpen={showDataSource}
         onBack={() => setShowDataSource(false)}
-        onStart={(_mode, _value) => setShowDataSource(false)}
+        onStart={handleStart}
       />
 
       <Sidebar />

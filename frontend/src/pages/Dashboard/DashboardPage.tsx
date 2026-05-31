@@ -1,8 +1,10 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { Database } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useJobHistory, usePairs } from "@/api/queries";
+import { useAppStore } from "@/stores/useAppStore";
 import apiClient from "@/api/client";
 import type { JobResults } from "@/api/schemas";
 import { formatMetric, formatPercent } from "@/lib/formatters";
@@ -29,6 +31,7 @@ function DashboardSkeleton() {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { demoMode } = useAppStore();
   const { data: pairs } = usePairs();
   const { data: jobs, isLoading: jobsLoading } = useJobHistory(50);
 
@@ -103,6 +106,23 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {demoMode && (
+        <div
+          className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs"
+          style={{
+            backgroundColor: "rgba(0, 229, 255, 0.08)",
+            border: "1px solid rgba(0, 229, 255, 0.2)",
+            color: "#00E5FF",
+          }}
+        >
+          <Database size={14} />
+          <span className="font-semibold">Demo Mode</span>
+          <span style={{ color: "#787B86" }}>
+            &mdash; Using pre-loaded sample market data. Run a real backtest or connect OANDA for live data.
+          </span>
+        </div>
+      )}
+
       {/* ── Ticker ribbon ──────────────────────────────────────────────────── */}
       <PriceTicker pairs={availablePairs.length > 0 ? [activePair, ...availablePairs.filter((p) => p !== activePair).slice(0, 2)] : ["EURUSD", "GBPUSD", "USDJPY"]} />
 
