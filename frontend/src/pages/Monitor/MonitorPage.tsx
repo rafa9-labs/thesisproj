@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, FlaskConical, ChevronRight, Square, Wifi, WifiOff } from "lucide-react";
 import { useActiveBacktests, useForceStopJob, useJobStatus } from "@/api/queries";
@@ -10,31 +10,32 @@ import { CycleCard } from "./CycleCard";
 import { EquityChart } from "./EquityChart";
 import { DebugOverlay } from "./DebugOverlay";
 import { wsManager } from "@/api/websocket";
+import type { JobSummary } from "@/api/schemas";
 
 export function MonitorPage() {
   const navigate = useNavigate();
   const { data: activeData, isLoading } = useActiveBacktests();
   const activeJobs = useJobStore((s) => s.activeJobs);
   const selectedJobId = useJobStore((s) => s.selectedJobId);
+  const completedJobIds = useJobStore((s) => s.completedJobIds);
   const selectJob = useJobStore((s) => s.selectJob);
   const getJob = useJobStore((s) => s.getJob);
   const setActiveTab = useJobStore((s) => s.setActiveTab);
   const handleWsEvent = useJobStore((s) => s.handleWsEvent);
+  const markCompleted = useJobStore((s) => s.markCompleted);
+  const clearCompletedJobs = useJobStore((s) => s.clearCompletedJobs);
+  const removeJob = useJobStore((s) => s.removeJob);
   const forceStop = useForceStopJob();
 
-  const [completedCache, setCompletedCache] = useState<Map<string, number>>(new Map());
-  const [, setTick] = useState(0);
   const [wsConnected, setWsConnected] = useState(false);
 
-  useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), 10_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const activeList = activeData?.jobs ?? [];
-  const runningList = activeList.filter((j) => j.status === "pending" || j.status === "running");
-
   const ensureJob = useJobStore((s) => s.ensureJob);
+
+  const activeList = useMemo(() => activeData?.jobs ?? [], [activeData?.jobs]);
+  const runningList = useMemo(
+    () => activeList.filter((j) => j.status === "pending" || j.status === "running"),
+    [activeList],
+  );
 
   useEffect(() => {
     for (const job of runningList) {
@@ -44,27 +45,63 @@ export function MonitorPage() {
     }
   }, [runningList, activeJobs, ensureJob]);
 
-  const allJobIds = useMemo(() => ({
-    active: new Set(runningList.map((j) => j.job_id)),
-    completed: completedCache,
-  }), [runningList, completedCache]);
+  const runningIds = useMemo(() => new Set(runningList.map((j) => j.job_id)), [runningList]);
+
+  const prevRunningIds = useRef<{ ids: Set<string>; initialized: boolean }>({ ids: new Set(), initialized: false });
+
+  useEffect(() => {
+    const currentIds = runningIds;
+    if (!prevRunningIds.current.initialized) {
+      prevRunningIds.current = { ids: currentIds, initialized: true };
+      return;
+    }
+    const newIds = [...currentIds].filter((id) => !prevRunningIds.current.ids.has(id));
+    if (newIds.length > 0) {
+      clearCompletedJobs();
+    }
+    prevRunningIds.current.ids = currentIds;
+  }, [runningIds, clearCompletedJobs]);
+
+  const completedSummaries: JobSummary[] = useMemo(() => {
+    if (completedJobIds.size === 0) return [];
+    return [...completedJobIds]
+      .filter((id) => activeJobs.has(id))
+      .map((id) => {
+        const j = activeJobs.get(id)!;
+        return {
+          job_id: id,
+          type: "backtest",
+          status: j.status as "completed" | "failed",
+          pair: j.pair,
+          models: j.models,
+          created_at: j.createdAt.toISOString(),
+        };
+      });
+  }, [completedJobIds, activeJobs]);
+
+  const allJobs = useMemo(
+    () => [...activeList, ...completedSummaries],
+    [activeList, completedSummaries],
+  );
 
   const visibleIds = useMemo(
-    () => new Set([...allJobIds.active, ...allJobIds.completed.keys()]),
-    [allJobIds],
+    () => new Set([...runningIds, ...completedJobIds]),
+    [runningIds, completedJobIds],
   );
 
   useEffect(() => {
     if (visibleIds.size > 0) {
-      if (!selectedJobId || !visibleIds.has(selectedJobId) || !activeJobs.has(selectedJobId)) {
-        const first = [...visibleIds].find((id) => activeJobs.has(id)) ?? null;
+      const selectedStillVisible = selectedJobId && visibleIds.has(selectedJobId) && activeJobs.has(selectedJobId);
+      if (!selectedStillVisible) {
+        const firstRunning = [...visibleIds].find((id) => runningIds.has(id) && activeJobs.has(id));
+        const first = firstRunning ?? ([...visibleIds].find((id) => activeJobs.has(id)) ?? null);
         if (first) {
           selectJob(first);
           setActiveTab(first, "hpo-and-results");
         }
       }
     }
-  }, [visibleIds, selectedJobId, selectJob, setActiveTab, activeJobs]);
+  }, [visibleIds, selectedJobId, selectJob, setActiveTab, activeJobs, runningIds]);
 
   const selectedJobStatus = selectedJobId ? getJob(selectedJobId)?.status : null;
   const wsJobId = selectedJobId && (selectedJobStatus === "pending" || selectedJobStatus === "running") ? selectedJobId : null;
@@ -94,6 +131,7 @@ export function MonitorPage() {
         job_id: selectedJobId,
         error: restStatus.error ?? "Job failed on server",
       });
+      markCompleted(selectedJobId);
     }
     if (restStatus.status === "completed" && local.status !== "completed") {
       handleWsEvent({
@@ -101,8 +139,9 @@ export function MonitorPage() {
         job_id: selectedJobId,
         metrics: [],
       });
+      markCompleted(selectedJobId);
     }
-  }, [restStatus, selectedJobId, getJob, handleWsEvent]);
+  }, [restStatus, selectedJobId, getJob, handleWsEvent, markCompleted]);
 
   const handleForceStop = async () => {
     if (!selectedJobId) return;
@@ -114,8 +153,7 @@ export function MonitorPage() {
         job_id: jobId,
         error: "Stopped by user",
       });
-      setCompletedCache((prev) => { const next = new Map(prev); next.delete(jobId); return next; });
-      useJobStore.getState().removeJob(jobId);
+      removeJob(jobId);
     } catch (err) {
       console.error("Force stop failed:", err);
     }
@@ -138,13 +176,13 @@ export function MonitorPage() {
         style={{ backgroundColor: "var(--color-app)" }}
       >
         <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-          Checking for active backtests...
+          Checking for backtests...
         </span>
       </div>
     );
   }
 
-  if (visibleIds.size === 0) {
+  if (runningList.length === 0 && completedJobIds.size === 0) {
     return (
       <div className="flex flex-col gap-6">
         <div
@@ -189,7 +227,7 @@ export function MonitorPage() {
           className="text-xs font-semibold uppercase tracking-[0.1em]"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          Active Jobs
+          Monitor{completedJobIds.size > 0 ? ` — ${completedJobIds.size} completed` : ""}
         </span>
         {selectedJobId && (
           <span
@@ -207,7 +245,7 @@ export function MonitorPage() {
       </div>
 
       <JobPillStrip
-        jobs={activeList}
+        jobs={allJobs}
         selectedJobId={selectedJobId}
         onSelect={(id) => {
           selectJob(id);

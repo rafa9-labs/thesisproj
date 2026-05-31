@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { useQueryClient } from "@tanstack/react-query";
 import type { Metrics, WsEvent, HpoTrialRow, OosPeriodResult } from "@/api/schemas";
 
 const _processedEventIds = new Map<string, Set<number>>();
@@ -53,6 +52,7 @@ interface JobState {
 interface JobStore {
   activeJobs: Map<string, JobState>;
   selectedJobId: string | null;
+  completedJobIds: Set<string>;
 
   startJob: (jobId: string, pair: string, models: string[]) => void;
   ensureJob: (jobId: string, pair: string, models: string[]) => void;
@@ -61,11 +61,14 @@ interface JobStore {
   removeJob: (jobId: string) => void;
   getJob: (jobId: string) => JobState | undefined;
   setActiveTab: (jobId: string, tab: ActiveTab) => void;
+  markCompleted: (jobId: string) => void;
+  clearCompletedJobs: () => void;
 }
 
 export const useJobStore = create<JobStore>()((set, get) => ({
   activeJobs: new Map(),
   selectedJobId: null,
+  completedJobIds: new Set(),
 
   startJob: (jobId, pair, models) =>
     set((state) => {
@@ -371,22 +374,20 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         updated.progress = 100;
         updated.progressText = "Complete";
         updated.completedAt = new Date();
-        try {
-          const qc = useQueryClient();
-          qc.invalidateQueries({ queryKey: ["jobs"] });
-          qc.invalidateQueries({ queryKey: ["job-results", jobId] });
-        } catch (_e) { void _e }
+        const nextCompleted = new Set(state.completedJobIds);
+        nextCompleted.add(jobId);
+        next.set(jobId, updated);
+        return { activeJobs: next, completedJobIds: nextCompleted };
       }
 
       if (event.event === "job_failed") {
         updated.status = "failed";
         updated.error = event.error;
         updated.progressText = `Failed: ${event.error}`;
-        try {
-          const qc = useQueryClient();
-          qc.invalidateQueries({ queryKey: ["jobs"] });
-          qc.invalidateQueries({ queryKey: ["job", jobId] });
-        } catch (_e) { void _e }
+        const nextCompleted = new Set(state.completedJobIds);
+        nextCompleted.add(jobId);
+        next.set(jobId, updated);
+        return { activeJobs: next, completedJobIds: nextCompleted };
       }
 
       next.set(jobId, updated);
@@ -399,9 +400,12 @@ export const useJobStore = create<JobStore>()((set, get) => ({
     set((state) => {
       const next = new Map(state.activeJobs);
       next.delete(jobId);
+      const nextCompleted = new Set(state.completedJobIds);
+      nextCompleted.delete(jobId);
       _processedEventIds.delete(jobId);
       return {
         activeJobs: next,
+        completedJobIds: nextCompleted,
         selectedJobId: state.selectedJobId === jobId ? null : state.selectedJobId,
       };
     }),
@@ -416,5 +420,26 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         next.set(jobId, { ...job, activeTab: tab });
       }
       return { activeJobs: next };
+    }),
+
+  markCompleted: (jobId) =>
+    set((state) => {
+      if (state.completedJobIds.has(jobId)) return state;
+      const nextCompleted = new Set(state.completedJobIds);
+      nextCompleted.add(jobId);
+      return { completedJobIds: nextCompleted };
+    }),
+
+  clearCompletedJobs: () =>
+    set((state) => {
+      const next = new Map(state.activeJobs);
+      const removed: string[] = [];
+      for (const [id, job] of next) {
+        if (job.status === "completed" || job.status === "failed") {
+          removed.push(id);
+        }
+      }
+      for (const id of removed) next.delete(id);
+      return { activeJobs: next, completedJobIds: new Set() };
     }),
 }));

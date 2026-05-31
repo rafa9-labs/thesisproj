@@ -203,7 +203,7 @@ class OandaClient:
             if not inst:
                 continue
             try:
-                r = self.close_position(inst)
+                self.close_position(inst)
                 results.append({"action": "close_position", "instrument": inst,
                                 "status": "ok"})
             except Exception as exc:

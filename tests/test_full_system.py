@@ -335,16 +335,7 @@ def test_pipeline_imports_hub():
     import pipeline._imports as pi
     assert hasattr(pi, "np")
     assert hasattr(pi, "pd")
-    assert hasattr(pi, "CSV_1H")
-    assert hasattr(pi, "CSV_4H")
-    assert hasattr(pi, "CSV_30MIN")
-
-
-def test_pipeline_imports_constants():
-    """Key constants from _imports must match expected values."""
-    import pipeline._imports as pi
-    assert pi.CSV_30MIN == "csv_data/EURUSD_10_years_M30_OANDA.csv"
-    assert pi.BASE_CSV == pi.CSV_30MIN
+    assert hasattr(pi, "CSV_ENGINE")
 
 
 # ═══════════════════════════════════════════════════════════════════════

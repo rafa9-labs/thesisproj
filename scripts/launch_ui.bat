@@ -1,6 +1,6 @@
 @echo off
 echo ============================================================
-echo  FX ML Backtester - Streamlit UI with GPU
+echo  KodaQuant - Streamlit UI with GPU
 echo ============================================================
 echo.
 echo Starting Streamlit server in WSL2...

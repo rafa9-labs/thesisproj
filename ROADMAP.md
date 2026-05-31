@@ -1117,7 +1117,7 @@
 > **Goal**: Enable real-time trading via OANDA API (demo first, then live). Paper trading with real data, then live execution with risk controls.
 > **Est**: 12-16h
 
-- [ ] **S21.1** OANDA API client (v20 REST)
+- [x] **S21.1** OANDA API client (v20 REST) ✅ DONE
   - Account info, position list, trade list, order submission
   - Market + limit + stop orders with SL/TP
   - Position management (close partial, modify SL/TP)
@@ -1126,7 +1126,7 @@
   - **Files**: new `trading/oanda_client.py`, `trading/oanda_models.py`
   - **Est**: 3h
 
-- [ ] **S21.2** Paper trading engine
+- [x] **S21.2** Paper trading engine ✅ DONE
   - Run trained models against live OANDA price feed
   - Generate signals, execute paper trades (no real money)
   - Track paper portfolio: equity, positions, P&L in real time
@@ -1134,7 +1134,7 @@
   - **Files**: new `trading/paper_engine.py`, `api/routers/trading.py`
   - **Est**: 4h
 
-- [ ] **S21.3** Live trading engine with risk controls
+- [x] **S21.3** Live trading engine with risk controls ✅ DONE
   - Signal → execute via OANDA API with position sizing
   - Max position size limit (e.g. 2% of equity)
   - Max daily trades limit
@@ -1144,7 +1144,7 @@
   - **Files**: new `trading/live_engine.py`, `trading/risk_controls.py`, `frontend/src/pages/Trading/LiveTradingPage.tsx`
   - **Est**: 4h
 
-- [ ] **S21.4** Trading dashboard UI
+- [x] **S21.4** Trading dashboard UI ✅ DONE
   - Live position monitor (open trades, P&L, time in trade)
   - Signal history with confidence scores
   - One-click "Start Paper Trading" / "Start Live Trading" with warnings
@@ -1255,10 +1255,10 @@ cd frontend && npm run dev
 | **S16.8** | Model Persistence, Deployment & Experiment Tracking | 15-19h | ✅ COMPLETE (2026-05-21, 64 tests) |
 | **S16.9** | Forward Test + Live Trading Bridge | 5-7h | IN PROGRESS |
 | **S17** | UI Polish, Tabs Flow & Search | 8-10h | TODO |
-| **S18** | Live News & Market Data Integration | 10-14h | TODO |
-| **S19** | Ensemble Models & Model Extensibility | 8-10h | TODO |
-| **S20** | LLM / AI Integration & Intelligent Trading | 10-14h | TODO |
-| **S21** | Live Trading with OANDA | 12-16h | TODO |
+| **S18** | Live News & Market Data Integration | 10-14h | PARTIAL (scraper/sentiment/features/prices done, live streaming + dashboard pending) |
+| **S19** | Ensemble Models & Model Extensibility | 8-10h | PARTIAL (2 ensembles done, voting/stacking/plugins pending) |
+| **S20** | LLM / AI Integration & Intelligent Trading | 10-14h | PARTIAL (advisor/sentiment done, commentary/suggest/generate pending) |
+| **S21** | Live Trading with OANDA | 12-16h | ✅ COMPLETE (OANDA client, paper engine, live engine, 17 risk gates, trading dashboard UI) |
 | **S22** | Commercial Infrastructure (deferred from S12) | 8-10h | TODO |
 | **S23** | Pipeline Stability & Live Monitor UX | 6-8h | ✅ DONE (2026-05-14) |
 
@@ -1279,14 +1279,14 @@ cd frontend && npm run dev
 | S15 | All user-facing text says "KodaQuant", professional branding | ✅ DONE — 37 tests, 12 files cleaned, icons regenerated |
 | S16 | Overfitting detection works, backtest summary is human-readable, training is transparent | ✅ DONE |
 | S16.8 | Model persistence complete — snapshots save/load/export/import, deployed models registry with CRUD, MetaEnsemble signal committee, live prediction bridge with compare endpoint | ✅ DONE |
-| S16.9 | Forward Test tab operational — saved models tested on any date range; Live Trading deploys saved models instead of training fresh |
-| S17 | Cmd+K search, tab-style navigation, consistent UI, no dead code |
-| S18 | Live news feed + live OANDA prices feed into backtesting + dashboard |
-| S19 | All ensemble types working, plugin system for custom models |
-| S20 | LLM commentary, strategy suggestions, AI-augmented features |
-| S21 | Paper trading on OANDA demo, live trading with risk controls |
-| S22 | Product listed on Paddle, landing page live, docs published, legal complete, analytics active |
-| S23 | Log noise reduced 98%, live equity chart shows BH from origin with model grouping, no double-submit, no TypeError crash |
+| S16.9 | Forward Test engine + API complete, Live Trading deploy supports saved models. UI tabs pending | 🔄 PARTIAL |
+| S17 | Cmd+K search, tab-style navigation, consistent UI, no dead code | ⬜ TODO (UI-heavy) |
+| S18 | Scraper/sentiment/features/prices endpoint exist. Live streaming + dashboard pending | 🔄 PARTIAL |
+| S19 | 2 ensembles working (cnn-lstm-xgb, adaptive regime). Voting/stacking/plugin system pending | 🔄 PARTIAL |
+| S20 | Advisor + sentiment LLM done. Commentary/suggest/generate/market-insight pending | 🔄 PARTIAL |
+| S21 | OANDA client + paper engine + live engine + 17 risk gates + trading dashboard. Full live trading pipeline with kill-safe execution. | ✅ COMPLETE |
+| S22 | Product listed on Paddle, landing page live, docs published, legal complete, analytics active | ⬜ TODO |
+| S23 | Log noise reduced 98%, live equity chart shows BH from origin with model grouping, no double-submit, no TypeError crash | ✅ DONE |
 
 ---
 

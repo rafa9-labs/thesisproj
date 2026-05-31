@@ -24,7 +24,7 @@ const navItems: NavItem[] = [
   { icon: Eye, label: "Monitor", path: "/monitor" },
   { icon: BarChart3, label: "Results", path: "/results" },
   { icon: Box, label: "Models", path: "/models" },
-  { icon: Zap, label: "Live", path: "/live-trading" },
+  { icon: Zap, label: "Trading", path: "/trading" },
   { icon: Newspaper, label: "News", path: "/news" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
