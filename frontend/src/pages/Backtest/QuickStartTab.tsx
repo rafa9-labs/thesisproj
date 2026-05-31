@@ -95,7 +95,7 @@ export function QuickStartTab(_props: Props) {
                   <button
                     key={opt.key}
                     onClick={() => handlePreset(opt.key)}
-                    className="flex flex-col gap-3 rounded-lg border p-4 text-left transition-all duration-150"
+                    className="flex flex-col gap-4 rounded-lg border p-5 text-left transition-all duration-150"
                     style={{
                       borderColor: "var(--color-glass-border)",
                       backgroundColor: "var(--color-glass)",
@@ -111,7 +111,7 @@ export function QuickStartTab(_props: Props) {
                     }}
                   >
                     {/* Title row */}
-                    <div className="flex flex-col gap-0.5">
+                    <div className="flex flex-col gap-1.5">
                       <span
                         className="text-[13px] font-semibold tracking-wide"
                         style={{ color: "var(--color-text-primary)", lineHeight: 1.35 }}
