@@ -40,7 +40,7 @@ export function BacktestPage() {
 
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("quickstart");
-  const [advancedHpo, setAdvancedHpo] = useState(false);
+
   const [presetName, setPresetName] = useState("");
   const [showSavePreset, setShowSavePreset] = useState(false);
 
@@ -99,7 +99,7 @@ export function BacktestPage() {
       {/* Study & HPO */}
       {activeTab === "study" && (
         <div className="flex flex-col gap-5 pt-1">
-          <HpoPanel advancedMode={advancedHpo} onToggleAdvanced={() => setAdvancedHpo(!advancedHpo)} />
+          <HpoPanel />
         </div>
       )}
 
