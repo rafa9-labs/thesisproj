@@ -75,3 +75,8 @@ Allmighty/
 
 # WSL2 GPU venv (local development)
 .venv-gpu/
+
+# Large binary files
+data/forex.db
+data/forex.db.bak
+deployed_models/

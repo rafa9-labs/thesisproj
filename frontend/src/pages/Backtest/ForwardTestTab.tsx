@@ -97,12 +97,20 @@ interface ModelBadgeProps {
 }
 function ModelTypeBadge({ type }: ModelBadgeProps) {
   const palette: Record<string, { bg: string; color: string }> = {
-    logistic:  { bg: "rgba(0,229,255,0.10)",   color: "var(--color-brand)" },
-    xgboost:   { bg: "rgba(91,192,235,0.12)",  color: "#5BC0EB" },
-    lstm:      { bg: "rgba(180,120,255,0.10)", color: "#B478FF" },
-    cnn:       { bg: "rgba(255,165,0,0.10)",   color: "#FFA500" },
-    svm:       { bg: "rgba(255,82,82,0.10)",   color: "#FF5252" },
-    ensemble:  { bg: "rgba(72,213,151,0.10)",  color: "#48D597" },
+    logistic:       { bg: "rgba(0,229,255,0.10)",   color: "var(--color-brand)" },
+    xgboost:        { bg: "rgba(91,192,235,0.12)",  color: "#5BC0EB" },
+    random_forest:  { bg: "rgba(72,213,151,0.10)",  color: "var(--color-accent-success)" },
+    decision_tree:  { bg: "rgba(72,213,151,0.08)",  color: "var(--color-accent-success)" },
+    lightgbm:       { bg: "rgba(72,213,151,0.12)",  color: "var(--color-accent-success)" },
+    catboost:       { bg: "rgba(72,213,151,0.10)",  color: "var(--color-accent-success)" },
+    lstm:           { bg: "rgba(180,120,255,0.10)", color: "#B478FF" },
+    cnn:            { bg: "rgba(255,165,0,0.10)",   color: "#FFA500" },
+    transformer:    { bg: "rgba(180,120,255,0.12)", color: "#D4A0FF" },
+    gru:            { bg: "rgba(50,200,255,0.10)",  color: "#32C8FF" },
+    gru_lstm:       { bg: "rgba(50,200,255,0.12)",  color: "#32C8FF" },
+    svm:            { bg: "rgba(255,82,82,0.10)",   color: "#FF5252" },
+    dqn:            { bg: "rgba(255,82,82,0.12)",   color: "#FF5252" },
+    ensemble:       { bg: "rgba(72,213,151,0.10)",  color: "#48D597" },
   };
   const key = Object.keys(palette).find((k) => type?.toLowerCase().includes(k)) ?? "logistic";
   const { bg, color } = palette[key];

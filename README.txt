@@ -39,9 +39,9 @@ Edit:
     ]
 
 Supported model strings (examples):
-- Classical: logistic, svm, decision_tree, random_forest, xgboost
-- Deep: cnn, lstm, transformer
-- Ensembles: ensemble_cnn_lstm_xgboost, ensemble_adaptive_regime
+- Classical: logistic, svm, decision_tree, random_forest, xgboost, lightgbm, catboost
+- Deep: cnn, lstm, transformer, gru, gru_lstm
+- Ensembles: ensemble_cnn_lstm_xgboost, ensemble_adaptive_regime, meta_ensemble, stacking_ensemble
 - RL: dqn
 
 

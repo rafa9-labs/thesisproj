@@ -244,7 +244,7 @@ export const STUDY_PRESETS = {
     targetActiveRate: 0.1,
     targetCoverage: 0.1,
     description: "Quick pipeline check. 10 trials per model, 1 run. Floor minimum — not statistically meaningful.",
-    estMinutes: { logistic: 2, xgboost: 3, svm: 3, random_forest: 4, decision_tree: 2, lstm: 5, cnn: 4, transformer: 6 },
+    estMinutes: { logistic: 2, xgboost: 3, svm: 3, random_forest: 4, decision_tree: 2, lightgbm: 3, catboost: 3, lstm: 5, cnn: 4, transformer: 6, gru: 5, gru_lstm: 6, dqn: 8, ensemble_adaptive_regime: 6, ensemble_cnn_lstm_xgboost: 6, meta_ensemble: 6, stacking_ensemble: 6 },
   },
   exploratory: {
     key: "exploratory",
@@ -260,7 +260,7 @@ export const STUDY_PRESETS = {
     targetActiveRate: 0.15,
     targetCoverage: 0.15,
     description: "Detects seed-dependent strategies. 10-20 trials per model × 3 runs.",
-    estMinutes: { logistic: 15, xgboost: 30, svm: 20, random_forest: 35, decision_tree: 10, lstm: 60, cnn: 45, transformer: 90 },
+    estMinutes: { logistic: 15, xgboost: 30, svm: 20, random_forest: 35, decision_tree: 10, lightgbm: 30, catboost: 30, lstm: 60, cnn: 45, transformer: 90, gru: 60, gru_lstm: 70, dqn: 90, ensemble_adaptive_regime: 70, ensemble_cnn_lstm_xgboost: 70, meta_ensemble: 70, stacking_ensemble: 70 },
   },
   validation: {
     key: "validation",
@@ -276,7 +276,7 @@ export const STUDY_PRESETS = {
     targetActiveRate: 0.15,
     targetCoverage: 0.15,
     description: "Median-of-5 robustness. 10-40 trials per model × 5 runs — model-aware budgets.",
-    estMinutes: { logistic: 45, xgboost: 90, svm: 60, random_forest: 100, decision_tree: 30, lstm: 180, cnn: 140, transformer: 240 },
+    estMinutes: { logistic: 45, xgboost: 90, svm: 60, random_forest: 100, decision_tree: 30, lightgbm: 90, catboost: 90, lstm: 180, cnn: 140, transformer: 240, gru: 180, gru_lstm: 200, dqn: 240, ensemble_adaptive_regime: 200, ensemble_cnn_lstm_xgboost: 200, meta_ensemble: 200, stacking_ensemble: 200 },
   },
   production: {
     key: "production",
@@ -292,7 +292,7 @@ export const STUDY_PRESETS = {
     targetActiveRate: 0.15,
     targetCoverage: 0.15,
     description: "Maximum statistical rigor. 10-40 trials per model × 10 runs. Decile confidence bands.",
-    estMinutes: { logistic: 120, xgboost: 240, svm: 160, random_forest: 280, decision_tree: 80, lstm: 480, cnn: 360, transformer: 600 },
+    estMinutes: { logistic: 120, xgboost: 240, svm: 160, random_forest: 280, decision_tree: 80, lightgbm: 240, catboost: 240, lstm: 480, cnn: 360, transformer: 600, gru: 480, gru_lstm: 550, dqn: 600, ensemble_adaptive_regime: 550, ensemble_cnn_lstm_xgboost: 550, meta_ensemble: 550, stacking_ensemble: 550 },
   },
 } as const;
 
@@ -364,8 +364,8 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "classical_full",
         label: "Full Classical Suite",
-        subtitle: "All five classical models — Logit, SVM, Decision Tree, Random Forest, XGBoost — at 80 trials each. Use this to benchmark every traditional approach before moving to deep learning.",
-        models: ["logistic", "svm", "decision_tree", "random_forest", "xgboost"],
+        subtitle: "All seven classical models — Logit, SVM, Decision Tree, Random Forest, XGBoost, LightGBM, CatBoost — at 80 trials each. Use this to benchmark every traditional approach before moving to deep learning.",
+        models: ["logistic", "svm", "decision_tree", "random_forest", "xgboost", "lightgbm", "catboost"],
         hpoIntensity: "standard" as const,
         nTrials: 80,
         repeats: 1,
@@ -423,8 +423,8 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "deep_full_stack",
         label: "CNN + LSTM + Transformer",
-        subtitle: "Full deep learning stack at maximum depth. CNN for patterns, LSTM for memory, Transformer for global attention across the lag window. 100 trials each, 4-year training set.",
-        models: ["cnn", "lstm", "transformer"],
+        subtitle: "Full deep learning stack at maximum depth. CNN for patterns, LSTM for memory, GRU for efficiency, GRU-LSTM hybrid, Transformer for global attention across the lag window. 100 trials each, 4-year training set.",
+        models: ["cnn", "lstm", "transformer", "gru", "gru_lstm"],
         hpoIntensity: "deep" as const,
         nTrials: 100,
         repeats: 1,
@@ -469,8 +469,8 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "ensemble_full",
         label: "Both Ensembles, Deep HPO",
-        subtitle: "Adaptive Regime and CNN-LSTM-XGB run back-to-back at deep HPO on 4 years of data. The most complete ensemble benchmark — use when you want to deploy an ensemble strategy.",
-        models: ["ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost"],
+        subtitle: "All four ensembles — Adaptive Regime, CNN-LSTM-XGB, Signal Committee, and Stacking — run back-to-back at deep HPO on 4 years of data. The most complete ensemble benchmark — use when you want to deploy an ensemble strategy.",
+        models: ["ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost", "meta_ensemble", "stacking_ensemble"],
         hpoIntensity: "deep" as const,
         nTrials: 80,
         repeats: 1,
@@ -560,5 +560,29 @@ export const MODEL_CONSTRAINTS: Record<string, { rules: string[]; tips: string[]
   ensemble_cnn_lstm_xgboost: {
     rules: ["Combines CNN (pattern detection), LSTM (sequential memory), and XGBoost (tabular strength).", "Very slow per trial (~3 min). GPU strongly recommended."],
     tips: ["Feature importance extracted from XGBoost sub-model via TreeSHAP.", "Use Production preset only when you've validated component models individually."],
+  },
+  lightgbm: {
+    rules: ["Histogram-based gradient boosting (Microsoft). Leaf-wise growth is faster than XGBoost on structured data.", "n_trials floor is 10 even in light HPO mode."],
+    tips: ["num_leaves 15-127. Higher = more capacity but risk of overfitting.", "Learning rate 0.01-0.3 (log scale). Lower LR needs more trees.", "Subsample 0.6-1.0 helps prevent overfitting to noise."],
+  },
+  catboost: {
+    rules: ["Ordered boosting (Yandex). Handles categorical features natively with minimal tuning required.", "subsample < 1.0 requires Bernoulli bootstrap type — set automatically."],
+    tips: ["depth 3-8. Shallower trees generalize better on financial data.", "l2_leaf_reg 1-10. Higher = stronger regularization.", "Learning rate 0.01-0.3 (log scale)."],
+  },
+  gru: {
+    rules: ["Gated Recurrent Unit. Simpler than LSTM (fewer gates) with comparable or better FX prediction accuracy.", "lr in range 1e-4 to 5e-3 (log scale)."],
+    tips: ["Start with 32-64 units for 14 lags. Increase lags before increasing units.", "Use early stopping — patience=6 avoids overtraining on small validation sets."],
+  },
+  gru_lstm: {
+    rules: ["Hybrid architecture: GRU layer feeds into LSTM layer. Research shows this outperforms standalone models on forex.", "lr in range 1e-4 to 5e-3 (log scale)."],
+    tips: ["Tune GRU units and LSTM units independently for best results.", "Use early stopping — patience=6 recommended for stability."],
+  },
+  meta_ensemble: {
+    rules: ["Wraps multiple models and combines predictions via voting (majority, soft, or weighted).", "Sub-models are selected in the Model Selector — choose 2-4 diverse types."],
+    tips: ["Start with logistic + xgboost as sub-models for a cheap ensemble baseline.", "Use 'soft' voting for probability averaging, 'majority' for hard class voting."],
+  },
+  stacking_ensemble: {
+    rules: ["Trains a Logistic Regression meta-learner on out-of-fold predictions from base models.", "Requires >= 2 base models. Stacking CV folds must be <= training splits."],
+    tips: ["Start with 2-3 base models and default CV=5.", "Sklearn StackingClassifier handles passthrough automatically.", "Use 'auto' stack method — it selects predict_proba when available."],
   },
 };

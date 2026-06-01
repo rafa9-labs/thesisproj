@@ -18,12 +18,17 @@ MODEL_DESCRIPTIONS = {
     "random_forest": ("Random Forest", "classical", "Ensemble of decision trees with bagging"),
     "decision_tree": ("Decision Tree", "classical", "Single decision tree classifier"),
     "xgboost": ("XGBoost", "classical", "Gradient-boosted trees with regularisation"),
+    "lightgbm": ("LightGBM", "classical", "Histogram-based gradient boosting (Microsoft)"),
+    "catboost": ("CatBoost", "classical", "Ordered boosting with native categorical handling (Yandex)"),
     "cnn": ("Convolutional Neural Network", "deep", "1D-CNN for pattern recognition on price windows"),
     "lstm": ("LSTM Network", "deep", "Long short-term memory network for sequential data"),
     "transformer": ("Transformer", "deep", "Self-attention architecture for time-series"),
+    "gru": ("GRU Network", "deep", "Gated Recurrent Unit -- simpler, faster alternative to LSTM"),
+    "gru_lstm": ("GRU-LSTM Hybrid", "deep", "Hybrid GRU+LSTM network for sequential data"),
     "dqn": ("Dueling DQN", "rl", "Deep Q-Network reinforcement learning agent"),
     "ensemble_adaptive_regime": ("Adaptive Regime Ensemble", "ensemble", "Regime-aware ensemble combining multiple models"),
     "meta_ensemble": ("Signal Committee", "ensemble", "Multi-model voting committee combining multiple models"),
+    "stacking_ensemble": ("Stacking Ensemble", "ensemble", "OOF meta-learner combining multiple base models"),
 }
 
 
@@ -85,7 +90,7 @@ def get_hyperparams():
             tunable=len(params) > 0,
             params={k: v for k, v in params.items()},
         ))
-        return ModelHyperparamsResponse(models=result)
+    return ModelHyperparamsResponse(models=result)
 
 
 # ────────────────────────────────────────────────────────────

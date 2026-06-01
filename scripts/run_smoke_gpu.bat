@@ -1,11 +1,11 @@
 @echo off
 REM Run smoke tests via WSL with GPU acceleration (RTX 3090)
 REM Usage: run_smoke_gpu [model]
-REM   model: logistic, xgboost, cnn, lstm, transformer, ensemble_cnn_lstm_xgboost, ensemble_adaptive_regime, dqn
+REM   model: logistic,xgboost,lightgbm,catboost,cnn,lstm,transformer,gru,gru_lstm,ensemble_cnn_lstm_xgboost,ensemble_adaptive_regime,meta_ensemble,stacking_ensemble,dqn
 REM   If no model specified, runs ALL models (warning: slow even on GPU for DQN).
 
 echo ============================================
-echo   FX ML Backtester - GPU Smoke Test Runner
+echo   KodaQuant - GPU Smoke Test Runner
 echo ============================================
 echo.
 

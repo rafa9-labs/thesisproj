@@ -1,4 +1,4 @@
-"""Validate all 8 model types through the full pipeline.
+"""Validate all 17 model types through the full pipeline.
 
 Runs each model individually in SMOKE_TEST mode (1 trial, 1 month).
 Reports per-model PASS/FAIL with timing.
@@ -25,12 +25,18 @@ ALL_MODELS = [
     "random_forest",
     "decision_tree",
     "xgboost",
+    "lightgbm",
+    "catboost",
     "cnn",
     "lstm",
     "transformer",
+    "gru",
+    "gru_lstm",
     "dqn",
     "ensemble_cnn_lstm_xgboost",
     "ensemble_adaptive_regime",
+    "meta_ensemble",
+    "stacking_ensemble",
 ]
 
 QUICK_MODELS = ["logistic", "xgboost"]
@@ -168,7 +174,7 @@ def main():
     
     print(SEPARATOR)
     print("MODEL VALIDATION -- All Model Types Smoke Test")
-    print(f"Mode: {'QUICK (logistic + xgboost)' if quick else 'FULL (all 11 models)'}")
+    print(f"Mode: {'QUICK (logistic + xgboost)' if quick else 'FULL (all 17 models)'}")
     print(f"Python: {sys.version.split()[0]}")
     print(f"CWD: {os.getcwd()}")
     print(SEPARATOR)

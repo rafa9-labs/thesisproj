@@ -80,12 +80,12 @@ export const modelCategories = {
   classical: {
     label: "Classical",
     color: colors.accentClassical,
-    models: ["logistic", "svm", "random_forest", "decision_tree", "xgboost"],
+    models: ["logistic", "svm", "random_forest", "decision_tree", "xgboost", "lightgbm", "catboost"],
   },
   deep: {
     label: "Deep Learning",
     color: colors.accentDeep,
-    models: ["cnn", "lstm", "transformer"],
+    models: ["cnn", "lstm", "transformer", "gru", "gru_lstm"],
   },
   rl: {
     label: "Reinforcement Learning",
@@ -95,7 +95,7 @@ export const modelCategories = {
   ensemble: {
     label: "Ensemble",
     color: colors.accentEnsemble,
-    models: ["ensemble_adaptive_regime", "meta_ensemble"],
+    models: ["ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost", "meta_ensemble", "stacking_ensemble"],
   },
 } as const;
 
@@ -105,10 +105,16 @@ export const modelDescriptions: Record<string, { name: string; short: string; ap
   random_forest: { name: "Random Forest", short: "The Forest", apprentice: "Ensemble of decision trees with bagging. Robust, handles mixed features well." },
   decision_tree: { name: "Decision Tree", short: "The Tree", apprentice: "Single decision tree. Highly interpretable but prone to overfitting. Use for feature analysis." },
   xgboost: { name: "XGBoost", short: "The Workhorse", apprentice: "Gradient-boosted trees. Exceptionally good at finding complex non-linear patterns in tabular data." },
+  lightgbm: { name: "LightGBM", short: "The Speedster", apprentice: "Histogram-based gradient boosting (Microsoft). Faster training than XGBoost with competitive accuracy." },
+  catboost: { name: "CatBoost", short: "The Cipher", apprentice: "Ordered boosting with native categorical handling (Yandex). Excels with minimal tuning." },
   cnn: { name: "CNN", short: "Pattern Scanner", apprentice: "1D convolutional network that learns local price patterns across sliding windows." },
   lstm: { name: "LSTM", short: "Time Traveler", apprentice: "Deep learning network designed for sequential time-series. Remembers price action across hundreds of bars." },
   transformer: { name: "Transformer", short: "Attention Engine", apprentice: "Self-attention architecture that weighs the importance of every historical bar simultaneously." },
+  gru: { name: "GRU", short: "The Efficiency Expert", apprentice: "Gated Recurrent Unit. Simpler and faster than LSTM while matching or exceeding performance on FX data." },
+  gru_lstm: { name: "GRU-LSTM Hybrid", short: "The Hybrid", apprentice: "Stacks GRU before LSTM layers. Research shows this outperforms standalone models on forex prediction." },
   dqn: { name: "Dueling DQN", short: "Autonomous Agent", apprentice: "Reinforcement learning agent. Instead of predicting price, it learns a trading policy through trial and error." },
   ensemble_adaptive_regime: { name: "Adaptive Regime", short: "The Shapeshifter", apprentice: "Dynamically shifts between models depending on market regime (trending vs ranging)." },
+  ensemble_cnn_lstm_xgboost: { name: "CNN+LSTM+XGB", short: "The Triad", apprentice: "Three-way stacking ensemble combining CNN, LSTM, and XGBoost for robust predictions." },
   meta_ensemble: { name: "Signal Committee", short: "The Committee", apprentice: "Wraps multiple models and combines their predictions via voting. Run logistic + xgboost + lstm as one." },
+  stacking_ensemble: { name: "Stacking Ensemble", short: "The Strategist", apprentice: "Trains a meta-learner (Logistic Regression) on out-of-fold predictions from multiple base models." },
 };

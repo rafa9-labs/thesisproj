@@ -22,11 +22,17 @@ const CATEGORY_COLORS: Record<string, string> = {
   random_forest: "var(--color-accent-success)",
   decision_tree: "var(--color-accent-success)",
   xgboost: "var(--color-brand)",
+  lightgbm: "var(--color-accent-success)",
+  catboost: "var(--color-accent-success)",
   cnn: "var(--color-accent)",
   lstm: "var(--color-accent)",
   transformer: "var(--color-accent)",
+  gru: "var(--color-accent)",
+  gru_lstm: "var(--color-accent)",
   ensemble_adaptive_regime: "var(--color-accent-warning)",
   ensemble_cnn_lstm_xgboost: "var(--color-accent-warning)",
+  meta_ensemble: "var(--color-accent-warning)",
+  stacking_ensemble: "var(--color-accent-warning)",
   dqn: "var(--color-accent-danger)",
 };
 

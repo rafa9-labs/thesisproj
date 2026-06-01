@@ -5,7 +5,7 @@ import { useSettingsStore } from "@/stores/useSettingsStore";
 import { AlertTriangle } from "lucide-react";
 import type { ModelInfo } from "@/api/schemas";
 
-const GPU_MODELS = new Set(["cnn", "lstm", "transformer", "dqn", "ensemble_adaptive_regime"]);
+const GPU_MODELS = new Set(["cnn", "lstm", "transformer", "gru", "gru_lstm", "dqn", "ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost", "meta_ensemble", "stacking_ensemble"]);
 
 export function ModelSelector() {
   const { data: models, isLoading } = useModels();

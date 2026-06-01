@@ -71,23 +71,43 @@ def _compute_features_from_data(
     start_date: str = "2020-01-01",
     end_date: str = "2025-01-01",
 ) -> pd.DataFrame:
-    """Compute features using an MLBacktester with the saved config."""
     from pipeline.backtester.composed import MLBacktester
-    from pipeline.data_sqlite import DataStore
+
+    merged_fc = {
+        "use_adx": True, "use_atr": True, "use_bbands": True,
+        "use_ema": True, "use_sma": True, "use_rsi": True, "use_macd": True,
+        "use_donchian": True, "use_stoch": False, "use_sar": False,
+        "use_fracdiff": True, "fracdiff_d": 0.4,
+        "use_crossover_bins": True, "use_ma_spread": True,
+        "use_price_ma_z": True, "use_indicator_states": False,
+        "use_mtf_ma": True, "use_mtf_alignment": True,
+        "use_macd_atr_ratio": True, "use_triple_confirm": True,
+        "use_trend_confirm": True, "use_vol_managed_mom": True,
+        "use_squeeze_breakout": True, "use_squeeze_expansion": True,
+        "use_atr_channel_breakout": True, "use_ext_atr_low_adx": False,
+        "use_reentry_mom": True, "use_slope_diff": True,
+        "use_rv_features": True,
+        "use_regime_features": False,
+        "use_news": False,
+        "lags": 14, "lag_depth": 1,
+        "roll_windows_key": [5, 10, 20, 30, 60, 160],
+    }
+    merged_fc.update(features_config)
+    merged_fc["use_news"] = False
 
     bt = MLBacktester(
         symbol=pair.upper(),
         start=start_date,
         end=end_date,
         trading_costs=False,
-        model_type=features_config.get("model_type", "logistic"),
-        features_config=dict(features_config) if features_config else {},
+        model_type=merged_fc.get("model_type", "logistic"),
+        features_config=dict(merged_fc),
         db_path="data/forex.db",
     )
 
-    lags = int(features_config.get("lags", 10))
-    lag_depth = int(features_config.get("lag_depth", 1))
-    roll_windows = features_config.get("roll_windows_key", [5])
+    lags = int(merged_fc.get("lags", 10))
+    lag_depth = int(merged_fc.get("lag_depth", 1))
+    roll_windows = merged_fc.get("roll_windows_key", [5])
     if isinstance(roll_windows, (int, float)):
         roll_windows = [int(roll_windows)]
     elif not isinstance(roll_windows, list):
@@ -281,26 +301,36 @@ def run_forward_test(
     exclude_cols = {"time", "target", "side", "returns", "spread", "label"}
     if feature_names:
         feature_cols = [c for c in feature_names if c in features_df.columns]
-        if not feature_cols:
-            feature_cols = [c for c in features_df.columns if c not in exclude_cols]
     else:
+        feature_cols = []
+
+    if not feature_cols or len(feature_cols) < max(3, len(feature_names) // 2):
         feature_cols = [c for c in features_df.columns if c not in exclude_cols]
 
-    X = features_df[feature_cols].fillna(0.0).astype(np.float64)
+    if not feature_cols:
+        raise RuntimeError("No feature columns found after computing features")
+
+    if feature_names and len(feature_names) > 0:
+        X_aligned = pd.DataFrame(0.0, index=features_df.index, columns=feature_names)
+        for col in feature_names:
+            if col in features_df.columns:
+                X_aligned[col] = features_df[col].fillna(0.0)
+        X = X_aligned.astype(np.float64)
+    else:
+        X = features_df[feature_cols].fillna(0.0).astype(np.float64)
 
     if scaler is not None:
         try:
             X_scaled = scaler.transform(X)
         except Exception:
-            X_scaled = X.values
+            try:
+                from sklearn.preprocessing import StandardScaler
+                temp_scaler = StandardScaler()
+                X_scaled = temp_scaler.fit_transform(X)
+            except Exception:
+                X_scaled = X.values
     else:
         X_scaled = X.values
-
-    if imputer is not None:
-        try:
-            X_scaled = imputer.transform(X_scaled)
-        except Exception:
-            pass
 
     try:
         proba = model.predict_proba(X_scaled)

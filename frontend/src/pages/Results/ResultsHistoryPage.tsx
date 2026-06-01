@@ -48,14 +48,20 @@ function StatusPill({ status }: { status: string }) {
 
 function ModelBadge({ model }: { model: string }) {
   const colorMap: Record<string, string> = {
-    logistic:   "var(--color-accent-classical)",
-    xgboost:    "var(--color-accent-classical)",
-    svm:        "var(--color-accent-classical)",
-    lstm:       "var(--color-accent-deep)",
-    cnn:        "var(--color-accent-deep)",
-    transformer:"var(--color-accent-deep)",
-    dqn:        "var(--color-accent-rl)",
-    ensemble:   "var(--color-accent-ensemble)",
+    logistic:      "var(--color-accent-classical)",
+    xgboost:       "var(--color-accent-classical)",
+    svm:           "var(--color-accent-classical)",
+    random_forest: "var(--color-accent-classical)",
+    decision_tree: "var(--color-accent-classical)",
+    lightgbm:      "var(--color-accent-classical)",
+    catboost:      "var(--color-accent-classical)",
+    lstm:          "var(--color-accent-deep)",
+    cnn:           "var(--color-accent-deep)",
+    transformer:   "var(--color-accent-deep)",
+    gru:           "var(--color-accent-deep)",
+    gru_lstm:      "var(--color-accent-deep)",
+    dqn:           "var(--color-accent-rl)",
+    ensemble:      "var(--color-accent-ensemble)",
   };
   const key = Object.keys(colorMap).find((k) => model.toLowerCase().includes(k));
   const color = key ? colorMap[key] : "var(--color-text-muted)";

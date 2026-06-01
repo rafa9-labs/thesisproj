@@ -198,6 +198,52 @@ export function getDynamicWarnings(modelKey: string, s: Record<string, unknown>)
       tips.push("Validate component models individually before using the ensemble.");
       break;
     }
+
+    case "lightgbm": {
+      tips.push("Histogram-based gradient boosting. Leaf-wise growth is faster than XGBoost.");
+      tips.push("num_leaves 15–127. Higher = more capacity but risk of overfitting.");
+      tips.push("Learning rate 0.01–0.3 (log scale). Lower LR needs more trees.");
+      break;
+    }
+
+    case "catboost": {
+      tips.push("Ordered boosting with native categorical handling. Excels with minimal tuning.");
+      tips.push("depth 3–8. Shallower trees generalize better on financial data.");
+      tips.push("Learning rate 0.01–0.3 (log scale). l2_leaf_reg 1–10 for regularization.");
+      break;
+    }
+
+    case "gru": {
+      const gru_units = (s.gru__units as number) ?? 64;
+      const gru_ratio = gru_units / lags;
+      if (gru_ratio > 5) {
+        warnings.push(`GRU units (${gru_units}) / lags (${lags}) = ${gru_ratio.toFixed(1)} — ratio is very high. Model likely memorizes noise. Try ${Math.round(lags * 1.5)}–${Math.round(lags * 2.5)} units.`);
+      }
+      tips.push(`Start with ${Math.round(lags * 1.5)}–${Math.round(lags * 2.5)} units for ${lags} lags.`);
+      tips.push("Learning rate: 1e-4 to 5e-3 (log scale). Use early stopping (patience=6).");
+      break;
+    }
+
+    case "gru_lstm": {
+      tips.push("Hybrid: GRU feeds into LSTM. Research shows this outperforms standalone models on forex.");
+      tips.push("Tune GRU units and LSTM units independently for best results.");
+      tips.push("Learning rate: 1e-4 to 5e-3 (log scale). Use early stopping (patience=6).");
+      break;
+    }
+
+    case "meta_ensemble": {
+      tips.push("Signal committee: wraps multiple models and combines via voting.");
+      tips.push("Choose 2–4 diverse sub-models. Start with logistic + xgboost.");
+      tips.push("Use 'soft' for probability averaging, 'majority' for hard class voting.");
+      break;
+    }
+
+    case "stacking_ensemble": {
+      tips.push("Trains a Logistic Regression meta-learner on out-of-fold predictions.");
+      tips.push("Requires >= 2 base models. Start with default CV=5.");
+      tips.push("Use 'auto' stack method — selects predict_proba when available.");
+      break;
+    }
   }
 
   return { warnings, tips };
