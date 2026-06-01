@@ -35,7 +35,8 @@ def run_optuna_tuning(
         train_data, base_features, evaluate_cv_func, cv_config, models_to_test,
         n_trials=1, n_startup_trials=10, return_top_n=3, study=None, sampler_seed=None,
         month_out_dir: str | None = None, month_ix: int | None = None,
-        max_hpo_duration_minutes: float = 0):
+        max_hpo_duration_minutes: float = 0,
+        sampler_method: str = "tpe"):
 
     """
     Runs Optuna tuning for a given model configuration, evaluates via CV,
@@ -49,9 +50,30 @@ def run_optuna_tuning(
         consensus_pool (list[dict]): Small pool of candidate configs (all valid trials) for consensus selection.
      """
     import optuna
-    from optuna.samplers import TPESampler
+    from optuna.samplers import TPESampler, RandomSampler, CmaEsSampler
     from optuna.pruners import MedianPruner
     import os, json, datetime
+
+    def _create_sampler(method, seed, n_startup, model_name=""):
+        tpe_ei = int(os.environ.get("TPE_EI_CANDIDATES", "64"))
+        if method == "tpe":
+            s = TPESampler(
+                n_startup_trials=n_startup, multivariate=True, group=True,
+                seed=seed, n_ei_candidates=tpe_ei,
+            )
+        elif method == "random":
+            s = RandomSampler(seed=seed)
+        elif method == "cmaes":
+            s = CmaEsSampler(seed=seed)
+        else:
+            s = TPESampler(
+                n_startup_trials=n_startup, multivariate=True, group=True,
+                seed=seed, n_ei_candidates=tpe_ei,
+            )
+        tag = f" model={model_name}" if model_name else ""
+        print(f"[Optuna] {type(s).__name__} seed={seed}{tag}"
+              + (f" n_startup_trials={n_startup}" if method == "tpe" else ""))
+        return s
 
     # Reset per-run hyperparameter boundary diagnostics
     global HP_BOUNDARY_HITS, HP_BOUNDARY_HITS_MIN, HP_BOUNDARY_HITS_MAX, HP_BOUNDARY_RANGES
@@ -109,7 +131,7 @@ def run_optuna_tuning(
         _model_name = models_to_test
     _model_name = str(_model_name).lower()
     _is_deep_family = (
-        _model_name in {"cnn", "lstm", "transformer", "dqn"} or _model_name.startswith("ensemble_")
+        _model_name in {"cnn", "lstm", "transformer", "gru", "gru_lstm", "dqn"} or _model_name.startswith("ensemble_")
     )
     
     # Ensure CV parallelism is wired even if caller omitted it
@@ -242,16 +264,7 @@ def run_optuna_tuning(
     except Exception:
         pass
 
-    tpe_ei = int(os.environ.get("TPE_EI_CANDIDATES", "64"))
-    sampler = TPESampler(
-        n_startup_trials=_n_startup,
-        multivariate=True,
-        group=True,
-        seed=sampler_seed,
-        n_ei_candidates=tpe_ei,
-    )
-    print(f"[Optuna] TPESampler(multivariate=True, group=True, n_startup_trials={_n_startup}, "
-          f"n_ei_candidates={tpe_ei}, seed={sampler_seed}) model={_model_name}")
+    sampler = _create_sampler(sampler_method, sampler_seed, _n_startup, _model_name)
     
     from optuna.pruners import SuccessiveHalvingPruner, NopPruner
 
@@ -279,13 +292,7 @@ def run_optuna_tuning(
 
     if study is None:
 
-        sampler = TPESampler(
-            seed=sampler_seed,
-            n_startup_trials=_n_startup,
-            multivariate=True,
-            group=True,
-            n_ei_candidates=tpe_ei,
-        )
+        sampler = _create_sampler(sampler_method, sampler_seed, _n_startup, _model_name)
 
         study = optuna.create_study(direction="maximize", sampler=sampler, pruner=pruner)
 

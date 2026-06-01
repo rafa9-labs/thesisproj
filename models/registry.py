@@ -443,6 +443,160 @@ def _build_ensemble_adaptive_regime(*, use_proba=True, **params):
     )
 
 
+@register_model("lightgbm")
+def _build_lightgbm(*, use_proba=True, **params):
+    """LGBMClassifier — histogram-based gradient boosting (Microsoft).
+
+    Literature: SSRN (2023) "Performance Analysis of Gradient Boosting Models
+    for Forex Market Prediction" — LightGBM fastest and among most accurate
+    vs XGBoost/CatBoost on FX data.
+    """
+    import os
+    from lightgbm import LGBMClassifier
+
+    seed = _extract_seed(params)
+    lgb_params = ensure_dict(filter_params(params, "lgbm_"))
+    lgb_params.setdefault("objective", "multiclass")
+    lgb_params.setdefault("num_class", 3)
+    lgb_params.setdefault("boosting_type", "gbdt")
+    lgb_params.setdefault("n_estimators", 400)
+    try:
+        lgb_params["n_estimators"] = int(lgb_params.get("n_estimators", 400))
+    except Exception:
+        lgb_params["n_estimators"] = 400
+    lgb_params["n_estimators"] = max(1, min(lgb_params["n_estimators"], 1500))
+    lgb_params.setdefault("max_depth", 6)
+    lgb_params.setdefault("num_leaves", 31)
+    lgb_params.setdefault("learning_rate", 0.1)
+    lgb_params.setdefault("subsample", 0.8)
+    lgb_params.setdefault("colsample_bytree", 0.8)
+    lgb_params.setdefault("reg_lambda", 1.0)
+    lgb_params.setdefault("reg_alpha", 0.0)
+    lgb_params.setdefault("min_child_samples", 20)
+    lgb_params.setdefault("class_weight", "balanced")
+    lgb_params.setdefault("n_jobs", int(os.environ.get("RF_JOBS", max(1, (os.cpu_count() or 2) - 1))))
+    lgb_params.setdefault("verbosity", -1)
+    if seed is not None:
+        lgb_params.setdefault("random_state", seed)
+    return LGBMClassifier(**lgb_params)
+
+
+@register_model("catboost")
+def _build_catboost(*, use_proba=True, **params):
+    """CatBoostClassifier — ordered boosting (Yandex).
+
+    Literature: SSRN (2023) forex comparison shows CatBoost often best with
+    minimal tuning (handles categorical features natively).
+    """
+    import os
+    from catboost import CatBoostClassifier
+
+    seed = _extract_seed(params)
+    cb_params = ensure_dict(filter_params(params, "cb_"))
+    cb_params.setdefault("loss_function", "MultiClass")
+    cb_params.setdefault("eval_metric", "MultiClass")
+    cb_params.setdefault("iterations", 400)
+    try:
+        cb_params["iterations"] = int(cb_params.get("iterations", 400))
+    except Exception:
+        cb_params["iterations"] = 400
+    cb_params["iterations"] = max(1, min(cb_params["iterations"], 1500))
+    cb_params.setdefault("depth", 6)
+    cb_params.setdefault("learning_rate", 0.1)
+    cb_params.setdefault("subsample", 0.8)
+    if float(cb_params.get("subsample", 1.0)) < 1.0:
+        cb_params["bootstrap_type"] = "Bernoulli"
+    cb_params.setdefault("l2_leaf_reg", 3.0)
+    cb_params.setdefault("border_count", 128)
+    cb_params.setdefault("thread_count", int(os.environ.get("RF_JOBS", max(1, (os.cpu_count() or 2) - 1))))
+    cb_params.setdefault("logging_level", "Silent")
+    cb_params.setdefault("allow_writing_files", False)
+    if seed is not None:
+        cb_params.setdefault("random_seed", seed)
+    return CatBoostClassifier(**cb_params)
+
+
+@register_model("gru")
+def _build_gru(*, use_proba=True, **params):
+    """Gated Recurrent Unit via Keras. Requires input_shape in params.
+
+    Literature: Springer Digital Finance (2020) — GRU simpler, faster,
+    statistically competitive or superior to LSTM across 4 FX pairs.
+    """
+    from models.gru import build_gru
+    _configure_tf_threads()
+    seed = _extract_seed(params)
+    cfg = filter_params(params, "gru_")
+    if seed is not None:
+        cfg.setdefault("seed", seed)
+    input_shape = params.get("input_shape")
+    if not (isinstance(input_shape, tuple) and len(input_shape) == 2):
+        raise ValueError(f"Invalid input_shape for GRU: {input_shape}")
+    model = build_gru(input_shape=input_shape, config=cfg)
+    if model is None:
+        raise RuntimeError("build_gru returned None. Check model config or input shape.")
+    return model
+
+
+@register_model("gru_lstm")
+def _build_gru_lstm(*, use_proba=True, **params):
+    """GRU-LSTM hybrid via Keras. Requires input_shape in params.
+
+    Literature: Nature Scientific Reports (2025), ScienceDirect (2020) —
+    outperforms standalone GRU, LSTM, and SMA on FX currency pairs.
+    """
+    from models.gru_lstm import build_gru_lstm
+    _configure_tf_threads()
+    seed = _extract_seed(params)
+    cfg = filter_params(params, "gru_lstm_")
+    if seed is not None:
+        cfg.setdefault("seed", seed)
+    input_shape = params.get("input_shape")
+    if not (isinstance(input_shape, tuple) and len(input_shape) == 2):
+        raise ValueError(f"Invalid input_shape for GRU-LSTM: {input_shape}")
+    model = build_gru_lstm(input_shape=input_shape, config=cfg)
+    if model is None:
+        raise RuntimeError("build_gru_lstm returned None. Check model config or input shape.")
+    return model
+
+
+@register_model("stacking_ensemble")
+def _build_stacking_ensemble(*, use_proba=True, **params):
+    """Stacking ensemble with OOF meta-learner via sklearn.StackingClassifier.
+
+    Unlike MetaEnsemble (voting), this trains a LogisticRegression meta-learner
+    on out-of-fold predictions from all base models.
+
+    Literature: ResearchGate (2025) — stacking outperforms individual models
+    on financial prediction tasks.
+    """
+    from models.stacking_ensemble import StackingEnsemble
+
+    sub_types = params.get("stack_sub_models", ["logistic", "xgboost", "lightgbm"])
+    if isinstance(sub_types, str):
+        sub_types = [t.strip() for t in sub_types.split(",") if t.strip()]
+    cv = int(params.get("stack_cv", 5))
+    method = str(params.get("stack_method", "auto")).lower()
+
+    base_models = []
+    for t in sub_types:
+        m = build_model(t, use_proba=True, **params)
+        if m is not None:
+            base_models.append(m)
+
+    if len(base_models) < 2:
+        raise ValueError(f"StackingEnsemble requires >=2 base models, got {len(base_models)} from types: {sub_types}")
+
+    seed = _extract_seed(params)
+    return StackingEnsemble(
+        base_models=base_models,
+        cv=cv,
+        method=method,
+        seed=seed,
+        stack_sub_models=sub_types,
+    )
+
+
 @register_model("meta_ensemble")
 def _build_meta_ensemble(*, use_proba=True, **params):
     """Signal committee: wraps N model types, combines via voting."""

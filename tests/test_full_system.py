@@ -69,11 +69,12 @@ def test_all_reexport_modules_import():
 # ═══════════════════════════════════════════════════════════════════════
 
 SKLEARN_MODELS = ["logistic", "svm", "random_forest", "decision_tree"]
-TREE_MODELS = ["xgboost"]
-DEEP_MODELS = ["cnn", "lstm", "transformer"]
+TREE_MODELS = ["xgboost", "lightgbm", "catboost"]
+DEEP_MODELS = ["cnn", "lstm", "transformer", "gru"]
 RL_MODELS = ["dqn"]
-ENSEMBLE_MODELS = ["ensemble_adaptive_regime"]
-ALL_MODELS = SKLEARN_MODELS + TREE_MODELS + DEEP_MODELS + RL_MODELS + ENSEMBLE_MODELS
+ENSEMBLE_MODELS = ["ensemble_adaptive_regime", "meta_ensemble", "stacking_ensemble"]
+HYBRID_MODELS = ["gru_lstm"]
+ALL_MODELS = SKLEARN_MODELS + TREE_MODELS + DEEP_MODELS + RL_MODELS + ENSEMBLE_MODELS + HYBRID_MODELS
 
 
 def _make_synthetic_data(n=200, n_features=10, n_classes=3):

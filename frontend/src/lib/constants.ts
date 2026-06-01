@@ -78,9 +78,23 @@ export const DEFAULTS = {
   optunaDirection: "maximize" as const,
   seed: 42,
   repeats: 1,
+  maxHpoDurationMinutes: 0,
 
   trainMonths: 36,
   testMonths: 1,
+
+  // HPO sampler & strategy
+  hpoSampler: "tpe" as const,
+  hpoTwoPhase: false,
+  hpoMode: "static" as const,
+  periodUnit: "months" as const,
+  phase1Sampler: "cmaes" as const,
+  phase1Trials: 30,
+  phase2Trials: 15,
+  phase2TopN: 5,
+  dynamicHpoTrials: 10,
+  wfoTrainPeriods: 0,
+  wfoTestPeriods: 0,
 
   sizingMethod: "fixed" as const,
   riskFraction: 0.02,
@@ -114,9 +128,16 @@ export const RANGES = {
   lagDepth: { min: 1, max: 3, step: 1 },
   nTrials: { min: 0, max: 150, step: 1 },
   repeats: { min: 1, max: 10, step: 1 },
+  maxHpoDurationMinutes: { min: 0, max: 120, step: 5 },
   seed: { min: 0, max: 9999, step: 1 },
   trainMonths: { min: 6, max: 60, step: 1 },
   testMonths: { min: 1, max: 6, step: 1 },
+  phase1Trials: { min: 1, max: 100, step: 1 },
+  phase2Trials: { min: 1, max: 50, step: 1 },
+  phase2TopN: { min: 1, max: 10, step: 1 },
+  dynamicHpoTrials: { min: 1, max: 50, step: 1 },
+  wfoTrainPeriods: { min: 1, max: 200, step: 1 },
+  wfoTestPeriods: { min: 1, max: 24, step: 1 },
   riskFraction: { min: 0.005, max: 0.1, step: 0.005 },
   kellyFraction: { min: 0.1, max: 1.0, step: 0.1 },
   kellyMinTrades: { min: 5, max: 100, step: 5 },
@@ -178,6 +199,25 @@ export const SELECT_OPTIONS = {
     { value: "quick", label: "Quick (2+2 trials)" },
     { value: "standard", label: "Standard (per-model tuned)" },
     { value: "deep", label: "Deep (max trials)" },
+  ],
+  hpoSampler: [
+    { value: "tpe", label: "Bayesian (TPE)" },
+    { value: "random", label: "Random Search" },
+    { value: "cmaes", label: "CMA-ES" },
+  ],
+  hpoMode: [
+    { value: "static", label: "Static (HPO once, retrain)" },
+    { value: "dynamic", label: "Dynamic (HPO per step)" },
+  ],
+  periodUnit: [
+    { value: "months", label: "Months" },
+    { value: "weeks", label: "Weeks" },
+    { value: "days", label: "Days" },
+  ],
+  phase1Sampler: [
+    { value: "cmaes", label: "CMA-ES" },
+    { value: "random", label: "Random" },
+    { value: "tpe", label: "TPE" },
   ],
 } as const;
 

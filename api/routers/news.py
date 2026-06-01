@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from api.schemas.news import NewsEventItem, NewsEventsResponse
+from api.schemas.news import NewsArticleFull, NewsArticlesResponse, NewsEventItem, NewsEventsResponse
 from news.scraper import NewsScraper
 
 router = APIRouter(prefix="/news", tags=["news"])
@@ -93,6 +93,55 @@ def get_news_events(
     return NewsEventsResponse(events=all_events, count=len(all_events))
 
 
+@router.get("/articles", response_model=NewsArticlesResponse)
+def get_news_articles(
+    pair: str = Query("", description="Optional currency pair filter (e.g. EURUSD)"),
+    days: int = Query(30, description="Max age of articles in days"),
+):
+    """Return all cached articles with sentiment scores.
+
+    Articles are sorted by sentiment magnitude (most opinionated first).
+    Filter by pair optionally; returns all articles if pair is empty.
+    """
+    try:
+        from news.scraper import NewsScraper
+        from news.sentiment import SentimentAnalyzer
+        scraper = NewsScraper()
+        articles = scraper.fetch_all()
+
+        if pair and pair.strip():
+            articles = NewsScraper.filter_by_pair(articles, pair.strip().upper())
+
+        now = datetime.now(timezone.utc)
+        cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        if days > 0:
+            from datetime import timedelta
+            cutoff = now - timedelta(days=days)
+        articles = [a for a in articles if a.timestamp.replace(tzinfo=timezone.utc) >= cutoff]
+
+        vader_analyzer = SentimentAnalyzer(backend="vader")
+        scored = vader_analyzer.score_articles(articles)
+
+        result = []
+        for article, s in sorted(scored, key=lambda x: abs(x[1].score), reverse=True):
+            score = round(s.score, 4)
+            result.append(NewsArticleFull(
+                title=article.title[:200],
+                body=(article.body or "")[:500],
+                source=article.source,
+                url=article.url or "",
+                timestamp=article.timestamp.isoformat() if hasattr(article.timestamp, "isoformat") else str(article.timestamp),
+                pair_tags=article.pair_tags or [],
+                sentiment_score=score,
+                summary=article.summary,
+                bias=NewsArticle.bias_label(score),
+            ))
+
+        return NewsArticlesResponse(articles=result, total=len(result), pair=pair or "all")
+    except Exception as e:
+        return NewsArticlesResponse(articles=[], total=0, pair=pair or "all")
+
+
 @router.get("/sentiment/live")
 def get_live_sentiment(
     pair: str = Query("EURUSD", description="Currency pair for sentiment analysis"),
@@ -120,10 +169,16 @@ def get_live_sentiment(
 
         top_articles = []
         for article, s in sorted(scored_vader, key=lambda x: abs(x[1].score), reverse=True)[:5]:
+            score = round(s.score, 4)
             top_articles.append({
                 "title": article.title[:120],
+                "body": (article.body or "")[:250],
                 "source": article.source,
-                "sentiment_score": round(s.score, 4),
+                "url": article.url or "",
+                "pair_tags": article.pair_tags or [],
+                "sentiment_score": score,
+                "summary": article.summary,
+                "bias": NewsArticle.bias_label(score),
                 "timestamp": article.timestamp.isoformat() if hasattr(article.timestamp, "isoformat") else str(article.timestamp),
             })
 

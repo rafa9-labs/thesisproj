@@ -137,12 +137,20 @@ class RunMixin:
             return [x]
 
         # --- Respect tuned months from Optuna or defaults ---
-        train_months_list = ensure_list(
-            config.get("train_months", TRAIN_TEST_MONTHS[model_type]["train"][0])
-        )
-        test_months_list = ensure_list(
-            config.get("test_months", TRAIN_TEST_MONTHS[model_type]["test"][0])
-        )
+        wfo_train = config.get("wfo_train_periods", None)
+        wfo_test  = config.get("wfo_test_periods", None)
+        if wfo_train is not None:
+            train_months_list = ensure_list(int(wfo_train))
+        else:
+            train_months_list = ensure_list(
+                config.get("train_months", TRAIN_TEST_MONTHS[model_type]["train"][0])
+            )
+        if wfo_test is not None:
+            test_months_list = ensure_list(int(wfo_test))
+        else:
+            test_months_list = ensure_list(
+                config.get("test_months", TRAIN_TEST_MONTHS[model_type]["test"][0])
+            )
         period_unit = config.get("period_unit", "months")
 
         tasks = self.get_walk_forward_splits(
@@ -787,9 +795,11 @@ class RunMixin:
                                 cursor += val_window_local + gap_early
                             splits.append(smax)
 
-                    # Early-stopping knobs for deep models (treat all ensembles as deep)
-                    is_ensemble = isinstance(model_type_local, str) and model_type_local.startswith("ensemble_")
-                    is_deep = (model_type_local in {"cnn","lstm","transformer"}) or is_ensemble
+                    # Early-stopping knobs for deep models (treat all deep + ensemble as deep)
+                    is_ensemble = (isinstance(model_type_local, str) and
+                                   (model_type_local.startswith("ensemble_") or
+                                    model_type_local in {"stacking_ensemble", "meta_ensemble"}))
+                    is_deep = (model_type_local in {"cnn","lstm","transformer","gru","gru_lstm"}) or is_ensemble
 
                     # =========================
                     # CV pre-setup (deep caps)
@@ -813,11 +823,15 @@ class RunMixin:
                         cfg.setdefault("cnn_use_early_stopping", True)
                         cfg.setdefault("lstm_use_early_stopping", True)
                         cfg.setdefault("transformer_use_early_stopping", True)
+                        cfg.setdefault("gru_use_early_stopping", True)
+                        cfg.setdefault("gru_lstm_use_early_stopping", True)
 
                         cv_pat = int(cfg.get("deep_cv_patience", 5))
                         cfg.setdefault("cnn_patience", cv_pat)
                         cfg.setdefault("lstm_patience", cv_pat)
                         cfg.setdefault("transformer_patience", cv_pat)
+                        cfg.setdefault("gru_patience", cv_pat)
+                        cfg.setdefault("gru_lstm_patience", cv_pat)
 
                         cfg["skip_perm_importance"] = True
                         self.features_config = cfg
@@ -1309,10 +1323,11 @@ class RunMixin:
                             except Exception:
                                 pass
                             
-                            # Evaluate block (generic: any "ensemble_*" -> test_ensemble_strategy)
+                            # Evaluate block (ensemble routing)
                             if (
                                 isinstance(model_type_local, str)
-                                and model_type_local.startswith("ensemble_")
+                                and (model_type_local.startswith("ensemble_")
+                                     or model_type_local in {"stacking_ensemble", "meta_ensemble"})
                             ):
                                 metrics = self.test_ensemble_strategy(
                                     train_start=tr.index[0],
@@ -3771,22 +3786,66 @@ class RunMixin:
             models_to_test=models_to_test,
             n_trials=int(config.get("n_trials", 1)),
             return_top_n=rt_n,
-            study=None,  # one study here
+            study=None,
             sampler_seed=int(self.features_config.get("run_seed", 0)) or None,
             max_hpo_duration_minutes=float(config.get("max_hpo_duration_minutes", 0)),
+            sampler_method=str(config.get("hpo_sampler", "tpe")),
         )
 
-        if {"month_out_dir", "month_ix"} <= _sig_params:
-            best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = run_optuna_tuning(
-                **_common_kwargs,
-                month_out_dir=month_graphs_dir_local,
-                month_ix=month_ix_local,
-            )
-        else: 
-            # Legacy tuner signature (no per-month plot routing)
-            best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = run_optuna_tuning(
-                **_common_kwargs
-            )
+        if bool(config.get("hpo_two_phase", False)):
+            # ── TWO-PHASE HPO ──
+            phase1_sampler = str(config.get("phase1_sampler", "cmaes"))
+            phase1_trials  = int(config.get("phase1_trials", 30))
+            phase2_trials  = int(config.get("phase2_trials", 15))
+            phase2_top_n   = int(config.get("phase2_top_n", 5))
+
+            kw1 = {**_common_kwargs, "sampler_method": phase1_sampler,
+                   "n_trials": phase1_trials}
+            if {"month_out_dir", "month_ix"} <= _sig_params:
+                best1, score1, top5_1, study1, pool1 = run_optuna_tuning(
+                    **kw1, month_out_dir=month_graphs_dir_local, month_ix=month_ix_local)
+            else:
+                best1, score1, top5_1, study1, pool1 = run_optuna_tuning(**kw1)
+
+            from optuna.trial import TrialState
+            valid = [t for t in (study1.trials or [])
+                    if getattr(t, "value", None) is not None
+                    and getattr(t, "state", None) == TrialState.COMPLETE]
+            topN = sorted(valid, key=lambda t: t.value, reverse=True)[:phase2_top_n]
+
+            if topN:
+                from optuna.samplers import TPESampler as _TPE2
+                _s2 = _TPE2(seed=kw1["sampler_seed"],
+                           n_startup_trials=min(5, max(1, phase2_trials // 3)))
+                study2 = optuna.create_study(direction="maximize", sampler=_s2)
+                for t in topN:
+                    study2.enqueue_trial(t.params)
+
+                kw2 = {**_common_kwargs, "sampler_method": "tpe",
+                       "n_trials": phase2_trials, "study": study2}
+                if {"month_out_dir", "month_ix"} <= _sig_params:
+                    best2, score2, top5_2, study2, pool2 = run_optuna_tuning(
+                        **kw2, month_out_dir=month_graphs_dir_local, month_ix=month_ix_local)
+                else:
+                    best2, score2, top5_2, study2, pool2 = run_optuna_tuning(**kw2)
+
+                best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = \
+                    best2, score2, top5_2, study2, pool2
+            else:
+                best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = \
+                    best1, score1, top5_1, study1, pool1
+        else:
+            # ── SINGLE-PHASE HPO ──
+            if {"month_out_dir", "month_ix"} <= _sig_params:
+                best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = run_optuna_tuning(
+                    **_common_kwargs,
+                    month_out_dir=month_graphs_dir_local,
+                    month_ix=month_ix_local,
+                )
+            else:
+                best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = run_optuna_tuning(
+                    **_common_kwargs
+                )
 
         log_print(
             f"[DONE] Optuna best trial: #{study_obj.best_trial.number} value={study_obj.best_value:.6f}",
@@ -4020,9 +4079,10 @@ class RunMixin:
                         models_to_test=models_to_test,
                         n_trials=int(config.get("retry_extra_trials", 20)),
                         return_top_n=rt_n,
-                        study=None,   # NEW study, but only here, after Top-5 fully failed
+                        study=None,
                         sampler_seed=int(self.features_config.get("run_seed", 0)) or None,
                         max_hpo_duration_minutes=float(config.get("max_hpo_duration_minutes", 0)),
+                        sampler_method=str(config.get("hpo_sampler", "tpe")),
                     )
                     if top5_2:
                         best2["__top5_params"] = top5_2
@@ -4175,9 +4235,55 @@ class RunMixin:
             )
 
 
-        all_results = Parallel(n_jobs=n_jobs_actual, backend=backend)(
-            delayed(evaluate_fold)(s, trn, tst, pu) for s, trn, tst, pu in tqdm(tasks, desc="Walk-forward splits")
-        )
+        hpo_mode = str(config.get("hpo_mode", "static")).lower()
+
+        if hpo_mode == "dynamic" and len(tasks) > 1:
+            from pipeline.tuning.runner import run_optuna_tuning as _dyn_run
+
+            _dyn_trials = int(config.get("dynamic_hpo_trials", int(config.get("n_trials", 10))))
+            print(f"[HPO] Dynamic mode: re-running HPO for each of {len(tasks)} walk-forward steps "
+                  f"({_dyn_trials} trials each)")
+            all_results = []
+            for s, trn, tst, pu in tqdm(tasks, desc="Walk-forward splits (dynamic HPO)"):
+                train_end = s + period_offset(trn, unit=pu)
+                fold_train = walk_data[(walk_data.index >= s) & (walk_data.index < train_end)]
+
+                if len(fold_train) >= 150:
+                    fold_features = [c for c in fold_train.columns
+                                   if c not in ("returns", "price", "spread",
+                                                "high", "low", "label", "time")]
+                    d_min = int(len(fold_train) * 0.75)
+                    d_val = max(1, int(len(fold_train) * 0.25))
+                    if d_min + d_val > len(fold_train):
+                        d_val = len(fold_train) - d_min
+                    fold_cv = {"min_train_window": d_min, "val_window": d_val,
+                              "cv_blocks": int(config.get("cv_blocks", 5)),
+                              "score_for_no_trades": -1.0}
+                    if "_progress_callback" in (config if isinstance(config, dict) else {}):
+                        fold_cv["_progress_callback"] = config["_progress_callback"]
+
+                    best_p, _best_s, top5, _st, _pool = _dyn_run(
+                        train_data=fold_train,
+                        base_features=fold_features,
+                        evaluate_cv_func=_single_study_cv,
+                        cv_config=fold_cv,
+                        models_to_test=models_to_test,
+                        n_trials=_dyn_trials,
+                        n_startup_trials=int(config.get("n_startup_trials", 10)),
+                        return_top_n=rt_n,
+                        study=None,
+                        sampler_seed=int(self.features_config.get("run_seed", 0)) or None,
+                        sampler_method=str(config.get("hpo_sampler", "tpe")),
+                    )
+                    self._optuna_best_for_wfo = best_p
+                    self._optuna_top5_for_wfo = top5 or []
+
+                result = evaluate_fold(s, trn, tst, pu)
+                all_results.append(result)
+        else:
+            all_results = Parallel(n_jobs=n_jobs_actual, backend=backend)(
+                delayed(evaluate_fold)(s, trn, tst, pu) for s, trn, tst, pu in tqdm(tasks, desc="Walk-forward splits")
+            )
 
 
         elapsed_wfo = time.time() - start

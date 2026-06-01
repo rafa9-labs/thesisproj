@@ -346,7 +346,7 @@ class DeepMixin:
     def _is_deep_model_type(self, model_type: str) -> bool:
         """Return True if this model family uses TF/Keras in this engine."""
         mt = str(model_type or "").lower().strip()
-        if mt in {"cnn", "lstm", "transformer"}:
+        if mt in {"cnn", "lstm", "transformer", "gru", "gru_lstm"}:
             return True
         if mt in {"ensemble_cnn_lstm_xgboost", "ensemble_adaptive_regime"}:
             return True

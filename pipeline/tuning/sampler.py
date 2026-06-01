@@ -88,7 +88,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
             "calibrate_method", ["sigmoid"]
         )
 
-        deep_models = {"lstm", "cnn", "transformer"}
+        deep_models = {"lstm", "cnn", "transformer", "gru", "gru_lstm"}
         if str(model_type).lower() in deep_models:
             params["deep_calibrate"] = True
             params["deep_calibration_method"] = "temperature"
@@ -141,14 +141,16 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     params["test_months"]  = 1
 
     # === Core temporal knobs ===
-    if str(model_type).startswith("ensemble_"):
+    if (str(model_type).startswith("ensemble_") or
+        str(model_type).lower() in {"stacking_ensemble", "meta_ensemble"}):
         l_lo, l_hi = 8, 24
     else:
         l_lo, l_hi = 12, 40
     params["lags_range"] = trial.suggest_int("lags_range", l_lo, l_hi)
     
-    # Allow deeper lag depth for ensembles (otherwise ensemble_* lag knobs are pointless)
-    if str(model_type).startswith("ensemble_"):
+    # Allow deeper lag depth for ensembles (otherwise ensemble lag knobs are pointless)
+    if (str(model_type).startswith("ensemble_") or
+        str(model_type).lower() in {"stacking_ensemble", "meta_ensemble"}):
         params["lag_depth"] = trial.suggest_int("lag_depth", 1, 4)
     else:
         params["lag_depth"] = trial.suggest_int("lag_depth", 1, 3)
@@ -317,7 +319,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
         runtime_window_step = 12
         high_vol_bump_max   = 0.03  # do not stack too aggressively with alpha*vol_z
 
-    elif mt  == "logistic":
+    elif mt in {"logistic", "lightgbm", "catboost"}:
         # Logistic: mid softness.
         # Still looser than default, but a bit tighter and slightly lower coverage
         # than LSTM so realised activity sits between.
@@ -337,7 +339,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
         high_vol_bump_max   = 0.03
 
     else:
-        # Default behaviour for all other models (CNN, transformer, ensembles, classical, etc.).
+        # Default for all other models (gru, gru_lstm, cnn, transformer, svm, rf, dt, xgboost, ensembles).
         # Keep a substantially lower target_active_rate so models do not over-trade once costs are applied.
         targ_low, targ_high = 0.05, 0.22
 
@@ -607,9 +609,71 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
         # Protocol constant (CV enforces a minimum stride for cost control).
         params["ensemble_train_stride"] = 1
 
+    # =====================================
+    # LightGBM (histogram GBDT - Microsoft)
+    # =====================================
+    elif model_type == "lightgbm":
+        params["lgbm_n_estimators"]     = trial.suggest_int("lgbm_n_estimators", 200, 800, step=100)
+        params["lgbm_max_depth"]        = trial.suggest_int("lgbm_max_depth", 3, 8)
+        params["lgbm_num_leaves"]       = trial.suggest_categorical("lgbm_num_leaves", [15, 31, 63, 127])
+        params["lgbm_learning_rate"]    = trial.suggest_float("lgbm_learning_rate", 0.01, 0.3, log=True)
+        params["lgbm_subsample"]        = trial.suggest_float("lgbm_subsample", 0.6, 1.0)
+        params["lgbm_colsample_bytree"] = trial.suggest_float("lgbm_colsample_bytree", 0.6, 1.0)
+        params["lgbm_reg_lambda"]       = trial.suggest_float("lgbm_reg_lambda", 0.0, 10.0)
+        params["lgbm_n_jobs"]           = -1
+
+    # =====================================
+    # CatBoost (ordered boosting - Yandex)
+    # =====================================
+    elif model_type == "catboost":
+        params["cb_iterations"]      = trial.suggest_int("cb_iterations", 200, 800, step=100)
+        params["cb_depth"]           = trial.suggest_int("cb_depth", 3, 8)
+        params["cb_learning_rate"]   = trial.suggest_float("cb_learning_rate", 0.01, 0.3, log=True)
+        params["cb_subsample"]       = trial.suggest_float("cb_subsample", 0.6, 1.0)
+        params["cb_l2_leaf_reg"]     = trial.suggest_float("cb_l2_leaf_reg", 1.0, 10.0)
+        params["cb_thread_count"]    = -1
+
+    # =====================================
+    # GRU (Gated Recurrent Unit)
+    # =====================================
+    elif model_type == "gru":
+        params["gru_units"]         = trial.suggest_categorical("gru_units", [32, 64, 128])
+        params["gru_num_layers"]    = trial.suggest_categorical("gru_num_layers", [1, 2])
+        params["gru_dense_units"]   = 64
+        params["gru_dropout_rate"]  = trial.suggest_float("gru_dropout_rate", 0.20, 0.50)
+        params["gru_learning_rate"] = trial.suggest_float("gru_learning_rate", 1e-4, 5e-3, log=True)
+        params["gru_batch_size"]    = 256
+        params["gru_bidirectional"] = False
+        params["gru_clipnorm"]      = 1.0
+
+    # =====================================
+    # GRU-LSTM Hybrid
+    # =====================================
+    elif model_type == "gru_lstm":
+        params["gru_lstm_gru_units"]      = trial.suggest_categorical("gru_lstm_gru_units", [32, 64, 128])
+        params["gru_lstm_lstm_units"]     = trial.suggest_categorical("gru_lstm_lstm_units", [32, 64, 128])
+        params["gru_lstm_dense_units"]    = 64
+        params["gru_lstm_dropout_rate"]   = trial.suggest_float("gru_lstm_dropout_rate", 0.20, 0.50)
+        params["gru_lstm_learning_rate"]  = trial.suggest_float("gru_lstm_learning_rate", 1e-4, 5e-3, log=True)
+        params["gru_lstm_batch_size"]     = 256
+
+    # =====================================
+    # Stacking Ensemble
+    # =====================================
+    elif model_type == "stacking_ensemble":
+        params["stack_cv"]     = trial.suggest_categorical("stack_cv", [3, 5, 8])
+        params["stack_method"] = trial.suggest_categorical("stack_method", ["auto", "predict_proba"])
+
+    # =====================================
+    # Meta Ensemble (Signal Committee) -- no per-model params; sub-models inherit their own
+    # (meta_ensemble params are tuned via meta_combination_method in SEARCH_SPACE)
+    # =====================================
+    elif model_type == "meta_ensemble":
+        pass
+
     # === Runtime guards for deep models (no wall-clock limits, just shapes) ===
-    # LSTM/CNN: if we use sequence windows, do not allow stride=1 (window explosion).
-    if model_type in ("lstm", "cnn"):
+    # LSTM/CNN/GRU: if we use sequence windows, do not allow stride=1 (window explosion).
+    if model_type in ("lstm", "cnn", "gru", "gru_lstm"):
         use_seq_key = f"{model_type}_use_seq_windows"
         stride_key  = f"{model_type}_train_stride"
         use_seq     = params.get(use_seq_key, False)

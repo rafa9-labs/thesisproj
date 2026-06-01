@@ -158,7 +158,8 @@ def test_deep_model_probabilities_valid(model_name, kwargs):
 def test_model_registry_completeness():
     from models.registry import MODEL_REGISTRY
     expected = {"logistic", "xgboost", "random_forest", "decision_tree", "svm",
-                "cnn", "lstm", "transformer"}
+                "cnn", "lstm", "transformer", "gru", "gru_lstm",
+                "lightgbm", "catboost", "stacking_ensemble"}
     actual = set(MODEL_REGISTRY.keys())
     missing = expected - actual
     assert not missing, f"Missing models from registry: {missing}"

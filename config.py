@@ -279,6 +279,48 @@ SEARCH_SPACE = {
         # Fixed: num_blocks=1, ff_multiple=2, dense_units=128,
         #        pooling="cls", use_time2vec=False, batch_size=256
     },
+    # -- LightGBM (Microsoft histogram GBDT) --
+    "lightgbm": {
+        "n_estimators": (200, 800, 100),       # (low, high, step)
+        "max_depth": (3, 8),
+        "num_leaves": [15, 31, 63, 127],
+        "learning_rate": (0.01, 0.3, True),    # (low, high, log_scale)
+        "subsample": (0.6, 1.0),
+        "colsample_bytree": (0.6, 1.0),
+        "reg_lambda": (0.0, 10.0),
+        # Fixed: boosting_type=gbdt, min_child_samples=20
+    },
+    # -- CatBoost (Yandex ordered boosting) --
+    "catboost": {
+        "iterations": (200, 800, 100),
+        "depth": (3, 8),
+        "learning_rate": (0.01, 0.3, True),
+        "subsample": (0.6, 1.0),
+        "l2_leaf_reg": (1.0, 10.0),
+        # Fixed: border_count=128, loss_function=MultiClass
+    },
+    # -- GRU (Gated Recurrent Unit) --
+    "gru": {
+        "units": [32, 64, 128],
+        "num_layers": [1, 2],
+        "dropout_rate": (0.2, 0.5),
+        "learning_rate": (1e-4, 5e-3, True),
+        # Fixed: dense_units=64, bidirectional=False, clipnorm=1.0, batch_size=256
+    },
+    # -- GRU-LSTM Hybrid --
+    "gru_lstm": {
+        "gru_lstm_gru_units": [32, 64, 128],
+        "gru_lstm_lstm_units": [32, 64, 128],
+        "gru_lstm_dropout_rate": (0.2, 0.5),
+        "gru_lstm_learning_rate": (1e-4, 5e-3, True),
+        # Fixed: dense_units=64, batch_size=256
+    },
+    # -- Stacking Ensemble (OOF meta-learner) --
+    "stacking_ensemble": {
+        "stack_cv": [3, 5, 8],
+        "stack_method": ["auto", "predict_proba"],
+        # sub-models selected by user in frontend, not tuned by HPO
+    },
     # -- Meta Ensemble (Signal Committee) --
     "meta_ensemble": {
         "meta_combination_method": ["majority", "soft", "weighted"],

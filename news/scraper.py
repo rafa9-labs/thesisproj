@@ -45,6 +45,15 @@ RSS_FEEDS = {
 }
 
 
+import re as _re
+
+_HTML_TAG = _re.compile(r"<[^>]*>")
+_MULTI_SPACE = _re.compile(r"\s+")
+
+def _strip_html(text: str) -> str:
+    return _MULTI_SPACE.sub(" ", _HTML_TAG.sub(" ", text or "")).strip()
+
+
 @dataclass
 class NewsArticle:
     title: str
@@ -63,6 +72,21 @@ class NewsArticle:
     @property
     def dedup_hash(self) -> str:
         return self._dedup_hash
+
+    @property
+    def summary(self) -> str:
+        text = _strip_html(self.body)
+        if len(text) <= 180:
+            return text
+        return text[:177].rsplit(" ", 1)[0] + "..."
+    
+    @staticmethod
+    def bias_label(score: float) -> str:
+        if score > 0.05:
+            return "long"
+        if score < -0.05:
+            return "short"
+        return "neutral"
 
 
 class NewsScraper:

@@ -561,8 +561,13 @@ export interface LiveSentimentPairData {
 
 export interface LiveSentimentArticle {
   title: string;
+  body: string;
   source: string;
+  url: string;
+  pair_tags: string[];
   sentiment_score: number;
+  summary: string;
+  bias: string;
   timestamp: string;
 }
 
@@ -572,6 +577,24 @@ export interface LiveSentimentResponse {
   backend: string;
   model: string;
   error?: string;
+}
+
+export interface NewsArticleFull {
+  title: string;
+  body: string;
+  source: string;
+  url: string;
+  timestamp: string;
+  pair_tags: string[];
+  sentiment_score: number;
+  summary: string;
+  bias: string;
+}
+
+export interface NewsArticlesResponse {
+  articles: NewsArticleFull[];
+  total: number;
+  pair: string;
 }
 
 export interface PaperSessionInfo {

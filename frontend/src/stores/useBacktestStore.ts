@@ -201,6 +201,17 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       daily_loss_limit_pct: s.dailyLossLimitPct,
       trailing_method: s.trailingMethod,
       trailing_activation: s.trailingActivation,
+      hpo_sampler: s.hpoSampler,
+      hpo_two_phase: s.hpoTwoPhase,
+      hpo_mode: s.hpoMode,
+      period_unit: s.periodUnit,
+      phase1_sampler: s.phase1Sampler,
+      phase1_trials: s.phase1Trials,
+      phase2_trials: s.phase2Trials,
+      phase2_top_n: s.phase2TopN,
+      dynamic_hpo_trials: s.dynamicHpoTrials,
+      wfo_train_periods: s.wfoTrainPeriods > 0 ? s.wfoTrainPeriods : undefined,
+      wfo_test_periods: s.wfoTestPeriods > 0 ? s.wfoTestPeriods : undefined,
     };
     const stateKeys = Object.keys(s) as (keyof typeof s)[];
     for (const key of stateKeys) {

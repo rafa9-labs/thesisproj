@@ -336,6 +336,20 @@ export function useNewsEvents(start: number | null, end: number | null, impact?:
   });
 }
 
+export function useNewsArticles(pair?: string, days?: number) {
+  return useQuery({
+    queryKey: ["news-articles", pair, days],
+    queryFn: async () => {
+      const { data } = await apiClient.get<import("./schemas").NewsArticlesResponse>("/news/articles", {
+        params: { pair: pair ?? "", days: days ?? 30 },
+      });
+      return data;
+    },
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+}
+
 export function useLiveSentiment(pair: string = "EURUSD") {
   return useQuery({
     queryKey: ["live-sentiment", pair],

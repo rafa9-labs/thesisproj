@@ -479,7 +479,7 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
         # Stronger churn control for classical ML (use existing CV metrics)
         # ------------------------------------------------------------
         _mt = str(params.get("model_type", "")).lower()
-        if _mt in {"logistic", "svm", "decision_tree", "random_forest", "xgboost"}:
+        if _mt in {"logistic", "svm", "decision_tree", "random_forest", "xgboost", "lightgbm", "catboost"}:
             # Copy to avoid mutating a shared dict across trials
             cv_config = dict(cv_config or {})
 

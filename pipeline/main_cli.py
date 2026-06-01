@@ -23,12 +23,18 @@ _TRIAL_COUNTS_FULL = {
     "random_forest":               {"random": 5,  "bayes": 10},
     "decision_tree":               {"random": 5,  "bayes": 5},
     "xgboost":                     {"random": 5,  "bayes": 15},
+    "lightgbm":                    {"random": 5,  "bayes": 15},
+    "catboost":                    {"random": 5,  "bayes": 15},
     "lstm":                        {"random": 3,  "bayes": 7},
     "cnn":                         {"random": 3,  "bayes": 7},
     "transformer":                 {"random": 3,  "bayes": 7},
+    "gru":                         {"random": 3,  "bayes": 7},
+    "gru_lstm":                    {"random": 3,  "bayes": 7},
     "dqn":                         {"random": 2,  "bayes": 3},
     "ensemble_cnn_lstm_xgboost":   {"random": 2,  "bayes": 3},
     "ensemble_adaptive_regime":    {"random": 2,  "bayes": 3},
+    "meta_ensemble":               {"random": 2,  "bayes": 3},
+    "stacking_ensemble":           {"random": 2,  "bayes": 3},
 }
 
 # Fast mode: reduced trials for rapid iteration (HURRY=1 env var or low HPO intensity)
@@ -38,12 +44,18 @@ _TRIAL_COUNTS_FAST = {
     "random_forest":               {"random": 2,  "bayes": 3},
     "decision_tree":               {"random": 2,  "bayes": 2},
     "xgboost":                     {"random": 2,  "bayes": 4},
+    "lightgbm":                    {"random": 2,  "bayes": 4},
+    "catboost":                    {"random": 2,  "bayes": 4},
     "lstm":                        {"random": 2,  "bayes": 4},
     "cnn":                         {"random": 2,  "bayes": 4},
     "transformer":                 {"random": 2,  "bayes": 4},
+    "gru":                         {"random": 2,  "bayes": 4},
+    "gru_lstm":                    {"random": 2,  "bayes": 4},
     "dqn":                         {"random": 2,  "bayes": 2},
     "ensemble_cnn_lstm_xgboost":   {"random": 2,  "bayes": 2},
     "ensemble_adaptive_regime":    {"random": 2,  "bayes": 2},
+    "meta_ensemble":               {"random": 2,  "bayes": 2},
+    "stacking_ensemble":           {"random": 2,  "bayes": 2},
 }
 
 TRIAL_COUNTS = dict(_TRIAL_COUNTS_FULL)
