@@ -624,3 +624,42 @@ def _build_meta_ensemble(*, use_proba=True, **params):
         weights=weights,
         meta_sub_models=sub_types,
     )
+
+
+# ---------------------------------------------------------------------------
+# Regime Classifier (meta-model — used by exploration/committee layer)
+# ---------------------------------------------------------------------------
+
+@register_model("regime_classifier")
+def _build_regime_classifier(*, seed=None, use_proba=True, **params):
+    """Build a RegimeClassifier (Random Forest for 7-class market regime labeling).
+
+    Not a trading-signal model. Used by the exploration agent, ExpertProfiler,
+    and committee builder to classify market state and route to specialist models.
+    """
+    from models.regime_classifier import RegimeClassifier
+
+    n_estimators = int(params.get("n_estimators", 100))
+    max_depth_val = params.get("max_depth")
+    max_depth = int(max_depth_val) if max_depth_val is not None else 8
+    min_samples_leaf = int(params.get("min_samples_leaf", 50))
+    class_weight = str(params.get("class_weight", "balanced_subsample"))
+    random_state = int(params.get("random_state", seed or 42))
+    feature_columns = params.get("feature_columns", None)
+
+    from pipeline.regime_utils import RegimeConfig
+    regime_cfg = RegimeConfig(**{k: v for k, v in params.items()
+                                  if k in ("adx_thresh", "rsi_high", "rsi_low",
+                                           "bbpct_high", "bbpct_low",
+                                           "atr_high_quantile", "bbw_high_quantile",
+                                           "bbw_low_quantile", "rv_low_quantile")})
+
+    return RegimeClassifier(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        min_samples_leaf=min_samples_leaf,
+        class_weight=class_weight,
+        random_state=random_state,
+        feature_columns=feature_columns,
+        regime_cfg=regime_cfg,
+    )
