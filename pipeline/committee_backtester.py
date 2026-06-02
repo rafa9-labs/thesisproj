@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from models.registry import build_model
 from pipeline.committee_builder import CommitteeConfig
 from pipeline.regime_utils import (
     detect_regimes,
@@ -92,15 +93,18 @@ class CommitteeBacktester:
     def __init__(
         self,
         config: CommitteeConfig,
-        regime_cfg: Optional[RegimeConfig] = None,
+        regime_clf=None,
+        regime_cfg: RegimeConfig = None,
         confidence_threshold: float = 0.6,
         label_threshold: float = 0.0001,
+        model_params: Optional[Dict[str, Dict]] = None,
     ):
         self.config = config
+        self._regime_clf = regime_clf
         self.regime_cfg = regime_cfg or RegimeConfig()
         self.confidence_threshold = confidence_threshold
         self.label_threshold = label_threshold
-
+        self.model_params = model_params or {}
         self._trained_models: Dict[str, Any] = {}
         self._regime_clf: Optional[Any] = None
         self._feature_names: List[str] = []
@@ -364,7 +368,9 @@ class CommitteeBacktester:
 
         for model_type in unique_models:
             try:
-                model = self._build_model(model_type, n_features=X_train.shape[1])
+                model_params = self.model_params.get(model_type, {})
+                model = self._build_model(model_type, n_features=X_train.shape[1],
+                                          params=model_params)
                 model.fit(X_train, y_train)
                 self._trained_models[model_type] = model
             except Exception:
@@ -443,51 +449,60 @@ class CommitteeBacktester:
 
     # ── Model building ──────────────────────────────────────────────
 
-    def _build_model(self, model_type: str, n_features: int = 20) -> Any:
-        """Build a lightweight model for committee training.
+    def _build_model(self, model_type: str, n_features: int = 20,
+                     params: Optional[Dict[str, Any]] = None) -> Any:
+        """Build a model for committee training.
 
-        Uses sklearn implementations directly (avoids registry dependency
-        for testing with synthetic data).
+        Uses sklearn implementations directly for standard models.
+        Supports stacking_ensemble and meta_ensemble via their BaseModel interface.
+        Optional params override defaults (for HPO-tuned hyperparameters).
         """
         from sklearn.linear_model import LogisticRegression
         from sklearn.ensemble import RandomForestClassifier
+        p = dict(params or {})
 
         if model_type == "logistic":
             return LogisticRegression(
-                C=1.0, max_iter=500, class_weight="balanced",
+                C=float(p.get("C", 1.0)), max_iter=int(p.get("max_iter", 500)),
+                class_weight=p.get("class_weight", "balanced"),
                 random_state=42, n_jobs=1,
             )
         elif model_type == "svm":
             from sklearn.svm import SVC
             return SVC(
-                C=1.0, kernel="rbf", gamma="scale",
-                probability=True, class_weight="balanced",
+                C=float(p.get("C", 1.0)), kernel=p.get("kernel", "rbf"),
+                gamma=p.get("gamma", "scale"),
+                probability=True, class_weight=p.get("class_weight", "balanced"),
                 random_state=42,
             )
         elif model_type in ("random_forest", "rf"):
             return RandomForestClassifier(
-                n_estimators=50, max_depth=6, min_samples_leaf=10,
-                class_weight="balanced_subsample",
+                n_estimators=int(p.get("n_estimators", 50)),
+                max_depth=int(p.get("max_depth", 6)) if p.get("max_depth") else 6,
+                min_samples_leaf=int(p.get("min_samples_leaf", 10)),
+                class_weight=p.get("class_weight", "balanced_subsample"),
                 random_state=42, n_jobs=1,
             )
         elif model_type == "xgboost":
             try:
                 from xgboost import XGBClassifier
                 return XGBClassifier(
-                    n_estimators=50, max_depth=4, learning_rate=0.1,
+                    n_estimators=int(p.get("n_estimators", 50)),
+                    max_depth=int(p.get("max_depth", 4)),
+                    learning_rate=float(p.get("learning_rate", 0.1)),
                     objective="multi:softprob", num_class=3,
                     random_state=42, n_jobs=1, verbosity=0,
                 )
             except ImportError:
                 return RandomForestClassifier(
-                    n_estimators=50, max_depth=6, n_jobs=1,
-                    random_state=42,
+                    n_estimators=50, max_depth=6, n_jobs=1, random_state=42,
                 )
         elif model_type == "lightgbm":
             try:
                 from lightgbm import LGBMClassifier
                 return LGBMClassifier(
-                    n_estimators=50, max_depth=5,
+                    n_estimators=int(p.get("n_estimators", 50)),
+                    max_depth=int(p.get("max_depth", 5)),
                     random_state=42, n_jobs=1, verbose=-1,
                 )
             except ImportError:
@@ -495,8 +510,34 @@ class CommitteeBacktester:
         elif model_type == "decision_tree":
             from sklearn.tree import DecisionTreeClassifier
             return DecisionTreeClassifier(
-                max_depth=6, min_samples_leaf=10,
-                class_weight="balanced", random_state=42,
+                max_depth=int(p.get("max_depth", 6)),
+                min_samples_leaf=int(p.get("min_samples_leaf", 10)),
+                class_weight=p.get("class_weight", "balanced"),
+                random_state=42,
+            )
+        elif model_type == "stacking_ensemble":
+            from models.stacking_ensemble import StackingEnsemble
+            sub_types = p.get("stack_sub_models", ["logistic", "xgboost"])
+            if isinstance(sub_types, str):
+                sub_types = [t.strip() for t in sub_types.split(",") if t.strip()]
+            return StackingEnsemble(
+                sub_models=[build_model(t) for t in sub_types if build_model(t) is not None],
+                stack_sub_models=sub_types,
+                method=str(p.get("stack_method", "auto")),
+                cv=int(p.get("stack_cv", 3)),
+                seed=42,
+            )
+        elif model_type == "meta_ensemble":
+            from models.meta_ensemble import MetaEnsemble
+            sub_types = p.get("meta_sub_models", ["logistic", "xgboost"])
+            if isinstance(sub_types, str):
+                sub_types = [t.strip() for t in sub_types.split(",") if t.strip()]
+            method = str(p.get("meta_combination_method", "soft"))
+            return MetaEnsemble(
+                sub_models=[build_model(t) for t in sub_types if build_model(t) is not None],
+                meta_sub_models=sub_types,
+                method=method,
+                seed=42,
             )
         else:
             return LogisticRegression(

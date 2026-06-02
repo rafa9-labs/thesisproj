@@ -627,6 +627,38 @@ def _build_meta_ensemble(*, use_proba=True, **params):
 
 
 # ---------------------------------------------------------------------------
+# CNN-LSTM-XGBoost Ensemble (deep ensemble — trained via ensemble mixin)
+# ---------------------------------------------------------------------------
+
+@register_model("ensemble_cnn_lstm_xgboost")
+def _build_ensemble_cnn_lstm_xgboost(*, seed=None, use_proba=True, **params):
+    """Build a CNN-LSTM-XGBoost ensemble.
+
+    This model is trained via the ensemble mixin path (test_ensemble_strategy).
+    The factory exists so the registry can enumerate and validate it.
+    """
+    from .ensemble_cnn_lstm_xgboost import EnsembleCNNLSTMXGBoost
+
+    cnn_config = {k: params[k] for k in ("cnn_filters", "cnn_kernel_size",
+                 "cnn_pool_size", "cnn_dropout", "cnn_l2", "cnn_use_early_stopping",
+                 "cnn_patience", "cnn_time_limit_sec", "cnn_batch_size") if k in params}
+    lstm_config = {k: params[k] for k in ("lstm_units", "lstm_dropout",
+                   "lstm_recurrent_dropout", "lstm_l2", "lstm_use_early_stopping",
+                   "lstm_patience", "lstm_time_limit_sec", "lstm_batch_size") if k in params}
+    xgb_config = {k: params[k] for k in ("xgb_max_depth", "xgb_learning_rate",
+                  "xgb_n_estimators", "xgb_subsample", "xgb_colsample_bytree",
+                  "xgb_min_child_weight", "xgb_gamma", "xgb_reg_alpha", "xgb_reg_lambda",
+                  "use_logit_meta", "calibrate_base_temps", "use_oof_meta",
+                  "oof_splits") if k in params}
+
+    return EnsembleCNNLSTMXGBoost(
+        cnn_config=cnn_config,
+        lstm_config=lstm_config,
+        xgb_config=xgb_config,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Regime Classifier (meta-model — used by exploration/committee layer)
 # ---------------------------------------------------------------------------
 

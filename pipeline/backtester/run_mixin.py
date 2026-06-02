@@ -796,9 +796,7 @@ class RunMixin:
                             splits.append(smax)
 
                     # Early-stopping knobs for deep models (treat all deep + ensemble as deep)
-                    is_ensemble = (isinstance(model_type_local, str) and
-                                   (model_type_local.startswith("ensemble_") or
-                                    model_type_local in {"stacking_ensemble", "meta_ensemble"}))
+                    is_ensemble = isinstance(model_type_local, str) and model_type_local.startswith("ensemble_")
                     is_deep = (model_type_local in {"cnn","lstm","transformer","gru","gru_lstm"}) or is_ensemble
 
                     # =========================
@@ -1323,11 +1321,10 @@ class RunMixin:
                             except Exception:
                                 pass
                             
-                            # Evaluate block (ensemble routing)
+                            # Evaluate block (ensemble routing — deep ensembles only)
                             if (
                                 isinstance(model_type_local, str)
-                                and (model_type_local.startswith("ensemble_")
-                                     or model_type_local in {"stacking_ensemble", "meta_ensemble"})
+                                and model_type_local.startswith("ensemble_")
                             ):
                                 metrics = self.test_ensemble_strategy(
                                     train_start=tr.index[0],
