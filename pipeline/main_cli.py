@@ -216,6 +216,12 @@ def main() ->  None:
         _run_profile(MODEL_LIST, RUN_DIR, features_config, features_config_rep)
         return
 
+    # ── COMMITTEE MODE: run CommitteeBacktester instead of normal backtest ──
+    _COMMITTEE = os.environ.get("COMMITTEE", "").strip().lower() in ("1", "true", "yes")
+    if _COMMITTEE:
+        _run_committee(MODEL_LIST, RUN_DIR, features_config, features_config_rep)
+        return
+
     all_reps = []  # collect combined monthly results across all repeats
     eq_by_model: dict[str, list[pd.DataFrame]] = {}  # collect per-rep equity paths
 
@@ -1179,6 +1185,86 @@ def _run_profile(
         top_path = os.path.join(out_dir, "top_models_per_regime.csv")
         pd.DataFrame(rows).to_csv(top_path, index=False)
         print(f"\n[PROFILE] Top models CSV saved to {top_path}")
+
+
+def _run_committee(
+    model_list: list,
+    run_dir: str,
+    features_config: dict,
+    features_config_rep: dict,
+) -> None:
+    """Run the CommitteeBacktester with a committee config.
+
+    Activated by setting COMMITTEE=1 in the environment.
+    Reads committee_config.json from results/ directory or builds a default.
+    """
+    from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+    from pipeline.committee_backtester import CommitteeBacktester
+    from pipeline.regime_utils import RegimeConfig
+
+    _committee_months = int(os.environ.get("N_MONTHS", "4"))
+    _committee_config_path = os.environ.get("COMMITTEE_CONFIG", "")
+
+    print("\n" + "=" * 72)
+    print("  COMMITTEE BACKTEST MODE")
+    print(f"  Models: {', '.join(model_list)}")
+    print(f"  WFO months: {_committee_months}")
+    print("=" * 72)
+
+    # Load committee config from file, or build a default from model_list
+    if _committee_config_path and os.path.exists(_committee_config_path):
+        config = CommitteeConfig.from_json(_committee_config_path)
+        print(f"  Loaded config from {_committee_config_path}")
+    else:
+        regime_assignment = RegimeAssignment(models=model_list,
+                                             weights=[1.0 / len(model_list)] * len(model_list))
+        config = CommitteeConfig(
+            regimes={
+                "trend_up": regime_assignment,
+                "trend_down": regime_assignment,
+                "sideways": regime_assignment,
+            },
+            fallback=RegimeAssignment(models=[model_list[0]], weights=[1.0]),
+        )
+        print(f"  Built default config with {len(model_list)} model(s) per regime")
+
+    # Load data
+    csv_path = features_config.get("csv_data_path") or os.path.join(
+        "csv_data", "EURUSD_10_years_H1_OANDA.csv")
+    if not os.path.exists(csv_path):
+        print(f"[ERROR] Data file not found: {csv_path}")
+        return
+
+    print(f"  Loading data from {csv_path} ...")
+    df = pd.read_csv(csv_path)
+    if "timestamp" in df.columns or "date" in df.columns:
+        time_col = "timestamp" if "timestamp" in df.columns else "date"
+        df[time_col] = pd.to_datetime(df[time_col])
+        df = df.set_index(time_col)
+    # Compute returns if missing
+    if "returns" not in df.columns:
+        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+    # Run committee backtest
+    bt = CommitteeBacktester(
+        config,
+        regime_cfg=RegimeConfig(),
+        confidence_threshold=float(features_config.get("confidence_threshold", 0.5)),
+    )
+    result = bt.run_wfo(df, train_months=_committee_months, test_months=1, verbose=True)
+
+    # Summary
+    print("\n" + "-" * 40)
+    print(result.to_summary_dict())
+    print(f"[COMMITTEE] {result.total_folds} folds, avg Sharpe={result.avg_sharpe:.4f}, "
+          f"avg trades={result.avg_trades:.0f}")
+
+    # Save results
+    out_dir = os.path.join(run_dir, "committee")
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "summary.json"), "w") as f:
+        json.dump(result.to_summary_dict(), f, indent=2, default=str)
+    print(f"[COMMITTEE] Results saved to {out_dir}")
 
 
 if __name__ == "__main__":

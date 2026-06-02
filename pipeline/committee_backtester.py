@@ -201,6 +201,11 @@ class CommitteeBacktester:
         )
 
     # ── Feature preparation ─────────────────────────────────────────
+    #
+    # NOTE: These feature computations intentionally mirror logic from
+    # pipeline/backtester/features_mixin.py. The committee backtester is
+    # self-contained for synthetic-OHLC testing (no pipeline dependency).
+    # Future: extract a shared FeatureComputer utility.
 
     def _prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Compute indicator features needed for regime detection and model training."""
