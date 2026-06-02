@@ -1,6 +1,7 @@
 """Committee backtest & regime analysis API endpoints (Racecar Phases A-E)."""
 import json
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -398,3 +399,229 @@ def list_committee_snapshots():
                     models=models,
                 ))
     return CommitteeSnapshotListResponse(snapshots=items[:20])
+
+
+# ── Racecar Auto-Optimize: full B→C→D pipeline ──────────────────────
+
+class RacecarAutoOptimizeRequest(BaseModel):
+    models: List[str] = Field(default_factory=lambda: [
+        "logistic", "random_forest", "xgboost",
+    ])
+    pair: str = "EURUSD"
+    timeframe: str = "H1"
+    train_months: int = 6
+    test_months: int = 1
+    profile_trials: int = 5
+    committee_top_k: int = 3
+
+
+class RacecarJobStatus(BaseModel):
+    job_id: str
+    phase: str  # "profiling", "building", "backtesting", "completed", "failed"
+    phase_progress: str = ""  # e.g. "3/5 models"
+    started_at: str
+    error: str = ""
+
+
+class RacecarJobResults(BaseModel):
+    job_id: str
+    status: str
+    profile_matrix: Optional[Dict[str, Any]] = None
+    committee_config: Optional[Dict[str, Any]] = None
+    backtest: Optional[Dict[str, Any]] = None
+    total_time_s: float = 0.0
+
+
+_AUTO_OPTIMIZE_DIR = Path("results/racecar")
+_AUTO_OPTIMIZE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@router.post("/auto-optimize", response_model=RacecarJobStatus)
+def start_auto_optimize(req: RacecarAutoOptimizeRequest):
+    """Start the full Racecar auto-optimize pipeline (B→C→D).
+
+    Phases:
+      B. ExpertProfiler — run all models across WFO folds, build regime×model matrix
+      C. CommitteeBuilder — build optimal committee config from matrix
+      D. CommitteeBacktester — WFO validation of the committee
+    """
+    job_id = f"racecar_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    job_dir = _AUTO_OPTIMIZE_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    status = RacecarJobStatus(
+        job_id=job_id,
+        phase="profiling",
+        phase_progress="0/{}".format(len(req.models)),
+        started_at=datetime.utcnow().isoformat(),
+    )
+    _write_status(job_dir, status)
+
+    thread = threading.Thread(
+        target=_run_auto_optimize,
+        args=(job_dir, req, status),
+        daemon=True,
+    )
+    thread.start()
+    return status
+
+
+@router.get("/auto-optimize/{job_id}/status", response_model=RacecarJobStatus)
+def get_auto_optimize_status(job_id: str):
+    """Poll the current phase and progress of an auto-optimize job."""
+    job_dir = _AUTO_OPTIMIZE_DIR / job_id
+    if not job_dir.exists():
+        raise HTTPException(404, f"Job {job_id} not found")
+    return _read_status(job_dir)
+
+
+@router.get("/auto-optimize/{job_id}/results", response_model=RacecarJobResults)
+def get_auto_optimize_results(job_id: str):
+    """Get the final results of a completed auto-optimize job."""
+    job_dir = _AUTO_OPTIMIZE_DIR / job_id
+    if not job_dir.exists():
+        raise HTTPException(404, f"Job {job_id} not found")
+
+    results_path = job_dir / "results.json"
+    if results_path.exists():
+        with open(results_path) as f:
+            return RacecarJobResults(**json.load(f))
+
+    status = _read_status(job_dir)
+    return RacecarJobResults(
+        job_id=job_id,
+        status=status.phase,
+        error=status.error,
+    )
+
+
+def _write_status(job_dir: Path, status: RacecarJobStatus):
+    with open(job_dir / "status.json", "w") as f:
+        json.dump(status.model_dump(), f, indent=2, default=str)
+
+
+def _read_status(job_dir: Path) -> RacecarJobStatus:
+    with open(job_dir / "status.json") as f:
+        return RacecarJobStatus(**json.load(f))
+
+
+def _update_phase(job_dir: Path, phase: str, progress: str = ""):
+    s = _read_status(job_dir)
+    s.phase = phase
+    s.phase_progress = progress
+    _write_status(job_dir, s)
+
+
+def _run_auto_optimize(job_dir: Path, req: RacecarAutoOptimizeRequest,
+                       status: RacecarJobStatus):
+    """Background thread: execute the full Racecar pipeline."""
+    t_start = datetime.utcnow()
+    try:
+        # ── Phase B: Expert Profiler ──
+        _update_phase(job_dir, "profiling",
+                       f"running {len(req.models)} models")
+
+        from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
+
+        csv_path = Path(f"csv_data/{req.pair}_10_years_{req.timeframe}_OANDA.csv")
+        if not csv_path.exists():
+            raise HTTPException(400, f"Data not found: {csv_path}")
+
+        profiler = ExpertProfiler(
+            data_config={
+                "symbol": req.pair,
+                "csv_data_path": str(csv_path),
+            },
+            wfo_config={
+                "n_months": req.train_months,
+                "n_trials": req.profile_trials,
+                "hpo_mode": "static",
+                "smoke_test": True,
+            },
+            regime_cfg=RegimeConfig(),
+        )
+
+        profile_result = profiler.profile(
+            models=req.models,
+            n_months=req.train_months,
+            n_trials=req.profile_trials,
+            seed=42,
+            verbose=False,
+        )
+
+        matrix = profile_result.matrix
+        if matrix is None or not matrix.models:
+            _update_phase(job_dir, "failed", "No models produced valid fold results")
+            return
+
+        # Save matrix
+        matrix_data = matrix.to_dict()
+        with open(job_dir / "regime_matrix.json", "w") as f:
+            json.dump(matrix_data, f, indent=2, default=str)
+
+        # ── Phase C: Committee Builder ──
+        _update_phase(job_dir, "building", "")
+
+        from pipeline.committee_builder import CommitteeBuilder
+
+        builder = CommitteeBuilder(
+            top_k=req.committee_top_k,
+            weight_type="sharpe_proportional",
+        )
+        committee_config = builder.build(
+            matrix,
+            constraints={
+                "max_models_per_regime": req.committee_top_k,
+                "min_sharpe": -0.5,
+                "min_trades": 3,
+            },
+        )
+
+        with open(job_dir / "committee_config.json", "w") as f:
+            json.dump(committee_config.to_dict(), f, indent=2, default=str)
+
+        # ── Phase D: Committee Backtester ──
+        _update_phase(job_dir, "backtesting", "")
+
+        from pipeline.committee_backtester import CommitteeBacktester
+
+        df = pd.read_csv(csv_path)
+        if "timestamp" in df.columns:
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            df = df.set_index("timestamp")
+        if "returns" not in df.columns:
+            df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+        bt = CommitteeBacktester(
+            committee_config,
+            regime_cfg=RegimeConfig(),
+            confidence_threshold=0.5,
+        )
+        bt_result = bt.run_wfo(
+            df,
+            train_months=req.train_months,
+            test_months=req.test_months,
+            verbose=False,
+        )
+
+        # ── Save results ──
+        results = {
+            "job_id": status.job_id,
+            "status": "completed",
+            "profile_matrix": matrix_data,
+            "committee_config": committee_config.to_dict(),
+            "backtest": bt_result.to_summary_dict(),
+            "total_time_s": (datetime.utcnow() - t_start).total_seconds(),
+        }
+        with open(job_dir / "results.json", "w") as f:
+            json.dump(results, f, indent=2, default=str)
+
+        _update_phase(job_dir, "completed", "")
+        print(f"[RACECAR] Auto-optimize {status.job_id} completed in {results['total_time_s']:.1f}s")
+
+    except Exception as e:
+        _update_phase(job_dir, "failed", "")
+        s = _read_status(job_dir)
+        s.error = str(e)
+        _write_status(job_dir, s)
+        print(f"[RACECAR] Auto-optimize {status.job_id} failed: {e}")

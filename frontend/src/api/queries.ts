@@ -31,6 +31,9 @@ import type {
   CommitteeBacktestSubmitResponse,
   CommitteeBacktestResultResponse,
   CommitteeSnapshotListResponse,
+  RacecarAutoOptimizeRequest,
+  RacecarJobStatus,
+  RacecarJobResults,
 } from "./schemas";
 
 export function useHealth() {
@@ -899,6 +902,58 @@ export function useCommitteeSnapshots() {
       );
       return data;
     },
+    staleTime: 30_000,
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Racecar Auto-Optimize (B→C→D pipeline)
+// ════════════════════════════════════════════════════════════════════
+
+export function useStartRacecar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: RacecarAutoOptimizeRequest) => {
+      const { data } = await apiClient.post<RacecarJobStatus>(
+        "/committee/auto-optimize", req,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["racecar"] });
+    },
+  });
+}
+
+export function useRacecarStatus(jobId: string | null) {
+  return useQuery({
+    queryKey: ["racecar", "status", jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<RacecarJobStatus>(
+        `/committee/auto-optimize/${jobId}/status`,
+      );
+      return data;
+    },
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      if (query.state.data?.phase === "completed" || query.state.data?.phase === "failed") {
+        return false;
+      }
+      return 2_000;
+    },
+  });
+}
+
+export function useRacecarResults(jobId: string | null) {
+  return useQuery({
+    queryKey: ["racecar", "results", jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<RacecarJobResults>(
+        `/committee/auto-optimize/${jobId}/results`,
+      );
+      return data;
+    },
+    enabled: !!jobId,
     staleTime: 30_000,
   });
 }

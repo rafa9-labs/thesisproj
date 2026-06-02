@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { TabBar } from "@/components/shared/TabBar";
+import { RacecarTab } from "./RacecarTab";
 import { RegimeHeatmap } from "./RegimeHeatmap";
 import { CommitteeConfigPanel } from "./CommitteeConfigPanel";
 import { CommitteeResultsTab } from "./CommitteeResultsTab";
 import { LiveCommitteePanel } from "./LiveCommitteePanel";
 
 const TABS = [
+  { key: "racecar", label: "Racecar" },
   { key: "regime", label: "Regime Heatmap" },
   { key: "config", label: "Config" },
   { key: "results", label: "Results" },
@@ -13,7 +15,7 @@ const TABS = [
 ];
 
 export function CommitteePage() {
-  const [activeTab, setActiveTab] = useState("regime");
+  const [activeTab, setActiveTab] = useState("racecar");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
@@ -46,6 +48,7 @@ export function CommitteePage() {
         }}
       >
         <div style={{ height: 24 }} />
+        {activeTab === "racecar" && <RacecarTab />}
         {activeTab === "regime" && <RegimeHeatmap />}
         {activeTab === "config" && <CommitteeConfigPanel />}
         {activeTab === "results" && <CommitteeResultsTab />}

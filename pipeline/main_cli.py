@@ -222,6 +222,12 @@ def main() ->  None:
         _run_committee(MODEL_LIST, RUN_DIR, features_config, features_config_rep)
         return
 
+    # ── RACECAR MODE: run full B→C→D pipeline ──
+    _RACECAR = os.environ.get("RACECAR", "").strip().lower() in ("1", "true", "yes")
+    if _RACECAR:
+        _run_racecar(MODEL_LIST, RUN_DIR, features_config, features_config_rep)
+        return
+
     all_reps = []  # collect combined monthly results across all repeats
     eq_by_model: dict[str, list[pd.DataFrame]] = {}  # collect per-rep equity paths
 
@@ -1265,6 +1271,103 @@ def _run_committee(
     with open(os.path.join(out_dir, "summary.json"), "w") as f:
         json.dump(result.to_summary_dict(), f, indent=2, default=str)
     print(f"[COMMITTEE] Results saved to {out_dir}")
+
+
+def _run_racecar(
+    model_list: list,
+    run_dir: str,
+    features_config: dict,
+    features_config_rep: dict,
+) -> None:
+    """Run the full Racecar pipeline: B (profile) → C (build) → D (backtest).
+
+    Activated by setting RACECAR=1 in the environment.
+    """
+    from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
+    from pipeline.committee_builder import CommitteeBuilder
+    from pipeline.committee_backtester import CommitteeBacktester
+
+    _racecar_months = int(os.environ.get("N_MONTHS", "6"))
+    _profile_trials = int(os.environ.get("PROFILE_TRIALS", "5"))
+    _top_k = int(os.environ.get("COMMITTEE_TOP_K", "3"))
+
+    print("\n" + "=" * 72)
+    print("  RACECAR AUTO-OPTIMIZE")
+    print(f"  Models: {', '.join(model_list)}")
+    print(f"  WFO months: {_racecar_months}  |  Trials: {_profile_trials}  |  Top-k: {_top_k}")
+    print("=" * 72)
+
+    csv_path = features_config.get("csv_data_path") or os.path.join(
+        "csv_data", "EURUSD_10_years_H1_OANDA.csv")
+    if not os.path.exists(csv_path):
+        print(f"[ERROR] Data file not found: {csv_path}")
+        return
+
+    # ── Phase B: ExpertProfiler ──
+    print("\n[PHASE B] Running ExpertProfiler...")
+    profiler = ExpertProfiler(
+        data_config={
+            "symbol": features_config.get("symbol", "EURUSD"),
+            "csv_data_path": csv_path,
+        },
+        wfo_config={
+            "n_months": _racecar_months,
+            "n_trials": _profile_trials,
+            "hpo_mode": "static",
+            "smoke_test": True,
+        },
+        regime_cfg=RegimeConfig(),
+    )
+    result = profiler.profile(
+        models=model_list,
+        n_months=_racecar_months,
+        n_trials=_profile_trials,
+        seed=int(features_config_rep.get("run_seed", 42)),
+        verbose=True,
+    )
+    profiler.print_summary(result)
+
+    # Save matrix
+    out_dir = os.path.join(run_dir, "racecar")
+    os.makedirs(out_dir, exist_ok=True)
+    profiler.save_matrix(result, os.path.join(out_dir, "regime_model_matrix.json"))
+
+    # ── Phase C: CommitteeBuilder ──
+    print("\n[PHASE C] Building optimal committee...")
+    builder = CommitteeBuilder(top_k=_top_k, weight_type="sharpe_proportional")
+    config = builder.build(
+        result.matrix,
+        constraints={
+            "max_models_per_regime": _top_k,
+            "min_sharpe": -0.5,
+            "min_trades": 3,
+        },
+    )
+    config.to_json(os.path.join(out_dir, "committee_config.json"))
+
+    # ── Phase D: CommitteeBacktester ──
+    print("\n[PHASE D] Running committee backtest...")
+    df = pd.read_csv(csv_path)
+    if "timestamp" in df.columns:
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df = df.set_index("timestamp")
+    if "returns" not in df.columns:
+        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+    bt = CommitteeBacktester(config, regime_cfg=RegimeConfig(), confidence_threshold=0.5)
+    bt_result = bt.run_wfo(df, train_months=_racecar_months, test_months=1, verbose=True)
+
+    print("\n" + "-" * 40)
+    print(bt_result.to_summary_dict())
+    print(f"\n[RACECAR] {bt_result.total_folds} folds, avg Sharpe={bt_result.avg_sharpe:.4f}, "
+          f"avg trades={bt_result.avg_trades:.0f}")
+
+    with open(os.path.join(out_dir, "results.json"), "w") as f:
+        json.dump({
+            "committee_config": config.to_dict(),
+            "backtest_summary": bt_result.to_summary_dict(),
+        }, f, indent=2, default=str)
+    print(f"[RACECAR] Results saved to {out_dir}")
 
 
 if __name__ == "__main__":

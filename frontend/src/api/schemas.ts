@@ -903,3 +903,34 @@ export interface CommitteeSnapshotInfo {
 export interface CommitteeSnapshotListResponse {
   snapshots: CommitteeSnapshotInfo[];
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Racecar Auto-Optimize (B→C→D pipeline)
+// ════════════════════════════════════════════════════════════════════
+
+export interface RacecarAutoOptimizeRequest {
+  models: string[];
+  pair?: string;
+  timeframe?: string;
+  train_months?: number;
+  test_months?: number;
+  profile_trials?: number;
+  committee_top_k?: number;
+}
+
+export interface RacecarJobStatus {
+  job_id: string;
+  phase: string;
+  phase_progress: string;
+  started_at: string;
+  error: string;
+}
+
+export interface RacecarJobResults {
+  job_id: string;
+  status: string;
+  profile_matrix?: Record<string, unknown>;
+  committee_config?: Record<string, unknown>;
+  backtest?: Record<string, unknown>;
+  total_time_s: number;
+}
