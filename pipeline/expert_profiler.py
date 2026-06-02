@@ -220,7 +220,6 @@ class ExpertProfiler:
                 start=model_config.get("start"),
                 end=model_config.get("end"),
                 model_type=model_type,
-                seed=seed,
             )
 
             df_wfo, best_combo = bt.run_strategy(

@@ -639,6 +639,8 @@ class FactoryStartRequest(BaseModel):
     stopping_tolerance: float = 0.02
     regime_sharpe_floor: float = 0.3
     train_months: int = 6
+    pair: str = "EURUSD"
+    timeframe: str = "H1"
 
 
 class FactoryIterationRecordOut(BaseModel):
@@ -779,9 +781,14 @@ def _run_factory_job(job_dir: Path, job_id: str, req: FactoryStartRequest):
             from pipeline.factory_llm import create_llm_proposer
             proposer = create_llm_proposer(backend=req.llm_backend)
 
+        csv_path = str(Path(f"csv_data/{req.pair}_10_years_{req.timeframe}_OANDA.csv"))
+        if not Path(csv_path).exists():
+            csv_path = "csv_data/EURUSD_10_years_H1_OANDA.csv"
+
         executor = FactoryExecutor(
             state=state,
             proposer=proposer,
+            data_path=csv_path,
             train_months=req.train_months,
             test_months=1,
         )
@@ -889,9 +896,21 @@ def _run_racecar_backend(req, matrix_path, config_path):
         csv_path = Path("csv_data/EURUSD_10_years_H1_OANDA.csv")
 
     profiler = ExpertProfiler(
-        data_config={"symbol": "EURUSD", "csv_data_path": str(csv_path)},
-        wfo_config={"n_months": req.train_months, "n_trials": 3,
-                     "hpo_mode": "static", "smoke_test": True},
+        data_config={
+            "symbol": req.pair,
+            "csv_data_path": str(csv_path),
+            "timeframe": req.timeframe,
+            "start": None,
+            "end": None,
+        },
+        wfo_config={
+            "n_months": req.train_months,
+            "n_trials": 3,
+            "hpo_mode": "static",
+            "smoke_test": True,
+            "label_threshold": 0.0,
+            "confidence_threshold": 0.5,
+        },
         regime_cfg=RegimeConfig(),
     )
     result = profiler.profile(models=req.models, n_months=req.train_months,

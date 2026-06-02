@@ -1,5 +1,6 @@
 """Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
+from config import SEARCH_SPACE
 from pipeline._imports import *  # noqa: F401,F403
 from pipeline.printer import HPOProgress
 
@@ -3840,8 +3841,8 @@ class RunMixin:
 
         # Auto-enable two-phase HPO for models with 4+ tunable hyperparameters
         _auto_two_phase = False
-        if model_type_local is not None and model_type_local != "":
-            _n_tunable = sum(1 for v in SEARCH_SPACE.get(model_type_local, {}).values()
+        if mt_local is not None and mt_local != "":
+            _n_tunable = sum(1 for v in SEARCH_SPACE.get(mt_local, {}).values()
                              if isinstance(v, (list, tuple)))
             _auto_two_phase = _n_tunable >= 4
 

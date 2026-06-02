@@ -39,6 +39,14 @@ class FactoryExecutor:
         if self._ohlc_data is not None:
             return self._ohlc_data
         df = pd.read_csv(self.data_path)
+        # Normalize OANDA column names to committee backtester convention
+        if "mid_close" in df.columns and "mid_c" not in df.columns:
+            df = df.rename(columns={
+                "mid_open": "mid_o", "mid_high": "mid_h",
+                "mid_low": "mid_l", "mid_close": "mid_c",
+            })
+        if "time" in df.columns and "timestamp" not in df.columns:
+            df["timestamp"] = pd.to_datetime(df["time"])
         if "timestamp" in df.columns:
             df["timestamp"] = pd.to_datetime(df["timestamp"])
             df = df.set_index("timestamp")
@@ -174,8 +182,8 @@ class FactoryExecutor:
             if verbose:
                 status = "ACCEPTED" if record.accepted else "REJECTED"
                 delta = record.after_sharpe - record.before_sharpe
-                print(f"  {status}: Sharpe {record.before_sharpe:.4f} → "
-                      f"{record.after_sharpe:.4f} (Δ={delta:+.4f})")
+                print(f"  {status}: Sharpe {record.before_sharpe:.4f} -> "
+                      f"{record.after_sharpe:.4f} (delta={delta:+.4f})")
                 print(f"  Best so far: {self.state.global_best_sharpe:.4f}")
 
         if verbose:

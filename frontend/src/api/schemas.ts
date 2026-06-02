@@ -948,6 +948,8 @@ export interface FactoryStartRequest {
   stopping_tolerance?: number;
   regime_sharpe_floor?: number;
   train_months?: number;
+  pair?: string;
+  timeframe?: string;
 }
 
 export interface FactoryIterationRecord {
