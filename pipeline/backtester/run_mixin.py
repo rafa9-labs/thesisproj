@@ -658,7 +658,9 @@ class RunMixin:
                     # Base fractional geometry (depends only on config + total_len)
                     val_frac  = float(config.get("cv_val_frac", 0.09))
                     min_frac  = float(config.get("cv_min_train_frac", 0.80))
-                    k_blocks_cfg = int(config.get("cv_blocks", 5))
+                    # A: Adaptive K — data-aware block count [3, 10], overridable via cv_blocks
+                    _adaptive_k = max(3, min(10, total_len // 4000))
+                    k_blocks_cfg = int(config.get("cv_blocks", _adaptive_k))
 
                     # Stable identifiers for this train_data (month)
                     try:
@@ -709,14 +711,21 @@ class RunMixin:
                             tb_max_holding_local,
                         )
 
+                        # B: soft floor — min(120, 3% of data) for statistical significance
+                        _soft_floor = min(120, max(30, int(round(0.03 * total_len))))
                         val_window_local = max(
-                            30,
+                            _soft_floor,
                             int(round(val_frac * total_len)),
                         )
                         min_train_local = int(round(min_frac * total_len))
 
                         smin = max(0, min_train_local + int(embargo_bars))
                         smax = total_len - val_window_local
+
+                        # Cap K to what geometry actually supports (before shrink loop refines further)
+                        _fit_usable = max(1, int(smax) - int(smin))
+                        _max_fit_k = max(1, int(_fit_usable // max(1, val_window_local)) + 1)
+                        k_blocks = min(k_blocks, _max_fit_k)
 
                         # Store only small ints; no DataFrames are cached.
                         geom_cache[cv_key] = (

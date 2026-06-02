@@ -366,6 +366,16 @@ SEARCH_SPACE = {
 
 
 # ---------------------------------------------------------------------------
+# CV geometry search space — sampled per trial to let Optuna discover the
+# optimal number of mini-blocks and validation fraction per model type.
+# ---------------------------------------------------------------------------
+CV_SEARCH_SPACE = {
+    "cv_blocks": [3, 5, 7, 10],
+    "cv_val_frac": [0.05, 0.07, 0.09, 0.11, 0.13, 0.15],
+}
+
+
+# ---------------------------------------------------------------------------
 # Pipeline protocol constants (single source of truth for .get() fallbacks)
 # ---------------------------------------------------------------------------
 # These values are referenced by backtester mixins via .get(key, DEFAULT).

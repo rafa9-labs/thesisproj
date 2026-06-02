@@ -14,7 +14,7 @@ import optuna
 from joblib import parallel_backend
 from threadpoolctl import threadpool_limits
 
-from config import PIPELINE_CONSTANTS as _PC, SEARCH_SPACE
+from config import PIPELINE_CONSTANTS as _PC, SEARCH_SPACE, CV_SEARCH_SPACE
 from utilsNoWFO import (
     TRAIN_TEST_MONTHS,
     TRAIN_TEST_MONTHS_DEBUG,
@@ -411,6 +411,20 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
                     params[param_key] = trial.suggest_float(param_key, spec[0], spec[1])
             else:
                 params[param_key] = spec  # fixed value
+
+        # Sample global CV geometry params (no model prefix — shared across models)
+        for key, spec in CV_SEARCH_SPACE.items():
+            if isinstance(spec, list):
+                params[key] = trial.suggest_categorical(key, spec)
+            elif isinstance(spec, tuple):
+                if len(spec) == 3 and isinstance(spec[2], bool):
+                    params[key] = trial.suggest_float(key, spec[0], spec[1], log=spec[2])
+                elif len(spec) == 3 and isinstance(spec[2], int):
+                    params[key] = trial.suggest_int(key, spec[0], spec[1], step=spec[2])
+                else:
+                    params[key] = trial.suggest_float(key, spec[0], spec[1])
+            else:
+                params[key] = spec
 
     # ensemble_adaptive_regime: TA profile must run BEFORE suggest (sets indicator toggles)
     if model_type == "ensemble_adaptive_regime":
