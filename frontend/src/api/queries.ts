@@ -34,6 +34,9 @@ import type {
   RacecarAutoOptimizeRequest,
   RacecarJobStatus,
   RacecarJobResults,
+  FactoryStartRequest,
+  FactoryStatusResponse,
+  FactoryResultsResponse,
 } from "./schemas";
 
 export function useHealth() {
@@ -950,6 +953,58 @@ export function useRacecarResults(jobId: string | null) {
     queryFn: async () => {
       const { data } = await apiClient.get<RacecarJobResults>(
         `/committee/auto-optimize/${jobId}/results`,
+      );
+      return data;
+    },
+    enabled: !!jobId,
+    staleTime: 30_000,
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Factory — Iterative Committee Optimizer
+// ════════════════════════════════════════════════════════════════════
+
+export function useStartFactory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: FactoryStartRequest) => {
+      const { data } = await apiClient.post<FactoryStatusResponse>(
+        "/committee/factory/start", req,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["factory"] });
+    },
+  });
+}
+
+export function useFactoryStatus(jobId: string | null) {
+  return useQuery({
+    queryKey: ["factory", "status", jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<FactoryStatusResponse>(
+        `/committee/factory/${jobId}/status`,
+      );
+      return data;
+    },
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      if (query.state.data?.phase === "completed" || query.state.data?.phase === "failed") {
+        return false;
+      }
+      return 3_000;
+    },
+  });
+}
+
+export function useFactoryResults(jobId: string | null) {
+  return useQuery({
+    queryKey: ["factory", "results", jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<FactoryResultsResponse>(
+        `/committee/factory/${jobId}/results`,
       );
       return data;
     },

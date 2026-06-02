@@ -934,3 +934,60 @@ export interface RacecarJobResults {
   backtest?: Record<string, unknown>;
   total_time_s: number;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Factory — Iterative Committee Optimizer
+// ════════════════════════════════════════════════════════════════════
+
+export interface FactoryStartRequest {
+  models: string[];
+  proposer?: string;
+  llm_backend?: string;
+  max_iterations?: number;
+  patience?: number;
+  stopping_tolerance?: number;
+  regime_sharpe_floor?: number;
+  train_months?: number;
+}
+
+export interface FactoryIterationRecord {
+  iteration: number;
+  action_type: string;
+  regime: string;
+  model_add: string;
+  model_remove: string;
+  before_sharpe: number;
+  after_sharpe: number;
+  delta_sharpe: number;
+  accepted: boolean;
+  rationale: string;
+}
+
+export interface FactoryStatusResponse {
+  job_id: string;
+  phase: string;
+  iteration: number;
+  total_iterations: number;
+  current_action: string;
+  current_regime: string;
+  before_sharpe: number;
+  after_sharpe: number;
+  delta_sharpe: number;
+  accepted: boolean;
+  best_sharpe_so_far: number;
+  stopped: boolean;
+  stop_reason: string;
+  history: FactoryIterationRecord[];
+}
+
+export interface FactoryResultsResponse {
+  job_id: string;
+  status: string;
+  best_sharpe: number;
+  total_iterations: number;
+  accepted_count: number;
+  total_time_s: number;
+  best_config?: Record<string, unknown>;
+  history: FactoryIterationRecord[];
+  stop_reason: string;
+}

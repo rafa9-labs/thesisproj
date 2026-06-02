@@ -6,7 +6,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -625,3 +624,280 @@ def _run_auto_optimize(job_dir: Path, req: RacecarAutoOptimizeRequest,
         s.error = str(e)
         _write_status(job_dir, s)
         print(f"[RACECAR] Auto-optimize {status.job_id} failed: {e}")
+
+
+# ── Factory: Iterative Committee Optimizer ──────────────────────────
+
+class FactoryStartRequest(BaseModel):
+    models: List[str] = Field(default_factory=lambda: [
+        "logistic", "random_forest", "xgboost",
+    ])
+    proposer: str = "llm"
+    llm_backend: str = "deepseek"
+    max_iterations: int = 20
+    patience: int = 5
+    stopping_tolerance: float = 0.02
+    regime_sharpe_floor: float = 0.3
+    train_months: int = 6
+
+
+class FactoryIterationRecordOut(BaseModel):
+    iteration: int
+    action_type: str = ""
+    regime: str = ""
+    model_add: str = ""
+    model_remove: str = ""
+    before_sharpe: float = 0.0
+    after_sharpe: float = 0.0
+    delta_sharpe: float = 0.0
+    accepted: bool = False
+    rationale: str = ""
+
+
+class FactoryStatusResponse(BaseModel):
+    job_id: str
+    phase: str  # "starting", "running", "completed", "failed"
+    iteration: int = 0
+    total_iterations: int = 0
+    current_action: str = ""
+    current_regime: str = ""
+    before_sharpe: float = 0.0
+    after_sharpe: float = 0.0
+    delta_sharpe: float = 0.0
+    accepted: bool = False
+    best_sharpe_so_far: float = 0.0
+    stopped: bool = False
+    stop_reason: str = ""
+    history: List[FactoryIterationRecordOut] = Field(default_factory=list)
+
+
+class FactoryResultsResponse(BaseModel):
+    job_id: str
+    status: str
+    best_sharpe: float = 0.0
+    total_iterations: int = 0
+    accepted_count: int = 0
+    total_time_s: float = 0.0
+    best_config: Optional[Dict[str, Any]] = None
+    history: List[FactoryIterationRecordOut] = Field(default_factory=list)
+    stop_reason: str = ""
+
+
+_FACTORY_DIR = Path("results/factory_jobs")
+_FACTORY_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@router.post("/factory/start", response_model=FactoryStatusResponse)
+def start_factory_job(req: FactoryStartRequest):
+    job_id = f"factory_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    job_dir = _FACTORY_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    status = FactoryStatusResponse(
+        job_id=job_id,
+        phase="starting",
+        total_iterations=req.max_iterations,
+    )
+    _write_json(job_dir / "status.json", status.model_dump())
+
+    thread = threading.Thread(
+        target=_run_factory_job,
+        args=(job_dir, job_id, req),
+        daemon=True,
+    )
+    thread.start()
+    return status
+
+
+@router.get("/factory/{job_id}/status", response_model=FactoryStatusResponse)
+def get_factory_status(job_id: str):
+    job_dir = _FACTORY_DIR / job_id
+    if not job_dir.exists():
+        raise HTTPException(404, f"Job {job_id} not found")
+    data = _read_json(job_dir / "status.json")
+    return FactoryStatusResponse(**data)
+
+
+@router.get("/factory/{job_id}/results", response_model=FactoryResultsResponse)
+def get_factory_results(job_id: str):
+    job_dir = _FACTORY_DIR / job_id
+    if not job_dir.exists():
+        raise HTTPException(404, f"Job {job_id} not found")
+    path = job_dir / "results.json"
+    if path.exists():
+        data = _read_json(path)
+        return FactoryResultsResponse(**data)
+    status_data = _read_json(job_dir / "status.json")
+    return FactoryResultsResponse(
+        job_id=job_id,
+        status=status_data.get("phase", "unknown"),
+        history=status_data.get("history", []),
+    )
+
+
+def _write_json(path: Path, data: dict):
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+
+
+def _read_json(path: Path) -> dict:
+    with open(path) as f:
+        return json.load(f)
+
+
+def _run_factory_job(job_dir: Path, job_id: str, req: FactoryStartRequest):
+    t_start = datetime.utcnow()
+    try:
+        from pipeline.factory_state import load_state_from_disk
+        from pipeline.factory_executor import FactoryExecutor
+
+        # Ensure profiler data exists — run Racecar if needed
+        matrix_path = Path("results/racecar/regime_model_matrix.json")
+        config_path = Path("results/racecar/committee_config.json")
+
+        if not matrix_path.exists() or not config_path.exists():
+            from pipeline.factory_llm import create_llm_proposer
+            _update_factory_status(job_dir, "starting", history=[],
+                                   current_action="Running Racecar first...")
+            _run_racecar_backend(req, matrix_path, config_path)
+
+        state = load_state_from_disk(
+            config_path=str(config_path),
+            matrix_path=str(matrix_path),
+            patience=req.patience,
+            tolerance=req.stopping_tolerance,
+            floor=req.regime_sharpe_floor,
+            max_iter=req.max_iterations,
+        )
+        if state is None:
+            _update_factory_status(job_dir, "failed", stopped=True,
+                                   stop_reason="Failed to load state")
+            return
+
+        proposer = None
+        if req.proposer == "llm":
+            from pipeline.factory_llm import create_llm_proposer
+            proposer = create_llm_proposer(backend=req.llm_backend)
+
+        executor = FactoryExecutor(
+            state=state,
+            proposer=proposer,
+            train_months=req.train_months,
+            test_months=1,
+        )
+
+        _update_factory_status(job_dir, "running", current_action="Starting iteration loop")
+
+        # Run loop manually to capture per-iteration status
+        executor._load_data()
+        _loop_proposer = executor.proposer
+        stop_reason = ""
+        while True:
+            should_stop, reason = state.should_stop()
+            if should_stop:
+                stop_reason = reason
+                _update_factory_status(job_dir, "completed", stopped=True,
+                                       stop_reason=reason, history=_state_to_history(state))
+                break
+
+            proposal = _loop_proposer.propose(state)
+            if proposal.type == "halt":
+                stop_reason = "No more untested moves"
+                _update_factory_status(job_dir, "completed", stopped=True,
+                                       stop_reason=stop_reason,
+                                       history=_state_to_history(state))
+                break
+
+            current_action = (f"{proposal.type} {proposal.model_add or proposal.model_remove or ''}"
+                             .strip())
+            _update_factory_status(job_dir, "running",
+                                   current_action=current_action,
+                                   current_regime=proposal.regime,
+                                   iteration=state.iteration + 1)
+
+            record, _ = executor.execute_iteration(proposal)
+            if record is None:
+                continue
+
+            _update_factory_status(job_dir, "running",
+                                   iteration=state.iteration,
+                                   current_action=f"{proposal.type} in {proposal.regime}",
+                                   before_sharpe=record.before_sharpe,
+                                   after_sharpe=record.after_sharpe,
+                                   delta_sharpe=record.after_sharpe - record.before_sharpe,
+                                   accepted=record.accepted,
+                                   best_sharpe_so_far=state.global_best_sharpe,
+                                   history=_state_to_history(state))
+
+        # Save final results
+        results = {
+            "job_id": job_id,
+            "status": "completed",
+            "best_sharpe": state.global_best_sharpe,
+            "total_iterations": state.iteration,
+            "accepted_count": sum(1 for r in state.history if r.accepted),
+            "total_time_s": (datetime.utcnow() - t_start).total_seconds(),
+            "best_config": state.global_best_config,
+            "history": [r.to_dict() for r in state.history],
+            "stop_reason": reason,
+        }
+        _write_json(job_dir / "results.json", results)
+
+    except Exception as e:
+        _update_factory_status(job_dir, "failed", stopped=True,
+                               stop_reason=str(e))
+        import traceback
+        traceback.print_exc()
+
+
+def _update_factory_status(job_dir: Path, phase: str, **kwargs):
+    data = {}
+    status_path = job_dir / "status.json"
+    if status_path.exists():
+        data = _read_json(status_path)
+    data["phase"] = phase
+    data.update(kwargs)
+    _write_json(status_path, data)
+
+
+def _state_to_history(state) -> list:
+    history = []
+    for rec in state.history[-15:]:
+        hist = {
+            "iteration": rec.iteration,
+            "action_type": rec.action.get("type", ""),
+            "regime": rec.action.get("regime", ""),
+            "model_add": rec.action.get("model_add", ""),
+            "model_remove": rec.action.get("model_remove", ""),
+            "before_sharpe": rec.before_sharpe,
+            "after_sharpe": rec.after_sharpe,
+            "delta_sharpe": rec.after_sharpe - rec.before_sharpe,
+            "accepted": rec.accepted,
+            "rationale": rec.rationale,
+        }
+        history.append(hist)
+    return history
+
+
+def _run_racecar_backend(req, matrix_path, config_path):
+    """Internal: run Racecar pipeline to generate initial profiler data."""
+    from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
+    from pipeline.committee_builder import CommitteeBuilder
+
+    csv_path = Path(f"csv_data/{req.pair}_10_years_{req.timeframe}_OANDA.csv")
+    if not csv_path.exists():
+        csv_path = Path("csv_data/EURUSD_10_years_H1_OANDA.csv")
+
+    profiler = ExpertProfiler(
+        data_config={"symbol": "EURUSD", "csv_data_path": str(csv_path)},
+        wfo_config={"n_months": req.train_months, "n_trials": 3,
+                     "hpo_mode": "static", "smoke_test": True},
+        regime_cfg=RegimeConfig(),
+    )
+    result = profiler.profile(models=req.models, n_months=req.train_months,
+                               n_trials=3, seed=42, verbose=False)
+    matrix_path.parent.mkdir(parents=True, exist_ok=True)
+    profiler.save_matrix(result, str(matrix_path))
+    builder = CommitteeBuilder(top_k=3, weight_type="sharpe_proportional")
+    config = builder.build(result.matrix, constraints={"max_models_per_regime": 3})
+    config.to_json(str(config_path))
