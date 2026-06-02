@@ -104,6 +104,18 @@ export function QuickStartTab(_props: Props) {
                       >
                         {opt.label}
                       </span>
+                      {(opt as any).isNew && (
+                        <span
+                          className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.08em]"
+                          style={{
+                            color: "#A8E063",
+                            backgroundColor: "rgba(168, 224, 99, 0.1)",
+                            border: "1px solid rgba(168, 224, 99, 0.2)",
+                          }}
+                        >
+                          NEW
+                        </span>
+                      )}
                       <span
                         className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10px] tabular-nums font-medium"
                         style={{

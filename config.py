@@ -253,6 +253,14 @@ SEARCH_SPACE = {
         "max_features": ["sqrt", 0.33, 0.5],
         # Fixed: bootstrap=True, class_weight=None, n_jobs=-1
     },
+    # -- Decision Tree --
+    "decision_tree": {
+        "max_depth": (3, 15, 1),             # (low, high, step)
+        "min_samples_leaf": (1, 20, 1),
+        "max_features": ["sqrt", "log2", None],
+        "ccp_alpha": (0.0, 0.01),
+        # Fixed: class_weight="balanced"
+    },
     # -- LSTM --
     "lstm": {
         "units": [32, 64, 128],             # categorical, not int range
@@ -264,8 +272,9 @@ SEARCH_SPACE = {
     },
     # -- CNN --
     "cnn": {
-        "filters": [32, 64, 96],            # categorical
-        "kernel_size": [3, 5],              # narrowed from [3, 5, 7]
+        "filters1": [32, 64, 96],           # conv layer 1
+        "filters2": [32, 64, 96],           # conv layer 2
+        "kernel_size": [3, 5],
         "learning_rate": (1e-4, 5e-3, True),
         # Fixed: dropout=0.3, dense_units=64, batch_size=256,
         #        use_seq_windows=False
@@ -309,10 +318,10 @@ SEARCH_SPACE = {
     },
     # -- GRU-LSTM Hybrid --
     "gru_lstm": {
-        "gru_lstm_gru_units": [32, 64, 128],
-        "gru_lstm_lstm_units": [32, 64, 128],
-        "gru_lstm_dropout_rate": (0.2, 0.5),
-        "gru_lstm_learning_rate": (1e-4, 5e-3, True),
+        "gru_units": [32, 64, 128],
+        "lstm_units": [32, 64, 128],
+        "dropout_rate": (0.2, 0.5),
+        "learning_rate": (1e-4, 5e-3, True),
         # Fixed: dense_units=64, batch_size=256
     },
     # -- Stacking Ensemble (OOF meta-learner) --
@@ -325,6 +334,33 @@ SEARCH_SPACE = {
     "meta_ensemble": {
         "meta_combination_method": ["majority", "soft", "weighted"],
         # sub-models selected by user in frontend, not tuned by HPO
+    },
+    # -- Ensemble: Adaptive Regime --
+    "ensemble_adaptive_regime": {
+        "lstm_units": [32, 64, 128],
+        "lstm_num_layers": (1, 3, 1),
+        "lstm_dropout_rate": (0.1, 0.5),
+        "lstm_learning_rate": (1e-4, 1e-2, True),
+        "rf_n_estimators": (100, 500, 100),
+        "rf_max_depth": [8, 12, 16, 20],
+        "logit_C": (1e-2, 1e2, True),
+        "logit_solver": ["lbfgs", "saga"],
+        "adx_thresh": (15, 30, 1),
+        "vol_thresh": (0.005, 0.02),
+        "adx_thresh_q": (0.5, 0.9),
+        # Fixed: adx_col, vol_col set at init; ensemble_method="hard"
+    },
+    # -- Ensemble: CNN-LSTM-XGBoost Fusion --
+    "ensemble_cnn_lstm_xgboost": {
+        "cnn_filters1": [32, 64, 96],
+        "cnn_filters2": [32, 64, 96],
+        "cnn_kernel_size": (2, 5, 1),
+        "cnn_learning_rate": (1e-4, 5e-3, True),
+        "lstm_units": [32, 64, 128],
+        "lstm_learning_rate": (1e-4, 5e-3, True),
+        "xgb_n_estimators": (200, 800, 100),
+        "xgb_learning_rate": (0.005, 0.2, True),
+        "xgb_max_depth": (3, 12, 1),
     },
 }
 
