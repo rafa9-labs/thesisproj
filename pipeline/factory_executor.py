@@ -197,6 +197,7 @@ def run_factory_from_disk(
     max_iter: int = 20,
     out_dir: str = "results/factory",
     verbose: bool = True,
+    proposer=None,
 ) -> Optional[FactoryState]:
     from pipeline.factory_state import load_state_from_disk
 
@@ -214,6 +215,7 @@ def run_factory_from_disk(
 
     executor = FactoryExecutor(
         state=state,
+        proposer=proposer,
         data_path=data_path,
         train_months=6,
         test_months=1,

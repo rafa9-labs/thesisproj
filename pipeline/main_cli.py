@@ -1385,19 +1385,33 @@ def _run_factory(
     """Run the Factory iterative committee optimizer.
 
     Activated by setting FACTORY=1. Iterates through swap/add/remove
-    proposals using the deterministic greedy proposer. Stops on
-    patience, budget, hard gate, exhaustion, or divergence.
+    proposals. Uses the LLM proposer when FACTORY_LLM_BACKEND is set,
+    otherwise falls back to deterministic greedy proposer. Stops on
+    patience, budget, hard gate, exhaustion, divergence, or confidence.
     """
     from pipeline.factory_state import load_state_from_disk
     from pipeline.factory_executor import run_factory_from_disk
+    from pipeline.factory_llm import create_llm_proposer
 
     _factory_patience = int(os.environ.get("FACTORY_PATIENCE", "5"))
     _factory_tolerance = float(os.environ.get("FACTORY_TOLERANCE", "0.02"))
     _factory_max_iter = int(os.environ.get("FACTORY_MAX_ITER", "20"))
     _factory_regime_floor = float(os.environ.get("FACTORY_REGIME_FLOOR", "0.3"))
 
+    _llm_backend = os.environ.get("FACTORY_LLM_BACKEND", "deepseek").strip().lower()
+    proposer = None
+    if _llm_backend and _llm_backend not in ("none", "deterministic"):
+        proposer = create_llm_proposer()
+        print(f"\n[FACTORY] LLM backend: {_llm_backend}")
+        if not os.environ.get("DEEPSEEK_API_KEY") and _llm_backend == "deepseek":
+            print("[FACTORY] WARNING: DEEPSEEK_API_KEY not set — LLM will fall back to deterministic")
+
     print("\n" + "=" * 72)
     print("  FACTORY — Iterative Committee Optimizer")
+    if proposer is not None:
+        print(f"  Proposer: LLM ({_llm_backend})")
+    else:
+        print("  Proposer: Deterministic greedy")
     print(f"  Patience: {_factory_patience}  |  Tolerance: {_factory_tolerance}")
     print(f"  Max iterations: {_factory_max_iter}  |  Regime floor: {_factory_regime_floor}")
     print("=" * 72)
@@ -1425,6 +1439,7 @@ def _run_factory(
         max_iter=_factory_max_iter,
         out_dir=os.path.join(run_dir, "factory"),
         verbose=True,
+        proposer=proposer,
     )
     if result:
         print(f"\n[FACTORY] Best Sharpe: {result.global_best_sharpe:.4f}")
