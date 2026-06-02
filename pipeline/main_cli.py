@@ -210,6 +210,12 @@ def main() ->  None:
     
     print(f"\n[TEST] Models for real trading simulation: {MODEL_LIST}")
 
+    # ── PROFILE MODE: run ExpertProfiler instead of normal backtest ──
+    _PROFILE = os.environ.get("PROFILE", "").strip().lower() in ("1", "true", "yes")
+    if _PROFILE:
+        _run_profile(MODEL_LIST, RUN_DIR, features_config, features_config_rep)
+        return
+
     all_reps = []  # collect combined monthly results across all repeats
     eq_by_model: dict[str, list[pd.DataFrame]] = {}  # collect per-rep equity paths
 
@@ -1088,6 +1094,92 @@ def main() ->  None:
                 )
         except Exception as _e:
             print(f"[tables] detailed per-run table skipped: {_e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Expert Profiler — Phase B integration
+# ─────────────────────────────────────────────────────────────────────────
+
+def _run_profile(
+    model_list: list,
+    run_dir: str,
+    features_config: dict,
+    features_config_rep: dict,
+) -> None:
+    """Run the ExpertProfiler across all models and print the matrix.
+
+    Activated by setting PROFILE=1 in the environment.
+    Outputs the regime x model performance matrix to results/profile/.
+    """
+    from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
+
+    _profile_n_months = int(os.environ.get("N_MONTHS", "2"))
+    _profile_trials = int(os.environ.get("PROFILE_TRIALS", "5"))
+
+    print("\n" + "=" * 72)
+    print("  EXPERT PROFILER MODE")
+    print(f"  Models: {', '.join(model_list)}")
+    print(f"  WFO months: {_profile_n_months}  |  HPO trials: {_profile_trials}")
+    print("=" * 72)
+
+    # Pull data config from features_config
+    data_config = {
+        "symbol": features_config.get("symbol", "EURUSD"),
+        "start": features_config.get("start"),
+        "end": features_config.get("end"),
+        "timeframe": features_config.get("bars_timeframe", "H1"),
+        "spread_bps": features_config.get("spread_bps", 1.5),
+        "csv_data_path": features_config.get("csv_data_path") or os.path.join("csv_data", "EURUSD_10_years_H1_OANDA.csv"),
+    }
+
+    wfo_config = {
+        "n_months": _profile_n_months,
+        "n_trials": _profile_trials,
+        "n_startup_trials": max(1, _profile_trials // 3),
+        "hpo_mode": "static",
+        "smoke_test": True,
+    }
+    # Merge features config into wfo_config
+    for k in (
+        "hpo_sampler", "hpo_two_phase", "train_months", "test_months",
+        "period_unit", "label_threshold", "lags", "lag_depth",
+    ):
+        if k in features_config:
+            wfo_config[k] = features_config[k]
+
+    profiler = ExpertProfiler(
+        data_config=data_config,
+        wfo_config=wfo_config,
+        regime_cfg=RegimeConfig(),
+    )
+
+    result = profiler.profile(
+        models=model_list,
+        n_months=_profile_n_months,
+        n_trials=_profile_trials,
+        seed=int(features_config_rep.get("run_seed", 42)),
+        verbose=True,
+    )
+
+    profiler.print_summary(result)
+
+    # Save
+    out_dir = os.path.join(run_dir, "profile")
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, "regime_model_matrix.json")
+    profiler.save_matrix(result, out_path)
+
+    # Also save top-per-regime as readable CSV
+    top = result.matrix.top_model_per_regime(top_k=3)
+    rows = []
+    for regime, models in top.items():
+        for rank, (model, score) in enumerate(models, 1):
+            rows.append({"regime": regime, "rank": rank, "model": model, "sharpe": round(score, 4)})
+    if rows:
+        top_path = os.path.join(out_dir, "top_models_per_regime.csv")
+        pd.DataFrame(rows).to_csv(top_path, index=False)
+        print(f"\n[PROFILE] Top models CSV saved to {top_path}")
+
 
 if __name__ == "__main__":
     import atexit
