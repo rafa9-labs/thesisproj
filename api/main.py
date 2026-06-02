@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 from api.config import settings
 from api.middleware import install_security_middleware
-from api.routers import backtest, config, data, health, license, live, models, news, pairs, prices, trading, ws
+from api.routers import backtest, committee, config, data, health, license, live, models, news, pairs, prices, trading, ws
 
 IS_DESKTOP = os.environ.get("FX_APP_MODE", "") == "desktop"
 
@@ -65,6 +65,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(pairs.router, prefix="/api/v1")
 app.include_router(models.router, prefix="/api/v1")
+app.include_router(committee.router, prefix="/api/v1")
 app.include_router(news.router, prefix="/api/v1")
 app.include_router(backtest.router, prefix="/api/v1")
 app.include_router(config.router, prefix="/api/v1")

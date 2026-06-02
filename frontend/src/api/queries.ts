@@ -24,6 +24,13 @@ import type {
   WsEvent,
   LlmAnalysisResponse,
   SeedDemoResponse,
+  CommitteeConfigSchema,
+  RegimeMatrixResponse,
+  RegimeLabelsResponse,
+  CommitteeBacktestRequest,
+  CommitteeBacktestSubmitResponse,
+  CommitteeBacktestResultResponse,
+  CommitteeSnapshotListResponse,
 } from "./schemas";
 
 export function useHealth() {
@@ -792,5 +799,106 @@ export function useDemoSeed() {
       const { data } = await apiClient.post<SeedDemoResponse>("/data/seed-demo", payload ?? {});
       return data;
     },
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Committee (Racecar Phases A-E)
+// ════════════════════════════════════════════════════════════════════
+
+export function useCommitteeConfig() {
+  return useQuery({
+    queryKey: ["committee", "config"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CommitteeConfigSchema>("/committee/config");
+      return data;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useSaveCommitteeConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (config: CommitteeConfigSchema) => {
+      const { data } = await apiClient.post<{ status: string }>("/committee/config", config);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["committee", "config"] });
+    },
+  });
+}
+
+export function useRegimeMatrix() {
+  return useQuery({
+    queryKey: ["committee", "regime-matrix"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<RegimeMatrixResponse>("/committee/regime-matrix");
+      return data;
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function useRegimeLabels(pair: string, timeframe: string, bars: number = 500) {
+  return useQuery({
+    queryKey: ["committee", "regime-labels", pair, timeframe, bars],
+    queryFn: async () => {
+      const { data } = await apiClient.get<RegimeLabelsResponse>(
+        `/committee/regime-labels/${pair}/${timeframe}?bars=${bars}`,
+      );
+      return data;
+    },
+    staleTime: 60_000,
+    enabled: !!pair && !!timeframe,
+  });
+}
+
+export function useSubmitCommitteeBacktest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: CommitteeBacktestRequest) => {
+      const { data } = await apiClient.post<CommitteeBacktestSubmitResponse>(
+        "/committee/backtest", req,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["committee"] });
+    },
+  });
+}
+
+export function useCommitteeBacktestResults(jobId: string | null) {
+  return useQuery({
+    queryKey: ["committee", "results", jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CommitteeBacktestResultResponse>(
+        `/committee/backtest/${jobId}/results`,
+      );
+      return data;
+    },
+    staleTime: 10_000,
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      if (query.state.data?.status === "completed" || query.state.data?.status === "failed") {
+        return false;
+      }
+      return 3_000;
+    },
+  });
+}
+
+export function useCommitteeSnapshots() {
+  return useQuery({
+    queryKey: ["committee", "snapshots"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CommitteeSnapshotListResponse>(
+        "/committee/snapshots",
+      );
+      return data;
+    },
+    staleTime: 30_000,
   });
 }

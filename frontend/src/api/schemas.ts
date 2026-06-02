@@ -806,3 +806,100 @@ export interface SeedDemoResponse {
   pairs: Record<string, SeedDemoTimeframe[]>;
   total_candles: number;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Committee (Racecar Phases A-E)
+// ════════════════════════════════════════════════════════════════════
+
+export interface RegimeAssignmentSchema {
+  models: string[];
+  weights: number[];
+}
+
+export interface CommitteeConfigSchema {
+  version: number;
+  regimes: Record<string, RegimeAssignmentSchema>;
+  fallback: RegimeAssignmentSchema;
+  constraints?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RegimeMatrixEntry {
+  regime: string;
+  model: string;
+  sharpe: number;
+  trades: number;
+  hit_rate: number;
+}
+
+export interface RegimeMatrixResponse {
+  regimes: string[];
+  models: string[];
+  entries: RegimeMatrixEntry[];
+  generated_at?: string;
+}
+
+export interface RegimeLabelPoint {
+  timestamp: string;
+  regime_id: number;
+  regime_name: string;
+}
+
+export interface RegimeLabelsResponse {
+  pair: string;
+  timeframe: string;
+  labels: RegimeLabelPoint[];
+  count: number;
+}
+
+export interface CommitteeBacktestRequest {
+  config: CommitteeConfigSchema;
+  pair?: string;
+  timeframe?: string;
+  train_months?: number;
+  test_months?: number;
+  confidence_threshold?: number;
+  seq_len?: number;
+}
+
+export interface CommitteeBacktestSubmitResponse {
+  job_id: string;
+  status: string;
+}
+
+export interface CommitteeFoldData {
+  fold_idx: number;
+  train_start: string;
+  train_end: string;
+  test_start: string;
+  test_end: string;
+  sharpe: number;
+  trades: number;
+  active_rate: number;
+  win_rate: number;
+  return_val: number;
+  drawdown: number;
+  regime_distribution?: Record<string, number>;
+}
+
+export interface CommitteeBacktestResultResponse {
+  job_id: string;
+  status: string;
+  total_folds: number;
+  avg_sharpe: number;
+  avg_trades: number;
+  models: string[];
+  warnings: string[];
+  folds: CommitteeFoldData[];
+  execution_time_s: number;
+}
+
+export interface CommitteeSnapshotInfo {
+  version: string;
+  created_at: string;
+  models: string[];
+}
+
+export interface CommitteeSnapshotListResponse {
+  snapshots: CommitteeSnapshotInfo[];
+}
