@@ -820,25 +820,45 @@ class RunMixin:
                             self._optuna_locked_keys = set()
 
                         cfg["deep_eval_mode"] = "cv_fast"
-
-                        # CV-only caps: install as defaults (won't override trial-set keys)
-                        cfg.setdefault("deep_cv_max_epochs", 8)
                         cfg.setdefault("deep_cv_batch_size", 256)
-                        cfg.setdefault("deep_cv_patience", 6)
 
-                        # Per-model early stopping defaults (don't override Optuna if set)
-                        cfg.setdefault("cnn_use_early_stopping", True)
-                        cfg.setdefault("lstm_use_early_stopping", True)
-                        cfg.setdefault("transformer_use_early_stopping", True)
-                        cfg.setdefault("gru_use_early_stopping", True)
-                        cfg.setdefault("gru_lstm_use_early_stopping", True)
-
-                        cv_pat = int(cfg.get("deep_cv_patience", 5))
-                        cfg.setdefault("cnn_patience", cv_pat)
-                        cfg.setdefault("lstm_patience", cv_pat)
-                        cfg.setdefault("transformer_patience", cv_pat)
-                        cfg.setdefault("gru_patience", cv_pat)
-                        cfg.setdefault("gru_lstm_patience", cv_pat)
+                        # Per-family CV caps — tuned to convergence speed of each arch
+                        if model_type_local == "transformer":
+                            cfg.setdefault("deep_cv_max_epochs", 6)
+                            cfg.setdefault("deep_cv_patience", 4)
+                            cfg.setdefault("transformer_use_early_stopping", True)
+                            cfg.setdefault("transformer_patience", 4)
+                        elif model_type_local in ("gru", "gru_lstm"):
+                            cfg.setdefault("deep_cv_max_epochs", 12)
+                            cfg.setdefault("deep_cv_patience", 8)
+                            cfg.setdefault("gru_use_early_stopping", True)
+                            cfg.setdefault("gru_lstm_use_early_stopping", True)
+                            cfg.setdefault(f"{model_type_local}_patience", 8)
+                        elif model_type_local == "cnn":
+                            cfg.setdefault("deep_cv_max_epochs", 10)
+                            cfg.setdefault("deep_cv_patience", 6)
+                            cfg.setdefault("cnn_use_early_stopping", True)
+                            cfg.setdefault("cnn_patience", 6)
+                        elif model_type_local == "lstm":
+                            cfg.setdefault("deep_cv_max_epochs", 10)
+                            cfg.setdefault("deep_cv_patience", 7)
+                            cfg.setdefault("lstm_use_early_stopping", True)
+                            cfg.setdefault("lstm_patience", 7)
+                        else:
+                            # ensemble / other: keep current defaults
+                            cfg.setdefault("deep_cv_max_epochs", 8)
+                            cfg.setdefault("deep_cv_patience", 6)
+                            cfg.setdefault("cnn_use_early_stopping", True)
+                            cfg.setdefault("lstm_use_early_stopping", True)
+                            cfg.setdefault("transformer_use_early_stopping", True)
+                            cfg.setdefault("gru_use_early_stopping", True)
+                            cfg.setdefault("gru_lstm_use_early_stopping", True)
+                            cv_pat = int(cfg.get("deep_cv_patience", 5))
+                            cfg.setdefault("cnn_patience", cv_pat)
+                            cfg.setdefault("lstm_patience", cv_pat)
+                            cfg.setdefault("transformer_patience", cv_pat)
+                            cfg.setdefault("gru_patience", cv_pat)
+                            cfg.setdefault("gru_lstm_patience", cv_pat)
 
                         cfg["skip_perm_importance"] = True
                         self.features_config = cfg
@@ -983,7 +1003,27 @@ class RunMixin:
                                 print(msg)
                             raise _opt.TrialPruned(msg)
 
-                    
+                        # -- (C) Early-abort hopeless Sharpe ----------------------------------
+                        # After cv_early_sharpe_folds (default 3) valid folds, if the mean
+                        # Sharpe is below the threshold (default -1.0), prune the trial.
+                        # No amount of additional folds will salvage a config this bad.
+                        _early_sharpe_folds = int(config.get("cv_early_sharpe_folds", 3))
+                        _early_sharpe_thr   = float(config.get("cv_early_sharpe_threshold", -1.0))
+                        if (_relax > 0.0 and processed >= _early_sharpe_folds
+                                and k_valid >= _early_sharpe_folds):
+                            _valid_scores = arr[_np.isfinite(arr)]
+                            if len(_valid_scores) >= _early_sharpe_folds:
+                                _mean_sharpe = float(_np.mean(_valid_scores))
+                                if _mean_sharpe < _early_sharpe_thr * _relax:
+                                    msg = (f"[MiniBlockCV:EARLY_HOPELESS] "
+                                           f"mean Sharpe={_mean_sharpe:.3f} "
+                                           f"< {_early_sharpe_thr:.0f} "
+                                           f"after {_early_sharpe_folds} folds -> prune trial")
+                                    if bool(config.get("print_cv_debug", False)):
+                                        print(msg)
+                                    raise _opt.TrialPruned(msg)
+
+
                     # --------------------------------------------
                     # Collectors BEFORE the mini-block evaluation
                     # --------------------------------------------
@@ -3798,7 +3838,14 @@ class RunMixin:
             sampler_method=str(config.get("hpo_sampler", "tpe")),
         )
 
-        if bool(config.get("hpo_two_phase", False)):
+        # Auto-enable two-phase HPO for models with 4+ tunable hyperparameters
+        _auto_two_phase = False
+        if model_type_local is not None and model_type_local != "":
+            _n_tunable = sum(1 for v in SEARCH_SPACE.get(model_type_local, {}).values()
+                             if isinstance(v, (list, tuple)))
+            _auto_two_phase = _n_tunable >= 4
+
+        if bool(config.get("hpo_two_phase", _auto_two_phase)):
             # ── TWO-PHASE HPO ──
             phase1_sampler = str(config.get("phase1_sampler", "cmaes"))
             phase1_trials  = int(config.get("phase1_trials", 30))

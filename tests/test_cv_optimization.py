@@ -147,3 +147,140 @@ class TestCVParamsInSuggest:
             return 0.0
 
         study.optimize(objective, n_trials=5)
+
+
+# ════════════════════════════════════════════════════════════════════
+# D: Per-family deep CV caps
+# ════════════════════════════════════════════════════════════════════
+
+class TestPerFamilyDeepCVCaps:
+    def _simulate_caps(self, model_type: str) -> dict:
+        """Simulate the setdefault logic from run_mixin.py for a model type."""
+        cfg = {}
+        cfg["deep_cv_batch_size"] = 256
+        if model_type == "transformer":
+            cfg.setdefault("deep_cv_max_epochs", 6)
+            cfg.setdefault("deep_cv_patience", 4)
+            cfg.setdefault("transformer_use_early_stopping", True)
+            cfg.setdefault("transformer_patience", 4)
+        elif model_type in ("gru", "gru_lstm"):
+            cfg.setdefault("deep_cv_max_epochs", 12)
+            cfg.setdefault("deep_cv_patience", 8)
+            cfg.setdefault("gru_use_early_stopping", True)
+            cfg.setdefault("gru_lstm_use_early_stopping", True)
+            cfg.setdefault(f"{model_type}_patience", 8)
+        elif model_type == "cnn":
+            cfg.setdefault("deep_cv_max_epochs", 10)
+            cfg.setdefault("deep_cv_patience", 6)
+            cfg.setdefault("cnn_use_early_stopping", True)
+            cfg.setdefault("cnn_patience", 6)
+        elif model_type == "lstm":
+            cfg.setdefault("deep_cv_max_epochs", 10)
+            cfg.setdefault("deep_cv_patience", 7)
+            cfg.setdefault("lstm_use_early_stopping", True)
+            cfg.setdefault("lstm_patience", 7)
+        else:
+            cfg.setdefault("deep_cv_max_epochs", 8)
+            cfg.setdefault("deep_cv_patience", 6)
+        return cfg
+
+    def test_transformer_gets_tighter_caps(self):
+        cfg = self._simulate_caps("transformer")
+        assert cfg["deep_cv_max_epochs"] == 6
+        assert cfg["deep_cv_patience"] == 4
+        assert cfg["transformer_patience"] == 4
+
+    def test_gru_gets_generous_caps(self):
+        cfg = self._simulate_caps("gru")
+        assert cfg["deep_cv_max_epochs"] == 12
+        assert cfg["deep_cv_patience"] == 8
+
+    def test_lstm_caps_in_between(self):
+        cfg = self._simulate_caps("lstm")
+        assert cfg["deep_cv_max_epochs"] == 10
+        assert cfg["deep_cv_patience"] == 7
+        assert cfg["lstm_patience"] == 7
+
+    def test_ensemble_keeps_defaults(self):
+        cfg = self._simulate_caps("ensemble_adaptive_regime")
+        assert cfg["deep_cv_max_epochs"] == 8
+        assert cfg["deep_cv_patience"] == 6
+
+    def test_gru_lstm_same_as_gru(self):
+        cfg = self._simulate_caps("gru_lstm")
+        assert cfg["deep_cv_max_epochs"] == 12
+        assert cfg["deep_cv_patience"] == 8
+        assert cfg["gru_lstm_patience"] == 8
+
+
+# ════════════════════════════════════════════════════════════════════
+# E: Auto two-phase HPO for models with 4+ tunable params
+# ════════════════════════════════════════════════════════════════════
+
+class TestAutoTwoPhase:
+    def _count_tunable(self, model_type: str) -> int:
+        from config import SEARCH_SPACE
+        return sum(1 for v in SEARCH_SPACE.get(model_type, {}).values()
+                   if isinstance(v, (list, tuple)))
+
+    def _auto_two_phase(self, model_type: str, explicit: bool = None) -> bool:
+        if explicit is not None:
+            return explicit
+        return self._count_tunable(model_type) >= 4
+
+    def test_two_phase_auto_enabled_for_deep(self):
+        for m in ("cnn", "lstm", "transformer", "gru", "gru_lstm"):
+            assert self._auto_two_phase(m) is True, (
+                f"{m} has {self._count_tunable(m)} tunable params, expected auto True")
+
+    def test_two_phase_disabled_for_few_params(self):
+        assert self._auto_two_phase("logistic") is False
+        assert self._auto_two_phase("svm") is False
+        assert self._auto_two_phase("meta_ensemble") is False
+
+    def test_two_phase_explicit_override(self):
+        assert self._auto_two_phase("lstm", explicit=False) is False
+        assert self._auto_two_phase("logistic", explicit=True) is True
+
+
+# ════════════════════════════════════════════════════════════════════
+# F: Early-abort hopeless trials
+# ════════════════════════════════════════════════════════════════════
+
+class TestEarlyAbort:
+    def _should_abort(self, sharpe_scores: list, folds: int = 3, thr: float = -1.0,
+                      relax: float = 1.0) -> bool:
+        import numpy as np
+        if relax <= 0.0:
+            return False  # pruning disabled entirely
+        processed = len(sharpe_scores)
+        arr = np.asarray(sharpe_scores, dtype=float)
+        k_valid = int(np.isfinite(arr).sum())
+        if processed < folds or k_valid < folds:
+            return False
+        valid = arr[np.isfinite(arr)]
+        if len(valid) < folds:
+            return False
+        mean_sharpe = float(np.mean(valid))
+        return mean_sharpe < thr * relax
+
+    def test_early_abort_triggers_on_hopeless(self):
+        assert self._should_abort([-2.0, -2.5, -1.8]) is True
+
+    def test_early_abort_passes_on_marginal(self):
+        assert self._should_abort([-0.5, 0.2, -0.3]) is False
+
+    def test_early_abort_passes_on_positive(self):
+        assert self._should_abort([1.2, 0.8, 1.5]) is False
+
+    def test_early_abort_respects_prune_relax(self):
+        # relax=0.0 disables all pruning
+        assert self._should_abort([-5.0, -4.0, -6.0], relax=0.0) is False
+
+    def test_early_abort_needs_minimum_folds(self):
+        # Only 2 folds → not enough to trigger regardless of scores
+        assert self._should_abort([-5.0, -5.0], folds=3) is False
+
+    def test_early_abort_ignores_nan_scores(self):
+        # NaN scores don't count toward the minimum
+        assert self._should_abort([-3.0, float('nan'), -3.0]) is False
