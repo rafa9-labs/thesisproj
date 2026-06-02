@@ -660,3 +660,161 @@ class TestResultDataclasses:
         assert s["models"] == ["a", "b"]
         assert s["folds"] == 5
         assert s["avg_sharpe"] == 0.42
+
+
+# ════════════════════════════════════════════════════════════════════
+# Sequence feature building (no TF dependency)
+# ════════════════════════════════════════════════════════════════════
+
+class TestSequenceFeatures:
+    def test_build_sequences_shape(self):
+        bt = CommitteeBacktester(_make_simple_committee())
+        df = _make_synthetic_ohlc(300)
+        # Add returns column (needed by _build_sequences)
+        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+        seq = bt._build_sequences(df, seq_len=30)
+        expected_rows = 300 - 30 + 1
+        assert seq.shape[0] == expected_rows
+        assert seq.shape[1] == 30
+        assert seq.shape[2] == len(CommitteeBacktester._SEQ_FEATURE_COLS)
+        assert seq.dtype == np.float32
+
+    def test_build_sequences_too_short(self):
+        bt = CommitteeBacktester(_make_simple_committee())
+        df = pd.DataFrame({
+            "mid_o": np.arange(10, dtype=np.float32),
+            "mid_h": np.arange(10, dtype=np.float32) + 0.01,
+            "mid_l": np.arange(10, dtype=np.float32) - 0.01,
+            "mid_c": np.arange(10, dtype=np.float32),
+            "returns": np.zeros(10, dtype=np.float32),
+        })
+
+        seq = bt._build_sequences(df, seq_len=30)
+        assert seq.shape[0] == 0
+        assert seq.shape[1] == 30
+
+    def test_build_sequences_missing_columns(self):
+        bt = CommitteeBacktester(_make_simple_committee())
+        df = pd.DataFrame({"arbitrary": np.arange(50, dtype=np.float32)})
+        seq = bt._build_sequences(df, seq_len=5)
+        assert seq.shape[0] == 0
+
+    def test_build_sequences_normalization(self):
+        bt = CommitteeBacktester(_make_simple_committee())
+        df = _make_synthetic_ohlc(500)
+        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+        seq = bt._build_sequences(df, seq_len=20)
+        assert seq.shape[0] > 0
+        # Normalized data should have mean ~0 (not raw prices ~1.1)
+        all_vals = seq.ravel()
+        assert abs(all_vals.mean()) < 0.5, "mean should be near zero after normalization"
+        # Range should be reasonable for z-scored data (not raw FX prices)
+        assert abs(all_vals.max() - all_vals.min()) < 100.0
+
+    def test_seq_len_configurable(self):
+        bt = CommitteeBacktester(_make_simple_committee(), seq_len=10)
+        df = _make_synthetic_ohlc(300)
+        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+        seq = bt._build_sequences(df, bt.seq_len)
+        assert seq.shape[1] == 10
+        assert seq.shape[0] == 300 - 10 + 1
+
+
+# ════════════════════════════════════════════════════════════════════
+# Deep model integration tests (TF required)
+# ════════════════════════════════════════════════════════════════════
+
+def _tf_available():
+    try:
+        import tensorflow  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+TF_REASON = "TensorFlow not available"
+
+
+class TestCommitteeDeepModelDispatch:
+    """Tests that deep models route to correct fit/predict paths."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        # Silence TF oneDNN/log spam during tests
+        import os as _os
+        _os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+        _os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+
+    def test_deep_model_types_are_class_constants(self):
+        assert "cnn" in CommitteeBacktester._DEEP_MODEL_TYPES
+        assert "lstm" in CommitteeBacktester._DEEP_MODEL_TYPES
+        assert "gru" in CommitteeBacktester._DEEP_MODEL_TYPES
+        assert "gru_lstm" in CommitteeBacktester._DEEP_MODEL_TYPES
+        assert "transformer" in CommitteeBacktester._DEEP_MODEL_TYPES
+        assert "logistic" not in CommitteeBacktester._DEEP_MODEL_TYPES
+        assert "xgboost" not in CommitteeBacktester._DEEP_MODEL_TYPES
+        assert CommitteeBacktester._ENSEMBLE_ADAPTIVE == "ensemble_adaptive_regime"
+
+    @pytest.mark.skipif(not _tf_available(), reason=TF_REASON)
+    def test_lstm_model_gets_sequence_input(self):
+        cfg = CommitteeConfig(
+            regimes={"trend_up": RegimeAssignment(models=["lstm"], weights=[1.0])},
+            fallback=RegimeAssignment(models=["lstm"], weights=[1.0]),
+        )
+        bt = CommitteeBacktester(cfg, seq_len=5, model_params={
+            "lstm": {"units": 4, "epochs": 1, "dropout": 0.0,
+                     "use_early_stopping": False},
+        })
+        df = _make_synthetic_ohlc(4000)
+        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+        result = bt.run_wfo(df, train_months=4, test_months=1)
+        assert result is not None
+        assert result.total_folds >= 1
+
+    @pytest.mark.skipif(not _tf_available(), reason=TF_REASON)
+    def test_hybrid_committee_sklearn_and_lstm(self):
+        """Committee with both sklearn and LSTM members routes correctly."""
+        cfg = CommitteeConfig(
+            regimes={
+                "trend_up": RegimeAssignment(
+                    models=["lstm", "logistic"], weights=[0.6, 0.4]),
+                "sideways": RegimeAssignment(
+                    models=["logistic"], weights=[1.0]),
+            },
+            fallback=RegimeAssignment(models=["logistic"], weights=[1.0]),
+        )
+        bt = CommitteeBacktester(cfg, seq_len=5, model_params={
+            "lstm": {"units": 4, "epochs": 1, "dropout": 0.0,
+                     "use_early_stopping": False},
+        })
+        df = _make_synthetic_ohlc(4000)
+        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+        result = bt.run_wfo(df, train_months=4, test_months=1)
+        assert result is not None
+        assert result.total_folds >= 1
+
+    @pytest.mark.skipif(not _tf_available(), reason=TF_REASON)
+    def test_ensemble_adaptive_regime_as_member(self):
+        """ensemble_adaptive_regime takes (X_seq, X_flat) for predict_proba."""
+        cfg = CommitteeConfig(
+            regimes={"trend_up": RegimeAssignment(
+                models=["ensemble_adaptive_regime"], weights=[1.0])},
+            fallback=RegimeAssignment(models=["logistic"], weights=[1.0]),
+        )
+        bt = CommitteeBacktester(cfg, seq_len=5, model_params={
+            "ensemble_adaptive_regime": {
+                "units": 4, "epochs": 1,
+                "dropout": 0.0, "use_early_stopping": False,
+            },
+        })
+        df = _make_synthetic_ohlc(4000)
+        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+        result = bt.run_wfo(df, train_months=4, test_months=1)
+        assert result is not None
+        assert result.total_folds >= 1

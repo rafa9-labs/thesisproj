@@ -88,7 +88,17 @@ class CommitteeBacktester:
         Minimum blended probability to generate a signal.
     label_threshold : float
         Return threshold for labeling (next-bar threshold).
+    model_params : Optional[Dict[str, Dict]]
+        Per-model hyperparameters from HPO tuning.
+    seq_len : int
+        Lookback window size for deep/sequence models (default 30).
     """
+
+    _DEEP_MODEL_TYPES: frozenset = frozenset({
+        "cnn", "lstm", "transformer", "gru", "gru_lstm",
+    })
+    _ENSEMBLE_ADAPTIVE = "ensemble_adaptive_regime"
+    _SEQ_FEATURE_COLS = ["mid_o", "mid_h", "mid_l", "mid_c", "returns"]
 
     def __init__(
         self,
@@ -98,6 +108,7 @@ class CommitteeBacktester:
         confidence_threshold: float = 0.6,
         label_threshold: float = 0.0001,
         model_params: Optional[Dict[str, Dict]] = None,
+        seq_len: int = 30,
     ):
         self.config = config
         self._regime_clf = regime_clf
@@ -105,9 +116,11 @@ class CommitteeBacktester:
         self.confidence_threshold = confidence_threshold
         self.label_threshold = label_threshold
         self.model_params = model_params or {}
+        self.seq_len = int(seq_len)
         self._trained_models: Dict[str, Any] = {}
         self._regime_clf: Optional[Any] = None
         self._feature_names: List[str] = []
+        self._n_seq_features: int = 0
 
     # ── Main entry point ─────────────────────────────────────────────
 
@@ -242,6 +255,30 @@ class CommitteeBacktester:
 
         return out
 
+    def _build_sequences(self, df: pd.DataFrame, seq_len: int) -> np.ndarray:
+        """Build (n - seq_len + 1, seq_len, n_features) sliding windows.
+
+        Uses OHLC + returns columns for sequence input to deep models.
+        Data is normalized per column (zero-mean, unit-variance).
+        Returns empty array (0, seq_len, 1) if not enough bars.
+        """
+        cols = [c for c in self._SEQ_FEATURE_COLS if c in df.columns]
+        if not cols:
+            return np.empty((0, seq_len, 1), dtype=np.float32)
+        data = df[cols].copy()
+        data = data.ffill().fillna(0.0).to_numpy(np.float32)
+        mean = data.mean(axis=0, keepdims=True)
+        std = data.std(axis=0, keepdims=True) + 1e-10
+        data = (data - mean) / std
+        n = data.shape[0]
+        if n < seq_len:
+            return np.empty((0, seq_len, data.shape[1]), dtype=np.float32)
+        from numpy.lib.stride_tricks import sliding_window_view
+        return sliding_window_view(data, (seq_len, 1)).reshape(
+            n - seq_len + 1, seq_len, data.shape[1])
+
+    # ── Static helpers ───────────────────────────────────────────────
+
     @staticmethod
     def _compute_simplified_adx(df: pd.DataFrame, window: int = 14) -> pd.Series:
         """Simplified ADX — directional movement based."""
@@ -264,6 +301,7 @@ class CommitteeBacktester:
 
         return adx.astype(np.float32)
 
+    @staticmethod
     @staticmethod
     def _compute_simplified_rsi(df: pd.DataFrame, window: int = 14) -> pd.Series:
         """Simplified RSI."""
@@ -366,30 +404,64 @@ class CommitteeBacktester:
         if len(X_train) < 50:
             return None
 
+        # Detect if any committee model needs sequence input
+        _needs_seq = any(
+            m in self._DEEP_MODEL_TYPES or m == self._ENSEMBLE_ADAPTIVE
+            for m in unique_models
+        )
+        X_seq_train = None
+        X_flat_train_aligned = X_train
+        y_train_aligned = y_train
+
+        if _needs_seq:
+            X_seq_full = self._build_sequences(train_slice, self.seq_len)
+            if X_seq_full.shape[0] > 0:
+                self._n_seq_features = X_seq_full.shape[2]
+                n_seq = X_seq_full.shape[0]
+                X_seq_train = X_seq_full
+                X_flat_train_aligned = X_train[-n_seq:]
+                y_train_aligned = y_train[-n_seq:]
+            else:
+                _needs_seq = False
+
         for model_type in unique_models:
             try:
                 model_params = self.model_params.get(model_type, {})
                 model = self._build_model(model_type, n_features=X_train.shape[1],
                                           params=model_params)
-                model.fit(X_train, y_train)
+
+                if _needs_seq and model_type in self._DEEP_MODEL_TYPES:
+                    model.fit(X_seq_train, y_train_aligned)
+                elif _needs_seq and model_type == self._ENSEMBLE_ADAPTIVE:
+                    model.fit(X_seq_train, X_flat_train_aligned, y_train_aligned)
+                else:
+                    model.fit(X_flat_train_aligned, y_train_aligned)
+
                 self._trained_models[model_type] = model
             except Exception:
                 self._trained_models[model_type] = None
 
         # ── 2. Prediction ──
         X_test = test_slice[feat_cols].fillna(0.0).to_numpy(np.float32)
+        X_seq_test = self._build_sequences(test_slice, self.seq_len) if _needs_seq else None
 
         # Classify regime per bar
         regime_ids = self._predict_regimes(test_slice)
 
         # Get blended predictions
-        blended_probs = self._blend_predictions(X_test, regime_ids)
+        blended_probs = self._blend_predictions(X_test, regime_ids, X_seq=X_seq_test)
         preds = self._proba_to_trade(blended_probs)
 
         # ── 3. Evaluation ──
         eval_df = test_slice[feat_cols].copy()
         eval_df["returns"] = test_slice["returns"].values
         eval_df["spread"] = test_slice.get("spread", pd.Series(0.0, index=test_slice.index)).values
+
+        # Align eval_df to preds length (seq features trim leading warmup bars)
+        if _needs_seq and X_seq_test is not None and len(preds) < len(eval_df):
+            eval_df = eval_df.iloc[-len(preds):]
+            regime_ids = regime_ids[-len(preds):]
+
         eval_df["pred"] = preds
 
         # Fill NaN predictions
@@ -539,6 +611,45 @@ class CommitteeBacktester:
                 method=method,
                 seed=42,
             )
+        elif model_type == "cnn":
+            from models.cnn import build_cnn
+            return build_cnn(
+                input_shape=(self.seq_len, max(self._n_seq_features, 5)),
+                config=dict(p),
+            )
+        elif model_type == "lstm":
+            from models.lstm import build_lstm
+            return build_lstm(
+                input_shape=(self.seq_len, max(self._n_seq_features, 5)),
+                config=dict(p),
+            )
+        elif model_type == "transformer":
+            from models.transformer import build_transformer
+            return build_transformer(
+                input_shape=(self.seq_len, max(self._n_seq_features, 5)),
+                config=dict(p),
+            )
+        elif model_type == "gru":
+            from models.gru import build_gru
+            return build_gru(
+                input_shape=(self.seq_len, max(self._n_seq_features, 5)),
+                config=dict(p),
+            )
+        elif model_type == "gru_lstm":
+            from models.gru_lstm import build_gru_lstm
+            return build_gru_lstm(
+                input_shape=(self.seq_len, max(self._n_seq_features, 5)),
+                config=dict(p),
+            )
+        elif model_type == "ensemble_adaptive_regime":
+            from models.ensemble_adaptive_regime import AdaptiveRegimeStrategy
+            return AdaptiveRegimeStrategy(
+                input_shape=(self.seq_len, max(self._n_seq_features, 5)),
+                adx_col=p.get("adx_col", "adx_14"),
+                vol_col=p.get("vol_col", "rolling_std_20"),
+                adx_thresh=float(p.get("adx_thresh", 25)),
+                vol_thresh=float(p.get("vol_thresh", 0.002)),
+            )
         else:
             return LogisticRegression(
                 C=1.0, max_iter=300, class_weight="balanced",
@@ -565,15 +676,22 @@ class CommitteeBacktester:
         self,
         X_test: np.ndarray,
         regime_ids: np.ndarray,
+        X_seq: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """Per-bar regime routing + model blending.
 
         For each bar:
           1. Look up regime → assignment in committee config
-          2. Get predict_proba from each assigned model
+          2. Get predict_proba from each assigned model (seq or flat)
           3. Weighted average of probabilities
           4. Return (n_samples, 3) blended probability matrix
         """
+        has_seq = X_seq is not None and X_seq.shape[0] > 0
+        if has_seq:
+            n_seq = X_seq.shape[0]
+            X_test = X_test[-n_seq:]
+            regime_ids = regime_ids[-n_seq:]
+
         n_samples = X_test.shape[0]
         blended = np.zeros((n_samples, 3), dtype=np.float64)
 
@@ -584,7 +702,6 @@ class CommitteeBacktester:
             if assignment is None or len(assignment.models) == 0:
                 continue
 
-            x_i = X_test[i:i + 1]
             prob_sum = np.zeros(3, dtype=np.float64)
             weight_sum = 0.0
 
@@ -593,7 +710,14 @@ class CommitteeBacktester:
                 if model is None:
                     continue
                 try:
-                    proba = model.predict_proba(x_i)
+                    if has_seq and model_name in self._DEEP_MODEL_TYPES:
+                        proba = model.predict(X_seq[i:i + 1], verbose=0)
+                    elif has_seq and model_name == self._ENSEMBLE_ADAPTIVE:
+                        proba = model.predict_proba(
+                            X_seq[i:i + 1], X_test[i:i + 1])
+                    else:
+                        proba = model.predict_proba(X_test[i:i + 1])
+
                     if proba is not None and proba.shape[1] >= 3:
                         prob_sum += weight * proba[0, :3]
                         weight_sum += weight
