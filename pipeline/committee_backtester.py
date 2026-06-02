@@ -1,0 +1,672 @@
+"""
+Committee Backtester — Phase D of the Multi-Agent Autonomous Exploration Engine.
+
+Takes a CommitteeConfig (from Phase C) and runs walk-forward evaluation with
+per-bar regime routing, model selection, and weight blending.
+
+At each bar:
+  1. RegimeClassifier determines the current market regime
+  2. CommitteeConfig maps regime → (model_list, weights)
+  3. Each assigned model produces a probability prediction
+  4. Predictions are blended via weighted average
+  5. The blended signal is converted to a trade (-1, 0, 1)
+
+Supports both synthetic data (for testing) and real OHLC data.
+"""
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+
+from pipeline.committee_builder import CommitteeConfig
+from pipeline.regime_utils import (
+    detect_regimes,
+    attach_regime_columns,
+    RegimeConfig,
+    _REGIME_NAMES,
+)
+
+
+@dataclass
+class CommitteeFoldResult:
+    """Result of a single walk-forward fold evaluation."""
+    fold_idx: int
+    train_start: Any
+    train_end: Any
+    test_start: Any
+    test_end: Any
+    sharpe: float
+    trades: int
+    active_rate: float
+    win_rate: float
+    return_val: float
+    drawdown: float
+    regime_distribution: Dict[str, float] = field(default_factory=dict)
+    per_model_active_fraction: Dict[str, float] = field(default_factory=dict)
+    num_nan_predictions: int = 0
+
+
+@dataclass
+class CommitteeBacktestResult:
+    """Aggregate backtest results for a committee config."""
+    config: CommitteeConfig
+    folds: List[CommitteeFoldResult]
+    models: List[str]
+    avg_sharpe: float = 0.0
+    avg_trades: float = 0.0
+    total_folds: int = 0
+    execution_time_s: float = 0.0
+    warnings: List[str] = field(default_factory=list)
+
+    def to_summary_dict(self) -> dict:
+        return {
+            "models": self.models,
+            "folds": self.total_folds,
+            "avg_sharpe": round(self.avg_sharpe, 4),
+            "avg_trades": round(self.avg_trades, 1),
+            "execution_time_s": round(self.execution_time_s, 1),
+            "regimes_configured": len(self.config.regimes),
+            "warnings": self.warnings,
+        }
+
+
+class CommitteeBacktester:
+    """Walk-forward backtester for model committees.
+
+    Parameters
+    ----------
+    config : CommitteeConfig
+        Per-regime model assignments with blending weights.
+    regime_cfg : RegimeConfig
+        Thresholds for 7-class regime detection.
+    confidence_threshold : float
+        Minimum blended probability to generate a signal.
+    label_threshold : float
+        Return threshold for labeling (next-bar threshold).
+    """
+
+    def __init__(
+        self,
+        config: CommitteeConfig,
+        regime_cfg: Optional[RegimeConfig] = None,
+        confidence_threshold: float = 0.6,
+        label_threshold: float = 0.0001,
+    ):
+        self.config = config
+        self.regime_cfg = regime_cfg or RegimeConfig()
+        self.confidence_threshold = confidence_threshold
+        self.label_threshold = label_threshold
+
+        self._trained_models: Dict[str, Any] = {}
+        self._regime_clf: Optional[Any] = None
+        self._feature_names: List[str] = []
+
+    # ── Main entry point ─────────────────────────────────────────────
+
+    def run_wfo(
+        self,
+        df: pd.DataFrame,
+        train_months: int = 12,
+        test_months: int = 1,
+        verbose: bool = True,
+    ) -> CommitteeBacktestResult:
+        """Run walk-forward evaluation of the committee.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            OHLC data with columns: mid_c, mid_h, mid_l, mid_o, spread.
+            Must have a datetime index.
+        train_months : int
+            Months of training data per fold.
+        test_months : int
+            Months of test data per fold.
+        verbose : bool
+            Print progress.
+
+        Returns
+        -------
+        CommitteeBacktestResult
+        """
+        t0 = time.time()
+        warnings: List[str] = []
+
+        # Compute features + regime tags on full dataframe
+        df_full = self._prepare_features(df)
+        df_full = attach_regime_columns(df_full, config=self.regime_cfg)
+
+        # Train a regime classifier on the full labeled data
+        self._regime_clf = self._train_regime_classifier(df_full)
+
+        # Generate WFO splits by month
+        splits = self._make_monthly_splits(df_full, train_months, test_months)
+
+        if verbose:
+            total_models = len(self.config.all_models())
+            print(f"\n[COMMITTEE] WFO: {len(splits)} folds, "
+                  f"{train_months}/{test_months} months, "
+                  f"{total_models} models in committee")
+
+        fold_results: List[CommitteeFoldResult] = []
+        for fold_idx, (train_slice, test_slice) in enumerate(splits):
+            try:
+                result = self._evaluate_fold(
+                    fold_idx, train_slice, test_slice
+                )
+                if result is not None:
+                    fold_results.append(result)
+                    if verbose and fold_idx % max(1, len(splits) // 4) == 0:
+                        print(f"  Fold {fold_idx}: Sharpe={result.sharpe:.3f}, "
+                              f"trades={result.trades}")
+            except Exception as e:
+                warnings.append(f"Fold {fold_idx}: {e}")
+
+        if not fold_results:
+            raise RuntimeError("All folds failed. Check data and committee config.")
+
+        sharpe_vals = [f.sharpe for f in fold_results if not np.isnan(f.sharpe)]
+        trade_vals = [f.trades for f in fold_results]
+
+        elapsed = time.time() - t0
+        return CommitteeBacktestResult(
+            config=self.config,
+            folds=fold_results,
+            models=self.config.all_models(),
+            avg_sharpe=float(np.mean(sharpe_vals)) if sharpe_vals else 0.0,
+            avg_trades=float(np.mean(trade_vals)) if trade_vals else 0.0,
+            total_folds=len(fold_results),
+            execution_time_s=elapsed,
+            warnings=warnings,
+        )
+
+    # ── Feature preparation ─────────────────────────────────────────
+
+    def _prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Compute indicator features needed for regime detection and model training."""
+        out = df.copy()
+        # Returns
+        out["returns"] = np.log(out["mid_c"] / out["mid_c"].shift(1)).astype(np.float32)
+
+        # EMA
+        out["ema_20"] = out["mid_c"].ewm(span=20, adjust=False).mean().astype(np.float32)
+
+        # SMA
+        out["sma_20"] = out["mid_c"].rolling(20).mean().astype(np.float32)
+
+        # ADX (simplified)
+        out["adx_14"] = self._compute_simplified_adx(out, window=14)
+
+        # RSI
+        out["rsi_14"] = self._compute_simplified_rsi(out, window=14)
+
+        # Bollinger Bands
+        bb_sma = out["mid_c"].rolling(20).mean()
+        bb_std = out["mid_c"].rolling(20).std()
+        out["bb_upper"] = (bb_sma + 2.0 * bb_std).astype(np.float32)
+        out["bb_lower"] = (bb_sma - 2.0 * bb_std).astype(np.float32)
+        out["bbw"] = ((out["bb_upper"] - out["bb_lower"]) / out["mid_c"]).astype(np.float32)
+        out["bb_pct"] = (
+            (out["mid_c"] - out["bb_lower"]) /
+            (out["bb_upper"] - out["bb_lower"]).replace(0, np.nan)
+        ).astype(np.float32)
+
+        # ATR
+        hl = out["mid_h"] - out["mid_l"]
+        out["atr_14"] = hl.rolling(14).mean().astype(np.float32)
+
+        # Realized Vol
+        out["rv_48"] = (out["returns"].pow(2).rolling(48).sum().pow(0.5)).astype(np.float32)
+
+        # MACD
+        ema12 = out["mid_c"].ewm(span=12, adjust=False).mean()
+        ema26 = out["mid_c"].ewm(span=26, adjust=False).mean()
+        out["macd_diff"] = (ema12 - ema26).astype(np.float32)
+
+        # Donchian
+        out["donchian_up_20"] = out["mid_h"].rolling(20).max().astype(np.float32)
+        out["donchian_dn_20"] = out["mid_l"].rolling(20).min().astype(np.float32)
+        out["donchian_break_up_20"] = (
+            (out["mid_c"] > out["donchian_up_20"].shift(1)).astype(np.int8)
+        )
+        out["donchian_break_dn_20"] = (
+            (out["mid_c"] < out["donchian_dn_20"].shift(1)).astype(np.int8)
+        )
+
+        return out
+
+    @staticmethod
+    def _compute_simplified_adx(df: pd.DataFrame, window: int = 14) -> pd.Series:
+        """Simplified ADX — directional movement based."""
+        high, low = df["mid_h"].astype(np.float64), df["mid_l"].astype(np.float64)
+        up_move = high.diff()
+        down_move = -low.diff()
+        up_move = up_move.clip(lower=0)
+        down_move = down_move.clip(lower=0)
+
+        atr = (high - low).abs().rolling(window, min_periods=1).mean()
+        atr = atr.replace(0, np.nan)
+
+        up_smooth = up_move.ewm(alpha=1.0 / window, adjust=False).mean()
+        down_smooth = down_move.ewm(alpha=1.0 / window, adjust=False).mean()
+
+        pdi = 100.0 * up_smooth / atr
+        mdi = 100.0 * down_smooth / atr
+        dx = 100.0 * (pdi - mdi).abs() / (pdi + mdi).replace(0, np.nan)
+        adx = dx.ewm(alpha=1.0 / window, adjust=False).mean()
+
+        return adx.astype(np.float32)
+
+    @staticmethod
+    def _compute_simplified_rsi(df: pd.DataFrame, window: int = 14) -> pd.Series:
+        """Simplified RSI."""
+        delta = df["mid_c"].diff().astype(np.float64)
+        gain = delta.clip(lower=0)
+        loss = (-delta).clip(lower=0)
+        avg_gain = gain.ewm(alpha=1.0 / window, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1.0 / window, adjust=False).mean()
+        rs = avg_gain / avg_loss.replace(0, np.nan)
+        rsi = 100.0 - 100.0 / (1.0 + rs)
+        return rsi.astype(np.float32)
+
+    # ── Regime classifier training ──────────────────────────────────
+
+    def _train_regime_classifier(self, df: pd.DataFrame) -> Any:
+        """Train a RandomForest regime classifier on labeled data.
+
+        Falls back gracefully if regime_7class column is not present.
+        """
+        from models.regime_classifier import RegimeClassifier
+
+        clf = RegimeClassifier(
+            n_estimators=50, max_depth=6, min_samples_leaf=30,
+            random_state=42,
+        )
+        if "regime_7class" not in df.columns:
+            return clf  # return untrained — predict_regimes falls back to rule-based
+        clf.fit(df)
+        return clf
+
+    # ── WFO split generation ────────────────────────────────────────
+
+    def _make_monthly_splits(
+        self,
+        df: pd.DataFrame,
+        train_months: int,
+        test_months: int,
+    ) -> List[Tuple[pd.DataFrame, pd.DataFrame]]:
+        """Generate (train, test) slices by shifting one month at a time."""
+        if df.empty:
+            return []
+
+        df_sorted = df.sort_index()
+        start_ts = df_sorted.index[0]
+        end_ts = df_sorted.index[-1]
+
+        splits = []
+        current = start_ts + pd.DateOffset(months=train_months)
+
+        while current + pd.DateOffset(months=test_months) <= end_ts:
+            train_end = current
+            test_end = current + pd.DateOffset(months=test_months)
+
+            train_slice = df_sorted.loc[start_ts:train_end].iloc[:-1]
+            test_slice = df_sorted.loc[train_end:test_end]
+
+            if len(train_slice) >= 50 and len(test_slice) >= 10:
+                splits.append((train_slice, test_slice))
+
+            current += pd.DateOffset(months=test_months)
+
+        return splits
+
+    # ── Single fold evaluation ──────────────────────────────────────
+
+    def _evaluate_fold(
+        self,
+        fold_idx: int,
+        train_slice: pd.DataFrame,
+        test_slice: pd.DataFrame,
+    ) -> Optional[CommitteeFoldResult]:
+        """Train committee models on train_slice, evaluate on test_slice with regime routing."""
+
+        # ── 1. Training ──
+        self._trained_models = {}
+        unique_models = self.config.all_models()
+
+        # Feature columns for training (numeric, no regime/prediction columns)
+        exclude = {
+            "regime_7class", "regime_name", "regime_id",
+            "regime_trend", "regime_sideways", "regime_volatile",
+            "time", "returns", "spread", "label",
+        }
+        feat_cols = [
+            c for c in train_slice.columns
+            if c not in exclude and np.issubdtype(train_slice[c].dtype, np.number)
+        ]
+
+        X_train = train_slice[feat_cols].copy()
+        y_train = self._make_labels(train_slice)
+
+        # Align y_train to X_train index (labels are computed on the full slice)
+        y_train = y_train.reindex(X_train.index)
+
+        # Drop rows with NaN in features or labels
+        valid = X_train.notna().all(axis=1) & y_train.notna()
+        X_train = X_train[valid].to_numpy(np.float32)
+        y_train = y_train[valid].to_numpy(np.int32)
+
+        if len(X_train) < 50:
+            return None
+
+        for model_type in unique_models:
+            try:
+                model = self._build_model(model_type, n_features=X_train.shape[1])
+                model.fit(X_train, y_train)
+                self._trained_models[model_type] = model
+            except Exception:
+                self._trained_models[model_type] = None
+
+        # ── 2. Prediction ──
+        X_test = test_slice[feat_cols].fillna(0.0).to_numpy(np.float32)
+
+        # Classify regime per bar
+        regime_ids = self._predict_regimes(test_slice)
+
+        # Get blended predictions
+        blended_probs = self._blend_predictions(X_test, regime_ids)
+        preds = self._proba_to_trade(blended_probs)
+
+        # ── 3. Evaluation ──
+        eval_df = test_slice[feat_cols].copy()
+        eval_df["returns"] = test_slice["returns"].values
+        eval_df["spread"] = test_slice.get("spread", pd.Series(0.0, index=test_slice.index)).values
+        eval_df["pred"] = preds
+
+        # Fill NaN predictions
+        nan_count = int(np.isnan(preds).sum())
+        eval_df["pred"] = eval_df["pred"].fillna(0.0)
+
+        metrics = self._compute_metrics(eval_df)
+
+        # Regime distribution
+        regime_dist = {}
+        unique_reg, counts = np.unique(regime_ids, return_counts=True)
+        for rid, cnt in zip(unique_reg, counts):
+            name = _REGIME_NAMES.get(int(rid), f"regime_{rid}")
+            regime_dist[name] = float(cnt) / float(len(regime_ids))
+
+        # Per-model active fraction
+        per_model_frac = {}
+        for rname, assignment in self.config.regimes.items():
+            per_model_frac[rname] = float(
+                regime_dist.get(rname, 0.0)
+            )
+
+        if metrics is None:
+            return None
+
+        sharpe, trades, active_rate, win_rate, ret_val, dd = metrics
+        return CommitteeFoldResult(
+            fold_idx=fold_idx,
+            train_start=train_slice.index[0],
+            train_end=train_slice.index[-1],
+            test_start=test_slice.index[0],
+            test_end=test_slice.index[-1],
+            sharpe=float(sharpe) if sharpe is not None else np.nan,
+            trades=int(trades) if trades is not None else 0,
+            active_rate=float(active_rate) if active_rate is not None else 0.0,
+            win_rate=float(win_rate) if win_rate is not None else np.nan,
+            return_val=float(ret_val) if ret_val is not None else np.nan,
+            drawdown=float(dd) if dd is not None else np.nan,
+            regime_distribution=regime_dist,
+            per_model_active_fraction=per_model_frac,
+            num_nan_predictions=nan_count,
+        )
+
+    # ── Labeling ────────────────────────────────────────────────────
+
+    def _make_labels(self, df: pd.DataFrame) -> pd.Series:
+        """Create 3-class labels from next-bar returns.
+
+        Returns NaN for the last bar (no next return available).
+        """
+        returns = df["returns"].shift(-1)
+        labels = pd.Series(1.0, index=df.index, dtype=np.float64)  # flat
+        labels[returns > self.label_threshold] = 2.0   # long
+        labels[returns < -self.label_threshold] = 0.0   # short
+        labels.iloc[-1] = np.nan  # last bar has no next return
+        return labels
+
+    # ── Model building ──────────────────────────────────────────────
+
+    def _build_model(self, model_type: str, n_features: int = 20) -> Any:
+        """Build a lightweight model for committee training.
+
+        Uses sklearn implementations directly (avoids registry dependency
+        for testing with synthetic data).
+        """
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.ensemble import RandomForestClassifier
+
+        if model_type == "logistic":
+            return LogisticRegression(
+                C=1.0, max_iter=500, class_weight="balanced",
+                random_state=42, n_jobs=1,
+            )
+        elif model_type == "svm":
+            from sklearn.svm import SVC
+            return SVC(
+                C=1.0, kernel="rbf", gamma="scale",
+                probability=True, class_weight="balanced",
+                random_state=42,
+            )
+        elif model_type in ("random_forest", "rf"):
+            return RandomForestClassifier(
+                n_estimators=50, max_depth=6, min_samples_leaf=10,
+                class_weight="balanced_subsample",
+                random_state=42, n_jobs=1,
+            )
+        elif model_type == "xgboost":
+            try:
+                from xgboost import XGBClassifier
+                return XGBClassifier(
+                    n_estimators=50, max_depth=4, learning_rate=0.1,
+                    objective="multi:softprob", num_class=3,
+                    random_state=42, n_jobs=1, verbosity=0,
+                )
+            except ImportError:
+                return RandomForestClassifier(
+                    n_estimators=50, max_depth=6, n_jobs=1,
+                    random_state=42,
+                )
+        elif model_type == "lightgbm":
+            try:
+                from lightgbm import LGBMClassifier
+                return LGBMClassifier(
+                    n_estimators=50, max_depth=5,
+                    random_state=42, n_jobs=1, verbose=-1,
+                )
+            except ImportError:
+                return RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=1)
+        elif model_type == "decision_tree":
+            from sklearn.tree import DecisionTreeClassifier
+            return DecisionTreeClassifier(
+                max_depth=6, min_samples_leaf=10,
+                class_weight="balanced", random_state=42,
+            )
+        else:
+            return LogisticRegression(
+                C=1.0, max_iter=300, class_weight="balanced",
+                random_state=42, n_jobs=1,
+            )
+
+    # ── Regime routing ──────────────────────────────────────────────
+
+    def _predict_regimes(self, df: pd.DataFrame) -> np.ndarray:
+        """Classify each bar into a 7-class regime.
+
+        Uses the trained RegimeClassifier if available, falls back to
+        rule-based detection.
+        """
+        if self._regime_clf is not None and self._regime_clf.is_fitted:
+            try:
+                return self._regime_clf.predict(df)
+            except Exception:
+                pass
+
+        return detect_regimes(df, config=self.regime_cfg)
+
+    def _blend_predictions(
+        self,
+        X_test: np.ndarray,
+        regime_ids: np.ndarray,
+    ) -> np.ndarray:
+        """Per-bar regime routing + model blending.
+
+        For each bar:
+          1. Look up regime → assignment in committee config
+          2. Get predict_proba from each assigned model
+          3. Weighted average of probabilities
+          4. Return (n_samples, 3) blended probability matrix
+        """
+        n_samples = X_test.shape[0]
+        blended = np.zeros((n_samples, 3), dtype=np.float64)
+
+        for i in range(n_samples):
+            regime_name = _REGIME_NAMES.get(int(regime_ids[i]), "sideways")
+            assignment = self.config.regime_models(regime_name)
+
+            if assignment is None or len(assignment.models) == 0:
+                continue
+
+            x_i = X_test[i:i + 1]
+            prob_sum = np.zeros(3, dtype=np.float64)
+            weight_sum = 0.0
+
+            for model_name, weight in zip(assignment.models, assignment.weights):
+                model = self._trained_models.get(model_name)
+                if model is None:
+                    continue
+                try:
+                    proba = model.predict_proba(x_i)
+                    if proba is not None and proba.shape[1] >= 3:
+                        prob_sum += weight * proba[0, :3]
+                        weight_sum += weight
+                except Exception:
+                    continue
+
+            if weight_sum > 0:
+                blended[i] = prob_sum / weight_sum
+
+        return blended
+
+    def _proba_to_trade(self, proba: np.ndarray) -> np.ndarray:
+        """Convert 3-class probabilities to trade signals (-1, 0, 1).
+
+        Trade when max probability exceeds confidence threshold.
+        """
+        n = proba.shape[0]
+        trades = np.zeros(n, dtype=np.float64)
+
+        for i in range(n):
+            p = proba[i]
+            # p[0] = short, p[1] = flat, p[2] = long
+            max_class = np.argmax(p)
+            if p[max_class] >= self.confidence_threshold:
+                if max_class == 2:
+                    trades[i] = 1.0   # long
+                elif max_class == 0:
+                    trades[i] = -1.0  # short
+                # class 1 (flat) → 0.0
+
+        return trades
+
+    # ── Metrics computation ─────────────────────────────────────────
+
+    def _compute_metrics(self, df: pd.DataFrame) -> Optional[Tuple]:
+        """Compute Sharpe, trades, active_rate, win_rate, return, drawdown."""
+        if "returns" not in df.columns or "pred" not in df.columns:
+            return None
+
+        rets = df["returns"].values.astype(float)
+        preds = df["pred"].values.astype(float)
+
+        # Apply 1-bar execution delay
+        preds_shifted = np.roll(preds, 1)
+        preds_shifted[0] = 0.0
+
+        strategy_returns = rets * preds_shifted
+
+        # Filters: non-zero preds and finite returns
+        mask = (preds_shifted != 0) & np.isfinite(strategy_returns)
+        active_returns = strategy_returns[mask]
+
+        n_bars = len(df)
+        n_trades = int(mask.sum())
+        active_rate = n_trades / max(1, n_bars)
+
+        if n_trades < 2 or len(active_returns) < 2:
+            return (0.0, n_trades, active_rate, np.nan, np.nan, 0.0)
+
+        mean_ret = np.mean(active_returns)
+        std_ret = np.std(active_returns, ddof=1)
+
+        # Annualized Sharpe (assuming H1 bars ≈ 252*24 = 6048 per year)
+        annual_factor = np.sqrt(6048.0)
+        sharpe = (mean_ret / std_ret) * annual_factor if std_ret > 0 else 0.0
+
+        win_rate = float((active_returns > 0).mean())
+
+        # Cumulative return
+        cum_ret = float(np.prod(1.0 + strategy_returns) - 1.0)
+
+        # Max drawdown
+        equity = np.cumprod(1.0 + strategy_returns)
+        peak = np.maximum.accumulate(equity)
+        drawdown = float(np.max((peak - equity) / peak)) if len(equity) > 0 else 0.0
+
+        return (sharpe, n_trades, active_rate, win_rate, cum_ret, drawdown)
+
+    # ── Summary ─────────────────────────────────────────────────────
+
+    def print_summary(self, result: CommitteeBacktestResult):
+        """Print human-readable backtest summary."""
+        print("\n" + "=" * 72)
+        print("  COMMITTEE BACKTESTER — Walk-Forward Validation")
+        print("=" * 72)
+        print(f"\n  Models: {', '.join(result.models)}")
+        print(f"  Folds: {result.total_folds}")
+        print(f"  Avg Sharpe: {result.avg_sharpe:.3f}")
+        print(f"  Avg Trades: {result.avg_trades:.0f}")
+        print(f"  Time: {result.execution_time_s:.0f}s")
+
+        if result.warnings:
+            print(f"\n  Warnings ({len(result.warnings)}):")
+            for w in result.warnings[:5]:
+                print(f"    - {w}")
+
+        print("\n  ── Per-Fold ──")
+        for f in result.folds:
+            print(f"    Fold {f.fold_idx:2d}: SR={f.sharpe:+.3f}  trades={f.trades:3d}  "
+                  f"active={f.active_rate:.3f}  wr={f.win_rate:.2%}")
+
+        if result.folds:
+            regimes_used = set()
+            for f in result.folds:
+                regimes_used.update(f.regime_distribution.keys())
+            print(f"\n  Regimes seen: {sorted(regimes_used)}")
+            # Show top 2 folds by Sharpe
+            sorted_folds = sorted(result.folds, key=lambda f: f.sharpe, reverse=True)
+            for best in sorted_folds[:2]:
+                top_r = sorted(
+                    best.regime_distribution.items(),
+                    key=lambda x: x[1], reverse=True
+                )[:3]
+                regime_str = " ".join(f"{r}={f:.0%}" for r, f in top_r)
+                print(f"    Best fold #{best.fold_idx}: {regime_str}")
+
+        print("\n" + "=" * 72)
