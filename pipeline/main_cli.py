@@ -228,6 +228,12 @@ def main() ->  None:
         _run_racecar(MODEL_LIST, RUN_DIR, features_config, features_config_rep)
         return
 
+    # ── FACTORY MODE: run iterative committee optimization ──
+    _FACTORY = os.environ.get("FACTORY", "").strip().lower() in ("1", "true", "yes")
+    if _FACTORY:
+        _run_factory(MODEL_LIST, RUN_DIR, features_config, features_config_rep)
+        return
+
     all_reps = []  # collect combined monthly results across all repeats
     eq_by_model: dict[str, list[pd.DataFrame]] = {}  # collect per-rep equity paths
 
@@ -1368,6 +1374,61 @@ def _run_racecar(
             "backtest_summary": bt_result.to_summary_dict(),
         }, f, indent=2, default=str)
     print(f"[RACECAR] Results saved to {out_dir}")
+
+
+def _run_factory(
+    model_list: list,
+    run_dir: str,
+    features_config: dict,
+    features_config_rep: dict,
+) -> None:
+    """Run the Factory iterative committee optimizer.
+
+    Activated by setting FACTORY=1. Iterates through swap/add/remove
+    proposals using the deterministic greedy proposer. Stops on
+    patience, budget, hard gate, exhaustion, or divergence.
+    """
+    from pipeline.factory_state import load_state_from_disk
+    from pipeline.factory_executor import run_factory_from_disk
+
+    _factory_patience = int(os.environ.get("FACTORY_PATIENCE", "5"))
+    _factory_tolerance = float(os.environ.get("FACTORY_TOLERANCE", "0.02"))
+    _factory_max_iter = int(os.environ.get("FACTORY_MAX_ITER", "20"))
+    _factory_regime_floor = float(os.environ.get("FACTORY_REGIME_FLOOR", "0.3"))
+
+    print("\n" + "=" * 72)
+    print("  FACTORY — Iterative Committee Optimizer")
+    print(f"  Patience: {_factory_patience}  |  Tolerance: {_factory_tolerance}")
+    print(f"  Max iterations: {_factory_max_iter}  |  Regime floor: {_factory_regime_floor}")
+    print("=" * 72)
+
+    # First, ensure we have a profiler matrix and initial config
+    matrix_path = os.path.join(run_dir, "racecar", "regime_model_matrix.json")
+    config_path = os.path.join(run_dir, "racecar", "committee_config.json")
+
+    if not os.path.exists(matrix_path) or not os.path.exists(config_path):
+        print("[FACTORY] No prior Racecar output found — running Racecar first...")
+        _run_racecar(model_list, run_dir, features_config, features_config_rep)
+        matrix_path = os.path.join(run_dir, "racecar", "regime_model_matrix.json")
+        config_path = os.path.join(run_dir, "racecar", "committee_config.json")
+
+    csv_path = features_config.get("csv_data_path") or os.path.join(
+        "csv_data", "EURUSD_10_years_H1_OANDA.csv")
+
+    result = run_factory_from_disk(
+        config_path=config_path,
+        matrix_path=matrix_path,
+        data_path=csv_path,
+        patience=_factory_patience,
+        tolerance=_factory_tolerance,
+        regime_floor=_factory_regime_floor,
+        max_iter=_factory_max_iter,
+        out_dir=os.path.join(run_dir, "factory"),
+        verbose=True,
+    )
+    if result:
+        print(f"\n[FACTORY] Best Sharpe: {result.global_best_sharpe:.4f}")
+        print(f"[FACTORY] Iterations: {result.iteration}")
 
 
 if __name__ == "__main__":
