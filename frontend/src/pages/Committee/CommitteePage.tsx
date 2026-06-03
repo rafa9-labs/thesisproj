@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { TabBar } from "@/components/shared/TabBar";
+import { FullCycleTab } from "./FullCycleTab";
 import { FactoryTab } from "./FactoryTab";
 import { RacecarTab } from "./RacecarTab";
 import { RegimeHeatmap } from "./RegimeHeatmap";
@@ -8,6 +9,7 @@ import { CommitteeResultsTab } from "./CommitteeResultsTab";
 import { LiveCommitteePanel } from "./LiveCommitteePanel";
 
 const TABS = [
+  { key: "fullcycle", label: "Full Cycle" },
   { key: "factory", label: "Factory" },
   { key: "racecar", label: "Racecar" },
   { key: "regime", label: "Regime Heatmap" },
@@ -17,7 +19,7 @@ const TABS = [
 ];
 
 export function CommitteePage() {
-  const [activeTab, setActiveTab] = useState("factory");
+  const [activeTab, setActiveTab] = useState("fullcycle");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
@@ -50,6 +52,7 @@ export function CommitteePage() {
         }}
       >
         <div style={{ height: 24 }} />
+        {activeTab === "fullcycle" && <FullCycleTab />}
         {activeTab === "factory" && <FactoryTab />}
         {activeTab === "racecar" && <RacecarTab />}
         {activeTab === "regime" && <RegimeHeatmap />}

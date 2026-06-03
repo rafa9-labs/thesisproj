@@ -3,11 +3,8 @@ import {
   useStartFactory,
   useFactoryStatus,
   useFactoryResults,
-  useStartFullCycle,
-  useFullCycleStatus,
-  useFullCycleResults,
 } from "@/api/queries";
-import type { FactoryIterationRecord, FactoryStartRequest, FullCycleRequest } from "@/api/schemas";
+import type { FactoryIterationRecord, FactoryStartRequest } from "@/api/schemas";
 
 const DEFAULT_MODELS = [
   "logistic", "random_forest", "xgboost", "lightgbm", "decision_tree",
@@ -28,15 +25,6 @@ function formatStopReason(raw: string): string {
   return raw || "Optimization stopped";
 }
 
-const PHASE_LABELS_FC: Record<string, string> = {
-  profiling: "Profiling models across regimes",
-  building: "Building committee config",
-  backtesting: "Backtesting committee",
-  optimizing: "Optimizing with Factory loop",
-  completed: "Full cycle complete",
-  failed: "Full cycle failed",
-};
-
 export function FactoryTab() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [models, setModels] = useState<string[]>(DEFAULT_MODELS);
@@ -46,60 +34,25 @@ export function FactoryTab() {
   const [patience, setPatience] = useState(5);
   const [tolerance, setTolerance] = useState(0.02);
   const [configOpen, setConfigOpen] = useState(false);
-  const [isFullCycle, setIsFullCycle] = useState(false);
 
-  // Factory-only hooks
   const startMutation = useStartFactory();
-  const { data: status, isFetching: statusPolling } = useFactoryStatus(
-    !isFullCycle ? jobId : null,
-  );
+  const { data: status, isFetching: statusPolling } = useFactoryStatus(jobId);
   const { data: results } = useFactoryResults(
-    !isFullCycle && (status?.phase === "completed" || status?.phase === "failed") ? jobId : null,
+    status?.phase === "completed" || status?.phase === "failed" ? jobId : null,
   );
 
-  // Full-cycle hooks
-  const startFcMutation = useStartFullCycle();
-  const { data: fcStatus } = useFullCycleStatus(isFullCycle ? jobId : null);
-  const { data: fcResults } = useFullCycleResults(
-    isFullCycle && (fcStatus?.phase === "completed" || fcStatus?.phase === "failed") ? jobId : null,
-  );
-
-  // Active status/results depending on mode
-  const activeStatus = isFullCycle ? fcStatus : status;
-  const activeResults = isFullCycle ? fcResults : results;
-  const activePending = isFullCycle ? startFcMutation.isPending : startMutation.isPending;
-  const isRunning = activeStatus && activeStatus.phase !== "completed" && activeStatus.phase !== "failed";
-  const phaseTitle = isFullCycle
-    ? (PHASE_LABELS_FC[activeStatus?.phase ?? ""] ?? activeStatus?.phase ?? "")
-    : (activeStatus?.phase === "completed" ? "Optimization Complete"
-       : activeStatus?.phase === "failed" ? "Failed"
-       : `Iteration ${activeStatus?.iteration ?? 0}/${activeStatus?.total_iterations ?? 0}`);
+  const isRunning = status && status.phase !== "completed" && status.phase !== "failed";
 
   function handleStart() {
-    if (isFullCycle) {
-      const req: FullCycleRequest = {
-        models,
-        proposer,
-        llm_backend: llmBackend,
-        max_iterations: maxIter,
-        patience,
-        stopping_tolerance: tolerance,
-        profile_trials: 5,
-        committee_top_k: 3,
-        train_months: 6,
-      };
-      startFcMutation.mutate(req, { onSuccess: (data) => setJobId(data.job_id) });
-    } else {
-      const req: FactoryStartRequest = {
-        models,
-        proposer,
-        llm_backend: llmBackend,
-        max_iterations: maxIter,
-        patience,
-        stopping_tolerance: tolerance,
-      };
-      startMutation.mutate(req, { onSuccess: (data) => setJobId(data.job_id) });
-    }
+    const req: FactoryStartRequest = {
+      models,
+      proposer,
+      llm_backend: llmBackend,
+      max_iterations: maxIter,
+      patience,
+      stopping_tolerance: tolerance,
+    };
+    startMutation.mutate(req, { onSuccess: (data) => setJobId(data.job_id) });
   }
 
   function handleReset() {
@@ -329,51 +282,16 @@ export function FactoryTab() {
                       min={0.005} max={0.1} step={0.005}
                       style={{ width: 50, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }}
                     />
-              </label>
-                  </div>
-                </div>
-                {/* Full Cycle toggle */}
-                <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                  <label style={{ position: "relative", display: "inline-block", width: 32, height: 18, cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={isFullCycle}
-                      onChange={(e) => setIsFullCycle(e.target.checked)}
-                      style={{ opacity: 0, width: 0, height: 0 }}
-                    />
-                    <span style={{
-                      position: "absolute", inset: 0, borderRadius: 9,
-                      background: isFullCycle ? "var(--color-brand)" : "var(--color-elevated)",
-                      transition: "0.2s",
-                      border: "1px solid var(--color-glass-border)",
-                    }}>
-                      <span style={{
-                        position: "absolute", top: 2, left: isFullCycle ? 16 : 2,
-                        width: 12, height: 12, borderRadius: "50%",
-                        background: "white", transition: "0.2s",
-                      }} />
-                    </span>
                   </label>
-                  <span style={{ fontSize: 10, color: "var(--color-text-muted)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                    Full Cycle
-                  </span>
-                  {isFullCycle && (
-                    <span style={{ fontSize: 9, color: "var(--color-accent-warning)" }}>
-                      (Racecar → Factory — takes longer)
-                    </span>
-                  )}
                 </div>
               </div>
-            </>
-          )}
-        </div>
             )}
           </>
         )}
       </div>
 
       {/* ── Progress Panel ── */}
-      {(isRunning || activeStatus?.phase === "completed" || activeStatus?.phase === "failed") && (
+      {(isRunning || status?.phase === "completed" || status?.phase === "failed") && (
         <div
           style={{
             background: "var(--color-surface)",
@@ -393,7 +311,7 @@ export function FactoryTab() {
                 color: "var(--color-text-primary)",
               }}
             >
-              {phaseTitle}
+              {status.phase === "completed" ? "Optimization Complete" : status.phase === "failed" ? "Failed" : `Iteration ${status.iteration}/${status.total_iterations}`}
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {isRunning && (
@@ -404,7 +322,7 @@ export function FactoryTab() {
                   </span>
                 </>
               )}
-              {activeStatus?.phase === "completed" && (
+              {status.phase === "completed" && (
                 <span style={{ fontSize: 10, color: "var(--color-accent-success)", fontWeight: 500, letterSpacing: "0.06em" }}>
                   Done
                 </span>
@@ -412,45 +330,14 @@ export function FactoryTab() {
             </div>
           </div>
 
-          {/* Phase progress bar (full cycle) */}
-          {isFullCycle && isRunning && (
-            <div style={{ marginBottom: 16, display: "flex", gap: 4 }}>
-              {["profiling", "building", "backtesting", "optimizing"].map((phase) => {
-                const current = activeStatus?.phase ?? "";
-                const idx = ["profiling", "building", "backtesting", "optimizing"].indexOf(phase);
-                const curIdx = ["profiling", "building", "backtesting", "optimizing"].indexOf(current);
-                const isActive = phase === current;
-                const isDone = idx < curIdx;
-                return (
-                  <div key={phase} style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-                    <div style={{
-                      height: 4, borderRadius: 2,
-                      background: isDone ? "var(--color-accent-success)"
-                        : isActive ? "var(--color-brand)"
-                        : "var(--color-elevated)",
-                      transition: "background 0.3s ease",
-                    }} />
-                    <span style={{
-                      fontSize: 8, fontWeight: 500, letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      color: isDone || isActive ? "var(--color-text-primary)" : "var(--color-text-dim)",
-                    }}>
-                      {phase === "optimizing" ? "Factory" : phase.charAt(0).toUpperCase() + phase.slice(1, 3)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Progress bar (factory-only) */}
-          {!isFullCycle && isRunning && (
+          {/* Progress bar */}
+          {isRunning && (
             <div style={{ marginBottom: 16 }}>
               <div style={{ height: 4, borderRadius: 2, background: "var(--color-elevated)", overflow: "hidden" }}>
                 <div
                   style={{
                     height: "100%",
-                    width: `${((activeStatus?.iteration ?? 0) / Math.max(1, activeStatus?.total_iterations ?? 1)) * 100}%`,
+                    width: `${(status.iteration / Math.max(1, status.total_iterations)) * 100}%`,
                     background: "var(--color-brand)",
                     borderRadius: 2,
                     transition: "width 0.5s ease",
@@ -461,7 +348,7 @@ export function FactoryTab() {
           )}
 
           {/* Current action */}
-          {(isRunning || activeStatus?.current_action) && (
+          {(isRunning || status.current_action) && (
             <div
               style={{
                 padding: 14,
@@ -474,8 +361,8 @@ export function FactoryTab() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <span
                   style={{
-                    background: activeStatus?.accepted ? "rgba(8,153,129,0.15)" : "rgba(242,54,69,0.15)",
-                    color: activeStatus?.accepted ? "var(--color-accent-success)" : "var(--color-accent-danger)",
+                    background: status.accepted ? "rgba(8,153,129,0.15)" : "rgba(242,54,69,0.15)",
+                    color: status.accepted ? "var(--color-accent-success)" : "var(--color-accent-danger)",
                     borderRadius: 3,
                     padding: "2px 8px",
                     fontSize: 10,
@@ -484,80 +371,56 @@ export function FactoryTab() {
                     fontFamily: "var(--font-mono)",
                   }}
                 >
-                  {activeStatus?.current_action || (isFullCycle ? "Running Racecar..." : "Starting...")}
+                  {status.current_action || "Starting..."}
                 </span>
-                {activeStatus?.current_regime && (
+                {status.current_regime && (
                   <span style={{ fontSize: 10, color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-                    in {activeStatus.current_regime.replace(/_/g, " ")}
+                    in {status.current_regime.replace(/_/g, " ")}
                   </span>
                 )}
-                {isRunning && !isFullCycle && activeStatus?.iteration > 0 && (
-                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: activeStatus?.accepted ? "var(--color-accent-success)" : "var(--color-accent-danger)", marginLeft: "auto" }}>
-                    {activeStatus?.accepted ? "ACCEPTED" : "REJECTED"}
+                {isRunning && status.iteration > 0 && (
+                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: status.accepted ? "var(--color-accent-success)" : "var(--color-accent-danger)", marginLeft: "auto" }}>
+                    {status.accepted ? "ACCEPTED" : "REJECTED"}
                   </span>
                 )}
               </div>
-              {!isFullCycle && activeStatus?.iteration > 0 && (
+              {status.iteration > 0 && (
                 <div style={{ display: "flex", gap: 24, marginTop: 8 }}>
-                  <MetricInline label="Before" value={(activeStatus?.before_sharpe ?? 0).toFixed(4)} />
-                  <MetricInline label="After" value={(activeStatus?.after_sharpe ?? 0).toFixed(4)} />
+                  <MetricInline label="Before" value={status.before_sharpe.toFixed(4)} />
+                  <MetricInline label="After" value={status.after_sharpe.toFixed(4)} />
                   <MetricInline
                     label="Delta"
-                    value={`${(activeStatus?.delta_sharpe ?? 0) >= 0 ? "+" : ""}${(activeStatus?.delta_sharpe ?? 0).toFixed(4)}`}
-                    color={(activeStatus?.delta_sharpe ?? 0) >= 0 ? "#089981" : "#F23645"}
+                    value={`${status.delta_sharpe >= 0 ? "+" : ""}${status.delta_sharpe.toFixed(4)}`}
+                    color={status.delta_sharpe >= 0 ? "#089981" : "#F23645"}
                   />
-                  <MetricInline label="Best" value={(activeStatus?.best_sharpe_so_far ?? 0).toFixed(4)} color="var(--color-brand" />
-                </div>
-              )}
-              {isFullCycle && activeStatus?.best_sharpe_so_far !== undefined && (
-                <div style={{ display: "flex", gap: 24, marginTop: 8 }}>
-                  <MetricInline label="Best Sharpe" value={(activeStatus?.best_sharpe_so_far ?? 0).toFixed(4)} color="var(--color-brand" />
+                  <MetricInline label="Best" value={status.best_sharpe_so_far.toFixed(4)} color="var(--color-brand" />
                 </div>
               )}
             </div>
           )}
 
-          {/* Job ID display for full cycle */}
-          {isFullCycle && (
-            <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--color-text-dim)", marginBottom: 8 }}>
-              Job: {activeStatus?.job_id}
-            </div>
-          )}
-
-          {/* Factory iteration history */}
-          {!isFullCycle && activeStatus?.history?.length > 0 && (
-            <IterationLog history={activeStatus.history} />
+          {/* Iteration history */}
+          {status.history.length > 0 && (
+            <IterationLog history={status.history} />
           )}
 
           {/* Stopped reason */}
-          {!isFullCycle && activeStatus?.stopped && activeStatus?.stop_reason && (
+          {status.stopped && status.stop_reason && (
             <div style={{ marginTop: 12, padding: 10, background: "rgba(0,229,255,0.05)", border: "1px solid rgba(0,229,255,0.15)", borderRadius: 4, fontSize: 11, color: "var(--color-brand", letterSpacing: "0.04em" }}>
-              Stopped — {formatStopReason(activeStatus.stop_reason)}
+              Stopped — {formatStopReason(status.stop_reason)}
             </div>
           )}
 
-          {activeStatus?.phase === "failed" && (
+          {status.phase === "failed" && (
             <div style={{ marginTop: 12, padding: 12, background: "rgba(242,54,69,0.08)", border: "1px solid rgba(242,54,69,0.2)", borderRadius: 4, fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--color-accent-danger" }}>
-              {activeStatus?.error || activeStatus?.stop_reason || "Unknown error"}
+              {status.stop_reason || "Unknown error"}
             </div>
           )}
         </div>
       )}
 
-      {/* ── Results Panel (Factory-only) ── */}
-      {!isFullCycle && results && status?.phase === "completed" && (
-        <FactoryResultsSection
-          bestSharpe={results.best_sharpe}
-          totalIterations={results.total_iterations}
-          acceptedCount={results.accepted_count}
-          totalTime={results.total_time_s}
-          bestConfig={results.best_config}
-          onReset={handleReset}
-        />
-      )}
-
-      {/* ── Results Panel (Full Cycle) ── */}
-      {isFullCycle && fcResults && fcStatus?.phase === "completed" && (
+      {/* ── Results Panel ── */}
+      {results && status?.phase === "completed" && (
         <div
           style={{
             background: "var(--color-surface)",
@@ -567,46 +430,27 @@ export function FactoryTab() {
           }}
         >
           <h3 style={{ fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-primary)", margin: "0 0 16px" }}>
-            Full Cycle Complete
+            Results
             <span style={{ fontSize: 10, color: "var(--color-text-muted)", marginLeft: 8, fontWeight: 400 }}>
-              {Number(fcResults.total_time_s).toFixed(0)}s
+              {Number(results.total_time_s).toFixed(0)}s
             </span>
           </h3>
 
-          {/* Racecar backtest summary */}
-          {fcResults.racecar_backtest && (
-            <div style={{ marginBottom: 20 }}>
-              <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
-                Racecar Backtest
-              </span>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10, marginTop: 8 }}>
-                <MetricBlock label="Avg Sharpe" value={Number((fcResults.racecar_backtest as Record<string, unknown>).avg_sharpe ?? 0).toFixed(3)} color={(Number((fcResults.racecar_backtest as Record<string, unknown>).avg_sharpe ?? 0)) >= 0 ? "#089981" : "#F23645"} />
-                <MetricBlock label="Avg Trades" value={String((fcResults.racecar_backtest as Record<string, unknown>).avg_trades ?? 0)} color="var(--color-text-secondary)" />
-                <MetricBlock label="Folds" value={String((fcResults.racecar_backtest as Record<string, unknown>).total_folds ?? 0)} color="var(--color-text-secondary)" />
-              </div>
-            </div>
-          )}
-
-          {/* Factory results */}
-          <div style={{ marginBottom: 20 }}>
-            <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
-              Factory Optimization
-            </span>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10, marginTop: 8 }}>
-              <MetricBlock label="Best Sharpe" value={Number(fcResults.factory_best_sharpe).toFixed(4)} color="#089981" />
-              <MetricBlock label="Iterations" value={String(fcResults.factory_total_iterations)} color="var(--color-text-secondary)" />
-              <MetricBlock label="Accepted" value={String(fcResults.factory_accepted_count)} color="var(--color-text-secondary)" />
-            </div>
+          {/* Summary cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10, marginBottom: 20 }}>
+            <MetricBlock label="Best Sharpe" value={Number(results.best_sharpe).toFixed(4)} color="#089981" />
+            <MetricBlock label="Iterations" value={String(results.total_iterations)} color="var(--color-text-secondary)" />
+            <MetricBlock label="Accepted" value={String(results.accepted_count)} color="var(--color-text-secondary)" />
           </div>
 
-          {/* Factory best config */}
-          {fcResults.factory_best_config && (
+          {/* Best config */}
+          {results.best_config && (
             <div style={{ marginBottom: 16 }}>
               <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
-                Best Committee Config (after Factory)
+                Best Committee Config
               </span>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
-                {Object.entries((fcResults.factory_best_config as Record<string, Record<string, unknown>>).regimes as Record<string, Record<string, unknown>> ?? {}).map(([regime, a]) => (
+                {Object.entries(results.best_config.regimes as Record<string, Record<string, unknown>> ?? {}).map(([regime, a]) => (
                   <div key={regime} style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 11 }}>
                     <span style={{ width: 120, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-brand", flexShrink: 0 }}>
                       {regime.replace(/_/g, " ")}
@@ -624,86 +468,11 @@ export function FactoryTab() {
             </div>
           )}
 
-          {/* Factory iteration history */}
-          {fcResults.factory_history?.length > 0 && (
-            <IterationLog history={fcResults.factory_history.map((r) => ({
-              iteration: r.iteration,
-              action_type: r.action_type ?? r.action?.type ?? "",
-              regime: r.regime ?? r.action?.regime ?? "",
-              model_add: r.model_add ?? r.action?.model_add ?? "",
-              model_remove: r.model_remove ?? r.action?.model_remove ?? "",
-              before_sharpe: r.before_sharpe ?? 0,
-              after_sharpe: r.after_sharpe ?? 0,
-              delta_sharpe: r.delta_sharpe ?? 0,
-              accepted: r.accepted ?? false,
-              rationale: r.rationale ?? "",
-            }))} />
-          )}
-
-          {/* Stop reason */}
-          {fcResults.factory_stop_reason && (
-            <div style={{ marginTop: 12, padding: 10, background: "rgba(0,229,255,0.05)", border: "1px solid rgba(0,229,255,0.15)", borderRadius: 4, fontSize: 11, color: "var(--color-brand", letterSpacing: "0.04em" }}>
-              Stopped — {formatStopReason(fcResults.factory_stop_reason)}
-            </div>
-          )}
-
-          <button onClick={handleReset} style={{ marginTop: 20, background: "var(--color-elevated)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-secondary)", padding: "6px 16px", fontSize: 10, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer" }}>
+          <button onClick={handleReset} style={{ background: "var(--color-elevated)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-secondary)", padding: "6px 16px", fontSize: 10, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer" }}>
             Run Again
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-function FactoryResultsSection({ bestSharpe, totalIterations, acceptedCount, totalTime, bestConfig, onReset }: {
-  bestSharpe: number; totalIterations: number; acceptedCount: number; totalTime: number;
-  bestConfig?: Record<string, unknown>; onReset: () => void;
-}) {
-  return (
-    <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-glass-border)", borderRadius: 4, padding: 24 }}>
-      <h3 style={{ fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-primary)", margin: "0 0 16px" }}>
-        Results
-        <span style={{ fontSize: 10, color: "var(--color-text-muted)", marginLeft: 8, fontWeight: 400 }}>{Number(totalTime).toFixed(0)}s</span>
-      </h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10, marginBottom: 20 }}>
-        <MetricBlock label="Best Sharpe" value={Number(bestSharpe).toFixed(4)} color="#089981" />
-        <MetricBlock label="Iterations" value={String(totalIterations)} color="var(--color-text-secondary)" />
-        <MetricBlock label="Accepted" value={String(acceptedCount)} color="var(--color-text-secondary)" />
-      </div>
-      {bestConfig && (
-        <ConfigDisplay config={bestConfig} />
-      )}
-      <button onClick={onReset} style={{ background: "var(--color-elevated)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-secondary)", padding: "6px 16px", fontSize: 10, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer" }}>
-        Run Again
-      </button>
-    </div>
-  );
-}
-
-function ConfigDisplay({ config }: { config: Record<string, unknown> }) {
-  const regimes = (config.regimes as Record<string, Record<string, unknown>>) ?? {};
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
-        Best Committee Config
-      </span>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
-        {Object.entries(regimes).map(([regime, a]) => (
-          <div key={regime} style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 11 }}>
-            <span style={{ width: 120, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-brand", flexShrink: 0 }}>
-              {regime.replace(/_/g, " ")}
-            </span>
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-              {(a.models as string[])?.map((m: string, i: number) => (
-                <span key={`${m}-${i}`} style={{ background: "var(--color-elevated)", borderRadius: 3, padding: "3px 8px", fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--color-text-secondary)" }}>
-                  {m} {((Number((a.weights as number[])?.[i] ?? 0) * 100)).toFixed(0)}%
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
