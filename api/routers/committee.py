@@ -914,9 +914,268 @@ def _run_racecar_backend(req, matrix_path, config_path):
         regime_cfg=RegimeConfig(),
     )
     result = profiler.profile(models=req.models, n_months=req.train_months,
-                               n_trials=3, seed=42, verbose=False)
+                                n_trials=3, seed=42, verbose=False)
     matrix_path.parent.mkdir(parents=True, exist_ok=True)
     profiler.save_matrix(result, str(matrix_path))
     builder = CommitteeBuilder(top_k=3, weight_type="sharpe_proportional")
     config = builder.build(result.matrix, constraints={"max_models_per_regime": 3})
     config.to_json(str(config_path))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Full Cycle: Racecar (B→C→D) + Factory (optimization) in one shot
+# ══════════════════════════════════════════════════════════════════════
+
+class FullCycleRequest(BaseModel):
+    models: List[str] = Field(default_factory=lambda: [
+        "logistic", "random_forest", "xgboost",
+    ])
+    pair: str = "EURUSD"
+    timeframe: str = "H1"
+    profile_trials: int = 5
+    committee_top_k: int = 3
+    train_months: int = 6
+    proposer: str = "llm"
+    llm_backend: str = "deepseek"
+    max_iterations: int = 20
+    patience: int = 5
+    stopping_tolerance: float = 0.02
+    regime_sharpe_floor: float = 0.3
+
+
+class FullCycleStatusResponse(BaseModel):
+    job_id: str
+    phase: str = "starting"
+    phase_progress: str = ""
+    iteration: int = 0
+    total_iterations: int = 0
+    current_action: str = ""
+    best_sharpe_so_far: float = 0.0
+    started_at: str = ""
+    error: str = ""
+
+
+class FullCycleResultsResponse(BaseModel):
+    job_id: str
+    status: str = ""
+    racecar_profile_matrix: Optional[Dict[str, Any]] = None
+    racecar_committee_config: Optional[Dict[str, Any]] = None
+    racecar_backtest: Optional[Dict[str, Any]] = None
+    factory_best_sharpe: float = 0.0
+    factory_total_iterations: int = 0
+    factory_accepted_count: int = 0
+    factory_best_config: Optional[Dict[str, Any]] = None
+    factory_history: List[Dict[str, Any]] = Field(default_factory=list)
+    factory_stop_reason: str = ""
+    total_time_s: float = 0.0
+
+
+_FULL_CYCLE_DIR = Path("results/full_cycle")
+_FULL_CYCLE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@router.post("/full-cycle", response_model=FullCycleStatusResponse)
+def start_full_cycle(req: FullCycleRequest):
+    """Full cycle: Racecar (B→C→D) → Factory (optimization) → best config saved."""
+    job_id = f"fullcycle_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    job_dir = _FULL_CYCLE_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    started_at = datetime.utcnow().isoformat()
+    status = FullCycleStatusResponse(
+        job_id=job_id, phase="starting", total_iterations=req.max_iterations,
+        started_at=started_at,
+    )
+    _write_json(job_dir / "status.json", status.model_dump())
+
+    thread = threading.Thread(
+        target=_run_full_cycle,
+        args=(job_dir, job_id, req, started_at),
+        daemon=True,
+    )
+    thread.start()
+    return status
+
+
+@router.get("/full-cycle/{job_id}/status", response_model=FullCycleStatusResponse)
+def get_full_cycle_status(job_id: str):
+    job_dir = _FULL_CYCLE_DIR / job_id
+    if not job_dir.exists():
+        raise HTTPException(404, f"Job {job_id} not found")
+    return FullCycleStatusResponse(**_read_json(job_dir / "status.json"))
+
+
+@router.get("/full-cycle/{job_id}/results", response_model=FullCycleResultsResponse)
+def get_full_cycle_results(job_id: str):
+    job_dir = _FULL_CYCLE_DIR / job_id
+    if not job_dir.exists():
+        raise HTTPException(404, f"Job {job_id} not found")
+    path = job_dir / "results.json"
+    if path.exists():
+        return FullCycleResultsResponse(**_read_json(path))
+    return FullCycleResultsResponse(
+        job_id=job_id,
+        status=_read_json(job_dir / "status.json").get("phase", "unknown"),
+    )
+
+
+def _update_full_cycle_status(job_dir: Path, phase: str, **kwargs):
+    data = {}
+    status_path = job_dir / "status.json"
+    if status_path.exists():
+        data = _read_json(status_path)
+    data["phase"] = phase
+    data.update(kwargs)
+    _write_json(status_path, data)
+
+
+def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_at: str):
+    t_start = datetime.utcnow()
+    try:
+        from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
+        from pipeline.committee_builder import CommitteeBuilder
+        from pipeline.committee_backtester import CommitteeBacktester
+
+        # ── Phase 1: Racecar B→C→D ──
+        csv_path = Path(f"csv_data/{req.pair}_10_years_{req.timeframe}_OANDA.csv")
+        if not csv_path.exists():
+            csv_path = Path("csv_data/EURUSD_10_years_H1_OANDA.csv")
+
+        # B: ExpertProfiler
+        _update_full_cycle_status(job_dir, "profiling",
+                                   phase_progress=f"0/{len(req.models)}")
+        profiler = ExpertProfiler(
+            data_config={"symbol": req.pair, "csv_data_path": str(csv_path)},
+            wfo_config={
+                "n_months": req.train_months, "n_trials": req.profile_trials,
+                "hpo_mode": "static", "smoke_test": True,
+            },
+            regime_cfg=RegimeConfig(),
+        )
+        profile_result = profiler.profile(
+            models=req.models, n_months=req.train_months,
+            n_trials=req.profile_trials, seed=42, verbose=False,
+        )
+        matrix = profile_result.matrix
+        if matrix is None or not matrix.models:
+            raise RuntimeError("No models produced valid fold results")
+        matrix_data = matrix.to_dict()
+        with open(job_dir / "regime_matrix.json", "w") as f:
+            json.dump(matrix_data, f, indent=2, default=str)
+
+        # C: CommitteeBuilder
+        _update_full_cycle_status(job_dir, "building")
+        builder = CommitteeBuilder(
+            top_k=req.committee_top_k, weight_type="sharpe_proportional",
+        )
+        committee_config = builder.build(
+            matrix, constraints={"max_models_per_regime": req.committee_top_k},
+        )
+        cc_data = committee_config.to_dict()
+        with open(job_dir / "committee_config.json", "w") as f:
+            json.dump(cc_data, f, indent=2, default=str)
+
+        # D: CommitteeBacktester
+        _update_full_cycle_status(job_dir, "backtesting")
+        df = pd.read_csv(csv_path)
+        if "timestamp" in df.columns:
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            df = df.set_index("timestamp")
+        elif "time" in df.columns:
+            df["time"] = pd.to_datetime(df["time"])
+            df = df.set_index("time")
+        if "returns" not in df.columns:
+            df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+        bt = CommitteeBacktester(
+            committee_config, regime_cfg=RegimeConfig(), confidence_threshold=0.5,
+        )
+        bt_result = bt.run_wfo(
+            df, train_months=req.train_months, test_months=1, verbose=False,
+        )
+        bt_summary = bt_result.to_summary_dict()
+        with open(job_dir / "racecar_backtest.json", "w") as f:
+            json.dump(bt_summary, f, indent=2, default=str)
+
+        # ── Phase 2: Factory optimization ──
+        _update_full_cycle_status(job_dir, "optimizing",
+                                   current_action="Starting optimization loop")
+
+        from pipeline.factory_state import load_state_from_disk
+        from pipeline.factory_executor import FactoryExecutor
+
+        state = load_state_from_disk(
+            config_path=str(job_dir / "committee_config.json"),
+            matrix_path=str(job_dir / "regime_matrix.json"),
+            patience=req.patience, tolerance=req.stopping_tolerance,
+            floor=req.regime_sharpe_floor, max_iter=req.max_iterations,
+        )
+        if state is None:
+            raise RuntimeError("Failed to load Factory state from Racecar results")
+
+        proposer = None
+        if req.proposer == "llm":
+            from pipeline.factory_llm import create_llm_proposer
+            proposer = create_llm_proposer(backend=req.llm_backend)
+
+        executor = FactoryExecutor(
+            state=state, proposer=proposer, data_path=str(csv_path),
+            train_months=req.train_months,
+        )
+
+        # Manual loop for per-iteration status updates
+        executor._load_data()
+        _loop_proposer = executor.proposer
+        while True:
+            should_stop, reason = state.should_stop()
+            if should_stop:
+                _update_full_cycle_status(job_dir, "optimizing",
+                                           current_action="Stopped: " + reason,
+                                           iteration=state.iteration)
+                break
+
+            proposal = _loop_proposer.propose(state)
+            if proposal.type == "halt":
+                _update_full_cycle_status(job_dir, "optimizing",
+                                           current_action="No more untested moves",
+                                           iteration=state.iteration)
+                break
+
+            _update_full_cycle_status(job_dir, "optimizing",
+                                       current_action=f"{proposal.type} in {proposal.regime}",
+                                       iteration=state.iteration + 1)
+
+            record, _ = executor.execute_iteration(proposal)
+            if record is None:
+                continue
+
+            _update_full_cycle_status(job_dir, "optimizing",
+                                       iteration=state.iteration,
+                                       best_sharpe_so_far=state.global_best_sharpe)
+
+        # ── Save results ──
+        factory_history = [r.to_dict() for r in state.history]
+        results = {
+            "job_id": job_id,
+            "status": "completed",
+            "racecar_profile_matrix": matrix_data,
+            "racecar_committee_config": cc_data,
+            "racecar_backtest": bt_summary,
+            "factory_best_sharpe": state.global_best_sharpe,
+            "factory_total_iterations": state.iteration,
+            "factory_accepted_count": sum(1 for r in state.history if r.accepted),
+            "factory_best_config": state.global_best_config,
+            "factory_history": factory_history,
+            "factory_stop_reason": reason,
+            "total_time_s": (datetime.utcnow() - t_start).total_seconds(),
+        }
+        with open(job_dir / "results.json", "w") as f:
+            json.dump(results, f, indent=2, default=str)
+
+        _update_full_cycle_status(job_dir, "completed",
+                                   best_sharpe_so_far=state.global_best_sharpe)
+
+    except Exception as e:
+        _update_full_cycle_status(job_dir, "failed", error=str(e))
+        import traceback
+        traceback.print_exc()

@@ -993,3 +993,49 @@ export interface FactoryResultsResponse {
   history: FactoryIterationRecord[];
   stop_reason: string;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Full Cycle — Racecar (B→C→D) + Factory (optimization) in one shot
+// ════════════════════════════════════════════════════════════════════
+
+export interface FullCycleRequest {
+  models: string[];
+  pair?: string;
+  timeframe?: string;
+  profile_trials?: number;
+  committee_top_k?: number;
+  train_months?: number;
+  proposer?: string;
+  llm_backend?: string;
+  max_iterations?: number;
+  patience?: number;
+  stopping_tolerance?: number;
+  regime_sharpe_floor?: number;
+}
+
+export interface FullCycleStatusResponse {
+  job_id: string;
+  phase: string;
+  phase_progress: string;
+  iteration: number;
+  total_iterations: number;
+  current_action: string;
+  best_sharpe_so_far: number;
+  started_at: string;
+  error: string;
+}
+
+export interface FullCycleResultsResponse {
+  job_id: string;
+  status: string;
+  racecar_profile_matrix?: Record<string, unknown>;
+  racecar_committee_config?: Record<string, unknown>;
+  racecar_backtest?: Record<string, unknown>;
+  factory_best_sharpe: number;
+  factory_total_iterations: number;
+  factory_accepted_count: number;
+  factory_best_config?: Record<string, unknown>;
+  factory_history: FactoryIterationRecord[];
+  factory_stop_reason: string;
+  total_time_s: number;
+}

@@ -37,6 +37,9 @@ import type {
   FactoryStartRequest,
   FactoryStatusResponse,
   FactoryResultsResponse,
+  FullCycleRequest,
+  FullCycleStatusResponse,
+  FullCycleResultsResponse,
 } from "./schemas";
 
 export function useHealth() {
@@ -1005,6 +1008,57 @@ export function useFactoryResults(jobId: string | null) {
     queryFn: async () => {
       const { data } = await apiClient.get<FactoryResultsResponse>(
         `/committee/factory/${jobId}/results`,
+      );
+      return data;
+    },
+    enabled: !!jobId,
+    staleTime: 30_000,
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Full Cycle — Racecar (B→C→D) + Factory (optimization) in one shot
+// ════════════════════════════════════════════════════════════════════
+
+export function useStartFullCycle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: FullCycleRequest) => {
+      const { data } = await apiClient.post<FullCycleStatusResponse>(
+        "/committee/full-cycle", req,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["full-cycle"] });
+    },
+  });
+}
+
+export function useFullCycleStatus(jobId: string | null) {
+  return useQuery({
+    queryKey: ["full-cycle", "status", jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<FullCycleStatusResponse>(
+        `/committee/full-cycle/${jobId}/status`,
+      );
+      return data;
+    },
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const phase = query.state.data?.phase;
+      if (phase === "completed" || phase === "failed") return false;
+      return 2_000;
+    },
+  });
+}
+
+export function useFullCycleResults(jobId: string | null) {
+  return useQuery({
+    queryKey: ["full-cycle", "results", jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<FullCycleResultsResponse>(
+        `/committee/full-cycle/${jobId}/results`,
       );
       return data;
     },
