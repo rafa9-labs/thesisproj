@@ -1189,6 +1189,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
         }
 
         first_df_wfo = None
+        hpo_model_params: Dict[str, dict] = {}
         for idx, model_type in enumerate(survivors):
             _update_full_cycle_status(
                 job_dir, "tuning", phase_number=1,
@@ -1198,13 +1199,15 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
             n_trials, n_startup = get_trial_budget(model_type)
             model_config = dict(hpo_base_config)
             model_config["model_type"] = model_type
-            tuned_folds, df_wfo = profiler._run_single_model(
+            tuned_folds, df_wfo, best_params = profiler._run_single_model(
                 model_type, {**model_config, "n_trials": n_trials,
                              "n_startup_trials": n_startup},
                 seed=42, verbose=False,
             )
             if tuned_folds:
                 matrix.raw_folds.extend(tuned_folds)
+            if best_params:
+                hpo_model_params[model_type] = best_params
             if first_df_wfo is None and df_wfo is not None:
                 first_df_wfo = df_wfo
 
@@ -1229,6 +1232,9 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
             matrix, constraints={"max_models_per_regime": req.committee_top_k},
         )
         cc_data = committee_config.to_dict()
+        if hpo_model_params:
+            committee_config.model_params = hpo_model_params
+            cc_data["model_params"] = hpo_model_params
         with open(job_dir / "committee_config.json", "w") as f:
             json.dump(cc_data, f, indent=2, default=str)
 
@@ -1240,6 +1246,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
 
         bt = CommitteeBacktester(
             committee_config, regime_cfg=RegimeConfig(), confidence_threshold=0.5,
+            model_params=hpo_model_params,
         )
         bt_result = bt.run_wfo(
             df, train_months=req.train_months, test_months=req.test_months,
@@ -1256,6 +1263,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
         for seed in (42, 101, 202):
             alt_bt = CommitteeBacktester(
                 committee_config, regime_cfg=RegimeConfig(), confidence_threshold=0.5,
+                model_params=hpo_model_params,
             )
             alt_r = alt_bt.run_wfo(
                 df, train_months=req.train_months, test_months=req.test_months,
@@ -1363,6 +1371,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
         final_config = state.config if state.config else committee_config
         final_bt = CommitteeBacktester(
             final_config, regime_cfg=RegimeConfig(), confidence_threshold=0.5,
+            model_params=hpo_model_params,
         )
         final_result = final_bt.run_wfo(
             df, train_months=req.train_months, test_months=req.test_months,
@@ -1375,6 +1384,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
         for seed in (42, 101, 202, 789, 999):
             fbt = CommitteeBacktester(
                 final_config, regime_cfg=RegimeConfig(), confidence_threshold=0.5,
+                model_params=hpo_model_params,
             )
             fr = fbt.run_wfo(
                 df, train_months=req.train_months, test_months=req.test_months,
@@ -1390,6 +1400,84 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
 
         # Save final committee config to disk (deployment)
         final_config.to_json(str(job_dir / "committee_config_final.json"))
+
+        # ── Save committee snapshot (MLOps reproducibility) ──
+        # Train all committee models on full history and save exact weights
+        # so deployment loads byte-for-byte identical estimators.
+        unique_models = list(set(final_config.all_models()))
+        snapshot_dir = job_dir / "committee_snapshot"
+        snapshot_saved = False
+        try:
+            from pipeline.feature_sweep import compute_feature_matrix, FEATURE_NAMES
+            from models.registry import build_model
+            from pipeline.expert_profiler import _reprefix_params
+            import pandas as pd
+            import numpy as np
+
+            snapshot_feature_names = locked_features if locked_features else FEATURE_NAMES
+
+            raw_full = pd.read_csv(csv_path)
+            for time_col in ("timestamp", "time"):
+                if time_col in raw_full.columns:
+                    raw_full[time_col] = pd.to_datetime(raw_full[time_col])
+                    raw_full = raw_full.set_index(time_col)
+                    break
+            raw_full = raw_full.rename(columns={
+                "mid_open": "mid_o", "mid_high": "mid_h",
+                "mid_low": "mid_l", "mid_close": "mid_c",
+            })
+
+            feature_matrix = compute_feature_matrix(raw_full, snapshot_feature_names, include_ohlc=False)
+            feature_matrix = feature_matrix.dropna()
+            X_full = feature_matrix.to_numpy(np.float32)
+
+            fwd = np.log(raw_full.loc[feature_matrix.index, "mid_c"]
+                         / raw_full.loc[feature_matrix.index, "mid_c"].shift(1))
+            y_full = np.ones(len(X_full), dtype=np.int32)
+            threshold = 0.0001
+            y_full[np.isfinite(fwd.values) & (fwd.values > threshold)] = 2
+            y_full[np.isfinite(fwd.values) & (fwd.values < -threshold)] = 0
+            y_full[-1] = 1
+
+            valid = np.isfinite(y_full)
+            X_full, y_full = X_full[valid], y_full[valid]
+
+            snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+            for mtype in unique_models:
+                try:
+                    params = hpo_model_params.get(mtype, {})
+                    model = build_model(
+                        mtype, use_proba=True, n_features=X_full.shape[1],
+                        **_reprefix_params(params, mtype),
+                    )
+                    model.fit(X_full, y_full)
+                    is_tf = hasattr(model, "save") and callable(getattr(model, "save", None))
+                    is_tf = is_tf and not hasattr(model, "get_params")
+                    if is_tf:
+                        tf_path = str(snapshot_dir / f"{mtype}_tf")
+                        model.save(tf_path, save_format="tf")
+                    else:
+                        import joblib
+                        joblib.dump(model, str(snapshot_dir / f"{mtype}.joblib"))
+                except Exception:
+                    import traceback
+                    traceback.print_exc()
+
+            # Save metadata
+            import json as _json
+            meta = {
+                "feature_names": list(snapshot_feature_names),
+                "models": unique_models,
+                "model_params": hpo_model_params,
+                "trained_at": datetime.utcnow().isoformat(),
+            }
+            with open(snapshot_dir / "manifest.json", "w") as f:
+                _json.dump(meta, f, indent=2, default=str)
+            snapshot_saved = True
+        except Exception:
+            import traceback
+            traceback.print_exc()
 
         # ── Assemble results ──
         factory_history = [r.to_dict() for r in state.history]
@@ -1423,6 +1511,8 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
             "factory_history": factory_history,
             "factory_stop_reason": reason,
             "total_time_s": (datetime.utcnow() - t_start).total_seconds(),
+            "snapshot_dir": str(snapshot_dir) if snapshot_saved else None,
+            "hpo_model_params_count": len(hpo_model_params),
         }
         with open(job_dir / "results.json", "w") as f:
             json.dump(results, f, indent=2, default=str)

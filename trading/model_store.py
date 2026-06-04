@@ -15,6 +15,60 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
+def _is_tf_model(model: Any) -> bool:
+    """Return True if *model* is a TensorFlow / Keras model instance."""
+    try:
+        import tensorflow as tf
+        if isinstance(model, tf.keras.Model):
+            return True
+    except ImportError:
+        pass
+    return False
+
+
+def _save_model_safe(model: Any, path: str) -> str:
+    """Serialize *model* to *path*, routing TF models to SavedModel format.
+
+    Returns the actual path written (may differ from *path* base).
+    """
+    import joblib
+
+    if _is_tf_model(model):
+        tf_path = path.replace(".joblib", "").replace(".pkl", "") + "_tf"
+        model.save(tf_path, save_format="tf")
+        return tf_path
+    else:
+        base = path.replace(".pkl", ".joblib") if path.endswith(".pkl") else path
+        if not base.endswith(".joblib"):
+            base += ".joblib"
+        joblib.dump(model, base)
+        return base
+
+
+def _load_model_safe(path: str) -> Optional[Any]:
+    """Deserialize a model from *path*, routing TF path suffix automatically.
+
+    Tries: path (as-is), path.joblib, path.pkl (backward compat), path_tf.
+    """
+    import joblib
+
+    candidates = [path, path + ".joblib", path + ".pkl"]
+    for p in candidates:
+        if os.path.exists(p):
+            return joblib.load(p)
+
+    tf_candidates = [path, path + "_tf"]
+    for p in tf_candidates:
+        if os.path.isdir(p) and os.path.exists(os.path.join(p, "saved_model.pb")):
+            try:
+                import tensorflow as tf
+                return tf.keras.models.load_model(p)
+            except ImportError:
+                pass
+
+    return None
+
+
 @dataclass
 class ModelSnapshot:
     """A versioned model artifact with metadata."""
@@ -153,12 +207,12 @@ class ModelStore:
 
         snapshots: Dict[str, ModelSnapshot] = {}
         for model_type, model in models.items():
-            model_path = os.path.join(models_dir, f"{model_type}.pkl")
-            joblib.dump(model, model_path)
+            model_path = os.path.join(models_dir, f"{model_type}.joblib")
+            actual_path = _save_model_safe(model, model_path)
 
             snapshots[model_type] = ModelSnapshot(
                 model_type=model_type,
-                model_path=model_path,
+                model_path=actual_path,
                 feature_names=feature_names,
                 n_features=len(feature_names),
                 trained_at=now,
@@ -187,9 +241,8 @@ class ModelStore:
         """Load all models from a committee snapshot.
 
         Returns dict with keys: models (dict), config_json (str), metadata (dict).
+        Handles .joblib (current), .pkl (backward compat), and TF SavedModel.
         """
-        import joblib
-
         manifest_path = os.path.join(version_dir, "manifest.json")
         if not os.path.exists(manifest_path):
             raise FileNotFoundError(f"No manifest at {manifest_path}")
@@ -200,16 +253,18 @@ class ModelStore:
         models: Dict[str, Any] = {}
         models_dir = os.path.join(version_dir, "models")
         for model_type in manifest.get("models", {}):
-            model_path = os.path.join(models_dir, f"{model_type}.pkl")
-            if os.path.exists(model_path):
-                models[model_type] = joblib.load(model_path)
+            base = os.path.join(models_dir, model_type)
+            model_obj = _load_model_safe(base)
+            if model_obj is not None:
+                models[model_type] = model_obj
 
+        first_snapshot = next(iter(manifest.get("models", {}).values()), {})
+        feature_list = first_snapshot.get("feature_names", []) if isinstance(first_snapshot, dict) else []
         return {
             "models": models,
             "config_json": manifest.get("committee_config_json", "{}"),
             "metadata": manifest.get("metadata", {}),
-            "feature_names": list(manifest.get("models", {}).values())[0].get("feature_names", [])
-                   if manifest.get("models") else [],
+            "feature_names": feature_list,
         }
 
     def list_snapshots(self) -> List[str]:

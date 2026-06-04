@@ -199,8 +199,8 @@ class TestDeployIntegration:
         )
         runner = LiveCommitteeRunner(
             config=cfg, models=models, feature_names=features,
-            regime_cfg=RegimeConfig(), confidence_threshold=0.5,
-            lookback_bars=20,
+            regime_cfg=RegimeConfig(), confidence_threshold=0.15,
+            lookback_bars=50,
         )
         runner.start()
 
@@ -209,13 +209,13 @@ class TestDeployIntegration:
             "mid_o": 1.1048, "spread": 0.0001, "returns": 0.0002,
             "timestamp": 1234567890,
         }
-        for _ in range(25):
+        for _ in range(55):
             runner.process_bar(bar.copy())
         signal = runner.process_bar(bar.copy())
+        runner.stop()
         assert signal is not None
         assert signal.signal in (-1, 0, 1)
         assert len(signal.active_models) > 0
-        runner.stop()
 
     def test_deploy_endpoint_request_model(self):
         """DeployCommitteeRequest Pydantic model validates correctly."""

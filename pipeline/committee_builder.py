@@ -51,6 +51,7 @@ class CommitteeConfig:
     fallback: Optional[RegimeAssignment] = None
     constraints: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    model_params: Dict[str, Dict] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -59,6 +60,7 @@ class CommitteeConfig:
             "fallback": self.fallback.to_dict() if self.fallback else None,
             "constraints": self.constraints,
             "metadata": self.metadata,
+            "model_params": self.model_params,
         }
 
     def to_json(self, path: str):
@@ -87,6 +89,7 @@ class CommitteeConfig:
             fallback=fallback,
             constraints=data.get("constraints", {}),
             metadata=data.get("metadata", {}),
+            model_params=data.get("model_params", {}),
         )
 
     @classmethod
@@ -114,6 +117,7 @@ class CommitteeConfig:
             fallback=fallback,
             constraints=data.get("constraints", {}),
             metadata=data.get("metadata", {}),
+            model_params=data.get("model_params", {}),
         )
 
     def all_models(self) -> List[str]:

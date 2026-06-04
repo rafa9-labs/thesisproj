@@ -259,72 +259,29 @@ class LiveCommitteeRunner:
     # ── Feature engineering ──────────────────────────────────────────
 
     def _build_features(self) -> np.ndarray:
-        """Build a single-row feature vector from the bar buffer."""
+        """Build a single-row feature vector from the bar buffer.
+
+        Delegates to pipeline.feature_sweep.compute_feature_matrix so the
+        exact same indicator computation used during profiling is applied
+        at inference time (zero data-drift between train and production).
+        """
+        from pipeline.feature_sweep import compute_feature_matrix
+
         df = pd.DataFrame(list(self._bar_buffer))
-
-        price = df["mid_c"].astype(np.float64)
-
-        features = {}
-        features["mid_c"] = price.iloc[-1]
-        features["mid_h"] = df["mid_h"].iloc[-1]
-        features["mid_l"] = df["mid_l"].iloc[-1]
-
-        # Moving averages
-        features["sma_20"] = price.rolling(20).mean().iloc[-1]
-        features["ema_20"] = price.ewm(span=20, adjust=False).mean().iloc[-1]
-
-        # Returns & volatility
-        rets = np.log(price / price.shift(1)).astype(np.float64).fillna(0.0)
-        features["rv_48"] = float(np.sqrt((rets.iloc[-48:] ** 2).sum()))
-        features["rolling_std_20"] = float(rets.iloc[-20:].std())
-
-        # RSI (simplified)
-        delta = price.diff()
-        gain = delta.clip(lower=0)
-        loss = (-delta).clip(lower=0)
-        avg_gain = gain.ewm(alpha=1.0 / 14, adjust=False).mean().iloc[-1]
-        avg_loss = loss.ewm(alpha=1.0 / 14, adjust=False).mean().iloc[-1]
-        rs = avg_gain / (avg_loss + 1e-10)
-        features["rsi_14"] = 100.0 - 100.0 / (1.0 + rs)
-
-        # MACD
-        ema12 = price.ewm(span=12, adjust=False).mean().iloc[-1]
-        ema26 = price.ewm(span=26, adjust=False).mean().iloc[-1]
-        features["macd_diff"] = ema12 - ema26
-
-        # Bollinger Bands
-        bb_sma = price.rolling(20).mean().iloc[-1]
-        bb_std = price.rolling(20).std().iloc[-1]
-        features["bb_upper"] = bb_sma + 2.0 * bb_std
-        features["bb_lower"] = bb_sma - 2.0 * bb_std
-        features["bb_pct"] = (
-            (price.iloc[-1] - features["bb_lower"]) /
-            (features["bb_upper"] - features["bb_lower"] + 1e-10)
-        )
-        features["bbw"] = (features["bb_upper"] - features["bb_lower"]) / (price.iloc[-1] + 1e-10)
-
-        # ATR
-        hl = df["mid_h"] - df["mid_l"]
-        features["atr_14"] = hl.rolling(14).mean().iloc[-1]
-
-        # ADX (simplified)
-        hi, lo = df["mid_h"].astype(np.float64), df["mid_l"].astype(np.float64)
-        up_move = hi.diff().clip(lower=0)
-        down_move = (-lo.diff()).clip(lower=0)
-        atr_series = (hi - lo).rolling(14).mean()
-        pdi = 100.0 * up_move.ewm(alpha=1.0 / 14, adjust=False).mean() / atr_series.replace(0, np.nan)
-        mdi = 100.0 * down_move.ewm(alpha=1.0 / 14, adjust=False).mean() / atr_series.replace(0, np.nan)
-        dx = 100.0 * (pdi - mdi).abs() / (pdi + mdi).replace(0, np.nan)
-        features["adx_14"] = dx.ewm(alpha=1.0 / 14, adjust=False).mean().iloc[-1]
-
-        # Build vector matching feature_names
-        feature_row = np.zeros(len(self.feature_names), dtype=np.float32)
+        feature_df = compute_feature_matrix(df, feature_names=list(self.feature_names),
+                                             include_ohlc=False)
+        if feature_df.empty or len(feature_df) == 0:
+            return np.zeros((1, len(self.feature_names)), dtype=np.float32)
+        last = feature_df.iloc[-1]
+        result = np.zeros((1, len(self.feature_names)), dtype=np.float32)
         for i, name in enumerate(self.feature_names):
-            if name in features:
-                val = features[name]
-                feature_row[i] = float(val) if val is not None and not np.isnan(val) else 0.0
-
-        return feature_row.reshape(1, -1)
+            if name in feature_df.columns:
+                val = last[name]
+                try:
+                    result[0, i] = float(val)
+                except (ValueError, TypeError):
+                    result[0, i] = 0.0
+        return result
 
     # ── Regime classification ────────────────────────────────────────
 

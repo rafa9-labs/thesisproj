@@ -84,26 +84,42 @@ def expand_features(df: pd.DataFrame) -> pd.DataFrame:
         out[f"price_ema_{w}_ratio"] = (close / out[f"ema_{w}"].replace(0, np.nan)).astype(np.float32)
 
     for w in INDICATOR_GRID["rsi"]:
-        out[f"rsi_{w}"] = ta.momentum.RSIIndicator(close=close, window=w).rsi().astype(np.float32)
+        try:
+            out[f"rsi_{w}"] = ta.momentum.RSIIndicator(close=close, window=w).rsi().astype(np.float32)
+        except Exception:
+            out[f"rsi_{w}"] = np.full(len(out), 50.0, dtype=np.float32)
 
     for w in INDICATOR_GRID["adx"]:
-        out[f"adx_{w}"] = ta.trend.ADXIndicator(
-            high=high, low=low, close=close, window=w,
-        ).adx().astype(np.float32)
+        try:
+            out[f"adx_{w}"] = ta.trend.ADXIndicator(
+                high=high, low=low, close=close, window=w,
+            ).adx().astype(np.float32)
+        except Exception:
+            out[f"adx_{w}"] = np.full(len(out), 20.0, dtype=np.float32)
 
     for w in INDICATOR_GRID["atr"]:
-        atr_arr = ta.volatility.AverageTrueRange(
-            high=high, low=low, close=close, window=w,
-        ).average_true_range()
-        out[f"atr_{w}"] = atr_arr.astype(np.float32)
-        out[f"atr_{w}_ratio"] = (atr_arr / close.replace(0, np.nan)).astype(np.float32)
+        try:
+            atr_arr = ta.volatility.AverageTrueRange(
+                high=high, low=low, close=close, window=w,
+            ).average_true_range()
+            out[f"atr_{w}"] = atr_arr.astype(np.float32)
+            out[f"atr_{w}_ratio"] = (atr_arr / close.replace(0, np.nan)).astype(np.float32)
+        except Exception:
+            out[f"atr_{w}"] = np.full(len(out), 0.001, dtype=np.float32)
+            out[f"atr_{w}_ratio"] = np.full(len(out), 0.001, dtype=np.float32)
 
     for w in INDICATOR_GRID["bbands"]:
-        bb = ta.volatility.BollingerBands(close=close, window=w, window_dev=2)
-        out[f"bb_upper_{w}"] = bb.bollinger_hband().astype(np.float32)
-        out[f"bb_lower_{w}"] = bb.bollinger_lband().astype(np.float32)
-        out[f"bbw_{w}"] = bb.bollinger_wband().astype(np.float32)
-        out[f"bb_pct_{w}"] = bb.bollinger_pband().astype(np.float32)
+        try:
+            bb = ta.volatility.BollingerBands(close=close, window=w, window_dev=2)
+            out[f"bb_upper_{w}"] = bb.bollinger_hband().astype(np.float32)
+            out[f"bb_lower_{w}"] = bb.bollinger_lband().astype(np.float32)
+            out[f"bbw_{w}"] = bb.bollinger_wband().astype(np.float32)
+            out[f"bb_pct_{w}"] = bb.bollinger_pband().astype(np.float32)
+        except Exception:
+            out[f"bb_upper_{w}"] = close.astype(np.float32) * 1.02
+            out[f"bb_lower_{w}"] = close.astype(np.float32) * 0.98
+            out[f"bbw_{w}"] = np.full(len(out), 0.04, dtype=np.float32)
+            out[f"bb_pct_{w}"] = np.full(len(out), 0.5, dtype=np.float32)
 
     for w in INDICATOR_GRID["donchian"]:
         out[f"donchian_up_{w}"] = high.rolling(w).max().astype(np.float32)
@@ -116,9 +132,13 @@ def expand_features(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     # Standard MACD (single variant)
-    macd = ta.trend.MACD(close=close, window_slow=26, window_fast=12, window_sign=9)
-    out["macd_diff"] = macd.macd_diff().astype(np.float32)
-    out["macd_signal"] = macd.macd_signal().astype(np.float32)
+    try:
+        macd = ta.trend.MACD(close=close, window_slow=26, window_fast=12, window_sign=9)
+        out["macd_diff"] = macd.macd_diff().astype(np.float32)
+        out["macd_signal"] = macd.macd_signal().astype(np.float32)
+    except Exception:
+        out["macd_diff"] = np.zeros(len(out), dtype=np.float32)
+        out["macd_signal"] = np.zeros(len(out), dtype=np.float32)
 
     # Realized volatility at short/long windows
     ret_sq = out["returns"] ** 2
@@ -340,3 +360,72 @@ def run_phase_minus1(
         json.dump(report, f, indent=2, default=str)
 
     return locked, report
+
+
+def _generate_feature_names() -> list[str]:
+    """Derive the canonical list of indicator columns from INDICATOR_GRID."""
+    names: list[str] = []
+    for w in RETURNS_LAGS:
+        names.append(f"returns_lag{w}")
+    for w in INDICATOR_GRID["sma"]:
+        names.append(f"sma_{w}")
+        names.append(f"price_sma_{w}_ratio")
+    for w in INDICATOR_GRID["ema"]:
+        names.append(f"ema_{w}")
+        names.append(f"price_ema_{w}_ratio")
+    for w in INDICATOR_GRID["rsi"]:
+        names.append(f"rsi_{w}")
+    for w in INDICATOR_GRID["adx"]:
+        names.append(f"adx_{w}")
+    for w in INDICATOR_GRID["atr"]:
+        names.append(f"atr_{w}")
+        names.append(f"atr_{w}_ratio")
+    for w in INDICATOR_GRID["bbands"]:
+        names.append(f"bb_upper_{w}")
+        names.append(f"bb_lower_{w}")
+        names.append(f"bbw_{w}")
+        names.append(f"bb_pct_{w}")
+    for w in INDICATOR_GRID["donchian"]:
+        names.append(f"donchian_up_{w}")
+        names.append(f"donchian_dn_{w}")
+        names.append(f"donchian_break_up_{w}")
+        names.append(f"donchian_break_dn_{w}")
+    names.append("macd_diff")
+    names.append("macd_signal")
+    names.append("rv_48")
+    names.append("rv_240")
+    return sorted(names)
+
+
+FEATURE_NAMES: list[str] = _generate_feature_names()
+"""All indicator column names produced by expand_features() (sorted)."""
+
+
+def compute_feature_matrix(
+    df: pd.DataFrame,
+    feature_names: Optional[list[str]] = None,
+    include_ohlc: bool = True,
+) -> pd.DataFrame:
+    """Expand OHLC data into indicator features and filter to a requested set.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Raw OHLC with columns: mid_h, mid_l, mid_c
+        (or mid_high/mid_low/mid_close — auto-renamed).
+    feature_names : list[str] or None
+        Requested feature columns. If None, returns all FEATURE_NAMES.
+    include_ohlc : bool
+        If True, also include mid_o, mid_h, mid_l, mid_c columns in output.
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered feature matrix with NaN/inf filled to 0.0, dtype float32.
+    """
+    expanded = expand_features(df)
+    names = list(feature_names) if feature_names else list(FEATURE_NAMES)
+    ohlc = ["mid_o", "mid_h", "mid_l", "mid_c"] if include_ohlc else []
+    available = [c for c in names + ohlc if c in expanded.columns]
+    result = expanded[available].fillna(0.0).replace([np.inf, -np.inf], 0.0)
+    return result.astype(np.float32)

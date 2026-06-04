@@ -319,24 +319,41 @@ async def deploy_live_session(req: DeployRequest):
 # ── Committee model training ────────────────────────────────────────
 
 _LIVE_FEATURE_NAMES = [
-    "mid_c", "mid_h", "mid_l", "sma_20", "ema_20", "rv_48",
-    "rolling_std_20", "rsi_14", "macd_diff", "bb_upper", "bb_lower",
-    "bb_pct", "bbw", "atr_14", "adx_14",
+    "sma_20", "ema_20", "rv_48",
+    "rsi_14", "macd_diff",
+    "bb_upper_20", "bb_lower_20", "bb_pct_20", "bbw_20",
+    "atr_14", "adx_14",
 ]
 
 
 def _train_committee_models(
     pair: str, timeframe: str, model_types: list[str],
+    feature_names: Optional[list[str]] = None,
+    model_params: Optional[dict[str, dict]] = None,
 ) -> tuple[dict[str, Any], list[str]]:
-    """Train one model per unique type on full EURUSD history.
+    """Train one model per unique type on full history.
 
-    Returns (trained_models: {type: model_obj}, feature_names: list[str]).
-    The feature set matches what LiveCommitteeRunner._build_features() produces.
+    Parameters
+    ----------
+    feature_names : list[str] or None
+        Feature columns to train on. If None, defaults to _LIVE_FEATURE_NAMES.
+    model_params : dict or None
+        model_type -> {param: value} dict with unprefixed HPO-tuned
+        hyperparameters. Applied at build time.
+
+    Returns
+    -------
+    (trained_models: {type: model_obj}, feature_names: list[str])
     """
-    import numpy as np
-    import pandas as pd
     from pathlib import Path
     from models.registry import build_model
+    from pipeline.feature_sweep import compute_feature_matrix, FEATURE_NAMES
+    from pipeline.expert_profiler import _reprefix_params
+    import pandas as pd
+    import numpy as np
+
+    use_features = list(feature_names) if feature_names else list(_LIVE_FEATURE_NAMES)
+    model_params = dict(model_params or {})
 
     csv_path = Path(f"csv_data/{pair}_10_years_{timeframe}_OANDA.csv")
     if not csv_path.exists():
@@ -348,75 +365,42 @@ def _train_committee_models(
         "mid_low": "mid_l", "mid_close": "mid_c",
     })
 
-    price = df["mid_c"].astype(np.float64)
-    n = len(df)
+    feature_matrix = compute_feature_matrix(df, feature_names=use_features, include_ohlc=False)
+    X = feature_matrix.to_numpy(np.float32)
+    n_rows = X.shape[0]
 
-    features_df = pd.DataFrame(index=df.index)
-    features_df["mid_c"] = price
-    features_df["mid_h"] = df["mid_h"].astype(np.float64)
-    features_df["mid_l"] = df["mid_l"].astype(np.float64)
-    features_df["sma_20"] = price.rolling(20).mean()
-    features_df["ema_20"] = price.ewm(span=20, adjust=False).mean()
+    if "mid_c" in feature_matrix.columns:
+        price = feature_matrix["mid_c"].to_numpy(dtype=np.float64).ravel()
+    else:
+        price = df["mid_c"].loc[feature_matrix.index].to_numpy(dtype=np.float64).ravel()
+    rets_vals = np.zeros(n_rows, dtype=np.float64)
+    rets_vals[1:] = np.log(price[1:] / price[:-1])
 
-    rets = np.log(price / price.shift(1)).fillna(0.0).astype(np.float64)
-    features_df["rv_48"] = np.sqrt(rets.rolling(48).apply(lambda x: (x ** 2).sum(), raw=True))
-    features_df["rolling_std_20"] = rets.rolling(20).std()
-
-    delta = price.diff()
-    gain = delta.clip(lower=0)
-    loss = (-delta).clip(lower=0)
-    avg_gain = gain.ewm(alpha=1.0 / 14, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1.0 / 14, adjust=False).mean()
-    rs = avg_gain / (avg_loss + 1e-10)
-    features_df["rsi_14"] = 100.0 - 100.0 / (1.0 + rs)
-
-    ema12 = price.ewm(span=12, adjust=False).mean()
-    ema26 = price.ewm(span=26, adjust=False).mean()
-    features_df["macd_diff"] = ema12 - ema26
-
-    bb_sma = price.rolling(20).mean()
-    bb_std = price.rolling(20).std()
-    features_df["bb_upper"] = bb_sma + 2.0 * bb_std
-    features_df["bb_lower"] = bb_sma - 2.0 * bb_std
-    features_df["bb_pct"] = (
-        (price - features_df["bb_lower"]) /
-        (features_df["bb_upper"] - features_df["bb_lower"] + 1e-10)
-    )
-    features_df["bbw"] = (
-        (features_df["bb_upper"] - features_df["bb_lower"]) / (price + 1e-10)
-    )
-
-    hl = df["mid_h"] - df["mid_l"]
-    features_df["atr_14"] = hl.rolling(14).mean()
-    features_df["adx_14"] = _compute_simplified_adx_local(df)
-
-    features_df = features_df.dropna()
-
-    fwd_returns = rets.shift(-1).values
-    labels = np.ones(len(features_df), dtype=np.int32)
+    labels = np.ones(n_rows, dtype=np.int32)
     threshold = 0.0001
-    labels[fwd_returns[:len(features_df)] > threshold] = 2
-    labels[fwd_returns[:len(features_df)] < -threshold] = 0
-    labels = labels[:len(features_df)]
+    labels[rets_vals > threshold] = 2
+    labels[rets_vals < -threshold] = 0
     labels[-1] = 1
 
-    X = features_df[_LIVE_FEATURE_NAMES].to_numpy(np.float32)
-    y = labels
-
-    valid = y != -1
-    X, y = X[valid], y[valid]
+    valid = (labels != -1)
+    X, labels = X[valid], labels[valid]
 
     trained = {}
     for mtype in model_types:
         try:
-            model = build_model(mtype, use_proba=True, n_features=X.shape[1])
-            model.fit(X, y)
+            params = model_params.get(mtype, {})
+            model = build_model(
+                mtype, use_proba=True, n_features=X.shape[1],
+                **_reprefix_params(params, mtype),
+            )
+            model.fit(X, labels)
             trained[mtype] = model
-            logger.info("Committee model %s trained on %d samples", mtype, len(X))
+            logger.info("Committee model %s trained on %d samples with %d features",
+                         mtype, len(X), X.shape[1])
         except Exception:
             logger.exception("Failed to train committee model %s", mtype)
 
-    return trained, _LIVE_FEATURE_NAMES
+    return trained, use_features
 
 
 def _compute_simplified_adx_local(df: "pd.DataFrame") -> "pd.Series":
@@ -467,33 +451,82 @@ async def deploy_committee_session(req: DeployCommitteeRequest):
     from pipeline.committee_builder import CommitteeConfig
     committee_config = CommitteeConfig.from_dict(config_json)
 
-    # 2. Get unique model types
+    model_params = committee_config.model_params or config_json.get("model_params", {})
+
+    # Detect the parent full-cycle job dir for locked features + snapshot
+    parent_job_dir = config_path.parent if config_path.parent.name.startswith("fullcycle_") else None
+    if parent_job_dir is None:
+        parent_job_dir = config_path.parent.parent if "full_cycle" in str(config_path) else None
+
+    # 2. Load locked features if available
+    locked_features = None
+    locked_features_path = Path("results/locked_features.json")
+    if locked_features_path.exists():
+        try:
+            from pipeline.feature_sweep import load_locked_features
+            locked_features = load_locked_features(str(locked_features_path))
+        except Exception:
+            pass
+
+    # 3. Get unique model types
     unique_models = list(set(committee_config.all_models()))
     if not unique_models:
         raise HTTPException(400, "Committee config has no models")
 
-    # 3. Train models
-    trained_models, feature_names = _train_committee_models(
-        pair, timeframe, unique_models,
-    )
-    if not trained_models:
-        raise HTTPException(500, "Failed to train any committee models")
+    trained_models: dict[str, Any] = {}
+    feature_names = locked_features if locked_features else _LIVE_FEATURE_NAMES
 
-    # 4. Create runner
+    # 4. Try loading saved snapshot (fast path, byte-for-byte identical to validation)
+    snapshot_loaded = False
+    if parent_job_dir:
+        snapshot_dir = parent_job_dir / "committee_snapshot"
+        if snapshot_dir.exists() and (snapshot_dir / "manifest.json").exists():
+            try:
+                import joblib
+                with open(snapshot_dir / "manifest.json") as f:
+                    manifest = json.load(f)
+                snapshot_feature_names = manifest.get("feature_names", list(feature_names))
+                for mtype in unique_models:
+                    jl_path = snapshot_dir / f"{mtype}.joblib"
+                    tf_path = snapshot_dir / f"{mtype}_tf"
+                    if jl_path.exists():
+                        trained_models[mtype] = joblib.load(str(jl_path))
+                    elif tf_path.exists():
+                        import tensorflow as tf
+                        trained_models[mtype] = tf.keras.models.load_model(str(tf_path))
+                if trained_models:
+                    feature_names = snapshot_feature_names
+                    snapshot_loaded = True
+                    logger.info("Loaded %d models from snapshot %s",
+                                 len(trained_models), str(snapshot_dir))
+            except Exception:
+                logger.exception("Snapshot load failed, falling back to fresh training")
+
+    # 5. Train models (slow path — only if no snapshot loaded)
+    if not snapshot_loaded:
+        trained_models, feature_names = _train_committee_models(
+            pair, timeframe, unique_models,
+            feature_names=locked_features if locked_features else _LIVE_FEATURE_NAMES,
+            model_params=model_params,
+        )
+    if not trained_models:
+        raise HTTPException(500, "Failed to obtain committee models")
+
+    # 6. Create runner
     from trading.live_committee_runner import LiveCommitteeRunner
     from pipeline.regime_utils import RegimeConfig
 
     runner = LiveCommitteeRunner(
         config=committee_config,
         models=trained_models,
-        feature_names=feature_names,
+        feature_names=list(feature_names),
         regime_cfg=RegimeConfig(),
         confidence_threshold=req.confidence_threshold,
         lookback_bars=req.lookback_bars,
     )
     runner.start()
 
-    # 5. Create session
+    # 7. Create session
     session_id = str(uuid.uuid4())[:8]
     session = {
         "session_id": session_id,
@@ -526,8 +559,11 @@ async def deploy_committee_session(req: DeployCommitteeRequest):
         "status": "running",
         "equity": req.initial_equity,
         "signal_count": 0,
-        "features": feature_names,
+        "features": list(feature_names),
+        "feature_count": len(feature_names),
         "lookback_bars": req.lookback_bars,
+        "snapshot_loaded": snapshot_loaded,
+        "model_params_count": len(model_params),
     }
 
 

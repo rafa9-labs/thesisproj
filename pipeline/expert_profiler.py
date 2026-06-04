@@ -181,7 +181,7 @@ class ExpertProfiler:
             if progress_callback:
                 progress_callback(model_type, idx + 1, len(models), "started")
 
-            fold_results, df_wfo = self._run_single_model(
+            fold_results, df_wfo, _ = self._run_single_model(
                 model_type, config, seed, verbose
             )
 
@@ -234,8 +234,12 @@ class ExpertProfiler:
         config: dict,
         seed: int,
         verbose: bool,
-    ) -> Tuple[Optional[List[FoldResult]], Optional[pd.DataFrame]]:
-        """Run one model through the WFO pipeline and collect fold results."""
+    ) -> Tuple[Optional[List[FoldResult]], Optional[pd.DataFrame], Optional[Dict]]:
+        """Run one model through the WFO pipeline and collect fold results + best params.
+
+        Returns (fold_results, df_wfo, best_params).
+        best_params is the unpinned HPO params dict (unprefixed) or None if no HPO ran.
+        """
         from pipeline.backtester.composed import MLBacktester
 
         model_config = dict(config)
@@ -244,6 +248,7 @@ class ExpertProfiler:
         locked_features = model_config.pop("locked_features", None)
 
         bt = None
+        best_params: Optional[Dict] = None
         try:
             bt = MLBacktester(
                 symbol=model_config.get("symbol", "EURUSD"),
@@ -262,10 +267,13 @@ class ExpertProfiler:
                 n_startup_trials=model_config.get("n_startup_trials", 2),
             )
 
+            if best_combo and isinstance(best_combo, dict):
+                best_params = _strip_model_prefix(best_combo, model_type)
+
             if df_wfo is None or df_wfo.empty:
                 if verbose:
                     print(f"  [SKIP] {model_type}: no WFO results produced")
-                return None, None
+                return None, None, best_params
 
             # Extract fold results from df_wfo
             fold_results = self._extract_fold_results(model_type, df_wfo)
@@ -279,7 +287,7 @@ class ExpertProfiler:
                 print(f"  [OK] {model_type}: {len(fold_results)} folds, "
                       f"avg Sharpe={avg_sharpe:.3f}, total trades={total_trades}")
 
-            return fold_results, df_wfo
+            return fold_results, df_wfo, best_params
 
         except Exception as e:
             if verbose:
@@ -287,7 +295,7 @@ class ExpertProfiler:
             import traceback
             if verbose:
                 traceback.print_exc()
-            return None, None
+            return None, None, None
         finally:
             if bt is not None:
                 try:
@@ -796,3 +804,63 @@ def prune_models(
             survivors.sort(key=lambda m: next(s for _m, s in scored if _m == m), reverse=True)
 
     return survivors, pruned
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HPO param prefix stripping
+# ══════════════════════════════════════════════════════════════════════
+
+_MODEL_PREFIX_MAP: Dict[str, str] = {
+    "logistic": "logit_",
+    "svm": "svm_",
+    "random_forest": "rf_",
+    "decision_tree": "dt_",
+    "xgboost": "xgb_",
+    "lightgbm": "lgbm_",
+    "catboost": "cb_",
+    "lstm": "lstm_",
+    "cnn": "cnn_",
+    "transformer": "transformer_",
+    "gru": "gru_",
+    "gru_lstm": "gru_lstm_",
+    "ensemble_adaptive_regime": None,
+    "ensemble_cnn_lstm_xgboost": None,
+    "stacking_ensemble": None,
+    "meta_ensemble": None,
+}
+
+
+def _strip_model_prefix(params: dict, model_type: str) -> dict:
+    """Remove the Optuna search-space prefix from parameter keys.
+
+    Examples
+    --------
+    >>> _strip_model_prefix({"logit_C": 0.3, "logit_max_iter": 300}, "logistic")
+    {"C": 0.3, "max_iter": 300}
+    """
+    prefix = _MODEL_PREFIX_MAP.get(model_type)
+    if prefix is None:
+        return dict(params)
+    result: Dict[str, Any] = {}
+    L = len(prefix)
+    for k, v in params.items():
+        if isinstance(k, str) and k.startswith(prefix):
+            result[k[L:]] = v
+        else:
+            result[k] = v
+    return result
+
+
+def _reprefix_params(params: dict, model_type: str) -> dict:
+    """Re-add the Optuna search-space prefix so model registry builders
+    (which use filter_params) can find them.
+
+    Examples
+    --------
+    >>> _reprefix_params({"C": 0.3, "max_iter": 300}, "logistic")
+    {"logit_C": 0.3, "logit_max_iter": 300}
+    """
+    prefix = _MODEL_PREFIX_MAP.get(model_type)
+    if prefix is None:
+        return dict(params)
+    return {f"{prefix}{k}": v for k, v in params.items()}
