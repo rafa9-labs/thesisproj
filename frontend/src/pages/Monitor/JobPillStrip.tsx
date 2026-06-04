@@ -34,7 +34,7 @@ export function JobPillStrip({ jobs, selectedJobId, onSelect }: Props) {
           <button
             key={j.job_id}
             onClick={() => onSelect(j.job_id)}
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 transition-all shrink-0"
+            className="flex items-center gap-2 rounded-sm border px-3 py-2 transition-all shrink-0"
             style={{
               borderColor: isSelected ? "var(--color-brand)" : "var(--color-glass-border)",
               backgroundColor: isSelected

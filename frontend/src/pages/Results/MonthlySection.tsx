@@ -12,7 +12,7 @@ export function MonthlySection({ monthlyResults }: MonthlySectionProps) {
   if (data.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-lg border p-8"
+        className="flex items-center justify-center rounded-sm border p-8"
         style={{
           backgroundColor: "var(--color-surface)",
           borderColor: "var(--color-border)",
@@ -30,7 +30,7 @@ export function MonthlySection({ monthlyResults }: MonthlySectionProps) {
     <div className="flex flex-col gap-4">
       <MonthlyReturnsChart monthlyResults={monthlyResults} height={260} />
       <div
-        className="rounded-lg border overflow-hidden"
+        className="rounded-sm border overflow-hidden"
         style={{ borderColor: "var(--color-border)" }}
       >
         <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>

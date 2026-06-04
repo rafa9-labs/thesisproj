@@ -72,7 +72,7 @@ export function LicenseDialog({ isOpen, onClose, onActivated, trialDaysLeft }: L
       style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
     >
       <div
-        className="relative w-full max-w-md rounded-xl border p-6 shadow-2xl"
+        className="relative w-full max-w-md rounded-sm border p-6 shadow-2xl"
         style={{
           borderColor: "var(--color-border)",
           backgroundColor: "var(--color-surface)",
@@ -88,7 +88,7 @@ export function LicenseDialog({ isOpen, onClose, onActivated, trialDaysLeft }: L
 
         <div className="flex items-center gap-3 mb-4">
           <div
-            className="flex h-10 w-10 items-center justify-center rounded-lg"
+            className="flex h-10 w-10 items-center justify-center rounded-sm"
             style={{ backgroundColor: "rgba(41,98,255,0.1)" }}
           >
             <Key size={20} style={{ color: "var(--color-accent)" }} />

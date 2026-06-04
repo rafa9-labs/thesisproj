@@ -31,27 +31,27 @@ function getSubType(val: number | null | undefined, thresholds: [number, number]
 }
 
 const SUB_COLORS = {
-  positive: "#089981",
-  negative: "#F23645",
-  neutral: "#F59E0B",
-  muted: "#787B86",
+  positive: "var(--color-accent-success)",
+  negative: "var(--color-accent-danger)",
+  neutral: "var(--color-accent-warning)",
+  muted: "var(--color-text-muted)",
 } as const;
 
 function KpiCell({ kpi }: { kpi: KpiDef }) {
   return (
     <div
       className="flex flex-col gap-0.5 px-4 py-2 border-r last:border-r-0"
-      style={{ borderColor: "#2A2E39", minWidth: 0 }}
+      style={{ borderColor: "var(--color-glass-border)", minWidth: 0 }}
     >
       <span
         className="text-[10px] font-medium uppercase tracking-[0.1em] truncate"
-        style={{ color: "#787B86", fontFamily: "Inter, sans-serif" }}
+        style={{ color: "var(--color-text-muted)", fontFamily: "Inter, sans-serif" }}
       >
         {kpi.label}
       </span>
       <span
         className="text-sm font-bold leading-none tabular-nums"
-        style={{ color: "#E8ECF1", fontFamily: "JetBrains Mono, monospace" }}
+        style={{ color: "var(--color-text-primary)", fontFamily: "JetBrains Mono, monospace" }}
       >
         {kpi.value}
       </span>
@@ -82,9 +82,9 @@ export function MetricsGrid({
   const [showVif, setShowVif] = useState(false);
 
   const RISK_COLORS: Record<string, string> = {
-    green: "#089981",
-    yellow: "#F59E0B",
-    red: "#F23645",
+    green: "var(--color-accent-success)",
+    yellow: "var(--color-accent-warning)",
+    red: "var(--color-accent-danger)",
   };
 
   const kpis: KpiDef[] = useMemo(() => [
@@ -187,16 +187,16 @@ export function MetricsGrid({
   ], [metrics]);
 
   return (
-    <div className="flex flex-col gap-0" style={{ backgroundColor: "#1E222D", border: "1px solid #2A2E39", borderRadius: 8 }}>
+    <div className="flex flex-col gap-0" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-glass-border)", borderRadius: 8 }}>
       {/* Header row */}
       <div
         className="flex items-center justify-between px-4 py-2 border-b"
-        style={{ borderColor: "#2A2E39" }}
+        style={{ borderColor: "var(--color-glass-border)" }}
       >
         <div className="flex items-center gap-3">
           <span
             className="text-sm font-bold"
-            style={{ color: "#E8ECF1", fontFamily: "JetBrains Mono, monospace" }}
+        style={{ color: "var(--color-text-primary)", fontFamily: "JetBrains Mono, monospace" }}
           >
             {modelName}
           </span>
@@ -211,7 +211,7 @@ export function MetricsGrid({
                 style={{
                   backgroundColor: "rgba(245,158,11,0.1)",
                   border: "1px solid rgba(245,158,11,0.25)",
-                  color: "#F59E0B",
+                  color: "var(--color-accent-warning)",
                   cursor: "pointer",
                 }}
                 title="Collinear features detected"
@@ -221,11 +221,11 @@ export function MetricsGrid({
               </button>
               {showVif && (
                 <div
-                  className="absolute left-0 top-full mt-1 z-50 rounded-lg p-3 text-[11px]"
-                  style={{
-                    backgroundColor: "#252934",
-                    border: "1px solid rgba(245,158,11,0.3)",
-                    color: "#F59E0B",
+                  className="absolute left-0 top-full mt-1 z-50 rounded-sm p-3 text-[11px]"
+                style={{
+                  backgroundColor: "var(--color-elevated)",
+                  border: "1px solid rgba(245,158,11,0.3)",
+                  color: "var(--color-accent-warning)",
                     fontFamily: "JetBrains Mono, monospace",
                     minWidth: 280,
                     boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
@@ -234,13 +234,13 @@ export function MetricsGrid({
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold uppercase tracking-wide text-[10px]">VIF Warning — Collinear Features</span>
-                    <button onClick={() => setShowVif(false)} style={{ color: "#787B86", cursor: "pointer", background: "none", border: "none" }}>
+                    <button onClick={() => setShowVif(false)} style={{ color: "var(--color-text-muted)", cursor: "pointer", background: "none", border: "none" }}>
                       &#10005;
                     </button>
                   </div>
                   <div className="flex flex-col gap-1">
                     {warnings.map((w, i) => (
-                      <span key={i} style={{ color: "#E8ECF1" }}>{w}</span>
+                      <span key={i} style={{ color: "var(--color-text-primary)" }}>{w}</span>
                     ))}
                   </div>
                 </div>
@@ -257,8 +257,8 @@ export function MetricsGrid({
               className="flex items-center gap-1.5 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-all hover:opacity-80"
               style={{
                 backgroundColor: "rgba(255,255,255,0.04)",
-                border: "1px solid #2A2E39",
-                color: RISK_COLORS[overfittingColor ?? "yellow"] ?? "#F59E0B",
+                border: "1px solid var(--color-glass-border)",
+                color: RISK_COLORS[overfittingColor ?? "yellow"] ?? "var(--color-accent-warning)",
                 cursor: onShowOverfitting ? "pointer" : "default",
                 fontFamily: "JetBrains Mono, monospace",
               }}
@@ -266,7 +266,7 @@ export function MetricsGrid({
             >
               <span
                 className="w-2 h-2 rounded-full inline-block"
-                style={{ backgroundColor: RISK_COLORS[overfittingColor ?? "yellow"] ?? "#F59E0B" }}
+                style={{ backgroundColor: RISK_COLORS[overfittingColor ?? "yellow"] ?? "var(--color-accent-warning)" }}
               />
               CV FOLD &sigma; {overfittingScore.toFixed(3)}
               {onShowOverfitting && <Info size={10} />}
@@ -278,8 +278,8 @@ export function MetricsGrid({
               className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider transition-all hover:opacity-80"
               style={{
                 backgroundColor: "rgba(255,255,255,0.04)",
-                border: "1px solid #2A2E39",
-                color: "#787B86",
+                border: "1px solid var(--color-glass-border)",
+                color: "var(--color-text-muted)",
                 cursor: "pointer",
               }}
             >

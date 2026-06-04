@@ -75,7 +75,7 @@ export function TradeHistory({ trades }: TradeHistoryProps) {
 
   return (
     <div
-      className="rounded-lg border p-3 flex flex-col flex-1 min-h-0"
+      className="rounded-sm border p-3 flex flex-col flex-1 min-h-0"
       style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
     >
       {/* Header row */}

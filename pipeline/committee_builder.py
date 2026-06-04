@@ -68,6 +68,28 @@ class CommitteeConfig:
         print(f"[COMMITTEE] Config saved to {path}")
 
     @classmethod
+    def from_dict(cls, data: dict) -> "CommitteeConfig":
+        regimes = {}
+        for rname, rdata in data.get("regimes", {}).items():
+            regimes[rname] = RegimeAssignment(
+                models=rdata["models"],
+                weights=rdata["weights"],
+            )
+        fallback = None
+        if data.get("fallback"):
+            fallback = RegimeAssignment(
+                models=data["fallback"]["models"],
+                weights=data["fallback"]["weights"],
+            )
+        return cls(
+            version=data.get("version", 1),
+            regimes=regimes,
+            fallback=fallback,
+            constraints=data.get("constraints", {}),
+            metadata=data.get("metadata", {}),
+        )
+
+    @classmethod
     def from_json(cls, path: str) -> "CommitteeConfig":
         with open(path) as f:
             data = json.load(f)
@@ -127,7 +149,7 @@ class CommitteeBuilder:
     def __init__(
         self,
         top_k: int = 3,
-        min_sharpe: float = -0.1,
+        min_sharpe: float = 0.0,
         weight_method: str = "sharpe_proportional",
         diversity_penalty: float = 0.05,
     ):
@@ -160,6 +182,7 @@ class CommitteeBuilder:
         constraints.setdefault("max_models_per_regime", self.top_k)
         constraints.setdefault("min_sharpe", self.min_sharpe)
         constraints.setdefault("diversity_penalty", self.diversity_penalty)
+        constraints.setdefault("max_regimes_per_model", 3)
 
         regimes_order = list(matrix.regimes)
         model_names = list(matrix.models)
@@ -171,8 +194,17 @@ class CommitteeBuilder:
         model_usage_count: Dict[str, int] = {}
 
         for r_idx, regime in enumerate(regimes_order):
+            # Hard diversity cap: eligible models are those below the per-model limit
+            max_per_model = constraints["max_regimes_per_model"]
+            eligible = [m for m in model_names
+                        if model_usage_count.get(m, 0) < max_per_model]
+
+            if not eligible:
+                continue
+
             candidates = self._select_candidates(
-                matrix, r_idx, top_k=constraints["max_models_per_regime"]
+                matrix, r_idx, top_k=constraints["max_models_per_regime"],
+                eligible_models=eligible,
             )
 
             if not candidates:
@@ -207,6 +239,7 @@ class CommitteeBuilder:
                 "n_models_profiled": len(model_names),
                 "n_regimes": len(regimes_order),
                 "weight_method": self.weight_method,
+                "max_regimes_per_model": constraints["max_regimes_per_model"],
                 "model_usage": model_usage_count,
             },
         )
@@ -218,14 +251,21 @@ class CommitteeBuilder:
         matrix: "RegimeModelMatrix",
         regime_idx: int,
         top_k: int = 3,
+        eligible_models: Optional[List[str]] = None,
     ) -> List[str]:
-        """Return top-k model names for a given regime by Sharpe."""
+        """Return top-k model names for a given regime by Sharpe.
+
+        If eligible_models is provided, only those models are considered.
+        """
         sharpe_col = matrix.sharpe_matrix[:, regime_idx]
         models = list(matrix.models)
+        eligible_set = set(eligible_models) if eligible_models is not None else None
 
         scored = []
         for i, s in enumerate(sharpe_col):
             if not np.isnan(s) and s >= self.min_sharpe:
+                if eligible_set is not None and models[i] not in eligible_set:
+                    continue
                 scored.append((models[i], float(s), int(matrix.trade_matrix[i, regime_idx])))
 
         # Sort by Sharpe descending, then by trades descending for ties

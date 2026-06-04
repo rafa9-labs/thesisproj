@@ -287,7 +287,7 @@ export function BacktestPlayback({
         <div className="flex-1 flex flex-col min-w-0 p-4">
           <div
             ref={containerRef}
-            className="w-full rounded-lg overflow-hidden border"
+            className="w-full rounded-sm overflow-hidden border"
             style={{ borderColor: "var(--color-glass-border)", backgroundColor: "#131722", minHeight: 440 }}
           />
 

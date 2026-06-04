@@ -29,6 +29,7 @@ MODEL_DESCRIPTIONS = {
     "ensemble_adaptive_regime": ("Adaptive Regime Ensemble", "ensemble", "Regime-aware ensemble combining multiple models"),
     "meta_ensemble": ("Signal Committee", "ensemble", "Multi-model voting committee combining multiple models"),
     "stacking_ensemble": ("Stacking Ensemble", "ensemble", "OOF meta-learner combining multiple base models"),
+    "regime_classifier": ("Regime Classifier", "ensemble", "RF-based market regime classifier for committee routing"),
 }
 
 

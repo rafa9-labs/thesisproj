@@ -32,7 +32,7 @@ export function PerformanceHeatmapSection({ data, isLoading }: PerformanceHeatma
           Model × Pair Performance
         </h3>
         <div
-          className="h-[200px] rounded-lg border animate-pulse"
+          className="h-[200px] rounded-sm border animate-pulse"
           style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
         />
       </div>

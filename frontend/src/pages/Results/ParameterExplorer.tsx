@@ -27,7 +27,7 @@ export function ParameterExplorer({ metrics }: Props) {
 
   return (
     <div
-      className="rounded-xl border p-5"
+      className="rounded-sm border p-5"
       style={{
         borderColor: "var(--color-glass-border)",
         backgroundColor: "var(--color-glass)",

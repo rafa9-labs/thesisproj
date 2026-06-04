@@ -134,7 +134,7 @@ export function BacktestChart({ jobId, model, height = 520 }: BacktestChartProps
 
       <div
         ref={containerRef}
-        className="w-full rounded-lg overflow-hidden border"
+        className="w-full rounded-sm overflow-hidden border"
         style={{ borderColor: "var(--color-glass-border)", backgroundColor: "#131722", minHeight: height }}
       >
         {isLoading && (

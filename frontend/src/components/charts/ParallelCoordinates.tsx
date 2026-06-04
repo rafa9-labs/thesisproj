@@ -101,7 +101,7 @@ export function ParallelCoordinates({ trials }: Props) {
 
   if (paramKeys.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg p-8" style={{ color: "var(--color-text-muted)" }}>
+      <div className="flex items-center justify-center rounded-sm p-8" style={{ color: "var(--color-text-muted)" }}>
         <span className="text-xs">No numeric parameter data available for visualization.</span>
       </div>
     );

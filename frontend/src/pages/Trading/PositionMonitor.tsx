@@ -50,7 +50,7 @@ export function PositionMonitor({
   const returnPct = initialEquity > 0 ? ((equity - initialEquity) / initialEquity) * 100 : 0;
   return (
     <div
-      className="rounded-lg border p-3"
+      className="rounded-sm border p-3"
       style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
     >
       <h4

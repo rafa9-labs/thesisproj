@@ -77,7 +77,7 @@ export function SharpeHeatmap({
   if (models.length === 0 || pairs.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-lg border p-8"
+        className="flex items-center justify-center rounded-sm border p-8"
         style={{
           backgroundColor: "var(--color-surface)",
           borderColor: "var(--color-border)",
@@ -93,7 +93,7 @@ export function SharpeHeatmap({
 
   return (
     <div
-      className="rounded-lg border overflow-auto p-3"
+      className="rounded-sm border overflow-auto p-3"
       style={{
         borderColor: "var(--color-border)",
         backgroundColor: "var(--color-surface)",

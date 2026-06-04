@@ -26,6 +26,7 @@ from models.registry import build_model
 from pipeline.committee_builder import CommitteeConfig
 from pipeline.regime_utils import (
     detect_regimes,
+    detect_regimes_anchored,
     attach_regime_columns,
     RegimeConfig,
     _REGIME_NAMES,
@@ -63,6 +64,109 @@ class CommitteeBacktestResult:
     execution_time_s: float = 0.0
     warnings: List[str] = field(default_factory=list)
 
+    @property
+    def fold_consistency_cv(self) -> float:
+        """Coefficient of Variation of fold Sharpes.
+
+        CV = std(fold Sharpes) / |mean(fold Sharpe)|.
+        A CV >= 1.0 indicates the committee's performance is dominated by
+        a single windfall fold — a red flag for overfitting.
+        Returns inf if mean is near zero or fewer than 3 folds exist.
+        """
+        sharpes = [f.sharpe for f in self.folds if np.isfinite(f.sharpe)]
+        if len(sharpes) < 3:
+            return float("inf")
+        mu = float(np.mean(sharpes))
+        if abs(mu) < 1e-8:
+            return float("inf")
+        return float(np.std(sharpes, ddof=1) / abs(mu))
+
+    @property
+    def fold_consistency_pass(self) -> bool:
+        return self.fold_consistency_cv < 1.0
+
+    @property
+    def per_regime_summary(self) -> Dict[str, Dict[str, float]]:
+        """Aggregate per-regime metrics across all folds.
+
+        Returns a dict mapping regime_name -> {
+            "sharpe": weighted average of fold Sharpes by active fraction,
+            "trades": total trades attributed to this regime,
+            "folds_active": number of folds where this regime was active,
+        }
+        """
+        regime_data: Dict[str, list] = {}
+        for fold in self.folds:
+            frac = getattr(fold, "per_model_active_fraction", {}) or {}
+            for rname, active_frac in frac.items():
+                if active_frac <= 0:
+                    continue
+                if rname not in regime_data:
+                    regime_data[rname] = []
+                regime_data[rname].append({
+                    "sharpe": fold.sharpe if np.isfinite(fold.sharpe) else 0.0,
+                    "trades": int(fold.trades) * active_frac,
+                    "active_frac": active_frac,
+                })
+
+        summary: Dict[str, Dict[str, float]] = {}
+        for rname, entries in regime_data.items():
+            total_frac = sum(e["active_frac"] for e in entries)
+            if total_frac <= 0:
+                continue
+            weighted_sharpe = sum(e["sharpe"] * e["active_frac"] for e in entries) / total_frac
+            total_trades = sum(e["trades"] for e in entries)
+            summary[rname] = {
+                "sharpe": round(float(weighted_sharpe), 4),
+                "trades": int(round(total_trades, 0)),
+                "folds_active": len(entries),
+            }
+        return summary
+
+    def regime_coverage_report(
+        self, min_trades: int = 30, min_sharpe: float = 0.0,
+    ) -> Dict[str, Dict]:
+        """Evaluate whether each regime meets minimum coverage standards.
+
+        Parameters
+        ----------
+        min_trades : int
+            Minimum number of trades across all folds to consider a regime
+            adequately covered (default 30).
+        min_sharpe : float
+            Minimum weighted Sharpe to consider a regime viable (default 0.0).
+
+        Returns
+        -------
+        dict
+            Mapping regime_name -> {
+                "sharpe": float, "trades": int, "folds_active": int,
+                "covered": bool (True if both thresholds met),
+            }
+        """
+        summary = self.per_regime_summary
+        report: Dict[str, Dict] = {}
+        for rname, data in summary.items():
+            covered = (
+                data["trades"] >= min_trades
+                and data["sharpe"] > min_sharpe
+            )
+            report[rname] = {**data, "covered": covered}
+        return report
+
+    @property
+    def all_regimes_covered(self) -> bool:
+        """True iff every regime in the config has positive coverage."""
+        # Only report config regimes, not detected-only regimes
+        report = self.regime_coverage_report()
+        config_regimes = set(self.config.regimes.keys())
+        report_regimes = set(report.keys())
+        # Every config regime must appear and be covered
+        for rname in config_regimes:
+            if rname not in report or not report[rname]["covered"]:
+                return False
+        return True
+
     def to_summary_dict(self) -> dict:
         return {
             "models": self.models,
@@ -71,6 +175,9 @@ class CommitteeBacktestResult:
             "avg_trades": round(self.avg_trades, 1),
             "execution_time_s": round(self.execution_time_s, 1),
             "regimes_configured": len(self.config.regimes),
+            "fold_consistency_cv": round(self.fold_consistency_cv, 4),
+            "fold_consistency_pass": bool(np.isfinite(self.fold_consistency_cv)) and self.fold_consistency_pass,
+            "all_regimes_covered": self.all_regimes_covered,
             "warnings": self.warnings,
         }
 
@@ -152,12 +259,8 @@ class CommitteeBacktester:
         t0 = time.time()
         warnings: List[str] = []
 
-        # Compute features + regime tags on full dataframe
+        # Compute features on full dataframe (indicators needed for model training)
         df_full = self._prepare_features(df)
-        df_full = attach_regime_columns(df_full, config=self.regime_cfg)
-
-        # Train a regime classifier on the full labeled data
-        self._regime_clf = self._train_regime_classifier(df_full)
 
         # Generate WFO splits by month
         splits = self._make_monthly_splits(df_full, train_months, test_months)
@@ -450,8 +553,8 @@ class CommitteeBacktester:
         X_test = test_slice[feat_cols].fillna(0.0).to_numpy(np.float32)
         X_seq_test = self._build_sequences(test_slice, self.seq_len) if _needs_seq else None
 
-        # Classify regime per bar
-        regime_ids = self._predict_regimes(test_slice)
+        # Classify regime per bar (per-fold anchored GMM)
+        regime_ids = self._predict_regimes(test_slice, df_train=train_slice, fold_idx=fold_idx)
 
         # Get blended predictions
         blended_probs = self._blend_predictions(X_test, regime_ids, X_seq=X_seq_test)
@@ -663,19 +766,19 @@ class CommitteeBacktester:
 
     # ── Regime routing ──────────────────────────────────────────────
 
-    def _predict_regimes(self, df: pd.DataFrame) -> np.ndarray:
+    def _predict_regimes(self, df: pd.DataFrame, df_train: Optional[pd.DataFrame] = None,
+                         fold_idx: int = 0) -> np.ndarray:
         """Classify each bar into a 7-class regime.
 
-        Uses the trained RegimeClassifier if available, falls back to
-        rule-based detection.
+        Uses anchored GMM detection per fold when df_train is provided (per-fold
+        WFO fitting). Falls back to single-fit anchored detection otherwise.
         """
-        if self._regime_clf is not None and self._regime_clf.is_fitted:
-            try:
-                return self._regime_clf.predict(df)
-            except Exception:
-                pass
-
-        return detect_regimes(df, config=self.regime_cfg)
+        if df_train is not None:
+            return detect_regimes_anchored(
+                df, df_train=df_train, window=252,
+                random_state=42 + fold_idx,
+            )
+        return detect_regimes_anchored(df, window=252, random_state=42)
 
     def _blend_predictions(
         self,

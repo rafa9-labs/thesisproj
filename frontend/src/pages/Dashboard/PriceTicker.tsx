@@ -36,7 +36,7 @@ function PriceCard({ price }: { price: LivePrice }) {
 
   return (
     <div
-      className="flex-1 rounded-lg border px-3 py-2.5 min-w-0"
+      className="flex-1 rounded-sm border px-3 py-2.5 min-w-0"
       style={{
         borderColor: "var(--color-glass-border)",
         backgroundColor: "var(--color-glass)",
@@ -87,7 +87,7 @@ function PriceCard({ price }: { price: LivePrice }) {
 
 function SkeletonCard() {
   return (
-    <div className="flex-1 rounded-lg border px-3 py-2.5 animate-pulse min-w-0"
+    <div className="flex-1 rounded-sm border px-3 py-2.5 animate-pulse min-w-0"
       style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
       <div className="h-3 w-14 rounded mb-2" style={{ backgroundColor: "var(--color-glass-hover)" }} />
       <div className="flex gap-2 mb-2">
@@ -110,7 +110,7 @@ export function PriceTicker({ pairs }: { pairs: string[] }) {
   if (data?.source === "key_required") {
     return (
       <div
-        className="flex items-center gap-3 rounded-lg border px-4 py-3"
+        className="flex items-center gap-3 rounded-sm border px-4 py-3"
         style={{
           borderColor: "var(--color-glass-border)",
           backgroundColor: "var(--color-glass)",
@@ -135,7 +135,7 @@ export function PriceTicker({ pairs }: { pairs: string[] }) {
   if (data?.source === "unavailable") {
     return (
       <div
-        className="flex items-center gap-3 rounded-lg border px-4 py-3"
+        className="flex items-center gap-3 rounded-sm border px-4 py-3"
         style={{
           borderColor: "var(--color-glass-border)",
           backgroundColor: "var(--color-glass)",

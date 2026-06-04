@@ -93,7 +93,7 @@ export function EquityOverlayChart({ curves, height = 400 }: EquityOverlayChartP
   if (validCurves.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-lg border p-8"
+        className="flex items-center justify-center rounded-sm border p-8"
         style={{
           height,
           backgroundColor: "var(--color-surface)",
@@ -117,7 +117,7 @@ export function EquityOverlayChart({ curves, height = 400 }: EquityOverlayChartP
         Equity Overlay
       </h3>
       <div
-        className="rounded-lg border overflow-hidden relative"
+        className="rounded-sm border overflow-hidden relative"
         style={{ borderColor: "var(--color-border)" }}
       >
         <div

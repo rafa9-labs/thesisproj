@@ -85,7 +85,7 @@ export function ValidationBar({
       className="sticky bottom-0 z-20 flex items-center justify-between px-6"
       style={{
         height: 56,
-        borderTop: "1px solid #333",
+        borderTop: "1px solid var(--color-glass-border)",
         backgroundColor: "var(--color-app)",
       }}
     >
@@ -173,7 +173,7 @@ export function ValidationBar({
             paddingLeft: 24,
             paddingRight: 24,
             backgroundColor: "var(--color-brand)",
-            color: "#0A0D12",
+            color: "var(--color-app)",
             cursor: canDeploy && !isSubmitting ? "pointer" : "not-allowed",
             opacity: canDeploy ? (isSubmitting ? 0.7 : 1) : 0.35,
             border: "none",

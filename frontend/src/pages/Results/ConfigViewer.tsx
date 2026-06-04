@@ -77,7 +77,7 @@ export function ConfigViewer({ config }: ConfigViewerProps) {
       </button>
       {isOpen && (
         <div
-          className="rounded-lg border p-4 overflow-auto"
+          className="rounded-sm border p-4 overflow-auto"
           style={{
             backgroundColor: "var(--color-surface)",
             borderColor: "var(--color-border)",

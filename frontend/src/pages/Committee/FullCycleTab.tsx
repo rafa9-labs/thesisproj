@@ -3,11 +3,14 @@ import {
   useStartFullCycle,
   useFullCycleStatus,
   useFullCycleResults,
+  useFullCycleHistory,
 } from "@/api/queries";
-import type { FactoryIterationRecord, FullCycleRequest } from "@/api/schemas";
+import apiClient from "@/api/client";
+import type { FullCycleRequest, FullCycleHistoryEntry } from "@/api/schemas";
 
-const DEFAULT_MODELS = [
-  "logistic", "random_forest", "xgboost", "lightgbm", "decision_tree",
+const CORE_MODELS = [
+  "logistic", "svm", "random_forest", "xgboost",
+  "lightgbm", "catboost", "lstm", "ensemble_adaptive_regime",
 ];
 
 const ALL_MODELS = [
@@ -32,38 +35,70 @@ function formatStopReason(raw: string): string {
   return raw || "Optimization stopped";
 }
 
-const FC_PHASES = ["profiling", "building", "backtesting", "optimizing"] as const;
+const FC_PHASES = ["feature_sweep", "phase0_profiling", "phase1_hpo", "phase2_assembly", "phase3_validation", "phase4_factory"] as const;
 const PHASE_LABEL: Record<string, string> = {
-  profiling: "Profiling",
-  building: "Building",
-  backtesting: "Backtesting",
-  optimizing: "Optimizing",
+  feature_sweep: "Phase -1: Sweep",
+  phase0_profiling: "Phase 0: Pre-screen",
+  phase1_hpo: "Phase 1: HPO",
+  phase2_assembly: "Phase 2: Assemble",
+  phase3_validation: "Phase 3: Validate",
+  phase4_factory: "Phase 4: Factory",
 };
 const PHASE_DESC: Record<string, string> = {
-  profiling: "Running all models across walk-forward folds to build regime x model matrix",
-  building: "Selecting top models per regime and assigning blend weights",
-  backtesting: "Validating committee with full walk-forward backtest",
-  optimizing: "Iteratively improving committee via propose -> test -> accept/reject",
+  feature_sweep: "Grid-expand indicators, shallow RF + permutation importance -> lock features",
+  phase0_profiling: "Quick-screening all models -> prune to surviving set with diversity enforcement",
+  phase1_hpo: "Targeted hyperparameter optimization per survivor with TPE sampler",
+  phase2_assembly: "Building committee config from best HPO models per regime",
+  phase3_validation: "36-month WFO, fold consistency, regime coverage, 3-seed robustness",
+  phase4_factory: "Iterative LLM-guided optimization with proxy WFO -> final 10-year WFO",
 };
 
 export function FullCycleTab() {
   const [jobId, setJobId] = useState<string | null>(null);
-  const [models, setModels] = useState<string[]>(DEFAULT_MODELS);
+  const [models, setModels] = useState<string[]>(CORE_MODELS);
   const [proposer, setProposer] = useState("llm");
   const [llmBackend, setLlmBackend] = useState("deepseek");
   const [maxIter, setMaxIter] = useState(20);
   const [patience, setPatience] = useState(5);
   const [tolerance, setTolerance] = useState(0.02);
+  const [trainMonths, setTrainMonths] = useState(36);
+  const [testMonths, setTestMonths] = useState(1);
+  const [hpoSampler, setHpoSampler] = useState("tpe");
+  const [cvBlocks, setCvBlocks] = useState(3);
+  const [profileTrialsPhase0, setProfileTrialsPhase0] = useState(5);
+  const [maxSurvivingModels, setMaxSurvivingModels] = useState(7);
+  const [sweepNEstimators, setSweepNEstimators] = useState(100);
+  const [sweepMaxDepth, setSweepMaxDepth] = useState(5);
 
   const startMutation = useStartFullCycle();
   const { data: status } = useFullCycleStatus(jobId);
   const { data: results } = useFullCycleResults(
-    status?.phase === "completed" || status?.phase === "failed" ? jobId : null,
+    status?.phase === "completed" || status?.phase === "failed"
+      || status?.phase === "validation_failed" ? jobId : null,
   );
 
-  const isRunning = status && status.phase !== "completed" && status.phase !== "failed";
-  const currentPhaseIdx = FC_PHASES.indexOf(status?.phase as typeof FC_PHASES[number] ?? "");
+  const terminalPhases = new Set(["completed", "failed", "validation_failed"]);
+  const isRunning = status && !terminalPhases.has(status.phase);
 
+  const [showHistory, setShowHistory] = useState(true);
+  const { data: history } = useFullCycleHistory();
+
+  function handleDownload() {
+    if (!results) return;
+    const blob = new Blob([JSON.stringify(results, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `full_cycle_${jobId ?? "results"}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  function handleDeploy() {
+    apiClient.post("/api/v1/live/deploy-committee", {
+      pair: "EURUSD", timeframe: "H1", initial_equity: 10000.0, confidence_threshold: 0.55,
+    }).then((r: { data: { session_id: string } }) => {
+      window.location.href = `/trading?session=${r.data.session_id}`;
+    });
+  }
   function handleStart() {
     const req: FullCycleRequest = {
       models,
@@ -72,9 +107,15 @@ export function FullCycleTab() {
       max_iterations: maxIter,
       patience,
       stopping_tolerance: tolerance,
-      profile_trials: 5,
+      train_months: trainMonths,
+      test_months: testMonths,
+      hpo_sampler: hpoSampler,
+      cv_blocks: cvBlocks,
+      profile_trials_phase0: profileTrialsPhase0,
+      max_surviving_models: maxSurvivingModels,
+      sweep_n_estimators: sweepNEstimators,
+      sweep_max_depth: sweepMaxDepth,
       committee_top_k: 3,
-      train_months: 6,
     };
     startMutation.mutate(req, { onSuccess: (data) => setJobId(data.job_id) });
   }
@@ -182,22 +223,43 @@ export function FullCycleTab() {
               ))}
             </div>
 
-            {/* Settings row */}
+            {/* Settings row 1: Pipeline controls */}
             <div style={{ marginTop: 16, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
               <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+                Train Months:{" "}
+                <input type="number" value={trainMonths} onChange={(e) => setTrainMonths(Number(e.target.value))} min={12} max={120} style={{ width: 42, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }} />
+              </label>
+              <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+                Test Months:{" "}
+                <input type="number" value={testMonths} onChange={(e) => setTestMonths(Number(e.target.value))} min={1} max={12} style={{ width: 36, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }} />
+              </label>
+              <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+                HPO Sampler:{" "}
+                <select value={hpoSampler} onChange={(e) => setHpoSampler(e.target.value)} style={{ background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "3px 6px", fontSize: 10 }}>
+                  <option value="tpe">TPE</option>
+                  <option value="random">Random</option>
+                  <option value="grid">Grid</option>
+                </select>
+              </label>
+              <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+                CV Blocks:{" "}
+                <input type="number" value={cvBlocks} onChange={(e) => setCvBlocks(Number(e.target.value))} min={2} max={10} style={{ width: 36, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }} />
+              </label>
+              <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+                Phase 0 Trials:{" "}
+                <input type="number" value={profileTrialsPhase0} onChange={(e) => setProfileTrialsPhase0(Number(e.target.value))} min={2} max={50} style={{ width: 36, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }} />
+              </label>
+              <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+                Max Survivors:{" "}
+                <input type="number" value={maxSurvivingModels} onChange={(e) => setMaxSurvivingModels(Number(e.target.value))} min={2} max={15} style={{ width: 36, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }} />
+              </label>
+            </div>
+
+            {/* Settings row 2: Factory / Proposer */}
+            <div style={{ marginTop: 12, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
                 Proposer:{" "}
-                <select
-                  value={proposer}
-                  onChange={(e) => setProposer(e.target.value)}
-                  style={{
-                    background: "var(--color-input-bg)",
-                    border: "1px solid var(--color-glass-border)",
-                    borderRadius: 4,
-                    color: "var(--color-text-primary)",
-                    padding: "3px 6px",
-                    fontSize: 10,
-                  }}
-                >
+                <select value={proposer} onChange={(e) => setProposer(e.target.value)} style={{ background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "3px 6px", fontSize: 10 }}>
                   <option value="llm">LLM (DeepSeek V4)</option>
                   <option value="ollama">LLM (Ollama)</option>
                   <option value="deterministic">Deterministic Greedy</option>
@@ -206,18 +268,7 @@ export function FullCycleTab() {
               {proposer !== "deterministic" && (
                 <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
                   Backend:{" "}
-                  <select
-                    value={llmBackend}
-                    onChange={(e) => setLlmBackend(e.target.value)}
-                    style={{
-                      background: "var(--color-input-bg)",
-                      border: "1px solid var(--color-glass-border)",
-                      borderRadius: 4,
-                      color: "var(--color-text-primary)",
-                      padding: "3px 6px",
-                      fontSize: 10,
-                    }}
-                  >
+                  <select value={llmBackend} onChange={(e) => setLlmBackend(e.target.value)} style={{ background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "3px 6px", fontSize: 10 }}>
                     <option value="deepseek">DeepSeek</option>
                     <option value="ollama">Ollama</option>
                     <option value="openai">OpenAI</option>
@@ -227,33 +278,99 @@ export function FullCycleTab() {
               )}
               <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
                 Max Iter:{" "}
-                <input
-                  type="number" value={maxIter}
-                  onChange={(e) => setMaxIter(Number(e.target.value))}
-                  min={3} max={50}
-                  style={{ width: 42, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                />
+                <input type="number" value={maxIter} onChange={(e) => setMaxIter(Number(e.target.value))} min={3} max={50} style={{ width: 42, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }} />
               </label>
               <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
                 Patience:{" "}
-                <input
-                  type="number" value={patience}
-                  onChange={(e) => setPatience(Number(e.target.value))}
-                  min={3} max={15}
-                  style={{ width: 40, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                />
+                <input type="number" value={patience} onChange={(e) => setPatience(Number(e.target.value))} min={3} max={15} style={{ width: 40, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }} />
               </label>
               <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
                 Tolerance:{" "}
-                <input
-                  type="number" value={tolerance}
-                  onChange={(e) => setTolerance(Number(e.target.value))}
-                  min={0.005} max={0.1} step={0.005}
-                  style={{ width: 52, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }}
-                />
+                <input type="number" value={tolerance} onChange={(e) => setTolerance(Number(e.target.value))} min={0.005} max={0.1} step={0.005} style={{ width: 52, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }} />
               </label>
             </div>
+
+            {/* Settings row 3: Phase -1 Feature Sweep */}
+            <div style={{ marginTop: 12, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", padding: "8px 12px", background: "rgba(0,229,255,0.04)", border: "1px solid rgba(0,229,255,0.12)", borderRadius: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-brand)" }}>Phase -1:</span>
+              <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+                RF Trees:{" "}
+                <input type="number" value={sweepNEstimators} onChange={(e) => setSweepNEstimators(Number(e.target.value))} min={30} max={300} step={10} style={{ width: 42, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }} />
+              </label>
+              <label style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+                Max Depth:{" "}
+                <input type="number" value={sweepMaxDepth} onChange={(e) => setSweepMaxDepth(Number(e.target.value))} min={2} max={10} style={{ width: 32, background: "var(--color-input-bg)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-primary)", padding: "2px 6px", fontSize: 10, fontFamily: "var(--font-mono)" }} />
+              </label>
+              <span style={{ fontSize: 9, color: "var(--color-text-dim)" }}>(shallow RF {`->`} permutation importance {`->`} lock features)</span>
+            </div>
           </div>
+        )}
+      </div>
+
+      {/* ── Run History Panel ── */}
+      <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-glass-border)", borderRadius: 4, padding: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: history?.entries?.length ? 14 : 0 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-primary)" }}>
+            Run History{history?.total_runs ? ` (${history.total_runs})` : ""}
+          </span>
+          <button onClick={() => setShowHistory(!showHistory)} style={{ background: "none", border: "none", color: "var(--color-text-muted)", cursor: "pointer", fontSize: 10, fontFamily: "var(--font-mono)" }}>
+            {showHistory ? "Hide" : "Show"}
+          </button>
+        </div>
+        {showHistory && (
+          <>
+            {history && history.entries.length === 0 && (
+              <div style={{ fontSize: 10, color: "var(--color-text-dim)", textAlign: "center", padding: 16 }}>No history yet. Run your first Full Cycle to see results here.</div>
+            )}
+            {history && history.entries.length > 0 && (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10 }}>
+                <thead>
+                  <tr>
+                    <th style={histThStyle}>Started</th>
+                    <th style={histThStyle}>Status</th>
+                    <th style={histThStyle}>Time</th>
+                    <th style={histThStyle}>Locked</th>
+                    <th style={histThStyle}>Survivors</th>
+                    <th style={{ ...histThStyle, textAlign: "right" }}>Sharpe</th>
+                    <th style={histThStyle}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.entries.map((entry: FullCycleHistoryEntry) => {
+                    const isActive = entry.job_id === jobId;
+                    const isTerminal = terminalPhases.has(entry.status);
+                    const isInProgress = !isTerminal && entry.status !== "unknown";
+                    const started = entry.started_at ? new Date(entry.started_at).toLocaleString(undefined, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "--";
+                    const timeStr = entry.total_time_s > 0 ? (entry.total_time_s >= 3600 ? `${Math.floor(entry.total_time_s / 3600)}h ${Math.floor((entry.total_time_s % 3600) / 60)}m` : `${Math.floor(entry.total_time_s / 60)}m ${Math.floor(entry.total_time_s % 60)}s`) : "--";
+                    const sharpeStr = entry.avg_sharpe !== 0 ? entry.avg_sharpe.toFixed(2) : "--";
+                    const sharpeColor = entry.avg_sharpe > 0 ? "#089981" : entry.avg_sharpe < 0 ? "#F23645" : "var(--color-text-dim)";
+                    const statusColor = isInProgress ? "var(--color-brand)" : entry.status === "completed" ? "#089981" : entry.status === "validation_failed" ? "#F2B436" : "#F23645";
+                    const survivorsStr = entry.survivors_count > 0 ? entry.survivors.slice(0, 3).join(",") + (entry.survivors_count > 3 ? ` +${entry.survivors_count - 3}` : "") : "--";
+                    return (
+                      <tr key={entry.job_id} style={{ borderBottom: "1px solid var(--color-glass-border)", background: isActive ? "rgba(0,229,255,0.04)" : "transparent" }}>
+                        <td style={{ ...histTdStyle, fontFamily: "var(--font-mono)", opacity: isActive ? 1 : 0.7 }}>{started}</td>
+                        <td style={histTdStyle}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", display: "inline-block", background: statusColor, animation: isInProgress ? "pulse 1.5s infinite" : "none" }} />
+                            <span style={{ color: "var(--color-text-secondary)" }}>{isInProgress ? "Running" : entry.status}</span>
+                          </span>
+                        </td>
+                        <td style={{ ...histTdStyle, fontFamily: "var(--font-mono)", color: "var(--color-text-dim)" }}>{timeStr}</td>
+                        <td style={{ ...histTdStyle, fontFamily: "var(--font-mono)", color: "var(--color-text-dim)" }}>{entry.locked_features_count > 0 ? entry.locked_features_count : "--"}</td>
+                        <td style={{ ...histTdStyle, fontFamily: "var(--font-mono)", color: "var(--color-text-dim)", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" }}>{survivorsStr}</td>
+                        <td style={{ ...histTdStyle, fontFamily: "var(--font-mono)", textAlign: "right", color: sharpeColor }}>{sharpeStr}</td>
+                        <td style={histTdStyle}>
+                          <button onClick={() => setJobId(entry.job_id)} disabled={isActive} style={{ background: "none", border: "none", cursor: isActive ? "default" : "pointer", color: isActive ? "var(--color-text-dim)" : "var(--color-brand)", fontSize: 9, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "var(--font-mono)" }}>
+                            {isActive ? "Active" : "Load"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </>
         )}
       </div>
 
@@ -278,7 +395,7 @@ export function FullCycleTab() {
                 color: "var(--color-text-primary)",
               }}
             >
-              {status.phase === "completed" ? "Full Cycle Complete" : status.phase === "failed" ? "Pipeline Failed" : "Pipeline Progress"}
+              {status.phase === "completed" ? "Full Cycle Complete" : status.phase === "validation_failed" ? "Validation Failed" : status.phase === "failed" ? "Pipeline Failed" : "Pipeline Progress"}
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {isRunning && (
@@ -297,11 +414,12 @@ export function FullCycleTab() {
             </div>
           </div>
 
-          {/* 4-Phase progress bar */}
+          {/* 6-Phase progress bar */}
           <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
             {FC_PHASES.map((phase, idx) => {
               const isActive = phase === status.phase;
-              const isDone = idx < currentPhaseIdx || status.phase === "completed";
+              const phaseNum = status.phase_number ?? 0;
+              const isDone = idx < phaseNum || status.phase === "completed";
               return (
                 <div key={phase} style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
                   <div style={{
@@ -336,6 +454,32 @@ export function FullCycleTab() {
               );
             })}
           </div>
+
+          {/* Phase -1 locked features */}
+          {status.locked_features_count !== undefined && status.locked_features_count > 0 && (
+            <div style={{ padding: 10, background: "rgba(0,229,255,0.06)", border: "1px solid rgba(0,229,255,0.15)", borderRadius: 4, marginBottom: 12, fontSize: 10 }}>
+              <span style={{ fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-brand)" }}>
+                Phase -1: {status.locked_features_count} features locked
+              </span>
+            </div>
+          )}
+
+          {/* Phase 0 survivors */}
+          {status.pruned_models?.length > 0 && (
+            <div style={{ padding: 10, background: "var(--color-elevated)", border: "1px solid var(--color-glass-border)", borderRadius: 4, marginBottom: 12, fontSize: 10 }}>
+              <span style={{ fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>
+                Phase 0: Pruned {status.pruned_models.length} models
+              </span>
+              {status.surviving_models?.length > 0 && (
+                <div style={{ marginTop: 6, display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  <span style={{ color: "var(--color-text-dim)" }}>Survivors:</span>
+                  {status.surviving_models.map((m: string) => (
+                    <span key={m} style={{ background: "rgba(8,153,129,0.12)", border: "1px solid rgba(8,153,129,0.25)", borderRadius: 3, padding: "2px 7px", color: "#089981", fontFamily: "var(--font-mono)" }}>{m}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Current action / Factory iteration */}
           {isRunning && status?.phase === "optimizing" && status?.current_action && (
@@ -378,11 +522,23 @@ export function FullCycleTab() {
               {status.error || "Unknown error"}
             </div>
           )}
+
+          {status?.phase === "validation_failed" && (
+            <div style={{ padding: 14, background: "rgba(242,180,54,0.08)", border: "1px solid rgba(242,180,54,0.25)", borderRadius: 4, marginBottom: 12, fontSize: 11 }}>
+              <span style={{ fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#F2B436" }}>Phase 3 Validation Failed</span>
+              <div style={{ marginTop: 8, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", lineHeight: 1.6 }}>
+                {status.error || "One or more gates failed. Check the results for diagnostics."}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 10, color: "var(--color-text-dim)" }}>
+                Suggested: increase train_months, reduce max_surviving_models, or run with more Phase 0 trials.
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* ── Results Panel ── */}
-      {results && status?.phase === "completed" && (
+      {results && (status?.phase === "completed" || status?.phase === "validation_failed") && (
         <div
           style={{
             background: "var(--color-surface)",
@@ -392,45 +548,85 @@ export function FullCycleTab() {
           }}
         >
           <h3 style={{
-            fontSize: 14,
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "var(--color-text-primary)",
-            margin: "0 0 20px",
+            fontSize: 14, fontWeight: 600, letterSpacing: "0.08em",
+            textTransform: "uppercase", color: "var(--color-text-primary)", margin: "0 0 20px",
           }}>
             Pipeline Results
+            {status?.phase === "validation_failed" && (
+              <span style={{ fontSize: 11, color: "#F2B436", marginLeft: 10, fontWeight: 500 }}>VALIDATION FAILED</span>
+            )}
             <span style={{ fontSize: 11, color: "var(--color-text-muted)", marginLeft: 10, fontWeight: 400, fontFamily: "var(--font-mono)" }}>
               {Number(results.total_time_s).toFixed(0)}s
             </span>
           </h3>
 
-          {/* Racecar backtest summary */}
+          {/* Phase -1 Feature Sweep */}
+          {results.locked_features_count !== undefined && results.locked_features_count > 0 && (
+            <>
+              <SectionHeader label="Phase -1: Feature Sweep" />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
+                <MetricCard label="Features Locked" value={String(results.locked_features_count)} color="#089981" />
+                <MetricCard label="Features Pruned" value={String(results.pruned_features_count ?? 0)} color="#F23645" />
+                <MetricCard label="Top Feature" value={results.top_importance_feature || "N/A"} color="var(--color-text-secondary)" />
+              </div>
+            </>
+          )}
+
+          {/* Phase 0 survivors */}
+          {results.phase0_survivors?.length > 0 && (
+            <>
+              <SectionHeader label="Phase 0: Pre-screened Survivors" />
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 20 }}>
+                {results.phase0_survivors.map((m: string) => (
+                  <span key={m} style={{ background: "rgba(8,153,129,0.12)", border: "1px solid rgba(8,153,129,0.25)", borderRadius: 3, padding: "3px 9px", fontSize: 10, fontFamily: "var(--font-mono)", color: "#089981" }}>{m}</span>
+                ))}
+              </div>
+              {results.phase0_pruned?.length > 0 && (
+                <div style={{ marginBottom: 16, fontSize: 9, color: "var(--color-text-dim)" }}>
+                  Pruned: {results.phase0_pruned.join(", ")}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Phase 3 validation */}
+          <SectionHeader label={`Phase 3: Validation${!results.phase3_fold_consistency_pass ? " (FAILED)" : ""}`} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
+            <MetricCard label="Fold CV" value={Number(results.phase3_fold_consistency_cv ?? 0).toFixed(3)} color={results.phase3_fold_consistency_pass ? "#089981" : "#F23645"} />
+            <MetricCard label="Regime Coverage" value={results.phase3_regime_coverage ? "PASS" : "FAIL"} color={results.phase3_regime_coverage ? "#089981" : "#F23645"} />
+            <MetricCard label="Seed Robustness" value={results.phase3_seed_robustness_pass ? "PASS" : "FAIL"} color={results.phase3_seed_robustness_pass ? "#089981" : "#F23645"} />
+            <MetricCard label="Seed Sharpe" value={Number(results.phase3_seed_robustness_sharpe ?? 0).toFixed(3)} color={Number(results.phase3_seed_robustness_sharpe ?? 0) >= 0 ? "#089981" : "#F23645"} />
+          </div>
+
+          {status?.phase === "validation_failed" && (
+            <div style={{ marginBottom: 20, padding: 14, background: "rgba(242,180,54,0.06)", border: "1px solid rgba(242,180,54,0.2)", borderRadius: 4, fontSize: 10, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 600, color: "#F2B436" }}>Validation halted pipeline.</span> Phase 4 Factory was skipped. Review the diagnostics above and adjust parameters. Common fixes: increase train_months, reduce max_surviving_models, or add more Phase 0 trials.
+            </div>
+          )}
+
+          {/* Team Backtest */}
           {results.racecar_backtest && (
-            <SectionHeader label="Racecar Backtest" />
+            <SectionHeader label="Team Backtest" />
           )}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10, marginBottom: 24 }}>
-            <MetricCard
-              label="Avg Sharpe"
-              value={Number((results.racecar_backtest as Record<string, unknown> | undefined)?.avg_sharpe ?? 0).toFixed(3)}
-              color={Number((results.racecar_backtest as Record<string, unknown> | undefined)?.avg_sharpe ?? 0) >= 0 ? "#089981" : "#F23645"}
-            />
-            <MetricCard
-              label="Avg Trades"
-              value={String((results.racecar_backtest as Record<string, unknown> | undefined)?.avg_trades ?? 0)}
-              color="var(--color-text-secondary)"
-            />
-            <MetricCard
-              label="Folds"
-              value={String((results.racecar_backtest as Record<string, unknown> | undefined)?.total_folds ?? 0)}
-              color="var(--color-text-secondary)"
-            />
-            <MetricCard
-              label="Models in Config"
-              value={String((results.racecar_backtest as Record<string, unknown> | undefined)?.models?.length ?? 0)}
-              color="var(--color-text-secondary)"
-            />
+            <MetricCard label="Avg Sharpe" value={Number((results.racecar_backtest as Record<string, unknown> | undefined)?.avg_sharpe ?? 0).toFixed(3)} color={Number((results.racecar_backtest as Record<string, unknown> | undefined)?.avg_sharpe ?? 0) >= 0 ? "#089981" : "#F23645"} />
+            <MetricCard label="Avg Trades" value={String((results.racecar_backtest as Record<string, unknown> | undefined)?.avg_trades ?? 0)} color="var(--color-text-secondary)" />
+            <MetricCard label="Folds" value={String((results.racecar_backtest as Record<string, unknown> | undefined)?.total_folds ?? 0)} color="var(--color-text-secondary)" />
+            <MetricCard label="Models in Config" value={String((results.racecar_backtest as Record<string, unknown> | undefined)?.models?.length ?? 0)} color="var(--color-text-secondary)" />
           </div>
+
+          {/* Final validation (10-year WFO) */}
+          {results.final_fold_consistency_cv !== undefined && results.final_fold_consistency_cv > 0 && (
+            <>
+              <SectionHeader label="Final Validation (10-year WFO + 5-seed)" />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10, marginBottom: 20 }}>
+                <MetricCard label="Fold CV" value={Number(results.final_fold_consistency_cv ?? 0).toFixed(3)} color={results.final_fold_consistency_pass ? "#089981" : "#F23645"} />
+                <MetricCard label="Regime Coverage" value={results.final_regime_coverage ? "PASS" : "FAIL"} color={results.final_regime_coverage ? "#089981" : "#F23645"} />
+                <MetricCard label="Seed Robustness" value={results.final_seed_robustness_pass ? "PASS" : "FAIL"} color={results.final_seed_robustness_pass ? "#089981" : "#F23645"} />
+                <MetricCard label="Seed Sharpe" value={Number(results.final_seed_robustness_sharpe ?? 0).toFixed(3)} color={Number(results.final_seed_robustness_sharpe ?? 0) >= 0 ? "#089981" : "#F23645"} />
+              </div>
+            </>
+          )}
 
           {/* Factory results */}
           <SectionHeader label="Factory Optimization" />
@@ -533,9 +729,13 @@ export function FullCycleTab() {
             </div>
           )}
 
-          <button onClick={handleReset} style={{ marginTop: 24, background: "var(--color-elevated)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-secondary)", padding: "8px 20px", fontSize: 10, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer" }}>
-            Run Again
-          </button>
+          <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
+            <button onClick={handleReset} style={{ background: "var(--color-elevated)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-secondary)", padding: "8px 20px", fontSize: 10, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer" }}>Run Again</button>
+            <button onClick={handleDownload} style={{ background: "var(--color-elevated)", border: "1px solid var(--color-glass-border)", borderRadius: 4, color: "var(--color-text-secondary)", padding: "8px 20px", fontSize: 10, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer" }}>Download JSON</button>
+            {results.factory_best_config && status?.phase !== "validation_failed" && (
+              <button onClick={handleDeploy} style={{ background: "var(--color-accent-success)", border: "none", borderRadius: 4, color: "var(--color-text-inverse)", padding: "8px 20px", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer" }}>Deploy to Trading</button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -584,3 +784,13 @@ const thStyle: React.CSSProperties = {
 
 const tdStyle: React.CSSProperties = { padding: "5px 8px", color: "var(--color-text-secondary)", fontSize: 10 };
 const tdStyleMono: React.CSSProperties = { ...tdStyle, fontFamily: "var(--font-mono)" };
+
+const histThStyle: React.CSSProperties = {
+  padding: "4px 8px", textAlign: "left", color: "var(--color-text-muted)",
+  fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase",
+  fontSize: 9, borderBottom: "1px solid var(--color-glass-border)",
+};
+
+const histTdStyle: React.CSSProperties = {
+  padding: "5px 8px", color: "var(--color-text-secondary)", fontSize: 10,
+};

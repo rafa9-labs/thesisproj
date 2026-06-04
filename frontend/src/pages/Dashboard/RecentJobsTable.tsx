@@ -66,7 +66,7 @@ export function RecentJobsTable({ jobs, equityData }: RecentJobsTableProps) {
       </div>
 
       <div
-        className="rounded-lg border overflow-hidden"
+        className="rounded-sm border overflow-hidden"
         style={{
           borderColor: "var(--color-glass-border)",
           backgroundColor: "var(--color-glass)",

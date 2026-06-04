@@ -4,7 +4,7 @@ import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamToggle } from "@/components/shared/ParamToggle";
 import { RANGES } from "@/lib/constants";
 
-const sectionClass = "rounded-xl border p-6";
+const sectionClass = "rounded-sm border p-6";
 const sectionStyle: React.CSSProperties = {
   borderColor: "var(--color-glass-border)",
   backgroundColor: "rgba(255,255,255,0.02)",
@@ -22,7 +22,7 @@ export function LabelsPanel() {
 
   return (
     <div
-      className="flex flex-col gap-6 rounded-xl border p-6"
+      className="flex flex-col gap-6 rounded-sm border p-6"
       style={{
         backgroundColor: "var(--color-glass)",
         borderColor: "var(--color-glass-border)",
@@ -79,7 +79,7 @@ export function LabelsPanel() {
 
           {useTB && (
             <div
-              className="flex flex-col gap-6 rounded-xl border p-6"
+              className="flex flex-col gap-6 rounded-sm border p-6"
               style={{
                 borderColor: "var(--color-glass-border)",
                 backgroundColor: "var(--color-glass)",

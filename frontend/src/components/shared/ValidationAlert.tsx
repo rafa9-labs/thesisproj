@@ -21,7 +21,7 @@ export function ValidationAlert({ warnings, errors }: ValidationAlertProps) {
           </div>
           <ul className="flex flex-col gap-1">
             {errors.map((err, i) => (
-              <li key={i} className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+              <li key={`err-${i}`} className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
                 {err}
               </li>
             ))}
@@ -41,7 +41,7 @@ export function ValidationAlert({ warnings, errors }: ValidationAlertProps) {
           </div>
           <ul className="flex flex-col gap-1">
             {warnings.map((w, i) => (
-              <li key={i} className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+              <li key={`warn-${i}`} className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
                 {w}
               </li>
             ))}

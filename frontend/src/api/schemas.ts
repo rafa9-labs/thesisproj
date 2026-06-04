@@ -1002,20 +1002,31 @@ export interface FullCycleRequest {
   models: string[];
   pair?: string;
   timeframe?: string;
-  profile_trials?: number;
+  profile_trials_phase0?: number;
+  sweep_n_estimators?: number;
+  sweep_max_depth?: number;
   committee_top_k?: number;
   train_months?: number;
+  test_months?: number;
+  hpo_sampler?: string;
+  cv_blocks?: number;
+  cv_val_frac?: number;
+  plateau_patience?: number;
+  max_surviving_models?: number;
   proposer?: string;
   llm_backend?: string;
   max_iterations?: number;
   patience?: number;
   stopping_tolerance?: number;
   regime_sharpe_floor?: number;
+  factory_proxy_months?: number;
+  factory_proxy_folds?: number;
 }
 
 export interface FullCycleStatusResponse {
   job_id: string;
   phase: string;
+  phase_number: number;
   phase_progress: string;
   iteration: number;
   total_iterations: number;
@@ -1023,14 +1034,34 @@ export interface FullCycleStatusResponse {
   best_sharpe_so_far: number;
   started_at: string;
   error: string;
+  pruned_models: string[];
+  surviving_models: string[];
+  locked_features_count: number;
 }
 
 export interface FullCycleResultsResponse {
   job_id: string;
   status: string;
+  locked_features_count: number;
+  pruned_features_count: number;
+  top_importance_feature: string;
+  phase0_pruned: string[];
+  phase0_survivors: string[];
   racecar_profile_matrix?: Record<string, unknown>;
   racecar_committee_config?: Record<string, unknown>;
   racecar_backtest?: Record<string, unknown>;
+  phase3_fold_consistency_cv: number;
+  phase3_fold_consistency_pass: boolean;
+  phase3_regime_coverage?: Record<string, unknown>;
+  phase3_seed_robustness_sharpe: number;
+  phase3_seed_robustness_seeds: number;
+  phase3_seed_robustness_pass: boolean;
+  final_fold_consistency_cv: number;
+  final_fold_consistency_pass: boolean;
+  final_regime_coverage?: Record<string, unknown>;
+  final_seed_robustness_sharpe: number;
+  final_seed_robustness_pass: boolean;
+  final_full_wfo?: Record<string, unknown>;
   factory_best_sharpe: number;
   factory_total_iterations: number;
   factory_accepted_count: number;
@@ -1038,4 +1069,22 @@ export interface FullCycleResultsResponse {
   factory_history: FactoryIterationRecord[];
   factory_stop_reason: string;
   total_time_s: number;
+}
+
+export interface FullCycleHistoryEntry {
+  job_id: string;
+  started_at: string;
+  status: string;
+  total_time_s: number;
+  locked_features_count: number;
+  survivors_count: number;
+  survivors: string[];
+  avg_sharpe: number;
+  phase3_passed: boolean;
+  factory_best_sharpe: number;
+}
+
+export interface FullCycleHistoryResponse {
+  entries: FullCycleHistoryEntry[];
+  total_runs: number;
 }

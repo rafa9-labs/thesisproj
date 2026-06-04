@@ -31,7 +31,7 @@ export function PlaybackController({
 
   return (
     <div
-      className="flex items-center gap-3 rounded-lg border px-3 py-2"
+      className="flex items-center gap-3 rounded-sm border px-3 py-2"
       style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
     >
       <button

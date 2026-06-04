@@ -62,7 +62,7 @@ export function ContourPlot({ trials }: Props) {
 
   if (numericParams.length < 2) {
     return (
-      <div className="flex items-center justify-center rounded-lg p-8" style={{ color: "var(--color-text-muted)" }}>
+      <div className="flex items-center justify-center rounded-sm p-8" style={{ color: "var(--color-text-muted)" }}>
         <span className="text-xs">Need at least 2 numeric parameters for contour analysis.</span>
       </div>
     );

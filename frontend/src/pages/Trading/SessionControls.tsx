@@ -28,7 +28,7 @@ interface SessionControlsProps {
 
 function ModeToggle({ mode, disabled, onChange }: { mode: TradingMode; disabled: boolean; onChange: (m: TradingMode) => void }) {
   return (
-    <div className="flex items-center rounded-lg border p-0.5" style={{ borderColor: "var(--color-glass-border)" }}>
+    <div className="flex items-center rounded-sm border p-0.5" style={{ borderColor: "var(--color-glass-border)" }}>
       <button
         onClick={() => { if (!disabled) onChange("paper"); }}
         disabled={disabled}

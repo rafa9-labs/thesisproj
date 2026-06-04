@@ -77,7 +77,7 @@ export function HpoTrialTable({ trials, bestTrial, totalTrials }: Props) {
 
       {visible.length === 0 && (
         <div
-          className="flex items-center justify-center rounded-lg border px-3 py-4"
+          className="flex items-center justify-center rounded-sm border px-3 py-4"
           style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
         >
           <span className="text-xs">Waiting for trials...</span>
@@ -87,7 +87,7 @@ export function HpoTrialTable({ trials, bestTrial, totalTrials }: Props) {
       {visible.length > 0 && (
         <div
           ref={scrollRef}
-          className="overflow-y-auto rounded-lg border"
+          className="overflow-y-auto rounded-sm border"
           style={{ maxHeight: 340, borderColor: "var(--color-border)" }}
         >
           <table className="w-full border-collapse">

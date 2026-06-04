@@ -15,7 +15,7 @@ export function ParameterGuide() {
 
   return (
     <div
-      className="rounded-lg border overflow-hidden"
+      className="rounded-sm border overflow-hidden"
       style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
     >
       <button
@@ -46,7 +46,7 @@ export function ParameterGuideInline() {
   if (guides.length === 0) return null;
 
   return (
-    <div className="rounded-xl border p-6" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "rgba(255,255,255,0.02)" }}>
+    <div className="rounded-sm border p-6" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "rgba(255,255,255,0.02)" }}>
       <div className="flex items-center gap-1.5 mb-4">
         <Lightbulb size={12} style={{ color: "var(--color-accent-warning)" }} />
         <span className="text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--color-text-secondary)" }}>

@@ -275,6 +275,10 @@ def run_optuna_tuning(
         _pruner_min_resource = int(cv_config.get("pruner_min_resource_classical", 2))
         _pruner_reduction_factor = int(cv_config.get("pruner_reduction_factor_classical", 2))
 
+    # Cap min_resource to n_trials so low-trial runs don't get fully pruned
+    if n_trials is not None and _pruner_min_resource > n_trials:
+        _pruner_min_resource = max(1, n_trials)
+
     # ASHA-style pruning (default), or no pruning if disabled
     if DISABLE_OPTUNA_PRUNING:
         pruner = optuna.pruners.NopPruner()

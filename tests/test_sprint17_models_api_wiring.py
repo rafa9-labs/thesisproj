@@ -23,11 +23,11 @@ client = TestClient(app) if _API_AVAILABLE else None
 _API_PREFIX = "/api/v1"
 
 # Expected model counts
-_EXPECTED_TOTAL = 16  # registry-compatible models (excludes ensemble_cnn_lstm_xgboost)
+_EXPECTED_TOTAL = 17  # registry-compatible models (excludes ensemble_cnn_lstm_xgboost)
 _CLASSICAL_MODELS = {"logistic", "svm", "random_forest", "decision_tree", "xgboost", "lightgbm", "catboost"}
 _DEEP_MODELS = {"cnn", "lstm", "transformer", "gru", "gru_lstm"}
 _RL_MODELS = {"dqn"}
-_ENSEMBLE_MODELS = {"ensemble_adaptive_regime", "meta_ensemble", "stacking_ensemble"}
+_ENSEMBLE_MODELS = {"ensemble_adaptive_regime", "meta_ensemble", "stacking_ensemble", "regime_classifier"}
 _ALL_DESC_EXPECTED = _CLASSICAL_MODELS | _DEEP_MODELS | _RL_MODELS | _ENSEMBLE_MODELS
 
 # ensemble_cnn_lstm_xgboost is a special model with non-standard interface

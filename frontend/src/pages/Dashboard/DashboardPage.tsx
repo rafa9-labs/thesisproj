@@ -18,11 +18,11 @@ function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-6 animate-pulse">
       <div className="h-10" style={{ backgroundColor: "var(--color-glass-hover)" }} />
-      <div className="h-[80px] rounded-lg" style={{ backgroundColor: "var(--color-glass-hover)" }} />
-      <div className="h-[360px] rounded-lg" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+      <div className="h-[80px] rounded-sm" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+      <div className="h-[360px] rounded-sm" style={{ backgroundColor: "var(--color-glass-hover)" }} />
       <div className="grid grid-cols-3 gap-4">
         {Array.from({ length: 3 }, (_, i) => (
-          <div key={i} className="h-[300px] rounded-lg" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+          <div key={i} className="h-[300px] rounded-sm" style={{ backgroundColor: "var(--color-glass-hover)" }} />
         ))}
       </div>
     </div>
@@ -108,16 +108,16 @@ export function DashboardPage() {
     <div className="flex flex-col gap-6">
       {demoMode && (
         <div
-          className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs"
+          className="flex items-center gap-3 px-4 py-2.5 rounded-sm text-xs"
           style={{
             backgroundColor: "rgba(0, 229, 255, 0.08)",
             border: "1px solid rgba(0, 229, 255, 0.2)",
-            color: "#00E5FF",
+            color: "var(--color-brand)",
           }}
         >
           <Database size={14} />
           <span className="font-semibold">Demo Mode</span>
-          <span style={{ color: "#787B86" }}>
+          <span style={{ color: "var(--color-text-muted)" }}>
             &mdash; Using pre-loaded sample market data. Run a real backtest or connect OANDA for live data.
           </span>
         </div>
@@ -128,7 +128,7 @@ export function DashboardPage() {
 
       {/* ── Full-width candlestick chart with embedded pair selector ──────── */}
       <div
-        className="rounded-lg border flex flex-col"
+        className="rounded-sm border flex flex-col"
         style={{
           borderColor: "var(--color-glass-border)",
           backgroundColor: "var(--color-glass)",
@@ -136,9 +136,8 @@ export function DashboardPage() {
       >
         {/* Chart panel header */}
         <div
-          className="flex items-center justify-between px-4"
+          className="flex items-center justify-between px-4 h-10"
           style={{
-            height: 40,
             borderBottom: "1px solid var(--color-glass-border)",
           }}
         >
@@ -151,9 +150,9 @@ export function DashboardPage() {
           <select
             value={activePair}
             onChange={(e) => setActivePair(e.target.value)}
-            className="rounded border px-2 text-[11px] transition focus:outline-none"
+            aria-label="Select chart pair"
+            className="rounded border px-2 text-[11px] transition focus:outline-none h-7"
             style={{
-              height: 26,
               borderColor: "var(--color-glass-border)",
               backgroundColor: "var(--color-elevated)",
               color: "var(--color-text-primary)",
@@ -174,11 +173,10 @@ export function DashboardPage() {
       <div className="grid grid-cols-3 gap-4">
         {/* Col 1: ALGO Metrics — flat label/value list, no nested boxes */}
         <div
-          className="rounded-lg border flex flex-col"
+          className="rounded-sm border flex flex-col p-5"
           style={{
             borderColor: "var(--color-glass-border)",
             backgroundColor: "var(--color-glass)",
-            padding: "16px",
           }}
         >
           <span
@@ -249,11 +247,10 @@ export function DashboardPage() {
 
         {/* Col 2: Market Sentiment */}
         <div
-          className="rounded-lg border flex flex-col"
+          className="rounded-sm border flex flex-col p-5"
           style={{
             borderColor: "var(--color-glass-border)",
             backgroundColor: "var(--color-glass)",
-            padding: "16px",
           }}
         >
           <span
@@ -267,11 +264,10 @@ export function DashboardPage() {
 
         {/* Col 3: Top News Articles */}
         <div
-          className="rounded-lg border flex flex-col"
+          className="rounded-sm border flex flex-col p-5"
           style={{
             borderColor: "var(--color-glass-border)",
             backgroundColor: "var(--color-glass)",
-            padding: "16px",
           }}
         >
           <NewsArticlesPanel pair={activePair} />

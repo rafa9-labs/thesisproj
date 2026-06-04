@@ -322,6 +322,215 @@ _STABLE_REGIMES_FOR_MODEL = {
 }
 
 
+# ══════════════════════════════════════════════════════════════════════
+# Anchored Unsupervised Regime Detection (GaussianMixture + Centroid Anchor)
+# ══════════════════════════════════════════════════════════════════════
+
+
+def detect_regimes_anchored(
+    df: pd.DataFrame,
+    df_train: Optional[pd.DataFrame] = None,
+    window: int = 252,
+    random_state: int = 42,
+) -> np.ndarray:
+    """Unsupervised regime detection via GaussianMixture with centroid anchoring.
+
+    Computes ADX_14 (trend strength) and ATR_14 (volatility) from raw OHLC data,
+    normalizes via backward-looking rolling Z-scores, fits a 3-component GMM,
+    and maps clusters to regime IDs via geometric centroid anchoring.
+
+    Per-fold WFO mode (df_train is not None):
+      - Compute ADX/ATR/Z-scores on train + test combined
+      - Fit GMM on train bars only
+      - Predict on test bars only
+      - Returns labels for test bars
+
+    Full-dataset mode (df_train is None):
+      - Compute ADX/ATR/Z-scores on df
+      - Fit GMM on all bars
+      - Predict on all bars
+      - Returns labels for all bars
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Test data with columns: mid_high, mid_low, mid_close (or mid_h/mid_l/mid_c).
+    df_train : pd.DataFrame, optional
+        Train data for per-fold WFO fitting. Same column requirements.
+    window : int
+        Rolling window for Z-score normalization (default 252 = ~1 year H1).
+    random_state : int
+        Seed for GMM reproducibility. In per-fold mode, caller should vary
+        this per fold (e.g. 42 + fold_idx) to avoid identical centroids.
+
+    Returns
+    -------
+    np.ndarray of int8, shape (n,)
+        Regime IDs for df bars:
+          1 = trend_up (Highest ADX centroid)
+          3 = mean_reverting (Remaining cluster)
+          5 = high_volatile (Highest Vol centroid)
+          6 = sideways (NaN fallback / insufficient history)
+    """
+    from sklearn.mixture import GaussianMixture
+    import ta
+
+    def _normalize_cols(d: pd.DataFrame) -> pd.DataFrame:
+        out = d.copy()
+        for src, dst in [("mid_high", "mid_h"), ("mid_low", "mid_l"),
+                         ("mid_close", "mid_c")]:
+            if src in out.columns and dst not in out.columns:
+                out[dst] = out[src]
+        return out
+
+    df = _normalize_cols(df)
+
+    has_high = "mid_h" in df.columns or "mid_high" in df.columns
+    has_low = "mid_l" in df.columns or "mid_low" in df.columns
+    has_close = "mid_c" in df.columns or "mid_close" in df.columns
+
+    if not (has_high and has_low and has_close):
+        return np.full(len(df), 6, dtype=np.int8)
+
+    def _extract_ohlc(d: pd.DataFrame):
+        h = d["mid_h"].values.astype(np.float64) if "mid_h" in d.columns else d["mid_high"].values.astype(np.float64)
+        l = d["mid_l"].values.astype(np.float64) if "mid_l" in d.columns else d["mid_low"].values.astype(np.float64)
+        c = d["mid_c"].values.astype(np.float64) if "mid_c" in d.columns else d["mid_close"].values.astype(np.float64)
+        return h, l, c
+
+    if df_train is not None:
+        df_train = _normalize_cols(df_train)
+        combined = pd.concat([df_train, df], axis=0, ignore_index=True, copy=False)
+        n_train = len(df_train)
+        high, low, close = _extract_ohlc(combined)
+    else:
+        n_train = len(df)
+        high, low, close = _extract_ohlc(df)
+
+    n_total = len(high)
+
+    high_s = pd.Series(high, dtype=np.float64)
+    low_s = pd.Series(low, dtype=np.float64)
+    close_s = pd.Series(close, dtype=np.float64)
+
+    try:
+        adx_indicator = ta.trend.ADXIndicator(high=high_s, low=low_s, close=close_s, window=14)
+        adx_arr = adx_indicator.adx()
+        atr_indicator = ta.volatility.AverageTrueRange(high=high_s, low=low_s, close=close_s, window=14)
+        atr_arr = atr_indicator.average_true_range()
+    except Exception:
+        return np.full(len(df), 6, dtype=np.int8)
+
+    adx_series = pd.Series(adx_arr, dtype=np.float64)
+    atr_series = pd.Series(atr_arr, dtype=np.float64)
+
+    adx_roll_mean = adx_series.rolling(window, min_periods=21).mean()
+    adx_roll_std = adx_series.rolling(window, min_periods=21).std().replace(0, np.nan)
+    atr_roll_mean = atr_series.rolling(window, min_periods=21).mean()
+    atr_roll_std = atr_series.rolling(window, min_periods=21).std().replace(0, np.nan)
+
+    z_adx = ((adx_series - adx_roll_mean) / adx_roll_std).to_numpy(np.float64)
+    z_atr = ((atr_series - atr_roll_mean) / atr_roll_std).to_numpy(np.float64)
+
+    valid_mask = np.isfinite(z_adx) & np.isfinite(z_atr)
+    n_valid = int(valid_mask.sum())
+
+    if df_train is not None:
+        n_train = len(df_train)
+        train_valid = valid_mask[:n_train]
+        test_valid = valid_mask[n_train:]
+        n_train_valid = int(train_valid.sum())
+        n_test_valid = int(test_valid.sum())
+
+        if n_train_valid < 10:
+            return np.full(len(df), 6, dtype=np.int8)
+
+        X_train = np.column_stack([z_adx[:n_train][train_valid],
+                                   z_atr[:n_train][train_valid]])
+        try:
+            gmm = GaussianMixture(
+                n_components=3, random_state=random_state,
+                n_init=3, init_params="k-means++",
+            )
+            gmm.fit(X_train)
+        except Exception:
+            return np.full(len(df), 6, dtype=np.int8)
+
+        centroids = gmm.means_
+        cluster_map = _anchor_centroids(centroids)
+
+        result = np.full(len(df), 6, dtype=np.int8)
+        if n_test_valid > 0:
+            X_test = np.column_stack([z_adx[n_train:][test_valid],
+                                      z_atr[n_train:][test_valid]])
+            raw_preds = gmm.predict(X_test)
+            mapped = np.array([cluster_map.get(p, 6) for p in raw_preds], dtype=np.int8)
+            test_result_indices = np.where(test_valid)[0]
+            result[test_result_indices] = mapped[:len(test_result_indices)]
+        return result
+
+    else:
+        if n_valid < 10:
+            return np.full(n_total, 6, dtype=np.int8)
+
+        X = np.column_stack([z_adx[valid_mask], z_atr[valid_mask]])
+        try:
+            gmm = GaussianMixture(
+                n_components=3, random_state=random_state,
+                n_init=3, init_params="k-means++",
+            )
+            gmm.fit(X)
+        except Exception:
+            return np.full(n_total, 6, dtype=np.int8)
+
+        centroids = gmm.means_
+        cluster_map = _anchor_centroids(centroids)
+
+        raw_preds = gmm.predict(X)
+        mapped = np.array([cluster_map.get(p, 6) for p in raw_preds], dtype=np.int8)
+
+        result = np.full(n_total, 6, dtype=np.int8)
+        result[valid_mask] = mapped
+        return result
+
+
+def _anchor_centroids(centroids: np.ndarray) -> dict:
+    """Map GMM cluster IDs to regime IDs based on geometric centroid position.
+
+    centroids shape: (3, 2) — [adx_z_score, atr_z_score] per cluster.
+
+    Returns dict mapping: raw_cluster_id → regime_id
+      - Highest ADX centroid  → 1 (trend_up)
+      - Highest Vol centroid  → 5 (high_volatile)
+      - Remaining             → 3 (mean_reverting)
+      - Ambiguous/fallback    → 6 (sideways)
+    """
+    if centroids.shape[0] != 3:
+        return {i: 6 for i in range(centroids.shape[0])}
+
+    adx_vals = centroids[:, 0]
+    atr_vals = centroids[:, 1]
+
+    adx_order = np.argsort(adx_vals)
+    atr_order = np.argsort(atr_vals)
+
+    high_trend_cluster = int(adx_order[-1])
+    high_vol_cluster = int(atr_order[-1])
+
+    if high_trend_cluster == high_vol_cluster:
+        high_vol_cluster = int(atr_order[-2])
+
+    all_clusters = {0, 1, 2}
+    remaining = all_clusters - {high_trend_cluster, high_vol_cluster}
+    mean_rev_cluster = int(remaining.pop()) if remaining else 2
+
+    return {
+        high_trend_cluster: 1,
+        high_vol_cluster: 5,
+        mean_rev_cluster: 3,
+    }
+
+
 def recommended_models_for_regime(regime_id: int) -> list:
     """Return model types recommended for a given regime class.
 

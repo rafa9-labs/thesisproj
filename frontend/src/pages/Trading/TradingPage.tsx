@@ -93,20 +93,20 @@ function StopResultModal({ summary, onClose }: { summary: PaperSummary; onClose:
   ];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}>
-      <div className="rounded-xl border p-6 w-[420px] max-h-[80vh] overflow-y-auto shadow-2xl" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-surface)" }}>
+      <div className="rounded-sm border p-6 w-[420px] max-h-[80vh] overflow-y-auto shadow-2xl" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-surface)" }}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold uppercase tracking-[0.08em]" style={{ color: "var(--color-text-primary)" }}>Paper Trading Results</h3>
-          <button onClick={onClose} className="rounded-md p-1 transition hover:brightness-125" style={{ color: "var(--color-text-muted)" }}><X size={16} /></button>
+          <button onClick={onClose} aria-label="Close results" className="rounded-md p-1 transition hover:brightness-125" style={{ color: "var(--color-text-muted)" }}><X size={16} /></button>
         </div>
         <div className="grid grid-cols-2 gap-3 mb-4">
           {metrics.map((m) => (
-            <div key={m.label} className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
+            <div key={m.label} className="rounded-sm border px-3 py-2" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
               <div className="text-[9px] font-medium uppercase tracking-[0.1em] mb-0.5" style={{ color: "var(--color-text-muted)" }}>{m.label}</div>
               <div className="text-base font-semibold" style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>{String(m.value)}</div>
             </div>
           ))}
         </div>
-        <div className="rounded-lg border px-3 py-2 mb-4" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
+        <div className="rounded-sm border px-3 py-2 mb-4" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
           <div className="flex justify-between">
             <span className="text-[9px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>Final Equity</span>
             <span className="text-sm font-semibold" style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>{summary.final_equity?.toFixed(2) ?? "\u2014"}</span>
@@ -321,7 +321,7 @@ export default function TradingPage() {
     return (
       <div className="flex flex-col gap-4 p-6">
         <h2 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>Trading</h2>
-        <div className="flex items-center gap-3 rounded-lg border px-4 py-3" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
+        <div className="flex items-center gap-3 rounded-sm border px-4 py-3" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
           <AlertTriangle size={16} style={{ color: "var(--color-accent-warning)" }} />
           <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{priceData?.message}</span>
           <button onClick={() => navigate("/settings")} className="text-[11px] font-medium rounded px-2 py-0.5 transition hover:underline" style={{ color: "var(--color-brand)" }}>Settings</button>
@@ -333,7 +333,7 @@ export default function TradingPage() {
     return (
       <div className="flex flex-col gap-4 p-6">
         <h2 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>Trading</h2>
-        <div className="flex items-center gap-3 rounded-lg border px-4 py-3" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
+        <div className="flex items-center gap-3 rounded-sm border px-4 py-3" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
           <AlertTriangle size={16} style={{ color: "var(--color-accent-warning)" }} />
           <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>OANDA API unreachable</span>
         </div>
@@ -342,13 +342,13 @@ export default function TradingPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6 h-full">
+    <div className="flex flex-col gap-4 h-full">
       {live.stopResult && tradingMode === "paper" && (
         <StopResultModal summary={live.stopResult} onClose={() => setLive((p) => ({ ...p, stopResult: null }))} />
       )}
       {confirmLive && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}>
-          <div className="rounded-xl border p-6 w-[380px] shadow-2xl" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-surface)" }}>
+          <div className="rounded-sm border p-6 w-[380px] shadow-2xl" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-surface)" }}>
             <h3 className="text-sm font-semibold mb-2" style={{ color: "var(--color-accent-danger)" }}>Confirm Live Trading</h3>
             <p className="text-xs mb-4" style={{ color: "var(--color-text-secondary)" }}>This will submit real orders to your OANDA account. Positions will be opened and closed by the model automatically.</p>
             <div className="flex gap-3">
@@ -372,20 +372,20 @@ export default function TradingPage() {
 
       {/* Alerts */}
       {live.killed && (
-        <div className="flex items-center gap-3 rounded-lg border px-4 py-2" style={{ borderColor: "var(--color-accent-danger)", backgroundColor: "rgba(239,68,68,0.08)" }}>
+        <div className="flex items-center gap-3 rounded-sm border px-4 py-2" style={{ borderColor: "var(--color-accent-danger)", backgroundColor: "rgba(239,68,68,0.08)" }}>
           <ShieldOff size={14} style={{ color: "var(--color-accent-danger)" }} />
           <span className="text-xs font-semibold" style={{ color: "var(--color-accent-danger)" }}>Session killed — {live.killReason}</span>
           <span className="text-[10px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>Level: {live.killLevel}</span>
         </div>
       )}
       {live.riskBlockedReason && (
-        <div className="flex items-center gap-2 rounded-lg border px-4 py-2" style={{ borderColor: "var(--color-accent-warning)", backgroundColor: "rgba(245,158,11,0.06)" }}>
+        <div className="flex items-center gap-2 rounded-sm border px-4 py-2" style={{ borderColor: "var(--color-accent-warning)", backgroundColor: "rgba(245,158,11,0.06)" }}>
           <AlertTriangle size={12} style={{ color: "var(--color-accent-warning)" }} />
           <span className="text-xs" style={{ color: "var(--color-accent-warning)", fontFamily: "var(--font-mono)" }}>Risk blocked: {live.riskBlockedReason}</span>
         </div>
       )}
       {live.error && (
-        <div className="flex items-center gap-3 rounded-lg border px-4 py-2" style={{ borderColor: "var(--color-accent-danger)", backgroundColor: "rgba(239,68,68,0.05)" }}>
+        <div className="flex items-center gap-3 rounded-sm border px-4 py-2" style={{ borderColor: "var(--color-accent-danger)", backgroundColor: "rgba(239,68,68,0.05)" }}>
           <AlertTriangle size={14} style={{ color: "var(--color-accent-danger)" }} />
           <span className="text-xs" style={{ color: "var(--color-accent-danger)" }}>{live.error}</span>
           <button onClick={() => setLive((p) => ({ ...p, error: null }))} className="text-[10px] underline ml-auto" style={{ color: "var(--color-text-muted)" }}>Dismiss</button>
@@ -396,7 +396,7 @@ export default function TradingPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>Pair</span>
-          <select value={selectedPair} onChange={(e) => setSelectedPair(e.target.value)} disabled={isRunning || live.deploying}
+          <select value={selectedPair} onChange={(e) => setSelectedPair(e.target.value)} disabled={isRunning || live.deploying} aria-label="Select trading pair"
             className="rounded-md border px-2.5 py-1 text-xs transition focus:outline-none disabled:opacity-50"
             style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>
             {pairList.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -409,7 +409,7 @@ export default function TradingPage() {
               <AlertTriangle size={10} />No active models — <button onClick={() => navigate("/models")} className="underline" style={{ color: "var(--color-brand)" }}>activate one</button>
             </span>
           ) : (
-            <select value={selectedModelId ?? ""} onChange={(e) => setSelectedModelId(e.target.value || null)} disabled={isRunning || live.deploying}
+            <select value={selectedModelId ?? ""} onChange={(e) => setSelectedModelId(e.target.value || null)} disabled={isRunning || live.deploying} aria-label="Select model"
               className="rounded-md border px-2.5 py-1 text-xs transition focus:outline-none disabled:opacity-50"
               style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>
               <option value="">Select...</option>
@@ -490,7 +490,7 @@ export default function TradingPage() {
 
           <TradeHistory trades={live.trades} />
 
-          <div className="rounded-lg border p-3" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
+          <div className="rounded-sm border p-3" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
             <h4 className="text-[10px] font-medium uppercase tracking-[0.12em] mb-2" style={{ color: "var(--color-text-muted)" }}>Configuration</h4>
             <div className="flex flex-col gap-1">
               <Row label="Mode" value={tradingMode === "paper" ? "Paper" : "Live (Demo)"} />

@@ -40,6 +40,7 @@ import type {
   FullCycleRequest,
   FullCycleStatusResponse,
   FullCycleResultsResponse,
+  FullCycleHistoryResponse,
 } from "./schemas";
 
 export function useHealth() {
@@ -1047,7 +1048,7 @@ export function useFullCycleStatus(jobId: string | null) {
     enabled: !!jobId,
     refetchInterval: (query) => {
       const phase = query.state.data?.phase;
-      if (phase === "completed" || phase === "failed") return false;
+      if (phase === "completed" || phase === "failed" || phase === "validation_failed") return false;
       return 2_000;
     },
   });
@@ -1064,5 +1065,18 @@ export function useFullCycleResults(jobId: string | null) {
     },
     enabled: !!jobId,
     staleTime: 30_000,
+  });
+}
+
+export function useFullCycleHistory() {
+  return useQuery({
+    queryKey: ["full-cycle", "history"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<FullCycleHistoryResponse>(
+        "/committee/full-cycle/history",
+      );
+      return data;
+    },
+    staleTime: 10_000,
   });
 }

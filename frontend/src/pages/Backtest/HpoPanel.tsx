@@ -5,7 +5,7 @@ import { ParamSelect } from "@/components/shared/ParamSelect";
 import { RANGES, SELECT_OPTIONS } from "@/lib/constants";
 import { ModelHyperparamsPanel } from "./ModelHyperparamsPanel";
 
-const sectionClass = "rounded-xl border p-6";
+const sectionClass = "rounded-sm border p-6";
 const sectionStyle: React.CSSProperties = {
   borderColor: "var(--color-glass-border)",
   backgroundColor: "rgba(255,255,255,0.02)",
@@ -24,7 +24,7 @@ export function HpoPanel() {
 
   return (
     <div
-      className="flex flex-col gap-6 rounded-xl border p-6"
+      className="flex flex-col gap-6 rounded-sm border p-6"
       style={{
         backgroundColor: "var(--color-glass)",
         borderColor: "var(--color-glass-border)",
@@ -68,7 +68,7 @@ export function HpoPanel() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-6">
-            <div className="flex flex-col gap-1 rounded-lg p-3"
+            <div className="flex flex-col gap-1 rounded-sm p-3"
               style={{ backgroundColor: "var(--color-elevated)" }}>
               <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
                 HPO Trials

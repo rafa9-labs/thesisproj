@@ -29,7 +29,7 @@ export function LLMAdvisor({ jobId, modelName }: Props) {
   if (!analysis && !isLoading) {
     return (
       <div
-        className="rounded-xl border p-5"
+        className="rounded-sm border p-5"
         style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
       >
         <div className="flex items-center justify-between">
@@ -60,7 +60,7 @@ export function LLMAdvisor({ jobId, modelName }: Props) {
   if (isLoading) {
     return (
       <div
-        className="rounded-xl border p-5"
+        className="rounded-sm border p-5"
         style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
       >
         <div className="flex items-center gap-2">
@@ -82,7 +82,7 @@ export function LLMAdvisor({ jobId, modelName }: Props) {
 
   return (
     <div
-      className="rounded-xl border p-5"
+      className="rounded-sm border p-5"
       style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
     >
       <div className="flex items-center justify-between mb-4">
@@ -130,7 +130,7 @@ export function LLMAdvisor({ jobId, modelName }: Props) {
           {/* Recommendation with Apply button */}
           {analysis.recommended_preset && (
             <div
-              className="flex items-center justify-between rounded-lg p-3"
+              className="flex items-center justify-between rounded-sm p-3"
               style={{ backgroundColor: "var(--color-elevated)" }}
             >
               <div className="flex flex-col gap-0.5">

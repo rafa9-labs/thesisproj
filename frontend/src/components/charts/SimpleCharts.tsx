@@ -14,7 +14,7 @@ export function SimpleBarChart({
   if (data.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-lg border"
+        className="flex items-center justify-center rounded-sm border"
         style={{ height, backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
       >
         No data

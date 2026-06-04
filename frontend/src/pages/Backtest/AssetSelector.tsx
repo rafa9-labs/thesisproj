@@ -98,7 +98,7 @@ export function AssetSelector() {
 
   return (
     <div
-      className="flex flex-col gap-6 rounded-xl border p-6"
+      className="flex flex-col gap-6 rounded-sm border p-6"
       style={{
         backgroundColor: "var(--color-glass)",
         borderColor: "var(--color-glass-border)",
@@ -288,7 +288,7 @@ export function AssetSelector() {
           onClick={() => setShowDefineModal(false)}
         >
           <div
-            className="flex w-[400px] flex-col gap-4 rounded-lg border p-6"
+            className="flex w-[400px] flex-col gap-4 rounded-sm border p-6"
             style={{
               backgroundColor: "var(--color-surface)",
               borderColor: "var(--color-glass-border)",

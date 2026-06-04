@@ -140,6 +140,9 @@ class _LazyModule:
     def __getattr__(self, attr):
         return getattr(self._resolve(), attr)
 
+    def __reduce__(self):
+        return importlib.import_module, (self._name, self._package)
+
     def __repr__(self):
         if self._mod is self._UNSET:
             return f"<LazyModule '{self._name}' (not yet loaded)>"

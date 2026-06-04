@@ -1,57 +1,3 @@
-export const colors = {
-  app: "#050608",
-  surface: "#0A0D12",
-  elevated: "#11151C",
-
-  glass: "rgba(255,255,255,0.03)",
-  glassBorder: "rgba(255,255,255,0.06)",
-  glassHover: "rgba(255,255,255,0.05)",
-
-  border: "#1A1F2A",
-  borderSubtle: "#131820",
-  borderActive: "rgba(0,229,255,0.25)",
-
-  textPrimary: "#E8ECF1",
-  textSecondary: "#7A8494",
-  textMuted: "#4A5568",
-  textInverse: "#050608",
-
-  primary: "#00E5FF",
-  primaryGlow: "rgba(0,229,255,0.15)",
-
-  brand: "#00E5FF",
-  brandGlow: "rgba(0,229,255,0.15)",
-
-  accent: "#00E5FF",
-  accentSuccess: "#22C55E",
-  accentDanger: "#EF4444",
-  accentWarning: "#F59E0B",
-  accentInfo: "#00E5FF",
-  accentClassical: "#22D3EE",
-  accentDeep: "#A78BFA",
-  accentRl: "#F59E0B",
-  accentEnsemble: "#EC4899",
-
-  chartLine: "#00E5FF",
-  chartBuyhold: "#555555",
-  chartDrawdown: "rgba(239,68,68,0.35)",
-
-  eventHigh: "#EF4444",
-  eventMedium: "#F59E0B",
-  eventLow: "#00E5FF",
-} as const;
-
-export const spacing = {
-  1: "4px",
-  2: "8px",
-  3: "12px",
-  4: "16px",
-  5: "20px",
-  6: "24px",
-  8: "32px",
-  10: "40px",
-} as const;
-
 export const layout = {
   sidebarCollapsed: 64,
   sidebarExpanded: 220,
@@ -79,23 +25,23 @@ export const typography = {
 export const modelCategories = {
   classical: {
     label: "Classical",
-    color: colors.accentClassical,
+    color: "#22D3EE",
     models: ["logistic", "svm", "random_forest", "decision_tree", "xgboost", "lightgbm", "catboost"],
   },
   deep: {
     label: "Deep Learning",
-    color: colors.accentDeep,
+    color: "#A78BFA",
     models: ["cnn", "lstm", "transformer", "gru", "gru_lstm"],
   },
   rl: {
     label: "Reinforcement Learning",
-    color: colors.accentRl,
+    color: "#F59E0B",
     models: ["dqn"],
   },
   ensemble: {
     label: "Ensemble",
-    color: colors.accentEnsemble,
-    models: ["ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost", "meta_ensemble", "stacking_ensemble"],
+    color: "#EC4899",
+    models: ["ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost", "meta_ensemble", "stacking_ensemble", "regime_classifier"],
   },
 } as const;
 
@@ -117,4 +63,5 @@ export const modelDescriptions: Record<string, { name: string; short: string; ap
   ensemble_cnn_lstm_xgboost: { name: "CNN+LSTM+XGB", short: "The Triad", apprentice: "Three-way stacking ensemble combining CNN, LSTM, and XGBoost for robust predictions." },
   meta_ensemble: { name: "Signal Committee", short: "The Committee", apprentice: "Wraps multiple models and combines their predictions via voting. Run logistic + xgboost + lstm as one." },
   stacking_ensemble: { name: "Stacking Ensemble", short: "The Strategist", apprentice: "Trains a meta-learner (Logistic Regression) on out-of-fold predictions from multiple base models." },
+  regime_classifier: { name: "Regime Classifier", short: "The Diplomat", apprentice: "Random Forest classifier labeling market regime (7 states). Used by exploration agents and committee routers for specialist model selection." },
 };

@@ -30,7 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
           style={{ backgroundColor: "var(--color-app)" }}
         >
           <div
-            className="flex flex-col items-center gap-4 rounded-lg border p-8"
+            className="flex flex-col items-center gap-4 rounded-sm border p-8"
             style={{
               maxWidth: 480,
               borderColor: "var(--color-accent-danger)",
@@ -53,9 +53,9 @@ export class ErrorBoundary extends Component<Props, State> {
               }}
               className="rounded-md border px-4 py-2 text-xs font-bold uppercase"
               style={{
-                borderColor: "var(--color-accent)",
+                borderColor: "var(--color-brand)",
                 backgroundColor: "rgba(41,98,255,0.1)",
-                color: "var(--color-accent)",
+                color: "var(--color-brand)",
                 cursor: "pointer",
               }}
             >

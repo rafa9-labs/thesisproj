@@ -4285,7 +4285,7 @@ class RunMixin:
         else:
             # Use our unified CPU-centric thread knob
             n_jobs_actual = int(
-                os.getenv("MLB_THREADS", os.getenv("BLAS_THREADS_PER_TRIAL", "8"))
+                os.getenv("MLB_THREADS") or os.getenv("BLAS_THREADS_PER_TRIAL") or "8"
             )
 
 

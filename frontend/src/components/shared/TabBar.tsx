@@ -13,7 +13,8 @@ interface Props {
 export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
   return (
     <div
-      className="flex items-end w-full justify-between"
+      className="flex items-end w-full justify-between px-4"
+      role="tablist"
     >
       {tabs.map((tab) => {
         const disabled = disabledTabs?.has(tab.key);
@@ -24,18 +25,19 @@ export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
             key={tab.key}
             onClick={() => !disabled && onTabChange(tab.key)}
             disabled={disabled}
-            className="relative pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors duration-150"
+            role="tab"
+            id={`tab-${tab.key}`}
+            aria-selected={isActive}
+            aria-controls={`tabpanel-${tab.key}`}
+            className="relative pb-2 px-0 pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors duration-150"
             style={{
-              paddingBottom: 8,
-              paddingLeft: 0,
-              paddingRight: 0,
               background: "transparent",
               border: "none",
               color: isActive
                 ? "var(--color-text-primary)"
                 : disabled
                 ? "var(--color-text-muted)"
-                : "rgba(255,255,255,0.38)",
+                : "var(--color-text-muted)",
               cursor: disabled ? "not-allowed" : "pointer",
               opacity: disabled ? 0.4 : 1,
               outline: "none",
@@ -43,15 +45,10 @@ export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
             }}
           >
             {tab.label}
-            {/* Active underline */}
             {isActive && (
               <span
+                className="absolute bottom-0 left-0 right-0 h-0.5"
                 style={{
-                  position: "absolute",
-                  bottom: -1,
-                  left: 0,
-                  right: 0,
-                  height: 2,
                   backgroundColor: "var(--color-brand)",
                   borderRadius: "2px 2px 0 0",
                 }}

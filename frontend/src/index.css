@@ -4,13 +4,8 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* ── KodaQuant Brand Palette ── */
-  --color-koda-cyan: #00E5FF;
-  --color-koda-cyan-dim: #0099AA;
-  --color-koda-dark: #050608;
-  --color-koda-surface: #0A0D12;
-  --color-koda-elevated: #11151C;
-  --color-koda-gold: #D4AF37;
+  /* ── KodaQuant Brand Palette */
+  --color-brand: #00E5FF;
 
   /* Base canvas — institutional dark mode */
   --color-app: #131722;
@@ -22,16 +17,21 @@
   --color-glass-border: #2A2E39;
   --color-glass-hover: rgba(255, 255, 255, 0.04);
 
+  /* Input backgrounds */
+  --color-input-bg: #0F1825;
+
   /* Borders */
   --color-border: #2A2E39;
   --color-border-subtle: #1E222D;
   --color-border-active: rgba(0, 229, 255, 0.25);
+  --color-card-border: #1E2A3A;
 
   /* Typography */
   --color-text-primary: #E8ECF1;
   --color-text-secondary: #7A8494;
   --color-text-muted: #787B86;
   --color-text-inverse: #050608;
+  --color-text-dim: #4A5568;
 
   /* Primary action — cyan (energy, precision) */
   --color-primary: #00E5FF;
@@ -51,11 +51,6 @@
   --color-accent-deep: #A78BFA;
   --color-accent-rl: #F59E0B;
   --color-accent-ensemble: #EC4899;
-
-  /* Chart tokens */
-  --color-chart-line: #00E5FF;
-  --color-chart-buyhold: #555555;
-  --color-chart-drawdown: rgba(239, 68, 68, 0.35);
 
   /* Event severity */
   --color-event-high: #EF4444;

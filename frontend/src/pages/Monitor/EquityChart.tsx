@@ -154,7 +154,7 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
           </ResponsiveContainer>
         ) : (
           <div
-            className="flex items-center justify-center rounded-lg border"
+            className="flex items-center justify-center rounded-sm border"
             style={{ height: 320, borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
           >
             <span className="text-xs">Waiting for simulation data...</span>
@@ -168,7 +168,7 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
             Per-Month Summary
           </span>
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+            <table className="w-full border-collapse rounded-sm overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
               <thead style={{ backgroundColor: "var(--color-elevated)" }}>
                 <tr>
                   <th

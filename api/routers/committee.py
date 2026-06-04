@@ -203,109 +203,20 @@ def get_regime_labels(
     if not csv_path.exists():
         return RegimeLabelsResponse(pair=pair, timeframe=timeframe, labels=[], count=0)
 
-    df = pd.read_csv(csv_path)
-    if "timestamp" in df.columns:
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df = df.set_index("timestamp")
-    elif "time" in df.columns:
-        df["time"] = pd.to_datetime(df["time"])
-        df = df.set_index("time")
-
-    df = df.tail(bars)
-    regime_ids = detect_regimes(df, config=RegimeConfig())
-
-    labels = []
-    for idx, rid in enumerate(regime_ids):
-        ts = df.index[idx]
-        labels.append(RegimeLabelPoint(
-            timestamp=str(ts),
-            regime_id=int(rid),
-            regime_name=_REGIME_NAMES.get(int(rid), "unknown"),
-        ))
-
-    return RegimeLabelsResponse(
-        pair=pair, timeframe=timeframe, labels=labels, count=len(labels),
-    )
-
-
-# ── Committee backtest endpoints ────────────────────────────────────
-
-@router.post("/backtest", response_model=CommitteeBacktestSubmitResponse)
-def submit_committee_backtest(req: CommitteeBacktestRequest):
-    """Submit a committee backtest job. Returns immediately with job_id."""
-    job_id = f"committee_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
-    job_dir = _COMMITTEE_RESULTS_DIR / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
-
-    # Save config for this job
-    with open(job_dir / "config.json", "w") as f:
-        json.dump(req.model_dump(), f, indent=2, default=str)
-
-    # Write status as pending
-    with open(job_dir / "status.json", "w") as f:
-        json.dump({"status": "pending", "created_at": datetime.utcnow().isoformat()}, f)
-
-    # Run synchronously (fast with sklearn models; Celery integration deferred)
-    try:
-        _run_committee_backtest(job_id, req, job_dir)
-    except Exception as e:
-        with open(job_dir / "status.json", "w") as f:
-            json.dump({"status": "failed", "error": str(e)}, f)
-        raise HTTPException(500, f"Committee backtest failed: {e}")
-
-    return CommitteeBacktestSubmitResponse(job_id=job_id)
-
-
-@router.get("/backtest/{job_id}/results", response_model=CommitteeBacktestResultResponse)
-def get_committee_backtest_results(job_id: str):
-    """Return results for a completed committee backtest job."""
-    job_dir = _COMMITTEE_RESULTS_DIR / job_id
-    if not job_dir.exists():
-        raise HTTPException(404, f"Job {job_id} not found")
-
-    results_path = job_dir / "results.json"
-    if not results_path.exists():
-        status_path = job_dir / "status.json"
-        if status_path.exists():
-            with open(status_path) as f:
-                status_data = json.load(f)
-            return CommitteeBacktestResultResponse(
-                job_id=job_id,
-                status=status_data.get("status", "unknown"),
-                warnings=[status_data.get("error", "")] if "error" in status_data else [],
-            )
-        raise HTTPException(404, "Results not yet available")
-
-    with open(results_path) as f:
-        data = json.load(f)
-
-    return CommitteeBacktestResultResponse(**data)
-
-
-def _run_committee_backtest(job_id: str, req: CommitteeBacktestRequest, job_dir: Path):
-    """Internal: run the committee backtest synchronously."""
-    from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-    from pipeline.committee_backtester import CommitteeBacktester
-    from pipeline.regime_utils import RegimeConfig
-
-    # Load data
-    timeframe_map = {"H1": "H1", "H4": "H4", "M30": "M30", "M15": "M15"}
-    tf = timeframe_map.get(req.timeframe, "H1")
-    csv_path = Path(f"csv_data/{req.pair}_10_years_{tf}_OANDA.csv")
-
-    if not csv_path.exists():
-        raise HTTPException(400, f"Data file not found: {csv_path}")
-
-    df = pd.read_csv(csv_path)
-    if "timestamp" in df.columns:
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df = df.set_index("timestamp")
-    elif "time" in df.columns:
-        df["time"] = pd.to_datetime(df["time"])
-        df = df.set_index("time")
-
-    if "returns" not in df.columns:
-        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+        df = pd.read_csv(csv_path)
+        if "timestamp" in df.columns:
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            df = df.set_index("timestamp")
+        elif "time" in df.columns:
+            df["time"] = pd.to_datetime(df["time"])
+            df = df.set_index("time")
+        if "mid_close" in df.columns and "mid_c" not in df.columns:
+            df = df.rename(columns={
+                "mid_open": "mid_o", "mid_high": "mid_h",
+                "mid_low": "mid_l", "mid_close": "mid_c",
+            })
+        if "returns" not in df.columns:
+            df["returns"] = df["mid_c"].pct_change().fillna(0.0)
 
     # Build config from request
     regimes = {}
@@ -404,13 +315,14 @@ def list_committee_snapshots():
 
 class RacecarAutoOptimizeRequest(BaseModel):
     models: List[str] = Field(default_factory=lambda: [
-        "logistic", "random_forest", "xgboost",
+        "logistic", "svm", "random_forest", "xgboost",
+        "lightgbm", "catboost", "lstm", "ensemble_adaptive_regime",
     ])
     pair: str = "EURUSD"
     timeframe: str = "H1"
-    train_months: int = 6
+    train_months: int = 36
     test_months: int = 1
-    profile_trials: int = 5
+    profile_trials: int = 30
     committee_top_k: int = 3
 
 
@@ -535,7 +447,7 @@ def _run_auto_optimize(job_dir: Path, req: RacecarAutoOptimizeRequest,
                 "n_months": req.train_months,
                 "n_trials": req.profile_trials,
                 "hpo_mode": "static",
-                "smoke_test": True,
+                "hpo_sampler": "tpe",
             },
             regime_cfg=RegimeConfig(),
         )
@@ -565,7 +477,7 @@ def _run_auto_optimize(job_dir: Path, req: RacecarAutoOptimizeRequest,
 
         builder = CommitteeBuilder(
             top_k=req.committee_top_k,
-            weight_type="sharpe_proportional",
+            weight_method="sharpe_proportional",
         )
         committee_config = builder.build(
             matrix,
@@ -630,7 +542,8 @@ def _run_auto_optimize(job_dir: Path, req: RacecarAutoOptimizeRequest,
 
 class FactoryStartRequest(BaseModel):
     models: List[str] = Field(default_factory=lambda: [
-        "logistic", "random_forest", "xgboost",
+        "logistic", "svm", "random_forest", "xgboost",
+        "lightgbm", "catboost", "lstm", "ensemble_adaptive_regime",
     ])
     proposer: str = "llm"
     llm_backend: str = "deepseek"
@@ -638,7 +551,7 @@ class FactoryStartRequest(BaseModel):
     patience: int = 5
     stopping_tolerance: float = 0.02
     regime_sharpe_floor: float = 0.3
-    train_months: int = 6
+    train_months: int = 36
     pair: str = "EURUSD"
     timeframe: str = "H1"
 
@@ -905,19 +818,20 @@ def _run_racecar_backend(req, matrix_path, config_path):
         },
         wfo_config={
             "n_months": req.train_months,
-            "n_trials": 3,
+            "n_trials": max(getattr(req, "profile_trials", 30), 30),
             "hpo_mode": "static",
-            "smoke_test": True,
+            "hpo_sampler": "tpe",
             "label_threshold": 0.0,
             "confidence_threshold": 0.5,
         },
         regime_cfg=RegimeConfig(),
     )
     result = profiler.profile(models=req.models, n_months=req.train_months,
-                                n_trials=3, seed=42, verbose=False)
+                                n_trials=max(getattr(req, "profile_trials", 30), 30),
+                                seed=42, verbose=False)
     matrix_path.parent.mkdir(parents=True, exist_ok=True)
     profiler.save_matrix(result, str(matrix_path))
-    builder = CommitteeBuilder(top_k=3, weight_type="sharpe_proportional")
+    builder = CommitteeBuilder(top_k=3, weight_method="sharpe_proportional")
     config = builder.build(result.matrix, constraints={"max_models_per_regime": 3})
     config.to_json(str(config_path))
 
@@ -928,24 +842,36 @@ def _run_racecar_backend(req, matrix_path, config_path):
 
 class FullCycleRequest(BaseModel):
     models: List[str] = Field(default_factory=lambda: [
-        "logistic", "random_forest", "xgboost",
+        "logistic", "svm", "random_forest", "xgboost",
+        "lightgbm", "catboost", "lstm", "ensemble_adaptive_regime",
     ])
     pair: str = "EURUSD"
     timeframe: str = "H1"
-    profile_trials: int = 5
+    profile_trials_phase0: int = 5
+    sweep_n_estimators: int = 100
+    sweep_max_depth: int = 5
     committee_top_k: int = 3
-    train_months: int = 6
+    train_months: int = 36
+    test_months: int = 1
+    hpo_sampler: str = "tpe"
+    cv_blocks: int = 3
+    cv_val_frac: float = 0.05
+    plateau_patience: int = 15
+    max_surviving_models: int = 7
     proposer: str = "llm"
     llm_backend: str = "deepseek"
     max_iterations: int = 20
     patience: int = 5
     stopping_tolerance: float = 0.02
     regime_sharpe_floor: float = 0.3
+    factory_proxy_months: int = 36
+    factory_proxy_folds: int = 3
 
 
 class FullCycleStatusResponse(BaseModel):
     job_id: str
     phase: str = "starting"
+    phase_number: int = 0
     phase_progress: str = ""
     iteration: int = 0
     total_iterations: int = 0
@@ -953,14 +879,34 @@ class FullCycleStatusResponse(BaseModel):
     best_sharpe_so_far: float = 0.0
     started_at: str = ""
     error: str = ""
+    pruned_models: List[str] = Field(default_factory=list)
+    surviving_models: List[str] = Field(default_factory=list)
+    locked_features_count: int = 0
 
 
 class FullCycleResultsResponse(BaseModel):
     job_id: str
     status: str = ""
+    locked_features_count: int = 0
+    pruned_features_count: int = 0
+    top_importance_feature: str = ""
+    phase0_pruned: List[str] = Field(default_factory=list)
+    phase0_survivors: List[str] = Field(default_factory=list)
     racecar_profile_matrix: Optional[Dict[str, Any]] = None
     racecar_committee_config: Optional[Dict[str, Any]] = None
     racecar_backtest: Optional[Dict[str, Any]] = None
+    phase3_fold_consistency_cv: float = 0.0
+    phase3_fold_consistency_pass: bool = False
+    phase3_regime_coverage: Optional[Dict[str, Any]] = None
+    phase3_seed_robustness_sharpe: float = 0.0
+    phase3_seed_robustness_seeds: int = 3
+    phase3_seed_robustness_pass: bool = False
+    final_fold_consistency_cv: float = 0.0
+    final_fold_consistency_pass: bool = False
+    final_regime_coverage: Optional[Dict[str, Any]] = None
+    final_seed_robustness_sharpe: float = 0.0
+    final_seed_robustness_pass: bool = False
+    final_full_wfo: Optional[Dict[str, Any]] = None
     factory_best_sharpe: float = 0.0
     factory_total_iterations: int = 0
     factory_accepted_count: int = 0
@@ -968,6 +914,24 @@ class FullCycleResultsResponse(BaseModel):
     factory_history: List[Dict[str, Any]] = Field(default_factory=list)
     factory_stop_reason: str = ""
     total_time_s: float = 0.0
+
+
+class FullCycleHistoryEntry(BaseModel):
+    job_id: str
+    started_at: str = ""
+    status: str = "unknown"
+    total_time_s: float = 0.0
+    locked_features_count: int = 0
+    survivors_count: int = 0
+    survivors: List[str] = Field(default_factory=list)
+    avg_sharpe: float = 0.0
+    phase3_passed: bool = False
+    factory_best_sharpe: float = 0.0
+
+
+class FullCycleHistoryResponse(BaseModel):
+    entries: List[FullCycleHistoryEntry] = Field(default_factory=list)
+    total_runs: int = 0
 
 
 _FULL_CYCLE_DIR = Path("results/full_cycle")
@@ -997,6 +961,43 @@ def start_full_cycle(req: FullCycleRequest):
     return status
 
 
+@router.get("/full-cycle/history", response_model=FullCycleHistoryResponse)
+def get_full_cycle_history():
+    """List all past full cycle runs with key summary metrics."""
+    entries: List[FullCycleHistoryEntry] = []
+    if not _FULL_CYCLE_DIR.exists():
+        return FullCycleHistoryResponse(entries=[], total_runs=0)
+
+    for job_dir in sorted(_FULL_CYCLE_DIR.iterdir(), reverse=True):
+        if not job_dir.is_dir():
+            continue
+        status_path = job_dir / "status.json"
+        results_path = job_dir / "results.json"
+        if not status_path.exists():
+            continue
+
+        try:
+            status_data = _read_json(status_path)
+            results_data = _read_json(results_path) if results_path.exists() else {}
+        except Exception:
+            continue
+
+        entries.append(FullCycleHistoryEntry(
+            job_id=job_dir.name,
+            started_at=status_data.get("started_at", ""),
+            status=status_data.get("phase", "unknown"),
+            total_time_s=float(results_data.get("total_time_s") or 0.0),
+            locked_features_count=int(results_data.get("locked_features_count") or 0),
+            survivors_count=len(results_data.get("phase0_survivors") or []),
+            survivors=results_data.get("phase0_survivors") or [],
+            avg_sharpe=float(results_data.get("phase3_seed_robustness_sharpe") or 0.0),
+            phase3_passed=bool(results_data.get("phase3_fold_consistency_pass", False)),
+            factory_best_sharpe=float(results_data.get("factory_best_sharpe") or 0.0),
+        ))
+
+    return FullCycleHistoryResponse(entries=entries, total_runs=len(entries))
+
+
 @router.get("/full-cycle/{job_id}/status", response_model=FullCycleStatusResponse)
 def get_full_cycle_status(job_id: str):
     job_dir = _FULL_CYCLE_DIR / job_id
@@ -1019,54 +1020,210 @@ def get_full_cycle_results(job_id: str):
     )
 
 
-def _update_full_cycle_status(job_dir: Path, phase: str, **kwargs):
+def _update_full_cycle_status(job_dir: Path, phase: str, phase_number: int = 0, **kwargs):
     data = {}
     status_path = job_dir / "status.json"
     if status_path.exists():
         data = _read_json(status_path)
     data["phase"] = phase
+    data["phase_number"] = phase_number
     data.update(kwargs)
     _write_json(status_path, data)
+
+
+def _load_csv_for_committee(pair: str, timeframe: str) -> tuple[Path, pd.DataFrame]:
+    """Resolve CSV path and return (path, normalized DataFrame)."""
+    csv_path = Path(f"csv_data/{pair}_10_years_{timeframe}_OANDA.csv")
+    if not csv_path.exists():
+        csv_path = Path("csv_data/EURUSD_10_years_H1_OANDA.csv")
+    df = pd.read_csv(csv_path)
+    for time_col in ("timestamp", "time"):
+        if time_col in df.columns:
+            df[time_col] = pd.to_datetime(df[time_col])
+            df = df.set_index(time_col)
+            break
+    rename_map = {
+        "mid_open": "mid_o", "mid_high": "mid_h",
+        "mid_low": "mid_l", "mid_close": "mid_c",
+    }
+    df = df.rename(columns=rename_map)
+    if "returns" not in df.columns:
+        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+    return csv_path, df
 
 
 def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_at: str):
     t_start = datetime.utcnow()
     try:
-        from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
+        from pipeline.expert_profiler import (
+            ExpertProfiler, RegimeConfig, prune_models,
+        )
         from pipeline.committee_builder import CommitteeBuilder
         from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.model_families import get_trial_budget
+        from pipeline.factory_state import load_state_from_disk
+        from pipeline.factory_executor import FactoryExecutor
 
-        # ── Phase 1: Racecar B→C→D ──
-        csv_path = Path(f"csv_data/{req.pair}_10_years_{req.timeframe}_OANDA.csv")
-        if not csv_path.exists():
-            csv_path = Path("csv_data/EURUSD_10_years_H1_OANDA.csv")
+        csv_path, df = _load_csv_for_committee(req.pair, req.timeframe)
 
-        # B: ExpertProfiler
-        _update_full_cycle_status(job_dir, "profiling",
-                                   phase_progress=f"0/{len(req.models)}")
+        # ──────────────────────────────────────────────────────────────
+        # PHASE -1: FEATURE SWEEP (if locked_features.json doesn't exist)
+        # ──────────────────────────────────────────────────────────────
+        locked_features_path = Path("results/locked_features.json")
+        sweep_report_path = locked_features_path.with_name("locked_features_report.json")
+        locked_features = None
+        sweep_report_data: Dict[str, Any] = {}
+
+        if locked_features_path.exists():
+            try:
+                from pipeline.feature_sweep import load_locked_features
+                locked_features = load_locked_features(str(locked_features_path))
+                if locked_features:
+                    print(f"[FULL_CYCLE] Loaded {len(locked_features)} locked features")
+                if sweep_report_path.exists():
+                    with open(sweep_report_path) as f:
+                        sweep_report_data = json.load(f)
+            except Exception:
+                pass
+
+        if not locked_features:
+            from pipeline.feature_sweep import run_phase_minus1
+            _update_full_cycle_status(job_dir, "feature_sweep", phase_number=-1,
+                                       current_action="Phase -1: expanding features, training shallow RF")
+            locked_features, sweep_report_data = run_phase_minus1(
+                df, output_path=str(locked_features_path),
+                label_threshold=0.0001,
+                n_estimators=req.sweep_n_estimators,
+                max_depth=req.sweep_max_depth,
+                n_folds=3, random_state=42,
+            )
+            print(f"[FULL_CYCLE] Phase -1 complete: {len(locked_features)} features locked")
+
+        locked_count = len(locked_features) if locked_features else 0
+        pruned_count = sweep_report_data.get("pruned_count", 0)
+        top_feature = (sweep_report_data.get("locked_features") or [""])[0]
+
+        if locked_features:
+            os.environ["MLB_TA_MODE"] = "fixed"
+            print("[FULL_CYCLE] TA_MODE locked to 'fixed' (features pre-filtered by Phase -1)")
+
+        # Prepare raw OHLC DataFrame for anchored regime detection (needs 'time' column)
+        raw_df_regime = df.reset_index() if df.index.name or "time" not in df.columns else df.copy()
+        if "time" not in raw_df_regime.columns:
+            raw_df_regime["time"] = raw_df_regime.index
+
+        # ──────────────────────────────────────────────────────────────
+        # PHASE 0: PRE-SCREENING (static pass across all candidate models)
+        # ──────────────────────────────────────────────────────────────
+        def _on_profile_progress(model, idx, total, status, sharpe=None):
+            _update_full_cycle_status(
+                job_dir, "profiling", phase_number=0,
+                current_action=f"Profiling {model} ({idx}/{total})",
+                phase_progress=f"{idx}/{total}", iteration=0,
+                best_sharpe_so_far=float(sharpe) if sharpe is not None else 0.0,
+            )
+
+        _update_full_cycle_status(job_dir, "prescreening", phase_number=0,
+                                   phase_progress=f"0/{len(req.models)}",
+                                   current_action="Phase 0: screening all models",
+                                   locked_features_count=locked_count)
         profiler = ExpertProfiler(
             data_config={"symbol": req.pair, "csv_data_path": str(csv_path)},
             wfo_config={
-                "n_months": req.train_months, "n_trials": req.profile_trials,
-                "hpo_mode": "static", "smoke_test": True,
+                "n_months": req.train_months,
+                "n_trials": req.profile_trials_phase0,
+                "hpo_mode": "static",
+                "hpo_sampler": req.hpo_sampler,
+                "cv_blocks": req.cv_blocks,
+                "cv_val_frac": req.cv_val_frac,
+                "plateau_patience": req.plateau_patience,
+                "locked_features": locked_features,
             },
             regime_cfg=RegimeConfig(),
         )
-        profile_result = profiler.profile(
+        phase0_result = profiler.profile(
             models=req.models, n_months=req.train_months,
-            n_trials=req.profile_trials, seed=42, verbose=False,
+            n_trials=req.profile_trials_phase0, seed=42, verbose=False,
+            progress_callback=_on_profile_progress,
+            raw_df=raw_df_regime,
         )
-        matrix = profile_result.matrix
+        matrix = phase0_result.matrix
         if matrix is None or not matrix.models:
-            raise RuntimeError("No models produced valid fold results")
+            raise RuntimeError("Phase 0: no models produced valid fold results")
+
+        survivors, pruned = prune_models(
+            matrix, min_sharpe=0.0, max_models=req.max_surviving_models,
+        )
+        if not survivors:
+            raise RuntimeError(
+                f"Phase 0: all {len(req.models)} models failed screening. "
+                "Tighten max_surviving_models or add better models."
+            )
+        _update_full_cycle_status(
+            job_dir, "prescreening_complete", phase_number=0,
+            current_action=f"{len(survivors)} survivors: {', '.join(survivors)}",
+            surviving_models=survivors, pruned_models=pruned,
+        )
+
+        # ──────────────────────────────────────────────────────────────
+        # PHASE 1: TARGETED HPO (real Optuna on each survivor)
+        # ──────────────────────────────────────────────────────────────
+        _update_full_cycle_status(job_dir, "tuning", phase_number=1,
+                                   current_action="Starting Phase 1 HPO",
+                                   phase_progress=f"0/{len(survivors)}")
+        # Remove Phase 0 folds for survivors — will be replaced with tuned folds
+        matrix.raw_folds = [f for f in matrix.raw_folds if f.model not in survivors]
+
+        hpo_base_config = {
+            "symbol": req.pair,
+            "csv_data_path": str(csv_path),
+            "timeframe": req.timeframe,
+            "train_months": req.train_months,
+            "test_months": req.test_months,
+            "hpo_mode": "static",
+            "hpo_sampler": req.hpo_sampler,
+            "cv_blocks": req.cv_blocks,
+            "cv_val_frac": req.cv_val_frac,
+            "plateau_patience": req.plateau_patience,
+            "locked_features": locked_features,
+        }
+
+        first_df_wfo = None
+        for idx, model_type in enumerate(survivors):
+            _update_full_cycle_status(
+                job_dir, "tuning", phase_number=1,
+                current_action=f"HPO on {model_type} ({idx + 1}/{len(survivors)})",
+                phase_progress=f"{idx + 1}/{len(survivors)}",
+            )
+            n_trials, n_startup = get_trial_budget(model_type)
+            model_config = dict(hpo_base_config)
+            model_config["model_type"] = model_type
+            tuned_folds, df_wfo = profiler._run_single_model(
+                model_type, {**model_config, "n_trials": n_trials,
+                             "n_startup_trials": n_startup},
+                seed=42, verbose=False,
+            )
+            if tuned_folds:
+                matrix.raw_folds.extend(tuned_folds)
+            if first_df_wfo is None and df_wfo is not None:
+                first_df_wfo = df_wfo
+
+        # Rebuild matrix with tuned fold results
+        if matrix.raw_folds:
+            profiler._attach_regime_distributions(matrix.raw_folds, first_df_wfo)
+            matrix = profiler._build_matrix(matrix.raw_folds)
+
         matrix_data = matrix.to_dict()
-        with open(job_dir / "regime_matrix.json", "w") as f:
+        with open(job_dir / "regime_matrix_tuned.json", "w") as f:
             json.dump(matrix_data, f, indent=2, default=str)
 
-        # C: CommitteeBuilder
-        _update_full_cycle_status(job_dir, "building")
+        # ──────────────────────────────────────────────────────────────
+        # PHASE 2: COMMITTEE ASSEMBLY
+        # ──────────────────────────────────────────────────────────────
+        _update_full_cycle_status(job_dir, "building", phase_number=2,
+                                   current_action="Building committee config")
         builder = CommitteeBuilder(
-            top_k=req.committee_top_k, weight_type="sharpe_proportional",
+            top_k=req.committee_top_k, weight_method="sharpe_proportional",
         )
         committee_config = builder.build(
             matrix, constraints={"max_models_per_regime": req.committee_top_k},
@@ -1075,43 +1232,89 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
         with open(job_dir / "committee_config.json", "w") as f:
             json.dump(cc_data, f, indent=2, default=str)
 
-        # D: CommitteeBacktester
-        _update_full_cycle_status(job_dir, "backtesting")
-        df = pd.read_csv(csv_path)
-        if "timestamp" in df.columns:
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
-            df = df.set_index("timestamp")
-        elif "time" in df.columns:
-            df["time"] = pd.to_datetime(df["time"])
-            df = df.set_index("time")
-        if "returns" not in df.columns:
-            df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+        # ──────────────────────────────────────────────────────────────
+        # PHASE 3: INTERMEDIATE VALIDATION (36-mo WFO + consistency + 3 seeds)
+        # ──────────────────────────────────────────────────────────────
+        _update_full_cycle_status(job_dir, "validating", phase_number=3,
+                                   current_action="Phase 3: 36-month WFO validation")
 
         bt = CommitteeBacktester(
             committee_config, regime_cfg=RegimeConfig(), confidence_threshold=0.5,
         )
         bt_result = bt.run_wfo(
-            df, train_months=req.train_months, test_months=1, verbose=False,
+            df, train_months=req.train_months, test_months=req.test_months,
+            verbose=False,
         )
-        bt_summary = bt_result.to_summary_dict()
-        with open(job_dir / "racecar_backtest.json", "w") as f:
-            json.dump(bt_summary, f, indent=2, default=str)
 
-        # ── Phase 2: Factory optimization ──
-        _update_full_cycle_status(job_dir, "optimizing",
-                                   current_action="Starting optimization loop")
+        cv = bt_result.fold_consistency_cv
+        cv_pass = bt_result.fold_consistency_pass
+        coverage = bt_result.regime_coverage_report(min_trades=30, min_sharpe=0.0)
+        all_covered = all(c["covered"] for c in coverage.values())
 
-        from pipeline.factory_state import load_state_from_disk
-        from pipeline.factory_executor import FactoryExecutor
+        # Seed robustness (3 intermediate seeds)
+        seed_sharpes = []
+        for seed in (42, 101, 202):
+            alt_bt = CommitteeBacktester(
+                committee_config, regime_cfg=RegimeConfig(), confidence_threshold=0.5,
+            )
+            alt_r = alt_bt.run_wfo(
+                df, train_months=req.train_months, test_months=req.test_months,
+                verbose=False,
+            )
+            seed_sharpes.append(alt_r.avg_sharpe if alt_r else 0.0)
+        seed_avg = float(np.mean(seed_sharpes)) if seed_sharpes else 0.0
+        seed_pass = all(s > 0.0 for s in seed_sharpes)
+
+        phase3_passed = cv_pass and all_covered and seed_pass
+        if not phase3_passed:
+            reason_parts = []
+            if not cv_pass:
+                reason_parts.append(f"fold CV={cv:.3f} >= 1.0")
+            if not all_covered:
+                uncovered = [r for r, c in coverage.items() if not c["covered"]]
+                reason_parts.append(f"regimes not covered: {uncovered}")
+            if not seed_pass:
+                reason_parts.append(f"seed Sharpes={[f'{s:.3f}' for s in seed_sharpes]}")
+            fail_reason = "; ".join(reason_parts)
+            _update_full_cycle_status(
+                job_dir, "validation_failed", phase_number=3,
+                error=f"Phase 3 gate failed: {fail_reason}",
+            )
+            elapsed = (datetime.utcnow() - t_start).total_seconds()
+            results = FullCycleResultsResponse(
+                job_id=job_id, status="validation_failed",
+                locked_features_count=locked_count,
+                pruned_features_count=pruned_count,
+                top_importance_feature=top_feature,
+                phase0_pruned=pruned, phase0_survivors=survivors,
+                phase3_fold_consistency_cv=cv,
+                phase3_fold_consistency_pass=cv_pass,
+                phase3_regime_coverage=coverage,
+                phase3_seed_robustness_sharpe=seed_avg,
+                phase3_seed_robustness_seeds=3,
+                phase3_seed_robustness_pass=seed_pass,
+                total_time_s=elapsed,
+            )
+            with open(job_dir / "results.json", "w") as f:
+                json.dump(results.model_dump(), f, indent=2, default=str)
+            return
+
+        # ──────────────────────────────────────────────────────────────
+        # PHASE 4: FACTORY OPTIMIZATION (proxy WFO inside loop)
+        # ──────────────────────────────────────────────────────────────
+        _update_full_cycle_status(job_dir, "optimizing", phase_number=4,
+                                   current_action="Starting Factory optimization (proxy WFO)",
+                                   phase_progress=f"0/{req.max_iterations}",
+                                   iteration=0, best_sharpe_so_far=0.0)
 
         state = load_state_from_disk(
             config_path=str(job_dir / "committee_config.json"),
-            matrix_path=str(job_dir / "regime_matrix.json"),
+            matrix_path=str(job_dir / "regime_matrix_tuned.json"),
             patience=req.patience, tolerance=req.stopping_tolerance,
             floor=req.regime_sharpe_floor, max_iter=req.max_iterations,
         )
         if state is None:
-            raise RuntimeError("Failed to load Factory state from Racecar results")
+            raise RuntimeError("Failed to load Factory state from committee config")
 
         proposer = None
         if req.proposer == "llm":
@@ -1120,47 +1323,99 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
 
         executor = FactoryExecutor(
             state=state, proposer=proposer, data_path=str(csv_path),
-            train_months=req.train_months,
+            train_months=req.factory_proxy_months, test_months=req.test_months,
         )
 
-        # Manual loop for per-iteration status updates
         executor._load_data()
         _loop_proposer = executor.proposer
+        reason = ""
         while True:
             should_stop, reason = state.should_stop()
             if should_stop:
-                _update_full_cycle_status(job_dir, "optimizing",
-                                           current_action="Stopped: " + reason,
-                                           iteration=state.iteration)
                 break
-
             proposal = _loop_proposer.propose(state)
             if proposal.type == "halt":
-                _update_full_cycle_status(job_dir, "optimizing",
-                                           current_action="No more untested moves",
-                                           iteration=state.iteration)
+                reason = "No more untested moves"
                 break
 
-            _update_full_cycle_status(job_dir, "optimizing",
-                                       current_action=f"{proposal.type} in {proposal.regime}",
-                                       iteration=state.iteration + 1)
-
+            _update_full_cycle_status(
+                job_dir, "optimizing", phase_number=4,
+                current_action=f"{proposal.type} in {proposal.regime}",
+                iteration=state.iteration + 1,
+                phase_progress=f"{state.iteration + 1}/{req.max_iterations}",
+            )
             record, _ = executor.execute_iteration(proposal)
             if record is None:
                 continue
+            _update_full_cycle_status(
+                job_dir, "optimizing", phase_number=4,
+                iteration=state.iteration,
+                best_sharpe_so_far=state.global_best_sharpe,
+                phase_progress=f"{state.iteration}/{req.max_iterations}",
+            )
 
-            _update_full_cycle_status(job_dir, "optimizing",
-                                       iteration=state.iteration,
-                                       best_sharpe_so_far=state.global_best_sharpe)
+        # ──────────────────────────────────────────────────────────────
+        # FINAL VALIDATION: full 10-year WFO + 5-seed robustness
+        # ──────────────────────────────────────────────────────────────
+        _update_full_cycle_status(job_dir, "final validation", phase_number=4,
+                                   current_action="Final: 10-year WFO + 5-seed robustness")
 
-        # ── Save results ──
+        final_config = state.config if state.config else committee_config
+        final_bt = CommitteeBacktester(
+            final_config, regime_cfg=RegimeConfig(), confidence_threshold=0.5,
+        )
+        final_result = final_bt.run_wfo(
+            df, train_months=req.train_months, test_months=req.test_months,
+            verbose=False,
+        )
+        final_summary = final_result.to_summary_dict() if final_result else {}
+
+        # 5-seed robustness on the final config
+        final_seed_sharpes = []
+        for seed in (42, 101, 202, 789, 999):
+            fbt = CommitteeBacktester(
+                final_config, regime_cfg=RegimeConfig(), confidence_threshold=0.5,
+            )
+            fr = fbt.run_wfo(
+                df, train_months=req.train_months, test_months=req.test_months,
+                verbose=False,
+            )
+            final_seed_sharpes.append(fr.avg_sharpe if fr else 0.0)
+        final_seed_avg = float(np.mean(final_seed_sharpes)) if final_seed_sharpes else 0.0
+        final_seed_pass = all(s > 0.0 for s in final_seed_sharpes)
+
+        final_fold_cv = final_result.fold_consistency_cv if final_result else float("inf")
+        final_fold_pass = final_result.fold_consistency_pass if final_result else False
+        final_coverage = final_result.regime_coverage_report(min_trades=30, min_sharpe=0.0) if final_result else {}
+
+        # Save final committee config to disk (deployment)
+        final_config.to_json(str(job_dir / "committee_config_final.json"))
+
+        # ── Assemble results ──
         factory_history = [r.to_dict() for r in state.history]
         results = {
             "job_id": job_id,
             "status": "completed",
+            "locked_features_count": locked_count,
+            "pruned_features_count": pruned_count,
+            "top_importance_feature": top_feature,
+            "phase0_pruned": pruned,
+            "phase0_survivors": survivors,
             "racecar_profile_matrix": matrix_data,
             "racecar_committee_config": cc_data,
-            "racecar_backtest": bt_summary,
+            "racecar_backtest": bt_result.to_summary_dict(),
+            "phase3_fold_consistency_cv": round(float(cv), 4),
+            "phase3_fold_consistency_pass": bool(cv_pass),
+            "phase3_regime_coverage": {r: dict(v) for r, v in coverage.items()},
+            "phase3_seed_robustness_sharpe": round(float(seed_avg), 4),
+            "phase3_seed_robustness_seeds": 3,
+            "phase3_seed_robustness_pass": bool(seed_pass),
+            "final_full_wfo": final_summary,
+            "final_fold_consistency_cv": round(float(final_fold_cv), 4),
+            "final_fold_consistency_pass": bool(final_fold_pass),
+            "final_regime_coverage": {r: dict(v) for r, v in final_coverage.items()},
+            "final_seed_robustness_sharpe": round(float(final_seed_avg), 4),
+            "final_seed_robustness_pass": bool(final_seed_pass),
             "factory_best_sharpe": state.global_best_sharpe,
             "factory_total_iterations": state.iteration,
             "factory_accepted_count": sum(1 for r in state.history if r.accepted),
@@ -1172,10 +1427,12 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
         with open(job_dir / "results.json", "w") as f:
             json.dump(results, f, indent=2, default=str)
 
-        _update_full_cycle_status(job_dir, "completed",
-                                   best_sharpe_so_far=state.global_best_sharpe)
+        _update_full_cycle_status(
+            job_dir, "completed", phase_number=4,
+            best_sharpe_so_far=state.global_best_sharpe,
+        )
 
     except Exception as e:
-        _update_full_cycle_status(job_dir, "failed", error=str(e))
+        _update_full_cycle_status(job_dir, "failed", phase_number=-1, error=str(e))
         import traceback
         traceback.print_exc()

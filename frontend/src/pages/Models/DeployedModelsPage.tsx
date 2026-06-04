@@ -130,7 +130,7 @@ export function DeployedModelsPage() {
 
       {!isLoading && filtered.length === 0 && (
         <div
-          className="flex flex-col items-center justify-center gap-4 rounded-xl border p-12"
+          className="flex flex-col items-center justify-center gap-4 rounded-sm border p-12"
           style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
         >
           <Box size={40} style={{ color: "var(--color-text-muted)" }} />
@@ -144,7 +144,7 @@ export function DeployedModelsPage() {
         {filtered.map((m) => (
           <div
             key={m.id}
-            className="rounded-xl border p-4 transition-all"
+            className="rounded-sm border p-4 transition-all"
             style={{
               borderColor: m.status === "active" ? "var(--color-brand)" : "var(--color-glass-border)",
               backgroundColor: m.status === "active" ? "rgba(0,229,255,0.03)" : "var(--color-glass)",

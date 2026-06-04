@@ -43,7 +43,7 @@ export function QuickTestBar() {
 
   return (
     <div
-      className="rounded-lg border p-5"
+      className="rounded-sm border p-5"
       style={{
         backgroundColor: "var(--color-glass)",
         borderColor: "rgba(0,229,255,0.15)",
@@ -69,7 +69,7 @@ export function QuickTestBar() {
           <button
             key={p.name}
             onClick={() => applyPreset(p)}
-            className="flex flex-col items-start gap-1 rounded-lg border px-4 py-3 transition-all duration-300 hover:border-[var(--color-border-active)]"
+            className="flex flex-col items-start gap-1 rounded-sm border px-4 py-3 transition-all duration-300 hover:border-[var(--color-border-active)]"
             style={{
               borderColor: "var(--color-glass-border)",
               backgroundColor: "var(--color-glass-hover)",

@@ -15,6 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pipeline.regime_utils import (
     detect_regimes,
+    detect_regimes_anchored,
+    _anchor_centroids,
     attach_regime_columns,
     regime_counts,
     regime_transition_matrix,
@@ -551,3 +553,111 @@ class TestResolveCol:
         df = pd.DataFrame({"adx_14": [1], "adx": [2]})
         col = _resolve_col(df, "adx")
         assert col == "adx_14"
+
+
+# ════════════════════════════════════════════════════════════════════
+# Anchored GMM Regime Detection Tests
+# ════════════════════════════════════════════════════════════════════
+
+class TestAnchoredRegimeDetection:
+
+    @staticmethod
+    def _make_ohlc_df(n: int = 5000, trend_prob: float = 0.3, seed: int = 42) -> pd.DataFrame:
+        """Generate synthetic OHLC data with controllable trend/vol characteristics."""
+        rng = np.random.default_rng(seed)
+        close = np.cumsum(rng.normal(0, 0.001, n)) + 1.10
+        high = close + np.abs(rng.normal(0, 0.0005, n))
+        low = close - np.abs(rng.normal(0, 0.0005, n))
+        idx = pd.date_range("2015-01-01", periods=n, freq="h")
+        return pd.DataFrame({
+            "time": idx,
+            "mid_high": high,
+            "mid_low": low,
+            "mid_close": close,
+        })
+
+    def test_produces_only_valid_ids(self):
+        """All returned regime IDs must be in {1, 3, 5, 6} (3 clusters + fallback)."""
+        df = self._make_ohlc_df(5000)
+        ids = detect_regimes_anchored(df, window=252, random_state=42)
+        valid = {1, 3, 5, 6}
+        unique = set(np.unique(ids).tolist())
+        assert unique.issubset(valid), f"Unexpected regime IDs: {unique - valid}"
+
+    def test_produces_three_clusters(self):
+        """On sufficient data, at least 2 of the 3 anchored clusters appear."""
+        df = self._make_ohlc_df(5000)
+        ids = detect_regimes_anchored(df, window=252, random_state=42)
+        non_fallback = ids[ids != 6]
+        n_clusters = len(set(np.unique(non_fallback)))
+        assert n_clusters >= 2, f"Expected >=2 anchored clusters, got {n_clusters}"
+
+    def test_centroid_anchoring_high_trend_has_max_adx(self):
+        """The cluster anchored to id=1 MUST have the highest ADX centroid."""
+        centroids = np.array([[0.5, 2.5], [2.0, 0.5], [-1.0, -0.5]])
+        cmap = _anchor_centroids(centroids)
+        trend_cluster = [k for k, v in cmap.items() if v == 1][0]
+        adx_vals = centroids[:, 0]
+        assert adx_vals[trend_cluster] == adx_vals.max()
+
+    def test_centroid_anchoring_high_vol_has_max_atr(self):
+        """The cluster anchored to id=5 MUST have the highest ATR centroid."""
+        centroids = np.array([[0.5, 2.5], [2.0, 0.5], [-1.0, -0.5]])
+        cmap = _anchor_centroids(centroids)
+        vol_cluster = [k for k, v in cmap.items() if v == 5][0]
+        atr_vals = centroids[:, 1]
+        assert atr_vals[vol_cluster] == atr_vals.max()
+
+    def test_centroid_anchoring_no_collision(self):
+        """High_Trend and High_Vol must map to different clusters."""
+        centroids = np.array([[2.0, 2.0], [-1.0, -1.0], [3.0, 3.0]])
+        cmap = _anchor_centroids(centroids)
+        trend_cluster = [k for k, v in cmap.items() if v == 1][0]
+        vol_cluster = [k for k, v in cmap.items() if v == 5][0]
+        assert trend_cluster != vol_cluster, "High_Trend and High_Vol mapped to same cluster"
+
+    def test_deterministic(self):
+        """Same seed + same data → identical regime IDs."""
+        df = self._make_ohlc_df(2000)
+        ids1 = detect_regimes_anchored(df, window=100, random_state=42)
+        ids2 = detect_regimes_anchored(df, window=100, random_state=42)
+        assert np.array_equal(ids1, ids2)
+
+    def test_handles_short_data(self):
+        """DataFrame with <28 bars crashes ADX computation; returns all sideways (6)."""
+        df = self._make_ohlc_df(15)
+        ids = detect_regimes_anchored(df, window=252, random_state=42)
+        assert np.all(ids == 6)
+
+    def test_df_train_mode_returns_labels_for_df_only(self):
+        """When df_train is passed, output length must match df, not train+test."""
+        df_full = self._make_ohlc_df(1000)
+        df_train = df_full.iloc[:700]
+        df_test = df_full.iloc[700:]
+        ids = detect_regimes_anchored(df_test, df_train=df_train, window=250, random_state=42)
+        assert len(ids) == len(df_test)
+
+    def test_df_train_mode_no_future_leakage(self):
+        """Per-fold: GMM fitted on train, predicted on test. No test data in train."""
+        df_full = self._make_ohlc_df(1000)
+        train_n = 700
+        df_train = df_full.iloc[:train_n]
+        df_test = df_full.iloc[train_n:]
+        ids = detect_regimes_anchored(df_test, df_train=df_train, window=250, random_state=42)
+        assert len(ids) == len(df_test)
+        assert set(np.unique(ids).tolist()).issubset({1, 3, 5, 6})
+
+    def test_empty_train_returns_fallback(self):
+        """df_train with insufficient history returns all sideways."""
+        df = self._make_ohlc_df(200)
+        df_train = df.iloc[:30]
+        df_test = df.iloc[30:]
+        ids = detect_regimes_anchored(df_test, df_train=df_train, window=250, random_state=42)
+        assert np.all(ids == 6)
+
+    def test_mid_h_mid_l_mid_c_column_names(self):
+        """Accepts alternative column naming (mid_h/mid_l/mid_c)."""
+        df = self._make_ohlc_df(2000)
+        df = df.rename(columns={"mid_high": "mid_h", "mid_low": "mid_l", "mid_close": "mid_c"})
+        ids = detect_regimes_anchored(df, window=250, random_state=42)
+        assert set(np.unique(ids).tolist()).issubset({1, 3, 5, 6})

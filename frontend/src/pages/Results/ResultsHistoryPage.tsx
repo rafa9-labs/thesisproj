@@ -128,7 +128,7 @@ function SummaryStrip({ results }: { results: BacktestSummaryItem[] }) {
       {stats.map((s) => (
         <div
           key={s.label}
-          className="rounded-lg border px-4 py-3 flex flex-col gap-1"
+          className="rounded-sm border px-4 py-3 flex flex-col gap-1"
           style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-elevated)" }}
         >
           <span className="text-[9px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>
@@ -252,7 +252,7 @@ export function ResultsHistoryPage() {
         {selected.size > 0 && (
           <button
             onClick={exportCSV}
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-[11px] font-medium transition-colors hover:bg-[var(--color-glass-hover)]"
+            className="flex items-center gap-2 rounded-sm border px-3 py-2 text-[11px] font-medium transition-colors hover:bg-[var(--color-glass-hover)]"
             style={{ borderColor: "var(--color-glass-border)", color: "var(--color-text-secondary)" }}
           >
             <Download size={14} />
@@ -268,7 +268,7 @@ export function ResultsHistoryPage() {
       <div className="flex items-center gap-3">
         {/* search */}
         <div
-          className="relative flex items-center flex-1 max-w-sm rounded-lg border transition-colors focus-within:border-[var(--color-brand)]"
+          className="relative flex items-center flex-1 max-w-sm rounded-sm border transition-colors focus-within:border-[var(--color-brand)]"
           style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-surface)" }}
         >
           <Search
@@ -288,6 +288,7 @@ export function ResultsHistoryPage() {
               onClick={() => setSearch("")}
               className="absolute right-2.5 text-[10px] px-1.5 py-0.5 rounded"
               style={{ color: "var(--color-text-muted)" }}
+              aria-label="Clear search"
             >
               ✕
             </button>
@@ -296,7 +297,7 @@ export function ResultsHistoryPage() {
 
         {/* pair selector */}
         <div
-          className="relative rounded-lg border transition-colors"
+          className="relative rounded-sm border transition-colors"
           style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-surface)" }}
         >
           <select
@@ -320,7 +321,7 @@ export function ResultsHistoryPage() {
 
       {/* ── table ── */}
       <div
-        className="overflow-hidden rounded-xl border"
+        className="overflow-hidden rounded-sm border"
         style={{ borderColor: "var(--color-glass-border)" }}
       >
         <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
@@ -489,6 +490,7 @@ export function ResultsHistoryPage() {
                         <button
                           onClick={() => handleRerun(row)}
                           title="Re-run"
+                          aria-label="Re-run backtest"
                           className="rounded-md p-1.5 transition-colors hover:bg-[var(--color-primary-glow)]"
                           style={{ color: "var(--color-brand)" }}
                         >
@@ -497,6 +499,7 @@ export function ResultsHistoryPage() {
                         <button
                           onClick={() => navigate(`/results/${row.job_id}`)}
                           title="View"
+                          aria-label="View results"
                           className="rounded-md p-1.5 transition-colors hover:bg-[var(--color-glass-hover)]"
                           style={{ color: "var(--color-text-muted)" }}
                         >
@@ -505,6 +508,7 @@ export function ResultsHistoryPage() {
                         <button
                           onClick={() => deleteJob.mutate(row.job_id)}
                           title="Delete"
+                          aria-label="Delete backtest"
                           className="rounded-md p-1.5 transition-colors hover:bg-[rgba(242,54,69,0.12)]"
                           style={{ color: "var(--color-text-muted)" }}
                         >

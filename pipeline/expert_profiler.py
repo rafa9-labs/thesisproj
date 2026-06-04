@@ -15,11 +15,16 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
+from pipeline.model_families import (
+    DEEP_MODELS,
+    LINEAR_MODELS,
+    TREE_MODELS,
+)
 from pipeline.regime_utils import (
     _REGIME_NAMES,
     RegimeConfig,
@@ -124,6 +129,8 @@ class ExpertProfiler:
         n_trials: int = 5,
         seed: int = 42,
         verbose: bool = True,
+        progress_callback: Optional[Callable] = None,
+        raw_df: Optional[pd.DataFrame] = None,
     ) -> ExpertProfileResult:
         """Run full profiling sweep across all models.
 
@@ -139,6 +146,11 @@ class ExpertProfiler:
             Reproducibility seed.
         verbose : bool
             Print progress.
+        progress_callback : Callable or None
+            Optional callback(model, idx, total, status, sharpe) called per model.
+        raw_df : pd.DataFrame, optional
+            Full OHLC DataFrame with 'time' column for anchored regime detection.
+            Columns required: mid_high, mid_low, mid_close, time (or mid_h/mid_l/mid_c).
 
         Returns
         -------
@@ -146,6 +158,8 @@ class ExpertProfiler:
         """
         t0 = time.time()
         warnings: List[str] = []
+
+        self._raw_df = raw_df
 
         # Build common config from data_config + wfo_config
         config = dict(self.data_config)
@@ -160,9 +174,12 @@ class ExpertProfiler:
         all_fold_results: List[FoldResult] = []
         first_df_wfo: Optional[pd.DataFrame] = None
 
-        for model_type in models:
+        for idx, model_type in enumerate(models):
             if verbose:
                 print(f"\n[PROFILE] Running {model_type} ({len(all_fold_results)} folds so far)...")
+
+            if progress_callback:
+                progress_callback(model_type, idx + 1, len(models), "started")
 
             fold_results, df_wfo = self._run_single_model(
                 model_type, config, seed, verbose
@@ -170,7 +187,18 @@ class ExpertProfiler:
 
             if fold_results is None or len(fold_results) == 0:
                 warnings.append(f"{model_type}: produced 0 valid folds, skipping")
+                if progress_callback:
+                    progress_callback(model_type, idx + 1, len(models), "failed")
                 continue
+
+            avg_sharpe = np.mean([
+                f.sharpe for f in fold_results
+                if f.sharpe is not None and not np.isnan(f.sharpe)
+            ]) if fold_results else None
+
+            if progress_callback:
+                progress_callback(model_type, idx + 1, len(models), "done",
+                                  float(avg_sharpe) if avg_sharpe is not None and not np.isnan(avg_sharpe) else None)
 
             # Keep the first model's df_wfo for fold boundary reference
             if first_df_wfo is None and df_wfo is not None:
@@ -213,6 +241,8 @@ class ExpertProfiler:
         model_config = dict(config)
         model_config["model_type"] = model_type
 
+        locked_features = model_config.pop("locked_features", None)
+
         bt = None
         try:
             bt = MLBacktester(
@@ -221,6 +251,9 @@ class ExpertProfiler:
                 end=model_config.get("end"),
                 model_type=model_type,
             )
+            if locked_features:
+                if isinstance(bt.features_config, dict):
+                    bt.features_config["locked_features"] = list(locked_features)
 
             df_wfo, best_combo = bt.run_strategy(
                 model_config,
@@ -312,28 +345,111 @@ class ExpertProfiler:
     ):
         """Compute regime distribution for each fold's test period.
 
-        Uses reference data from the first model to get fold boundaries.
-        Then computes features + 7-class regime on the test data slice.
+        Uses anchored GMM detection on raw_df if available (per-fold WFO fitting).
+        Falls back to heuristic if no raw_df is provided.
         """
-        if ref_df_wfo is None or ref_df_wfo.empty:
+        if self._raw_df is not None:
             if verbose:
-                print("[PROFILE] No reference WFO data for regime tagging. Generating synthetic.")
-            # Fallback: use fold boundaries from fold_results itself
+                print("[PROFILE] Using anchored GMM regime detection per fold")
+            self._attach_regime_from_labels(fold_results, self._raw_df)
+        else:
+            if verbose:
+                print("[PROFILE] No raw_df, using heuristic regime fallback")
+            self._attach_regime_from_fallback(fold_results)
+
+    def _attach_regime_from_labels(self, fold_results: List[FoldResult], raw_df: pd.DataFrame):
+        """Per-fold anchored GMM regime detection using raw OHLC data.
+
+        For each unique (test_start, test_end) fold boundary:
+          1. Find bar indices in raw_df matching the time range
+          2. Split into train (all bars before test_start) and test
+          3. Call detect_regimes_anchored(df_test, df_train) for per-fold WFO fitting
+          4. Count regime frequencies in test bars
+          5. Assign regime_counts and dominant_regime to each FoldResult
+
+        This ensures the GMM is fit only on data available before the test period,
+        eliminating look-ahead bias.
+        """
+        from collections import defaultdict
+        from pipeline.regime_utils import detect_regimes_anchored
+
+        has_time = "time" in raw_df.columns
+        if not has_time:
             self._attach_regime_from_fallback(fold_results)
             return
 
-        # Check if we have the raw data to compute features on
-        # We need a way to get the test data per fold. The simple approach:
-        # use test_start/test_end from df_wfo to slice the full data,
-        # then compute features on that slice.
-        #
-        # Since we don't have direct access to the raw market data here,
-        # we use a lightweight fallback: count regime distribution based on
-        # the fold metrics' correlation with known regime patterns.
-        #
-        # But for now, let's try the approach that uses the attached data
-        # from run_mixin. Actually, let me take a pragmatic approach.
-        self._attach_regime_from_fallback(fold_results)
+        time_series = pd.to_datetime(raw_df["time"])
+        raw_n = len(raw_df)
+
+        fold_groups: Dict[Tuple[str, str], List[FoldResult]] = defaultdict(list)
+        for fr in fold_results:
+            key = (str(fr.test_start), str(fr.test_end))
+            fold_groups[key].append(fr)
+
+        for (t_start_str, t_end_str), folds in fold_groups.items():
+            try:
+                t_start = pd.Timestamp(t_start_str)
+                t_end = pd.Timestamp(t_end_str)
+            except Exception:
+                self._assign_heuristic_to_folds(folds)
+                continue
+
+            in_test = (time_series >= t_start) & (time_series <= t_end)
+            test_indices = np.where(in_test)[0]
+            if len(test_indices) == 0:
+                self._assign_heuristic_to_folds(folds)
+                continue
+
+            test_start_idx = int(test_indices[0])
+            test_end_idx = int(test_indices[-1])
+
+            train_end_idx = test_start_idx - 1
+            if train_end_idx < 50:
+                self._assign_heuristic_to_folds(folds)
+                continue
+
+            df_train = raw_df.iloc[0:train_end_idx + 1]
+            df_test = raw_df.iloc[test_start_idx:test_end_idx + 1]
+
+            regime_ids = detect_regimes_anchored(
+                df_test, df_train=df_train, window=252,
+                random_state=42 + len(folds),
+            )
+
+            counts = np.bincount(regime_ids, minlength=7)
+            names = {i: _REGIME_NAMES.get(i, f"unknown_{i}") for i in range(7)}
+            reg_counts = {names[i]: int(c) for i, c in enumerate(counts)}
+
+            dominant_idx = int(np.argmax(counts))
+            dominant = names.get(dominant_idx, "sideways")
+
+            for fr_item in folds:
+                fr_item.regime_counts = dict(reg_counts)
+                fr_item.dominant_regime = dominant
+
+    def _assign_heuristic_to_folds(self, folds: List[FoldResult]):
+        """Assign default regime labels via the heuristic fallback for a batch of folds."""
+        for f_item in folds:
+            da = f_item.directional_accuracy if not np.isnan(f_item.directional_accuracy) else 0.5
+            trades = f_item.trades
+            sharpe = f_item.sharpe if not np.isnan(f_item.sharpe) else 0.0
+            weights = {
+                "trend_up": max(0.0, 0.15 + sharpe * 0.08 + (da - 0.5) * 0.3),
+                "trend_down": max(0.0, 0.10 + sharpe * 0.05),
+                "mean_reverting": max(0.0, 0.15 - abs(sharpe) * 0.05 + min(trades / 50.0, 0.3)),
+                "breakout": max(0.0, 0.05 + (sharpe > 0.3) * 0.15 + (trades > 20) * 0.10),
+                "high_volatile": max(0.0, 0.10 + (sharpe < 0) * 0.15 + (
+                    f_item.win_rate < 0.35
+                    if f_item.win_rate is not None and not np.isnan(f_item.win_rate) else 0
+                ) * 0.10),
+                "quiet_squeeze": max(0.0, 0.20 - min(trades / 40.0, 0.20)),
+                "sideways": 0.15,
+            }
+            total = sum(weights.values()) or 1.0
+            weights = {k: v / total for k, v in weights.items()}
+            bars_per = max(1, trades * 4)
+            f_item.regime_counts = {k: int(v * bars_per) for k, v in weights.items()}
+            f_item.dominant_regime = max(weights, key=weights.get)
 
     def _attach_regime_from_fallback(self, fold_results: List[FoldResult]):
         """Fallback: compute regime distributions from fold-level metrics.
@@ -596,3 +712,87 @@ class ExpertProfiler:
             print("    (no statistically significant differences at p<0.05)")
 
         print("\n" + "=" * 72)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Phase 0: Pre-screening model pruning
+# ══════════════════════════════════════════════════════════════════════
+
+def prune_models(
+    matrix: "RegimeModelMatrix",
+    min_sharpe: float = 0.0,
+    max_models: int = 7,
+) -> tuple[list[str], list[str]]:
+    """Filter a RegimeModelMatrix to the top-k models with diversity enforcement.
+
+    Parameters
+    ----------
+    matrix : RegimeModelMatrix
+        Output from ExpertProfiler (Phase B).
+    min_sharpe : float
+        Absolute threshold: a model must have *any* regime with Sharpe > this
+        value to survive (default 0.0).
+    max_models : int
+        Maximum number of survivors after pruning (default 7).
+
+    Returns
+    -------
+    survivors : list[str]
+        Model names that passed all gates (sorted by best regime Sharpe desc).
+    pruned : list[str]
+        Model names that were eliminated.
+    """
+    import numpy as np
+
+    if matrix.models is None or len(matrix.models) == 0:
+        raise ValueError("Matrix has no models — cannot prune.")
+    if matrix.regimes is None or len(matrix.regimes) == 0:
+        raise ValueError("Matrix has no regimes — cannot prune.")
+
+    # Score each model by its best Sharpe across all regimes
+    scored: list[tuple[str, float]] = []
+    for i, model in enumerate(matrix.models):
+        row = matrix.sharpe_matrix[i, :]
+        valid = [float(s) for s in row if not (isinstance(s, float) and np.isnan(s))]
+        best = max(valid) if valid else -float("inf")
+        scored.append((model, best))
+
+    # Sort descending by best Sharpe
+    scored.sort(key=lambda x: x[1], reverse=True)
+
+    # Absolute threshold: eliminate models that never reach min_sharpe
+    survivors = [m for m, s in scored if s > min_sharpe]
+    pruned = [m for m, s in scored if s <= min_sharpe]
+
+    # Cap to max_models
+    if len(survivors) > max_models:
+        pruned.extend(survivors[max_models:])
+        survivors = survivors[:max_models]
+
+    # Diversity enforcement: ensure at least 1 tree, 1 linear, 1 deep
+    has_tree = any(m in TREE_MODELS for m in survivors)
+    has_linear = any(m in LINEAR_MODELS for m in survivors)
+    has_deep = any(m in DEEP_MODELS for m in survivors)
+
+    missing_families = []
+    if not has_tree:
+        missing_families.append(("tree", TREE_MODELS))
+    if not has_linear:
+        missing_families.append(("linear", LINEAR_MODELS))
+    if not has_deep:
+        missing_families.append(("deep", DEEP_MODELS))
+
+    for family_name, family_set in missing_families:
+        best_from_family = None
+        best_score_family = -float("inf")
+        for model, s in scored:
+            if model in family_set and model in pruned:
+                if s > best_score_family:
+                    best_score_family = s
+                    best_from_family = model
+        if best_from_family is not None and best_score_family > min_sharpe:
+            survivors.append(best_from_family)
+            pruned.remove(best_from_family)
+            survivors.sort(key=lambda m: next(s for _m, s in scored if _m == m), reverse=True)
+
+    return survivors, pruned

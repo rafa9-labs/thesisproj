@@ -42,7 +42,7 @@ PAID_MODELS: FrozenSet[str] = frozenset({
     "dqn", "gru", "gru_lstm",
     "lightgbm", "catboost",
     "ensemble_cnn_lstm_xgboost", "ensemble_adaptive_regime",
-    "meta_ensemble", "stacking_ensemble",
+    "meta_ensemble", "stacking_ensemble", "regime_classifier",
 })
 
 ALL_MODELS: FrozenSet[str] = FREE_MODELS | PAID_MODELS

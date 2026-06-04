@@ -10,7 +10,7 @@ const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "S
 
 /** Maps a return % (−1..+1 raw fraction, or number) to a muted institutional color */
 function returnToColor(ret: number | null | undefined): string {
-  if (ret == null) return "#1E222D"; // empty cell
+  if (ret == null) return "var(--color-surface)"; // empty cell
   const pct = ret * 100; // convert fraction to %
   if (pct >= 3) return "rgba(8,153,129,0.85)";
   if (pct >= 1.5) return "rgba(8,153,129,0.60)";
@@ -23,7 +23,7 @@ function returnToColor(ret: number | null | undefined): string {
 }
 
 function returnToTextColor(ret: number | null | undefined): string {
-  if (ret == null) return "#4A5568";
+  if (ret == null) return "var(--color-text-dim)";
   return ret >= 0 ? "#089981" : "#F23645";
 }
 
@@ -82,8 +82,8 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
   if (years.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-lg p-8"
-        style={{ backgroundColor: "#1E222D", color: "#4A5568", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}
+        className="flex items-center justify-center rounded-sm p-8"
+        style={{ backgroundColor: "var(--color-surface)", color: "var(--color-text-dim)", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}
       >
         No monthly data available
       </div>
@@ -93,8 +93,8 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
   return (
     <div className="relative select-none">
       <div
-        className="rounded-lg overflow-hidden"
-        style={{ backgroundColor: "#1E222D", border: "1px solid #2A2E39" }}
+        className="rounded-sm overflow-hidden"
+        style={{ backgroundColor: "var(--color-surface)", border: "1px solid #2A2E39" }}
       >
         {/* Header row: months */}
         <div
@@ -116,7 +116,7 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
                 fontWeight: 600,
                 textTransform: "uppercase",
                 letterSpacing: "0.06em",
-                color: "#787B86",
+                color: "var(--color-text-muted)",
               }}
             >
               {m}
@@ -140,7 +140,7 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
               style={{
                 fontSize: 10,
                 fontFamily: "JetBrains Mono, monospace",
-                color: "#787B86",
+                color: "var(--color-text-muted)",
                 borderRight: "1px solid #2A2E39",
               }}
             >
@@ -191,7 +191,7 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
         {/* Legend */}
         <div
           className="flex items-center gap-2 px-3 py-2"
-          style={{ borderTop: "1px solid #2A2E39", fontSize: 9, fontFamily: "Inter, sans-serif", color: "#787B86" }}
+          style={{ borderTop: "1px solid #2A2E39", fontSize: 9, fontFamily: "Inter, sans-serif", color: "var(--color-text-muted)" }}
         >
           <span className="uppercase tracking-[0.06em]">Return</span>
           {[
@@ -213,47 +213,47 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
       {/* Floating tooltip */}
       {hoveredCell && tooltipPos && (
         <div
-          className="fixed z-50 pointer-events-none rounded-lg px-3 py-2 text-[11px]"
+          className="fixed z-50 pointer-events-none rounded-sm px-3 py-2 text-[11px]"
           style={{
             left: tooltipPos.x + 12,
             top: tooltipPos.y - 80,
-            backgroundColor: "#252934",
+            backgroundColor: "var(--color-elevated)",
             border: "1px solid #2A2E39",
             fontFamily: "JetBrains Mono, monospace",
             boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
             minWidth: 160,
-            color: "#E8ECF1",
+            color: "var(--color-text-primary)",
           }}
         >
           <div
             className="font-semibold mb-1.5 pb-1.5 text-[10px] uppercase tracking-wider"
-            style={{ color: "#787B86", borderBottom: "1px solid #2A2E39" }}
+            style={{ color: "var(--color-text-muted)", borderBottom: "1px solid #2A2E39" }}
           >
             {MONTH_LABELS[hoveredCell.month]} {hoveredCell.year}
           </div>
           <div className="flex flex-col gap-1">
             <div className="flex justify-between gap-4">
-              <span style={{ color: "#787B86" }}>Return</span>
+              <span style={{ color: "var(--color-text-muted)" }}>Return</span>
               <span style={{ color: returnToTextColor(hoveredCell.return_pct), fontWeight: 700 }}>
                 {formatPct(hoveredCell.return_pct)}
               </span>
             </div>
             {hoveredCell.win_rate != null && (
               <div className="flex justify-between gap-4">
-                <span style={{ color: "#787B86" }}>Win Rate</span>
+                <span style={{ color: "var(--color-text-muted)" }}>Win Rate</span>
                 <span>{formatPct(hoveredCell.win_rate)}</span>
               </div>
             )}
             {hoveredCell.trades != null && (
               <div className="flex justify-between gap-4">
-                <span style={{ color: "#787B86" }}>Trades</span>
+                <span style={{ color: "var(--color-text-muted)" }}>Trades</span>
                 <span>{hoveredCell.trades}</span>
               </div>
             )}
             {hoveredCell.sharpe != null && (
               <div className="flex justify-between gap-4">
-                <span style={{ color: "#787B86" }}>Sharpe</span>
-                <span style={{ color: (hoveredCell.sharpe ?? 0) >= 1 ? "#089981" : "#E8ECF1" }}>
+                <span style={{ color: "var(--color-text-muted)" }}>Sharpe</span>
+                <span style={{ color: (hoveredCell.sharpe ?? 0) >= 1 ? "#089981" : "var(--color-text-primary)" }}>
                   {hoveredCell.sharpe.toFixed(2)}
                 </span>
               </div>

@@ -220,7 +220,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
 
     # === Strategy family & TA backbone (profiled via MLB_TA_MODE) ===
-    ta_mode = MLB_TA_MODE or "legacy"
+    ta_mode = os.environ.get("MLB_TA_MODE", "").strip().lower() or MLB_TA_MODE or "legacy"
     if ta_mode == "fixed":
         _apply_ta_profile_fixed(trial, params)
     elif ta_mode == "tuned":

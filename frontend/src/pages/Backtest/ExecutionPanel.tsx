@@ -5,7 +5,7 @@ import { RANGES, SELECT_OPTIONS } from "@/lib/constants";
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
-const sectionClass = "rounded-xl border p-6";
+const sectionClass = "rounded-sm border p-6";
 const sectionStyle: React.CSSProperties = {
   borderColor: "var(--color-glass-border)",
   backgroundColor: "rgba(255,255,255,0.02)",
@@ -22,7 +22,7 @@ export function ExecutionPanel({ defaultOpen = false }: { defaultOpen?: boolean 
 
   return (
     <div
-      className="flex flex-col gap-6 rounded-xl border p-6"
+      className="flex flex-col gap-6 rounded-sm border p-6"
       style={{
         backgroundColor: "var(--color-glass)",
         borderColor: "var(--color-glass-border)",

@@ -175,8 +175,8 @@ export function CandlestickChart({
 
       <div
         ref={containerRef}
-        className="w-full rounded-lg overflow-hidden border"
-        style={{ borderColor: "var(--color-glass-border)", backgroundColor: "#131722", minHeight: height }}
+        className="w-full rounded-sm overflow-hidden border"
+        style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-app)", minHeight: height }}
       >
         {isLoading && (
           <div className="flex items-center justify-center" style={{ height }}>

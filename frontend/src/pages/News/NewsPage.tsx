@@ -142,7 +142,7 @@ function GroupSection({ group }: { group: GroupedArticles }) {
   const aggLabel = isBullish ? "Bullish" : isBearish ? "Bearish" : "Neutral";
 
   return (
-    <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
+    <div className="rounded-sm border overflow-hidden" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-2 w-full px-4 py-2.5 text-left transition-colors hover:bg-[var(--color-glass-hover)]"
@@ -240,11 +240,11 @@ export function NewsPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-6 pt-6 pb-4">
+      <div className="flex-1 py-2">
         <div className="flex flex-col gap-5">
           {/* ── Top Bar ─────────────────────────────────── */}
           <div
-            className="rounded-lg border p-4 flex items-center gap-4 flex-wrap"
+            className="rounded-sm border p-4 flex items-center gap-4 flex-wrap"
             style={{
               borderColor: "var(--color-glass-border)",
               backgroundColor: "var(--color-glass)",
@@ -254,9 +254,9 @@ export function NewsPage() {
             <select
               value={pair}
               onChange={handlePairChange}
-              className="rounded border px-2.5 text-[11px] transition focus:outline-none shrink-0"
+              aria-label="Select news pair"
+              className="rounded border px-2.5 text-[11px] transition focus:outline-none shrink-0 h-7"
               style={{
-                height: 28,
                 borderColor: "var(--color-glass-border)",
                 backgroundColor: "var(--color-elevated)",
                 color: "var(--color-text-primary)",
@@ -285,7 +285,7 @@ export function NewsPage() {
             </button>
             {calendarOpen && (
               <div
-                className="mt-2 rounded-lg border p-3 flex flex-wrap items-center gap-x-6 gap-y-1.5"
+                className="mt-2 rounded-sm border p-3 flex flex-wrap items-center gap-x-6 gap-y-1.5"
                 style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
               >
                 {eventsData && eventsData.length > 0 ? (
@@ -308,7 +308,7 @@ export function NewsPage() {
           {articlesLoading ? (
             <div className="flex flex-col gap-3">
               {Array.from({ length: 5 }, (_, i) => (
-                <div key={i} className="rounded-lg h-16 animate-skeleton" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+                <div key={i} className="rounded-sm h-16 animate-skeleton" style={{ backgroundColor: "var(--color-glass-hover)" }} />
               ))}
             </div>
           ) : groups.length > 0 ? (

@@ -21,7 +21,7 @@ interface Props {
 }
 
 const REGIME_COLORS = {
-  sideways: "#6366f1",
+  sideways: "var(--color-accent-classical)",
   trend: "#22c55e",
   volatile: "#f97316",
 };
@@ -88,7 +88,7 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
 
   if (!data.length) {
     return (
-      <div className="rounded-xl border p-5" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
+      <div className="rounded-sm border p-5" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
         <div className="flex items-center gap-2 mb-4">
           <Eye size={16} style={{ color: "var(--color-text-muted)" }} />
           <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--color-text-secondary)" }}>
@@ -103,7 +103,7 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
   }
 
   return (
-    <div className="rounded-xl border p-5" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
+    <div className="rounded-sm border p-5" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Eye size={16} style={{ color: "var(--color-brand)" }} />
@@ -136,22 +136,22 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
       <ChartCard title="" subtitle="" height={240}>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={barData} margin={{ top: 5, right: 10, left: -10, bottom: 30 }} onMouseLeave={() => setHoveredIdx(null)}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2A2E39" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-glass-border)" />
             <XAxis
               dataKey="label"
-              tick={{ fill: "#787B86", fontSize: 9, fontFamily: "JetBrains Mono" }}
+              tick={{ fill: "var(--color-text-muted)", fontSize: 9, fontFamily: "JetBrains Mono" }}
               angle={-45}
               textAnchor="end"
               height={50}
             />
             <YAxis
-              tick={{ fill: "#787B86", fontSize: 10, fontFamily: "JetBrains Mono" }}
+              tick={{ fill: "var(--color-text-muted)", fontSize: 10, fontFamily: "JetBrains Mono" }}
               tickFormatter={(v: number) => viewMode === "signals" ? `${v}%` : `${v}`}
             />
-            <ReferenceLine y={0} stroke="#787B86" strokeDasharray="3 3" />
+            <ReferenceLine y={0} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#1E222D",
+                backgroundColor: "var(--color-surface)",
                 border: "1px solid #363A45",
                 borderRadius: 6,
                 fontSize: 11,
@@ -240,7 +240,7 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
       {/* Hovered period detail */}
       {hovered && (
         <div
-          className="mt-3 rounded-lg p-3 text-xs"
+          className="mt-3 rounded-sm p-3 text-xs"
           style={{ backgroundColor: "var(--color-elevated)", fontFamily: "var(--font-mono)" }}
           onMouseLeave={() => setHoveredIdx(null)}
         >
@@ -300,7 +300,7 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
       {/* Summary stats */}
       {!hovered && data.length > 0 && (
         <div className="mt-3 grid grid-cols-4 gap-2">
-          <div className="rounded-lg p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
+          <div className="rounded-sm p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
             <span className="text-[10px] uppercase tracking-[0.06em] block" style={{ color: "var(--color-text-muted)" }}>
               Avg Sharpe
             </span>
@@ -308,7 +308,7 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
               {formatMetric(data.reduce((s, d) => s + (d.testSharpe ?? 0), 0) / data.length)}
             </span>
           </div>
-          <div className="rounded-lg p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
+          <div className="rounded-sm p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
             <span className="text-[10px] uppercase tracking-[0.06em] block" style={{ color: "var(--color-text-muted)" }}>
               Total Trades
             </span>
@@ -316,7 +316,7 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
               {data.reduce((s, d) => s + d.trades, 0)}
             </span>
           </div>
-          <div className="rounded-lg p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
+          <div className="rounded-sm p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
             <span className="text-[10px] uppercase tracking-[0.06em] block" style={{ color: "var(--color-text-muted)" }}>
               Gate Rate
             </span>
@@ -324,7 +324,7 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
               {formatPercent(data.reduce((s, d) => s + d.signalRatio, 0) / data.length)}
             </span>
           </div>
-          <div className="rounded-lg p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
+          <div className="rounded-sm p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
             <span className="text-[10px] uppercase tracking-[0.06em] block" style={{ color: "var(--color-text-muted)" }}>
               Pos Periods
             </span>

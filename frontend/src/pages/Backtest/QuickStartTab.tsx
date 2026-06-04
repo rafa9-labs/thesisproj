@@ -36,7 +36,7 @@ export function QuickStartTab(_props: Props) {
 
   return (
     <div
-      className="flex flex-col rounded-xl border p-6"
+      className="flex flex-col rounded-sm border p-6"
       style={{
         backgroundColor: "var(--color-glass)",
         borderColor: "var(--color-glass-border)",
@@ -82,7 +82,7 @@ export function QuickStartTab(_props: Props) {
                   <div
                     key={opt.key}
                     onClick={() => handlePreset(opt.key)}
-                    className="rounded-lg border p-5 flex flex-col cursor-pointer transition-all duration-150"
+                    className="rounded-sm border p-5 flex flex-col cursor-pointer transition-all duration-150"
                     style={{
                       backgroundColor: "var(--color-elevated)",
                       borderColor: "var(--color-glass-border)",
@@ -189,7 +189,7 @@ export function QuickStartTab(_props: Props) {
             {Object.entries(customPresets).map(([key, p]) => (
               <div
                 key={key}
-                className="rounded-lg border p-6 flex items-center justify-between"
+                className="rounded-sm border p-6 flex items-center justify-between"
                 style={{
                   borderColor: "var(--color-glass-border)",
                   backgroundColor: "var(--color-elevated)",

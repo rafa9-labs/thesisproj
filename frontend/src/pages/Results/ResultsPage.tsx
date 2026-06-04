@@ -60,14 +60,14 @@ function Accordion({
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ border: "1px solid #2A2E39", borderRadius: 8, overflow: "hidden" }}>
+    <div className="rounded-sm overflow-hidden" style={{ border: "1px solid var(--color-glass-border)" }}>
       <button
         onClick={onToggle}
         className="w-full flex items-center justify-between px-4 py-2 text-left transition-all hover:opacity-80"
         style={{
-          backgroundColor: "#1E222D",
-          color: "#787B86",
-          fontFamily: "Inter, sans-serif",
+          backgroundColor: "var(--color-surface)",
+          color: "var(--color-text-muted)",
+          fontFamily: "var(--font-sans)",
           fontSize: 11,
           fontWeight: 600,
           textTransform: "uppercase",
@@ -80,7 +80,7 @@ function Accordion({
         {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
       </button>
       {open && (
-        <div style={{ backgroundColor: "#131722" }}>
+        <div style={{ backgroundColor: "var(--color-app)" }}>
           {children}
         </div>
       )}
@@ -217,18 +217,18 @@ export function ResultsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-3 overflow-y-auto animate-fade-in" style={{ height: "100%" }}>
+    <div className="flex flex-col gap-5 animate-fade-in" style={{ height: "100%" }}>
 
       {/* ── Top ribbon ─────────────────────────────────────────────── */}
       <div className="flex items-center justify-between" style={{ minHeight: 32 }}>
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate("/backtest")}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-all duration-200 hover:border-[var(--color-border-active)]"
+            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-all duration-200 hover:border-[var(--color-brand)]"
             style={{
-              borderColor: "#2A2E39",
+              borderColor: "var(--color-glass-border)",
               backgroundColor: "transparent",
-              color: "#787B86",
+              color: "var(--color-text-muted)",
               cursor: "pointer",
             }}
           >
@@ -236,13 +236,13 @@ export function ResultsPage() {
           </button>
           <h2
             className="text-[11px] font-semibold uppercase tracking-[0.12em]"
-            style={{ color: "#787B86" }}
+            style={{ color: "var(--color-text-muted)" }}
           >
             Results
           </h2>
           <span
             className="text-[11px]"
-            style={{ color: "#4A5568", fontFamily: "JetBrains Mono, monospace" }}
+            style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}
           >
             {results.pair}
           </span>
@@ -255,7 +255,7 @@ export function ResultsPage() {
                 <button
                   onClick={() => navigate("/models")}
                   className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase transition-all hover:brightness-110"
-                  style={{ borderColor: "#089981", backgroundColor: "rgba(8,153,129,0.1)", color: "#089981", cursor: "pointer" }}
+                  style={{ borderColor: "var(--color-accent-success)", backgroundColor: "rgba(8,153,129,0.1)", color: "var(--color-accent-success)", cursor: "pointer" }}
                 >
                   <Save size={11} /> View in Models
                 </button>
@@ -273,7 +273,7 @@ export function ResultsPage() {
                   }}
                   disabled={saveModelMutation.isPending}
                   className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase transition-all hover:brightness-110"
-                  style={{ borderColor: "#F59E0B", backgroundColor: "rgba(245,158,11,0.1)", color: "#F59E0B", cursor: saveModelMutation.isPending ? "not-allowed" : "pointer", opacity: saveModelMutation.isPending ? 0.6 : 1 }}
+                  style={{ borderColor: "var(--color-accent-warning)", backgroundColor: "rgba(245,158,11,0.1)", color: "var(--color-accent-warning)", cursor: saveModelMutation.isPending ? "not-allowed" : "pointer", opacity: saveModelMutation.isPending ? 0.6 : 1 }}
                 >
                   <Save size={11} /> {saveModelMutation.isPending ? "Saving..." : "Save Model"}
                 </button>
@@ -286,9 +286,9 @@ export function ResultsPage() {
               onClick={() => setShowPlayback(true)}
               className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase transition-all"
               style={{
-                borderColor: "#089981",
+                borderColor: "var(--color-accent-success)",
                 backgroundColor: "rgba(8,153,129,0.1)",
-                color: "#089981",
+                color: "var(--color-accent-success)",
               }}
             >
               <Play size={11} /> Replay
@@ -301,9 +301,9 @@ export function ResultsPage() {
       {activeMetric && (activeMetric.total_trades ?? 0) === 0 && (
         <div
           className="rounded-md border px-3 py-2"
-          style={{ borderColor: "#F59E0B", backgroundColor: "rgba(245,158,11,0.05)" }}
+          style={{ borderColor: "var(--color-accent-warning)", backgroundColor: "rgba(245,158,11,0.05)" }}
         >
-          <p className="text-[11px]" style={{ color: "#F59E0B" }}>
+          <p className="text-[11px]" style={{ color: "var(--color-accent-warning)" }}>
             This backtest produced no trades. All walk-forward months were flat. Try increasing HPO trials, tightening bounds, or selecting a different model.
           </p>
         </div>
@@ -331,9 +331,9 @@ export function ResultsPage() {
               onClick={() => setActiveModelIdx(i)}
               className="rounded-md border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.06em] transition-all duration-200"
               style={{
-                borderColor: i === activeModelIdx ? "var(--color-brand)" : "#2A2E39",
+                borderColor: i === activeModelIdx ? "var(--color-brand)" : "var(--color-glass-border)",
                 backgroundColor: i === activeModelIdx ? "rgba(0,229,255,0.07)" : "transparent",
-                color: i === activeModelIdx ? "var(--color-brand)" : "#787B86",
+                color: i === activeModelIdx ? "var(--color-brand)" : "var(--color-text-muted)",
                 cursor: "pointer",
               }}
             >
@@ -345,19 +345,18 @@ export function ResultsPage() {
 
       {/* ── Results / Compare tab bar (multi-model) ─────────────────── */}
       {metrics.length > 1 && (
-        <div className="flex items-center gap-1 border-b" style={{ borderColor: "#1E222D" }}>
+        <div className="flex items-center gap-1 border-b" style={{ borderColor: "var(--color-surface)" }}>
           <button
             onClick={() => setTab("results")}
             className="relative px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all duration-200"
+            role="tab"
+            aria-selected={tab === "results"}
             style={{
-              color: tab === "results" ? "var(--color-brand)" : "#787B86",
-              borderBottom: tab === "results" ? "2px solid var(--color-brand)" : "2px solid transparent",
+              color: tab === "results" ? "var(--color-brand)" : "var(--color-text-muted)",
               cursor: "pointer",
               background: "transparent",
               border: "none",
-              borderBottomWidth: 2,
-              borderBottomStyle: "solid",
-              borderBottomColor: tab === "results" ? "var(--color-brand)" : "transparent",
+              borderBottom: tab === "results" ? "2px solid var(--color-brand)" : "2px solid transparent",
             }}
           >
             <BarChart3 size={11} className="inline mr-1.5" />
@@ -366,14 +365,14 @@ export function ResultsPage() {
           <button
             onClick={() => setTab("compare")}
             className="relative px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all duration-200"
+            role="tab"
+            aria-selected={tab === "compare"}
             style={{
-              color: tab === "compare" ? "var(--color-brand)" : "#787B86",
+              color: tab === "compare" ? "var(--color-brand)" : "var(--color-text-muted)",
               cursor: "pointer",
               background: "transparent",
               border: "none",
-              borderBottomWidth: 2,
-              borderBottomStyle: "solid",
-              borderBottomColor: tab === "compare" ? "var(--color-brand)" : "transparent",
+              borderBottom: tab === "compare" ? "2px solid var(--color-brand)" : "2px solid transparent",
             }}
           >
             <GitCompare size={11} className="inline mr-1.5" />
@@ -418,17 +417,17 @@ export function ResultsPage() {
 
           {/* ── HERO: main chart area ───────────────────────────────── */}
           <div
-            className="rounded-lg overflow-hidden"
-            style={{ border: "1px solid #2A2E39" }}
+            className="rounded-sm overflow-hidden"
+            style={{ border: "1px solid var(--color-glass-border)" }}
           >
             {/* Trade visualization */}
             {jobId && activeMetric?.model && (
-              <div style={{ borderBottom: "1px solid #2A2E39" }}>
+              <div style={{ borderBottom: "1px solid var(--color-glass-border)" }}>
                 <BacktestChart jobId={jobId} model={activeMetric.model} />
               </div>
             )}
             {/* Equity + Drawdown stacked below */}
-            <div className="px-3 pt-2 pb-3" style={{ backgroundColor: "#131722" }}>
+            <div className="px-3 pt-2 pb-3" style={{ backgroundColor: "var(--color-app)" }}>
               <EquitySection
                 ref={equityChartRef}
                 equityCurve={normalizeEquityCurve(activeMetric?.equity_curve ?? null)}
@@ -538,27 +537,28 @@ export function ResultsPage() {
       {/* ── Selected trade tooltip ───────────────────────────────────── */}
       {selectedTrade && (
         <div
-          className="fixed bottom-12 right-6 rounded-lg border p-3 text-xs"
+          className="fixed bottom-12 right-6 rounded-sm border p-3 text-xs"
           style={{
-            backgroundColor: "#1E222D",
-            borderColor: "#2A2E39",
-            fontFamily: "JetBrains Mono, monospace",
+            backgroundColor: "var(--color-surface)",
+            borderColor: "var(--color-glass-border)",
+            fontFamily: "var(--font-mono)",
             zIndex: 50,
             backdropFilter: "blur(12px)",
           }}
         >
           <div className="flex items-center justify-between gap-4">
-            <span style={{ color: "#787B86" }}>Trade #{selectedTrade.trade_id}</span>
-            <span style={{ color: selectedTrade.direction === "BUY" ? "#089981" : "#F23645" }}>
+            <span style={{ color: "var(--color-text-muted)" }}>Trade #{selectedTrade.trade_id}</span>
+            <span style={{ color: selectedTrade.direction === "BUY" ? "var(--color-accent-success)" : "var(--color-accent-danger)" }}>
               {selectedTrade.direction}
             </span>
-            <span style={{ color: (selectedTrade.return_pct ?? 0) >= 0 ? "#089981" : "#F23645" }}>
+            <span style={{ color: (selectedTrade.return_pct ?? 0) >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)" }}>
               {(selectedTrade.return_pct ?? 0) >= 0 ? "+" : ""}
               {(selectedTrade.return_pct ?? 0).toFixed(2)}%
             </span>
             <button
               onClick={() => setSelectedTrade(null)}
-              style={{ color: "#787B86", cursor: "pointer", background: "none", border: "none" }}
+              style={{ color: "var(--color-text-muted)", cursor: "pointer", background: "none", border: "none" }}
+              aria-label="Close trade tooltip"
             >
               <X size={12} />
             </button>
