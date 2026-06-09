@@ -346,7 +346,7 @@ class DeepMixin:
     def _is_deep_model_type(self, model_type: str) -> bool:
         """Return True if this model family uses TF/Keras in this engine."""
         mt = str(model_type or "").lower().strip()
-        if mt in {"cnn", "lstm", "transformer"}:
+        if mt in {"cnn", "lstm", "transformer", "gru", "gru_lstm"}:
             return True
         if mt in {"ensemble_cnn_lstm_xgboost", "ensemble_adaptive_regime"}:
             return True
@@ -790,11 +790,15 @@ class DeepMixin:
     # Lazy singleton ProcessPoolExecutor for deep model isolation.
     # Reusing the same worker process avoids repeated TF import (~15-30s
     # per call).  Created on first use, shut down via atexit.
+    # ---
+    # Per-job tracking: after pool creation, the worker PIDs are registered
+    # with api.process_cleanup so cancellation can terminate them.
     # ------------------------------------------------------------------
     _deep_pool: "concurrent.futures.ProcessPoolExecutor | None" = None
+    _deep_pool_job_id: "str | None" = None   # tracks which job owns the pool
 
     @classmethod
-    def _get_deep_pool(cls) -> "concurrent.futures.ProcessPoolExecutor":
+    def _get_deep_pool(cls, job_id: str = "") -> "concurrent.futures.ProcessPoolExecutor":
         """Return (and lazily create) the shared deep-model worker pool."""
         if cls._deep_pool is None or cls._deep_pool._shutdown_mutex.locked():
             import concurrent.futures
@@ -802,17 +806,29 @@ class DeepMixin:
                 max_workers=1,
                 mp_context=__import__("multiprocessing").get_context("spawn"),
             )
+            cls._deep_pool_job_id = job_id if job_id else None
+            # Register worker PIDs with process registry
+            if job_id:
+                try:
+                    for w in cls._deep_pool._processes.values():
+                        pid = getattr(w, "pid", None)
+                        if pid is not None:
+                            from api.process_cleanup import register_job_process as _reg_proc
+                            _reg_proc(job_id, pid)
+                except Exception:
+                    pass
         return cls._deep_pool
 
     @classmethod
     def _shutdown_deep_pool(cls):
-        """Gracefully shut down the worker pool (called at exit)."""
+        """Gracefully shut down the worker pool (called at exit or on cancel)."""
         if cls._deep_pool is not None:
             try:
-                cls._deep_pool.shutdown(wait=False)
+                cls._deep_pool.shutdown(wait=False, cancel_futures=True)
             except Exception:
                 pass
             cls._deep_pool = None
+            cls._deep_pool_job_id = None
 
     def _deep_fit_predict_subprocess(
         self,
@@ -883,7 +899,8 @@ class DeepMixin:
         # --- Submit to ProcessPoolExecutor ---
         try:
             from pipeline.workers import deep_fit_predict_worker
-            pool = self._get_deep_pool()
+            job_id = getattr(self, "_job_id", "") or ""
+            pool = self._get_deep_pool(job_id)
             future = pool.submit(deep_fit_predict_worker, job_json)
             result = future.result(timeout=600)  # 10-min timeout
         except Exception as e:

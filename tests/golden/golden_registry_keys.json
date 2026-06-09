@@ -1,1 +1,1 @@
-["cnn", "decision_tree", "dqn", "ensemble_adaptive_regime", "logistic", "lstm", "random_forest", "svm", "transformer", "xgboost"]
+["catboost", "cnn", "decision_tree", "dqn", "ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost", "gru", "gru_lstm", "lightgbm", "logistic", "lstm", "meta_ensemble", "random_forest", "regime_classifier", "stacking_ensemble", "svm", "transformer", "xgboost"]

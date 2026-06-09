@@ -176,19 +176,39 @@ def _is_cancelled(job_id: str) -> bool:
 
 
 def revoke_task(job_id: str) -> bool:
-    """Revoke the Celery task / signal cancellation for a job_id (force stop)."""
+    """Revoke the Celery task / signal cancellation for a job_id (force stop).
+
+    On Windows, terminate=True uses TerminateProcess which is a hard kill
+    that skips all cleanup handlers, leaving child processes orphaned.
+    Instead we set the threading event so the backtester's _force_stop_checker
+    raises KeyboardInterrupt → cleanup runs gracefully. If the task hasn't
+    stopped in 5s, escalate with terminate as last resort.
+    """
     task_id = _JOB_TASK_IDS.pop(job_id, None)
     revoked = False
-    if task_id and _celery_available and celery_app is not None:
-        try:
-            celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
-            revoked = True
-        except Exception:
-            pass
+
+    # Phase 1: gentle signal via threading event (works cross-platform)
     evt = _cancellation_events.get(job_id)
     if evt is not None:
         evt.set()
         revoked = True
+
+    # Phase 2: deferred hard kill (only if gentle signal doesn't work)
+    if task_id and _celery_available and celery_app is not None:
+        try:
+            import threading as _thr
+            def _escalate():
+                import time
+                time.sleep(5.0)
+                try:
+                    celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
+                except Exception:
+                    pass
+            _thr.Thread(target=_escalate, daemon=True).start()
+            revoked = True
+        except Exception:
+            pass
+
     return revoked
 
 
@@ -358,6 +378,12 @@ if not IS_DESKTOP:
             worker_prefetch_multiplier=1,
             broker_connection_retry_on_startup=True,
             task_time_limit=3600,
+            beat_schedule={
+                "prefetch-news-hourly": {
+                    "task": "prefetch_news",
+                    "schedule": 3600.0,
+                },
+            },
         )
         _celery_available = True
     except Exception:
@@ -723,52 +749,10 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 )
                 bt._progress_callback = _progress_cb
                 bt._force_stop_checker = lambda: _is_cancelled(job_id)
+                bt._job_id = job_id
 
-                # --- Inject news & sentiment data if enabled (only on rep 1, reused across reps) ---
-                if rep == 1:
-                    if feat_cfg.get("use_news", True):
-                        try:
-                            from news.scraper import NewsScraper
-                            from news.sentiment import SentimentAnalyzer
-
-                            scraper = NewsScraper()
-                            articles = scraper.fetch_all()
-                            pair_val = pair or "EURUSD"
-                            filtered = NewsScraper.filter_by_pair(articles, pair_val)
-                            backend = feat_cfg.get("news_sentiment_backend", "vader")
-                            analyzer = SentimentAnalyzer(backend=backend)
-                            scored = analyzer.score_articles(filtered)
-                            news_aggregated = analyzer.aggregate_to_df(scored, freq="1h")
-                            econ_events = scraper.economic_calendar_events()
-                            bt._news_aggregated = news_aggregated
-                            bt._news_economic_events = econ_events
-                            _pub("news_loaded", job_id, {"articles": len(filtered), "backend": backend})
-                        except Exception as _news_err:
-                            _pub("news_skip", job_id, {"reason": str(_news_err)[:200]})
-
-                    if feat_cfg.get("llm_sentiment_enabled", True):
-                        try:
-                            from pipeline.llm.sentiment import LLMSentimentEngine
-
-                            llm_engine = LLMSentimentEngine(config=feat_cfg)
-                            llm_articles = getattr(bt, "_news_raw_articles", [])
-                            if not llm_articles:
-                                try:
-                                    from news.scraper import NewsScraper
-                                    scraper = NewsScraper()
-                                    llm_articles = scraper.fetch_all()
-                                except Exception:
-                                    pass
-
-                            pair_val = pair or "EURUSD"
-                            llm_filtered = NewsScraper.filter_by_pair(llm_articles, pair_val)
-                            scored_llm = llm_engine.score_articles(llm_filtered, pair=pair_val)
-                            llm_aggregated = llm_engine.aggregate_to_df(scored_llm, freq="1h")
-                            bt._llm_aggregated = llm_aggregated
-                            _pub("llm_loaded", job_id, {"articles": len(llm_filtered), "backend": feat_cfg.get("llm_backend", "ollama")})
-                            llm_engine.close()
-                        except Exception as _llm_err:
-                            _pub("llm_skip", job_id, {"reason": str(_llm_err)[:200]})
+                from api.process_cleanup import register_backtester as _reg_bt_task
+                _reg_bt_task(job_id, bt)
 
                 base_cfg = deepcopy(CLASS_DEFAULTS["features"])
                 base_cfg.update(deepcopy(CLASS_DEFAULTS["cv"]))
@@ -1177,23 +1161,32 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             jm.update_status(job_id, "failed", error="Force stopped by user")
             _pub("job_failed", job_id, {"error": "Stopped by user"})
             emit_event("job_failed", job_id=job_id, error="Stopped by user")
+            from api.process_cleanup import cleanup_job as _cleanup_task_job
+            _cleanup_task_job(job_id)
             return
         tb = traceback.format_exc()
         jm.update_status(job_id, "failed", error=f"{e}\n{tb}")
         _pub("job_failed", job_id, {"error": str(e)})
         emit_event("job_failed", job_id=job_id, error=str(e)[:200])
+        from api.process_cleanup import cleanup_job as _cleanup_task_job
+        _cleanup_task_job(job_id)
         raise
     except BaseException:
         _JOB_TASK_IDS.pop(job_id, None)
         jm.update_status(job_id, "failed", error="Task killed or interrupted")
         _pub("job_failed", job_id, {"error": "Task killed or interrupted"})
         emit_event("job_failed", job_id=job_id, error="Task killed or interrupted")
+        from api.process_cleanup import cleanup_job as _cleanup_task_job
+        _cleanup_task_job(job_id)
         raise
     finally:
         _JOB_TASK_IDS.pop(job_id, None)
+        _cancellation_events.pop(job_id, None)
+        from api.process_cleanup import cleanup_job as _cleanup_final
+        _cleanup_final(job_id)
 
 
-def _download_data_impl(job_id: str, pair: str, years: int = 10):
+def _download_data_impl(job_id: str, pair: str, years: int = 10, base_timeframe: str = "M30"):
     """Core download logic -- executed by Celery worker or in-process (desktop mode)."""
     project_root = settings.project_root
     if project_root not in sys.path:
@@ -1243,9 +1236,9 @@ def _download_data_impl(job_id: str, pair: str, years: int = 10):
         saved = download_pair(
             instrument=cfg.oanda_name,
             store=store,
-            granularities=["M30", "H1", "H4"],
             years=years,
             pair_symbol=cfg.symbol,
+            base_timeframe=base_timeframe,
         )
 
         jm.update_status(job_id, "completed", result={"pair": pair, "granularities": saved})
@@ -1342,10 +1335,26 @@ def _run_forward_test_impl(job_id: str, config: dict):
 
 # --- Public API: dispatch to Celery or in-process depending on availability ---
 
+def _prefetch_news_impl():
+    """Background task: pre-fetch RSS articles to keep cache warm."""
+    import logging
+    _news_log = logging.getLogger(__name__)
+    try:
+        from news.scraper import NewsScraper
+        scraper = NewsScraper()
+        articles = scraper.fetch_all()
+        _news_log.info("News prefetch: %d articles cached", len(articles))
+        return {"status": "ok", "articles": len(articles)}
+    except Exception as exc:
+        _news_log.warning("News prefetch failed: %s", exc)
+        return {"status": "error", "reason": str(exc)[:200]}
+
+
 if _celery_available and celery_app is not None:
     run_backtest_task = celery_app.task(name="run_backtest")(_run_backtest_impl)
     download_data_task = celery_app.task(name="download_data")(_download_data_impl)
     run_forward_test_task = celery_app.task(name="run_forward_test")(_run_forward_test_impl)
+    prefetch_news_task = celery_app.task(name="prefetch_news")(_prefetch_news_impl)
 else:
     class _SyncTask:
         """Celery-compatible task interface for synchronous (desktop) execution."""

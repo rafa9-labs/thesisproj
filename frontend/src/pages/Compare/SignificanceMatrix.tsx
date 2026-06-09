@@ -31,7 +31,7 @@ export function SignificanceMatrix({ models = [], pValues }: SignificanceMatrixP
           Significance Testing
         </h3>
         <div
-          className="flex items-center justify-center rounded-lg border p-8"
+          className="flex items-center justify-center rounded-sm border p-8"
           style={{
             backgroundColor: "var(--color-surface)",
             borderColor: "var(--color-border)",
@@ -69,7 +69,7 @@ export function SignificanceMatrix({ models = [], pValues }: SignificanceMatrixP
         Significance Testing
       </h3>
       <div
-        className="rounded-lg border overflow-auto p-3"
+        className="rounded-sm border overflow-auto p-3"
         style={{
           borderColor: "var(--color-border)",
           backgroundColor: "var(--color-surface)",

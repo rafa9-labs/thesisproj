@@ -160,13 +160,27 @@ class DataConfig:
 
 
 # ---------------------------------------------------------------------------
+# Timeframe Hierarchy — maps each base timeframe to its MTF timeframes + cadence
+# ---------------------------------------------------------------------------
+TIMEFRAME_HIERARCHY = {
+    "M15": {"bars_per_day": 96, "annual_bars": 24192, "mtf_fast": "M30", "mtf_slow": "H1"},
+    "M30": {"bars_per_day": 48, "annual_bars": 12096, "mtf_fast": "H1",  "mtf_slow": "H4"},
+    "H1":  {"bars_per_day": 24, "annual_bars": 6048,  "mtf_fast": "H4",  "mtf_slow": "D1"},
+    "H4":  {"bars_per_day": 6,  "annual_bars": 1512,  "mtf_fast": "D1",  "mtf_slow": "W1"},
+}
+DEFAULT_BASE_TIMEFRAME = "M30"
+
+
+# ---------------------------------------------------------------------------
 # Compute / Threading
 # ---------------------------------------------------------------------------
 @dataclass
 class ComputeConfig:
     """CPU/GPU thread budgets and parallelism settings."""
     cpu_total: int = 0
-    safe_cores: int = 0
+    safe_cores: int = 0       # legacy, kept for backward compat
+    blas_threads: int = 0     # per-operation BLAS parallelism (OMP/MKL)
+    cv_n_jobs: int = 0        # fold-level parallelism (joblib CV)
     force_cpu: bool = False
     log_level_tf: str = "3"  # TF_CPP_MIN_LOG_LEVEL: 0=all, 1=INFO, 2=WARNING, 3=ERROR
     gpu_allow_growth: bool = True
@@ -174,13 +188,34 @@ class ComputeConfig:
     def __post_init__(self):
         if self.cpu_total <= 0:
             self.cpu_total = os.cpu_count() or 8
-        if self.safe_cores <= 0:
-            _blas_env = _env("BLAS_THREADS_PER_TRIAL", "").strip()
+
+        _blas_env = _env("BLAS_THREADS_PER_TRIAL", "").strip()
+        _cv_env = _env("CV_JOBS", "").strip()
+        _mlb = _env_int("MLB_THREADS", 0)
+
+        if _blas_env or _cv_env or _mlb:
             if _blas_env:
-                self.safe_cores = max(1, int(_blas_env))
-            else:
-                _mlb_threads = _env_int("MLB_THREADS", 0)
-                self.safe_cores = _mlb_threads if _mlb_threads > 0 else max(1, self.cpu_total - 2)
+                self.blas_threads = max(1, int(_blas_env))
+            if _cv_env:
+                self.cv_n_jobs = max(1, int(_cv_env))
+            if _mlb:
+                self.blas_threads = self.blas_threads or _mlb
+            if self.blas_threads <= 0:
+                self.blas_threads = max(1, self.cpu_total - 2)
+            if self.cv_n_jobs <= 0:
+                self.cv_n_jobs = self.blas_threads
+        else:
+            try:
+                from pipeline.resource_budget import get_resource_budget
+                budget = get_resource_budget()
+                self.blas_threads = budget.blas_threads
+                self.cv_n_jobs = budget.cv_n_jobs
+            except Exception:
+                self.blas_threads = max(1, self.cpu_total - 2)
+                self.cv_n_jobs = self.blas_threads
+
+        if self.safe_cores <= 0:
+            self.safe_cores = self.blas_threads
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +267,7 @@ SEARCH_SPACE = {
     # -- XGBoost --
     "xgboost": {
         "n_estimators": (200, 800, 100),   # (low, high, step)
-        "max_depth": (3, 8),                # narrowed from 10
+        "max_depth": (3, 8, 1),              # narrowed from 10
         "learning_rate": (0.01, 0.3, True), # (low, high, log_scale)
         "subsample": (0.6, 1.0),
         "colsample_bytree": (0.6, 1.0),
@@ -241,7 +276,7 @@ SEARCH_SPACE = {
     # -- SVM --
     "svm": {
         "C": (1e-2, 1e2, True),            # narrowed from [1e-3, 1e3]
-        "gamma": [1e-4, 1e-3, 1e-2, 0.1, 0.5],  # categorical from literature; removes degenerate high-gamma noise-memorization
+        "gamma": [1e-4, 1e-3, 1e-2, 0.05],    # categorical, capped at 0.05 (0.5 caused O(n^3) hangs)
         "kernel": "rbf",                    # fixed: standard for FX
         "class_weight": "balanced",         # fixed: standard for imbalanced FX
     },
@@ -249,9 +284,17 @@ SEARCH_SPACE = {
     "random_forest": {
         "n_estimators": (300, 1000, 100),
         "max_depth": [8, 12, 16, 20],         # removed None (unconstrained -> perfect IS fit -> coverage rejection)
-        "min_samples_leaf": (1, 10),
+        "min_samples_leaf": (1, 10, 1),
         "max_features": ["sqrt", 0.33, 0.5],
         # Fixed: bootstrap=True, class_weight=None, n_jobs=-1
+    },
+    # -- Decision Tree --
+    "decision_tree": {
+        "max_depth": (3, 15, 1),             # (low, high, step)
+        "min_samples_leaf": (1, 20, 1),
+        "max_features": ["sqrt", "log2", None],
+        "ccp_alpha": (0.0, 0.01),
+        # Fixed: class_weight="balanced"
     },
     # -- LSTM --
     "lstm": {
@@ -264,8 +307,9 @@ SEARCH_SPACE = {
     },
     # -- CNN --
     "cnn": {
-        "filters": [32, 64, 96],            # categorical
-        "kernel_size": [3, 5],              # narrowed from [3, 5, 7]
+        "filters1": [32, 64, 96],           # conv layer 1
+        "filters2": [32, 64, 96],           # conv layer 2
+        "kernel_size": [3, 5],
         "learning_rate": (1e-4, 5e-3, True),
         # Fixed: dropout=0.3, dense_units=64, batch_size=256,
         #        use_seq_windows=False
@@ -279,11 +323,90 @@ SEARCH_SPACE = {
         # Fixed: num_blocks=1, ff_multiple=2, dense_units=128,
         #        pooling="cls", use_time2vec=False, batch_size=256
     },
+    # -- LightGBM (Microsoft histogram GBDT) --
+    "lightgbm": {
+        "n_estimators": (200, 800, 100),       # (low, high, step)
+        "max_depth": (3, 8, 1),
+        "num_leaves": [15, 31, 63, 127],
+        "learning_rate": (0.01, 0.3, True),    # (low, high, log_scale)
+        "subsample": (0.6, 1.0),
+        "colsample_bytree": (0.6, 1.0),
+        "reg_lambda": (0.0, 10.0),
+        # Fixed: boosting_type=gbdt, min_child_samples=20
+    },
+    # -- CatBoost (Yandex ordered boosting) --
+    "catboost": {
+        "iterations": (200, 800, 100),
+        "depth": (3, 8, 1),
+        "learning_rate": (0.01, 0.3, True),
+        "subsample": (0.6, 1.0),
+        "l2_leaf_reg": (1.0, 10.0),
+        # Fixed: border_count=128, loss_function=MultiClass
+    },
+    # -- GRU (Gated Recurrent Unit) --
+    "gru": {
+        "units": [32, 64, 128],
+        "num_layers": [1, 2],
+        "dropout_rate": (0.2, 0.5),
+        "learning_rate": (1e-4, 5e-3, True),
+        # Fixed: dense_units=64, bidirectional=False, clipnorm=1.0, batch_size=256
+    },
+    # -- GRU-LSTM Hybrid --
+    "gru_lstm": {
+        "gru_units": [32, 64, 128],
+        "lstm_units": [32, 64, 128],
+        "dropout_rate": (0.2, 0.5),
+        "learning_rate": (1e-4, 5e-3, True),
+        # Fixed: dense_units=64, batch_size=256
+    },
+    # -- Stacking Ensemble (OOF meta-learner) --
+    "stacking_ensemble": {
+        "stack_cv": [3, 5, 8],
+        "stack_method": ["auto", "predict_proba"],
+        # sub-models selected by user in frontend, not tuned by HPO
+    },
     # -- Meta Ensemble (Signal Committee) --
     "meta_ensemble": {
         "meta_combination_method": ["majority", "soft", "weighted"],
         # sub-models selected by user in frontend, not tuned by HPO
     },
+    # -- Ensemble: Adaptive Regime --
+    "ensemble_adaptive_regime": {
+        "lstm_units": [32, 64, 128],
+        "lstm_num_layers": (1, 3, 1),
+        "lstm_dropout_rate": (0.1, 0.5),
+        "lstm_learning_rate": (1e-4, 1e-2, True),
+        "rf_n_estimators": (100, 500, 100),
+        "rf_max_depth": [8, 12, 16, 20],
+        "logit_C": (1e-2, 1e2, True),
+        "logit_solver": ["lbfgs", "saga"],
+        "adx_thresh": (15, 30, 1),
+        "vol_thresh": (0.005, 0.02),
+        "adx_thresh_q": (0.5, 0.9),
+        # Fixed: adx_col, vol_col set at init; ensemble_method="hard"
+    },
+    # -- Ensemble: CNN-LSTM-XGBoost Fusion --
+    "ensemble_cnn_lstm_xgboost": {
+        "cnn_filters1": [32, 64, 96],
+        "cnn_filters2": [32, 64, 96],
+        "cnn_kernel_size": (2, 5, 1),
+        "cnn_learning_rate": (1e-4, 5e-3, True),
+        "lstm_units": [32, 64, 128],
+        "lstm_learning_rate": (1e-4, 5e-3, True),
+        "xgb_n_estimators": (200, 800, 100),
+        "xgb_learning_rate": (0.005, 0.2, True),
+        "xgb_max_depth": (3, 12, 1),
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# CV geometry search space — sampled per trial to let Optuna discover the
+# optimal number of mini-blocks and validation fraction per model type.
+# ---------------------------------------------------------------------------
+CV_SEARCH_SPACE = {
+    "cv_blocks": [3, 5, 7, 10],
+    "cv_val_frac": [0.05, 0.07, 0.09, 0.11, 0.13, 0.15],
 }
 
 
@@ -320,7 +443,10 @@ PIPELINE_CONSTANTS = {
     # Confidence thresholds
     "min_conf_thr": 0.33,
     "max_conf_thr": 0.90,
-    "confidence_threshold": 0.80,
+    "confidence_threshold": 0.50,
+
+    # Base timeframe (one of M15, M30, H1, H4)
+    "base_timeframe": "M30",
 
     # Execution cadence
     "bars_per_day": 48,
@@ -340,6 +466,11 @@ PIPELINE_CONSTANTS = {
     "news_volume_windows": [6, 24],
     "news_event_flags": True,
 
+    # Live trading news blending (post-prediction signal adjustment)
+    "live_news_blend_enabled": False,
+    "live_news_blend_weight": 0.10,       # 0.0 = model-only, 0.30 max recommended
+    "live_news_cache_hours": 6.0,
+
     # LLM sentiment
     "llm_sentiment_enabled": False,    # off by default — only useful for live trading, not backtesting
     "llm_backend": "ollama",
@@ -349,6 +480,15 @@ PIPELINE_CONSTANTS = {
     "llm_batch_size": 10,
     "llm_cache_ttl_hours": 720,
     "llm_ollama_url": "http://localhost:11434",
+
+    # Phase 1: BorutaSHAP feature selection
+    "use_boruta_shap": True,
+    "boruta_percentile": 90,
+    "boruta_max_iter": 20,
+
+    # Phase 6: UCB1 proposer
+    "ucb1_exploration_factor": 2.0,
+    "ucb1_llm_refresh_interval": 5,
 }
 
 # ---------------------------------------------------------------------------
@@ -506,16 +646,21 @@ def apply_global_env(settings: Settings) -> None:
     if settings.compute.gpu_allow_growth:
         os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
 
-    # Thread budgets
-    sc = settings.compute.safe_cores
-    for var in (
+    # Thread budgets: split BLAS (per-op) from CV_JOBS (per-fold)
+    blas = settings.compute.blas_threads
+    cv = settings.compute.cv_n_jobs
+
+    blas_vars = (
         "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
         "NUMEXPR_NUM_THREADS", "TF_NUM_INTRAOP_THREADS",
         "TF_NUM_INTEROP_THREADS", "SKLEARN_JOBS", "XGB_JOBS",
-        "RF_JOBS", "CV_JOBS", "BLAS_THREADS_PER_TRIAL",
-    ):
-        os.environ.setdefault(var, str(sc))
-    os.environ["BLAS_THREADS_PER_TRIAL"] = str(sc)
+        "RF_JOBS",
+    )
+    for var in blas_vars:
+        os.environ.setdefault(var, str(blas))
+    os.environ.setdefault("CV_JOBS", str(cv))
+    os.environ.setdefault("MLB_THREADS", str(blas))
+    os.environ["BLAS_THREADS_PER_TRIAL"] = str(blas)
 
 
 # ---------------------------------------------------------------------------

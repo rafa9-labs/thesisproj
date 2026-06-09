@@ -29,7 +29,7 @@ function SectionCard({
 }) {
   return (
     <div
-      className="rounded-xl border flex flex-col gap-5 p-6"
+      className="rounded-sm border flex flex-col gap-5 p-6"
       style={cardStyle}
     >
       <div className="flex items-center gap-2.5">
@@ -249,7 +249,7 @@ function LicenseSection() {
   };
   const planColor: Record<string, string> = {
     free: "var(--color-text-muted)",
-    trial: "#F59E0B",
+    trial: "var(--color-accent-warning)",
     pro: "var(--color-brand)",
     team: "var(--color-accent-success)",
   };
@@ -263,14 +263,14 @@ function LicenseSection() {
             className="rounded-md border px-3 py-1 text-[11px] font-semibold uppercase tracking-wider"
             style={{
               borderColor: color,
-              backgroundColor: `${color}18`,
+              backgroundColor: `color-mix(in srgb, ${color} 9%, transparent)`,
               color,
             }}
           >
             {planLabel[license.plan] || license.plan}
           </span>
           {license.trial_active && (
-            <span className="text-[11px]" style={{ color: "#F59E0B" }}>
+            <span className="text-[11px]" style={{ color: "var(--color-accent-warning)" }}>
               {license.trial_days_left} days remaining
             </span>
           )}
@@ -545,7 +545,7 @@ export function SettingsPage() {
           ].map(({ label, value }) => (
             <div
               key={label}
-              className="rounded-lg border p-3 flex flex-col gap-1"
+              className="rounded-sm border p-3 flex flex-col gap-1"
               style={{
                 borderColor: "var(--color-glass-border)",
                 backgroundColor: "var(--color-elevated)",

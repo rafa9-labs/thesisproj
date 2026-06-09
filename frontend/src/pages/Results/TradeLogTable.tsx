@@ -167,7 +167,7 @@ export function TradeLogTable({ trades, onTradeSelect }: TradeLogTableProps) {
   if (data.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-lg border p-8"
+        className="flex items-center justify-center rounded-sm border p-8"
         style={{
           backgroundColor: "var(--color-surface)",
           borderColor: "var(--color-border)",
@@ -198,7 +198,7 @@ export function TradeLogTable({ trades, onTradeSelect }: TradeLogTableProps) {
         </span>
       </div>
       <div
-        className="ag-theme-alpine-dark rounded-lg border overflow-hidden"
+        className="ag-theme-alpine-dark rounded-sm border overflow-hidden"
         style={{
           height: 360,
           borderColor: "var(--color-border)",

@@ -103,6 +103,7 @@ class FeaturesConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
     
     # ── Session & leakage control ──
+    base_timeframe: str = Field(default="M30")
     session_filter_mode: Literal["both", "london", "newyork", "asian"] = Field(
         default="both",
     )
@@ -166,7 +167,7 @@ class FeaturesConfig(BaseModel):
     deep_calibration_frac: float = Field(default=0.10, ge=0.01, le=0.5)
     
     # ── Confidence / coverage ──
-    confidence_threshold: float = Field(default=0.80, ge=0.0, le=1.0)
+    confidence_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
     target_active_rate: float = Field(default=0.15, ge=0.0, le=1.0)
     
     # ── Prefilter / stability selection ──

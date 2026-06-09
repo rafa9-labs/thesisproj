@@ -82,6 +82,20 @@ def _build_model(model_type: str, input_shape: tuple, params: dict):
         raise ValueError(f"Unknown deep model type: {model_type}")
 
 
+class _ThrottleCallback:
+    """TF callback that inserts micro-sleeps between epochs when CPU/GPU is under pressure."""
+
+    def on_epoch_end(self, epoch, logs=None):
+        try:
+            from pipeline.resource_monitor import get_throttle_signal
+            sig = get_throttle_signal()
+            if sig and sig.delay > 0:
+                import time
+                time.sleep(sig.delay)
+        except Exception:
+            pass
+
+
 def _reshape_for_model(X_2d: "np.ndarray", mode: str, win: int):  # noqa: F821
     """Reshape 2D features into the shape expected by the model."""
     import numpy as np
@@ -160,6 +174,7 @@ def deep_fit_predict_worker(job_json_path: str) -> dict:
         early_cb = getattr(model, "early_stop_callback", None)
         if early_cb is not None:
             callbacks.append(early_cb)
+        callbacks.append(_ThrottleCallback())
 
         # Optional validation split (time-ordered tail)
         validation_split = 0.0

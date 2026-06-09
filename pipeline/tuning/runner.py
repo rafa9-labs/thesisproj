@@ -4,6 +4,7 @@ import gc
 import json
 import math
 import os
+import threading
 import time
 import traceback
 from concurrent.futures.process import BrokenProcessPool
@@ -35,7 +36,8 @@ def run_optuna_tuning(
         train_data, base_features, evaluate_cv_func, cv_config, models_to_test,
         n_trials=1, n_startup_trials=10, return_top_n=3, study=None, sampler_seed=None,
         month_out_dir: str | None = None, month_ix: int | None = None,
-        max_hpo_duration_minutes: float = 0):
+        max_hpo_duration_minutes: float = 0,
+        sampler_method: str = "tpe"):
 
     """
     Runs Optuna tuning for a given model configuration, evaluates via CV,
@@ -49,9 +51,30 @@ def run_optuna_tuning(
         consensus_pool (list[dict]): Small pool of candidate configs (all valid trials) for consensus selection.
      """
     import optuna
-    from optuna.samplers import TPESampler
+    from optuna.samplers import TPESampler, RandomSampler, CmaEsSampler
     from optuna.pruners import MedianPruner
     import os, json, datetime
+
+    def _create_sampler(method, seed, n_startup, model_name=""):
+        tpe_ei = int(os.environ.get("TPE_EI_CANDIDATES", "64"))
+        if method == "tpe":
+            s = TPESampler(
+                n_startup_trials=n_startup, multivariate=True, group=True,
+                seed=seed, n_ei_candidates=tpe_ei,
+            )
+        elif method == "random":
+            s = RandomSampler(seed=seed)
+        elif method == "cmaes":
+            s = CmaEsSampler(seed=seed, warn_independent_sampling=False)
+        else:
+            s = TPESampler(
+                n_startup_trials=n_startup, multivariate=True, group=True,
+                seed=seed, n_ei_candidates=tpe_ei,
+            )
+        tag = f" model={model_name}" if model_name else ""
+        print(f"[Optuna] {type(s).__name__} seed={seed}{tag}"
+              + (f" n_startup_trials={n_startup}" if method == "tpe" else ""))
+        return s
 
     # Reset per-run hyperparameter boundary diagnostics
     global HP_BOUNDARY_HITS, HP_BOUNDARY_HITS_MIN, HP_BOUNDARY_HITS_MAX, HP_BOUNDARY_RANGES
@@ -109,7 +132,7 @@ def run_optuna_tuning(
         _model_name = models_to_test
     _model_name = str(_model_name).lower()
     _is_deep_family = (
-        _model_name in {"cnn", "lstm", "transformer", "dqn"} or _model_name.startswith("ensemble_")
+        _model_name in {"cnn", "lstm", "transformer", "gru", "gru_lstm", "dqn"} or _model_name.startswith("ensemble_")
     )
     
     # Ensure CV parallelism is wired even if caller omitted it
@@ -242,16 +265,7 @@ def run_optuna_tuning(
     except Exception:
         pass
 
-    tpe_ei = int(os.environ.get("TPE_EI_CANDIDATES", "64"))
-    sampler = TPESampler(
-        n_startup_trials=_n_startup,
-        multivariate=True,
-        group=True,
-        seed=sampler_seed,
-        n_ei_candidates=tpe_ei,
-    )
-    print(f"[Optuna] TPESampler(multivariate=True, group=True, n_startup_trials={_n_startup}, "
-          f"n_ei_candidates={tpe_ei}, seed={sampler_seed}) model={_model_name}")
+    sampler = _create_sampler(sampler_method, sampler_seed, _n_startup, _model_name)
     
     from optuna.pruners import SuccessiveHalvingPruner, NopPruner
 
@@ -261,6 +275,10 @@ def run_optuna_tuning(
     else:
         _pruner_min_resource = int(cv_config.get("pruner_min_resource_classical", 2))
         _pruner_reduction_factor = int(cv_config.get("pruner_reduction_factor_classical", 2))
+
+    # Cap min_resource to n_trials so low-trial runs don't get fully pruned
+    if n_trials is not None and _pruner_min_resource > n_trials:
+        _pruner_min_resource = max(1, n_trials)
 
     # ASHA-style pruning (default), or no pruning if disabled
     if DISABLE_OPTUNA_PRUNING:
@@ -279,13 +297,7 @@ def run_optuna_tuning(
 
     if study is None:
 
-        sampler = TPESampler(
-            seed=sampler_seed,
-            n_startup_trials=_n_startup,
-            multivariate=True,
-            group=True,
-            n_ei_candidates=tpe_ei,
-        )
+        sampler = _create_sampler(sampler_method, sampler_seed, _n_startup, _model_name)
 
         study = optuna.create_study(direction="maximize", sampler=sampler, pruner=pruner)
 
@@ -307,7 +319,9 @@ def run_optuna_tuning(
     )
 
     def _func_with_progress(trial):
+        _trial_start_time[0] = time.time()
         _trial_counter[0] += 1
+        print(f"[HEARTBEAT] Starting trial {_trial_counter[0]}/{_n_trials_for_cb}")
         pruned = None
         _prune_reason = None
         _exc = None
@@ -378,7 +392,38 @@ def run_optuna_tuning(
         if _hpo_deadline is not None and time.time() >= _hpo_deadline:
             study.stop()
 
+    def _throttle_callback(study, trial):
+        try:
+            from pipeline.resource_monitor import get_throttle_signal
+            sig = get_throttle_signal()
+            if sig and sig.delay > 0:
+                time.sleep(sig.delay)
+        except Exception:
+            pass
+
     study.set_user_attr("max_hpo_duration_minutes", max_hpo_duration_minutes)
+
+    _trial_start_time = [time.time()]
+    _per_trial_timeout = int(os.environ.get("OPTUNA_PER_TRIAL_TIMEOUT", "1800"))
+    _watchdog_stop = threading.Event()
+
+    def _per_trial_watchdog(study_ref, trial_start_ref, timeout_s, stop_event):
+        while not stop_event.is_set():
+            elapsed = time.time() - trial_start_ref[0]
+            if elapsed > timeout_s:
+                mins = elapsed / 60
+                print(f"[TIMEOUT] Single trial running {mins:.1f} min > {timeout_s//60} min -- stopping study")
+                try:
+                    study_ref.stop()
+                except Exception:
+                    pass
+                break
+            stop_event.wait(60)
+
+    _wd = threading.Thread(target=_per_trial_watchdog,
+                           args=(study, _trial_start_time, _per_trial_timeout, _watchdog_stop),
+                           daemon=True)
+    _wd.start()
 
     # Cap NumPy/SciPy/Sklearn/XGB BLAS threads inside the trial
     with threadpool_limits(limits=blas_threads):
@@ -392,9 +437,11 @@ def run_optuna_tuning(
         plateau_min_trials = int(cv_config.get("plateau_min_trials", 0) or 0)
 
         if plateau_patience <= 0:
-            # Backwards-compatible default behavior
+            _cb = [_throttle_callback]
+            if _hpo_deadline:
+                _cb.append(_hpo_timeout_callback)
             study.optimize(_func_with_progress, n_trials=n_trials, n_jobs=n_jobs, gc_after_trial=True,
-                           callbacks=[_hpo_timeout_callback] if _hpo_deadline else None)
+                           callbacks=_cb)
         else:
             print(f"[Optuna] Plateau stop enabled: patience={plateau_patience} "
                   f"delta={plateau_delta} min_trials={plateau_min_trials}")
@@ -410,7 +457,8 @@ def run_optuna_tuning(
             _no_improve = 0
 
             for _i in range(_target_trials):
-                study.optimize(_func_with_progress, n_trials=1, n_jobs=n_jobs, gc_after_trial=True)
+                study.optimize(_func_with_progress, n_trials=1, n_jobs=n_jobs, gc_after_trial=True,
+                               callbacks=[_throttle_callback])
 
                 try:
                     _after = study.best_value
@@ -444,7 +492,10 @@ def run_optuna_tuning(
                     break
 
 
-                
+    _watchdog_stop.set()
+    if _wd.is_alive():
+        _wd.join(timeout=5)
+
     # --- post-study cleanup (runs once per study) ---
     try:
         import tensorflow as _tf
@@ -452,10 +503,14 @@ def run_optuna_tuning(
     except Exception:
         pass
 
-    # Optional: only helps if loky reusable executor was created somewhere
+    # Optional: only helps if loky reusable executor was created somewhere.
+    # Use timeout to prevent deadlock if workers are stuck in native code.
     try:
         from joblib.externals.loky import get_reusable_executor
-        get_reusable_executor().shutdown(wait=True, kill_workers=True)
+        try:
+            get_reusable_executor().shutdown(wait=True, timeout=10)
+        except TypeError:
+            get_reusable_executor().shutdown(wait=False)
     except Exception:
         pass
 

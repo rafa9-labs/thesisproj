@@ -26,7 +26,7 @@ export function ChartCard({ title, subtitle, children }: ChartCardProps) {
         )}
       </div>
       <div
-        className="rounded-lg border p-4 transition-all duration-300"
+        className="rounded-sm border p-4 transition-all duration-300"
         style={{
           borderColor: "var(--color-glass-border)",
           backgroundColor: "var(--color-glass)",

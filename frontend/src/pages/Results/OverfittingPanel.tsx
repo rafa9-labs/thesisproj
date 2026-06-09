@@ -32,20 +32,20 @@ export function OverfittingPanel({ overfitting, walkforwardPeriods }: Props) {
       <div className="flex items-center justify-between">
         <span
           className="text-[10px] font-semibold uppercase tracking-[0.1em]"
-          style={{ color: "#787B86" }}
+          style={{ color: "var(--color-text-muted)" }}
         >
           Score
         </span>
         <div className="flex items-center gap-2">
           <div
             className="w-2 h-2 rounded-full"
-            style={{ backgroundColor: RISK_COLORS[overfitting.risk_color] ?? "#787B86" }}
+            style={{ backgroundColor: RISK_COLORS[overfitting.risk_color] ?? "var(--color-text-muted)" }}
           />
           <span
             className="text-sm font-bold"
             style={{
               fontFamily: "JetBrains Mono, monospace",
-              color: RISK_COLORS[overfitting.risk_color] ?? "#787B86",
+              color: RISK_COLORS[overfitting.risk_color] ?? "var(--color-text-muted)",
             }}
           >
             {overfitting.overfit_score.toFixed(0)}
@@ -127,7 +127,7 @@ export function OverfittingPanel({ overfitting, walkforwardPeriods }: Props) {
               <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
                 Per-Period Gap
               </span>
-              <div className="flex items-end gap-0.5" style={{ height: 80, paddingBottom: 14 }}>
+              <div className="flex items-end gap-0.5 pb-3.5" style={{ height: 80 }}>
                 {gapPeriods.map((g, i) => {
                   const absGap = Math.abs(g.gap ?? 0);
                   const pct = Math.min(absGap / 60, 1);

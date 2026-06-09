@@ -94,7 +94,7 @@ export function CrossPairOverlayChart({ model, curves, height = 400 }: CrossPair
   if (validCurves.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-lg border p-8"
+        className="flex items-center justify-center rounded-sm border p-8"
         style={{
           height,
           backgroundColor: "var(--color-surface)",
@@ -118,13 +118,13 @@ export function CrossPairOverlayChart({ model, curves, height = 400 }: CrossPair
         Cross-Pair Equity Overlay — {model}
       </h3>
       <div
-        className="rounded-lg border overflow-hidden relative"
+        className="rounded-sm border overflow-hidden relative"
         style={{ borderColor: "var(--color-border)" }}
       >
         <div
           className="absolute top-3 left-3 z-10 flex flex-col gap-1 rounded-md px-3 py-2"
           style={{
-            backgroundColor: "rgba(19,23,34,0.85)",
+            backgroundColor: "var(--color-app)",
             border: "1px solid var(--color-border)",
           }}
         >

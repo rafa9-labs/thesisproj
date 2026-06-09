@@ -81,6 +81,7 @@ class SizingConfig:
     risk_fraction: float = 0.02
     kelly_fraction: float = 0.5
     kelly_min_trades: int = 10
+    trust_multiplier: float = 1.0
 
     atr_risk_pct: float = 0.02
     atr_sl_mult: float = 2.0
@@ -131,29 +132,34 @@ def compute_size(
     Returns
     -------
     float
-        Position size (lot units), clamped to ``[0, max_leverage]``.
+        Position size (lot units), clamped to ``[0, max_leverage]``
+        and scaled by trust_multiplier.
     """
     m = config.method
 
     if state.equity <= 0:
         return 0.0
 
+    trust_mul = max(0.0, min(1.0, float(config.trust_multiplier)))
+    if trust_mul <= 0:
+        return 0.0
+
     if m == SizingMethod.FIXED:
-        return 1.0
+        return 1.0 * trust_mul
 
     if m == SizingMethod.FIXED_FRACTIONAL:
-        return _clamp(_fixed_fractional(state, config), config.max_leverage)
+        return _clamp(_fixed_fractional(state, config) * trust_mul, config.max_leverage)
 
     if m == SizingMethod.KELLY:
-        return _clamp(_kelly(state, config), config.max_leverage)
+        return _clamp(_kelly(state, config) * trust_mul, config.max_leverage)
 
     if m == SizingMethod.ATR:
-        return _clamp(_atr_sizing(state, atr, config), config.max_leverage)
+        return _clamp(_atr_sizing(state, atr, config) * trust_mul, config.max_leverage)
 
     if m == SizingMethod.VOL_TARGET:
-        return _clamp(_vol_target(bar_vol, config), config.max_leverage)
+        return _clamp(_vol_target(bar_vol, config) * trust_mul, config.max_leverage)
 
-    return 1.0
+    return 1.0 * trust_mul
 
 
 def update_state(

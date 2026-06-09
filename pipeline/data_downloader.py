@@ -168,6 +168,25 @@ def _df_to_rows(df: pd.DataFrame, pair: str, timeframe: str) -> list[tuple]:
 BATCH_SIZE = 50_000
 
 
+def _resolve_granularities(
+    base_timeframe: str = "M30",
+    granularities: Optional[List[str]] = None,
+) -> List[str]:
+    """Compute the set of timeframes needed given a base timeframe.
+
+    Always includes the base + its MTF fast/slow from TIMEFRAME_HIERARCHY.
+    Additional granularities are merged in without duplication.
+    """
+    from config import TIMEFRAME_HIERARCHY, DEFAULT_BASE_TIMEFRAME
+    tf_h = TIMEFRAME_HIERARCHY.get(base_timeframe, TIMEFRAME_HIERARCHY[DEFAULT_BASE_TIMEFRAME])
+    required = [base_timeframe, tf_h["mtf_fast"], tf_h["mtf_slow"]]
+    if granularities:
+        for g in granularities:
+            if g not in required:
+                required.append(g)
+    return required
+
+
 def download_pair(
     instrument: str,
     store = None,
@@ -176,6 +195,7 @@ def download_pair(
     output_dir: str = "csv_data",
     end_date: Optional[datetime] = None,
     pair_symbol: Optional[str] = None,
+    base_timeframe: str = "M30",
 ) -> dict[str, int]:
     """Download candle data for a single OANDA instrument across multiple timeframes.
 
@@ -188,7 +208,8 @@ def download_pair(
     store : DataStore
         DataStore instance for direct SQLite insert.
     granularities : list[str], optional
-        Timeframes to download. Defaults to ``["M30", "H1", "H4"]``.
+        Additional timeframes to download. Defaults to those needed for
+        ``base_timeframe`` (base + MTF fast + MTF slow).
     years : int
         How many years of history to fetch.
     output_dir : str
@@ -198,6 +219,9 @@ def download_pair(
     pair_symbol : str, optional
         Symbol like ``"EURUSD"``. When ``store`` is provided, used directly.
         Defaults to ``instrument.replace("_","")``.
+    base_timeframe : str
+        Primary trading timeframe (M15, M30, H1, H4). Determines which
+        additional MTF timeframes are required.
 
     Returns
     -------
@@ -206,8 +230,10 @@ def download_pair(
     """
     from oandapyV20 import API
 
-    if granularities is None:
-        granularities = ["M30", "H1", "H4"]
+    granularities = _resolve_granularities(
+        base_timeframe=base_timeframe,
+        granularities=granularities,
+    )
 
     token, _ = _load_credentials()
     client = API(access_token=token)

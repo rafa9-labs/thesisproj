@@ -21,10 +21,12 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ["OMP_NUM_THREADS"] = "4"
+os.environ["MLB_DISABLE_OPTUNA_PRUNING"] = "1"
 sys.path.insert(0, r"C:\Users\rafa\ML_Trading\thesisproj")
 
 for _m in ["config", "pipeline.metrics_tuples",
-           "pipeline.backtester.composed"]:
+           "pipeline.backtester.composed", "pipeline.tuning.helpers",
+           "pipeline.tuning.runner", "pipeline.tuning.objective"]:
     sys.modules.pop(_m, None)
 
 START = "2017-06-01 00:00:00"
@@ -91,10 +93,15 @@ class TestFullPipeline:
             assert not df_sim.empty, "Backtest should have data"
 
             # Extract metrics
-            model_obj = getattr(bt, "model", None)
+            model_obj = getattr(bt, "_last_trained_model", None) or getattr(bt, "model", None)
             assert model_obj is not None, "Should have trained model"
             cov_thr = getattr(bt, "_coverage_conf_thr", None)
+            # Derive actual feature count from the trained backtester / model
             feat_names = getattr(bt, "_diagnostics_feature_names", [])
+            n_features = getattr(model_obj, "n_features_in_", None) or len(feat_names) or 3
+            actual_feats = feat_names if feat_names and len(feat_names) == n_features else (
+                [f"f{i}" for i in range(n_features)]
+            )
             feat_cfg = getattr(bt, "features_config", {})
 
             shrp = float(df_sim["sharpe"].mean()) if "sharpe" in df_sim.columns else 0.0
@@ -109,7 +116,7 @@ class TestFullPipeline:
                 model_type="logistic",
                 best_params=feat_cfg,
                 coverage_conf_thr=float(cov_thr) if cov_thr is not None else None,
-                feature_names=list(feat_names) if feat_names else None,
+                feature_names=list(actual_feats) if actual_feats else None,
                 features_config=feat_cfg,
                 calibrate_method="sigmoid",
                 train_start=START[:10], train_end=END[:10],
@@ -133,7 +140,7 @@ class TestFullPipeline:
             assert meta["parent_job_id"] == "test-parent-001"
 
             # Verify model produces output on dummy data
-            X = np.random.RandomState(7).randn(5, 3)
+            X = np.random.RandomState(7).randn(5, n_features)
             try:
                 proba = loaded["model"].predict_proba(X)
                 assert proba.shape[0] == 5
@@ -169,7 +176,7 @@ class TestFullPipeline:
 
             from pipeline.model_persistence import load_model_only
             pred_model = load_model_only(snap_dir)
-            X_pred = np.random.RandomState(42).randn(3, 3)
+            X_pred = np.random.RandomState(42).randn(3, n_features)
             proba_pred = pred_model.predict_proba(X_pred)
             assert proba_pred.shape == (3, 3) or proba_pred.shape[0] == 3
 
@@ -251,19 +258,25 @@ class TestRoundtripPrediction:
             mp.DEPLOY_ROOT = td
             try:
                 bt, df_sim, cfg = _run_mini_backtest("logistic")
-                model_obj = getattr(bt, "model", None)
+                model_obj = getattr(bt, "_last_trained_model", None) or getattr(bt, "model", None)
                 if model_obj is None:
                     bt.free(release_data=True)
                     pytest.skip("No model produced by backtest")
 
+                feat_names_fid = getattr(bt, "_diagnostics_feature_names", [])
+                n_feat_fid = getattr(model_obj, "n_features_in_", None) or len(feat_names_fid) or 3
+                actual_fid = feat_names_fid if feat_names_fid and len(feat_names_fid) == n_feat_fid else (
+                    [f"f{i}" for i in range(n_feat_fid)]
+                )
+
                 snap_dir = save_snapshot(
                     model=model_obj, model_type="logistic",
-                    best_params={}, feature_names=["a", "b", "c"],
+                    best_params={}, feature_names=actual_fid,
                     metrics={"sharpe": 0.5},
                 )
                 loaded = load_snapshot(snap_dir)
 
-                X = np.random.RandomState(99).randn(10, 3)
+                X = np.random.RandomState(99).randn(10, n_feat_fid)
                 orig_preds = model_obj.predict(X)
                 loaded_preds = loaded["model"].predict(X)
                 assert np.array_equal(orig_preds, loaded_preds), \

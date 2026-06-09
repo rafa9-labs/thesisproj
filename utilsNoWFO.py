@@ -532,18 +532,18 @@ def init_study_tree(run_dir: str):
 def model_category(model_type: str) -> str:
     """
     Map model_type -> family bucket with the capitalization you asked for:
-      - Classical: logistic, logistic_ovr, svm, decision_tree, random_forest, xgboost
-      - RL:        cnn, lstm, transformer
+      - Classical: logistic, logistic_ovr, svm, decision_tree, random_forest, xgboost, lightgbm, catboost
+      - RL:        cnn, lstm, transformer, gru, gru_lstm
       - DQN:       dqn (its own top-level group)
-      - Ensembles: any name starting with 'ensemble_'
+      - Ensembles: any name starting with 'ensemble_' or named stacking_ensemble/meta_ensemble
     Default is Classical.
     """
     m = (model_type or "").lower()
-    if m in {"cnn", "lstm", "transformer"}:
+    if m in {"cnn", "lstm", "transformer", "gru", "gru_lstm"}:
         return "RL"
     if m in {"dqn"}:
         return "DQN"
-    if m.startswith("ensemble_"):
+    if m.startswith("ensemble_") or m in {"stacking_ensemble", "meta_ensemble"}:
         return "Ensembles"
     return "Classical"
 
@@ -592,14 +592,20 @@ def friendly_model_name(model_type: str) -> str:
         "decision_tree": "Decision Tree",
         "random_forest": "Random Forest",
         "xgboost": "XGBoost",
+        "lightgbm": "LightGBM",
+        "catboost": "CatBoost",
         "cnn": "CNN",
         "lstm": "LSTM",
+        "gru": "GRU",
+        "gru_lstm": "GRU-LSTM",
         "transformer": "Transformer",
         "dqn": "DQN",
         "rl": "RL",
         "ensemble_cnn_lstm_xgboost": "CNN+LSTM+XGB",
         "ensemble_transformer_xgb_dqn": "Transformer+XGB+DQN",
         "ensemble_adaptive_regime": "Adaptive Regime",
+        "meta_ensemble": "Signal Committee",
+        "stacking_ensemble": "Stacking Ensemble",
     }
     return mapping.get(m, model_type)
 
@@ -716,10 +722,14 @@ TRAIN_TEST_MONTHS = {
     "decision_tree":{"train": (36, 36), "test": (1, 1)},
     "random_forest":{"train": (36, 36), "test": (1, 1)},
     "xgboost":     {"train": (36, 36), "test": (1, 1)},
+    "lightgbm":    {"train": (36, 36), "test": (1, 1)},
+    "catboost":    {"train": (36, 36), "test": (1, 1)},
 
     # keep as-is if you want strict comparability vs classical
     "lstm":        {"train": (48, 48), "test": (1, 1)},
     "cnn":         {"train": (48, 48), "test": (1, 1)},
+    "gru":         {"train": (48, 48), "test": (1, 1)},
+    "gru_lstm":    {"train": (48, 48), "test": (1, 1)},
 
     # data-hungrier / higher-capacity models
     "transformer": {"train": (48, 48), "test": (1, 1)},
@@ -729,6 +739,8 @@ TRAIN_TEST_MONTHS = {
     # ensembles inherit deep-data needs + benefit from more regime variety
     "ensemble_cnn_lstm_xgboost": {"train": (48, 48), "test": (1, 1)},
     "ensemble_adaptive_regime":  {"train": (48, 48), "test": (1, 1)},
+    "meta_ensemble":             {"train": (48, 48), "test": (1, 1)},
+    "stacking_ensemble":         {"train": (48, 48), "test": (1, 1)},
 }
 
 TRAIN_TEST_MONTHS_DEBUG = {
@@ -737,14 +749,20 @@ TRAIN_TEST_MONTHS_DEBUG = {
     "decision_tree":{"train": (6, 12), "test": (1, 1)},
     "random_forest":{"train": (6, 12), "test": (1, 1)},
     "xgboost":     {"train": (6, 12), "test": (1, 1)},
+    "lightgbm":    {"train": (6, 12), "test": (1, 1)},
+    "catboost":    {"train": (6, 12), "test": (1, 1)},
     "lstm":        {"train": (6, 12), "test": (1, 1)},
     "cnn":         {"train": (6, 12), "test": (1, 1)},
+    "gru":         {"train": (6, 12), "test": (1, 1)},
+    "gru_lstm":    {"train": (6, 12), "test": (1, 1)},
     "transformer": {"train": (6, 12), "test": (1, 1)},
     "dqn":         {"train": (6, 12), "test": (1, 1)},
     "rl":          {"train": (6, 12), "test": (1, 1)},
     "ensemble_transformer_xgb_dqn": {"train": (6, 12), "test": (1, 1)},
     "ensemble_cnn_lstm_xgboost":   {"train": (6, 12), "test": (1, 1)},
     "ensemble_adaptive_regime":    {"train": (6, 12), "test": (1, 1)},
+    "meta_ensemble":               {"train": (6, 12), "test": (1, 1)},
+    "stacking_ensemble":           {"train": (6, 12), "test": (1, 1)},
 }
 
 def _ensure_dt(s):

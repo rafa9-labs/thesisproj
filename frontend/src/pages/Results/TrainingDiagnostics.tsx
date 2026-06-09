@@ -31,8 +31,8 @@ const METHOD_COLORS: Record<string, { bg: string; fg: string }> = {
   permutation:  { bg: "rgba(120,123,134,0.08)", fg: "#787b86" },
   mdi:          { bg: "rgba(245,158,11,0.08)",  fg: "#f59e0b" },
   submodel:     { bg: "rgba(168,85,247,0.08)",  fg: "#a855f7" },
-  none:         { bg: "rgba(239,68,68,0.05)",   fg: "#ef4444" },
-  unknown:      { bg: "#1E222D",                fg: "#787b86" },
+  none:         { bg: "rgba(239,68,68,0.05)",   fg: "var(--color-event-high)" },
+  unknown:      { bg: "var(--color-surface)",                fg: "#787b86" },
 };
 
 const FAMILY_COLORS: Record<string, string> = {
@@ -55,10 +55,10 @@ function ImportanceChart({ features }: { features: { feature: string; importance
           margin={{ left: 4, right: 8, top: 2, bottom: 2 }}
           barCategoryGap="35%"
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#2A2E39" horizontal={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-glass-border)" horizontal={false} />
           <XAxis
             type="number"
-            tick={{ fill: "#787B86", fontSize: 9, fontFamily: "JetBrains Mono" }}
+            tick={{ fill: "var(--color-text-muted)", fontSize: 9, fontFamily: "JetBrains Mono" }}
             axisLine={false}
             tickLine={false}
           />
@@ -66,13 +66,13 @@ function ImportanceChart({ features }: { features: { feature: string; importance
             type="category"
             dataKey="feature"
             width={88}
-            tick={{ fill: "#787B86", fontSize: 9, fontFamily: "Inter" }}
+            tick={{ fill: "var(--color-text-muted)", fontSize: 9, fontFamily: "Inter" }}
             axisLine={false}
             tickLine={false}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "#1E222D",
+              backgroundColor: "var(--color-surface)",
               border: "1px solid #2A2E39",
               borderRadius: 6,
               fontSize: 11,
@@ -114,7 +114,7 @@ function ConfusionMatrix({ matrix, labels }: { matrix: number[][]; labels: strin
               fontWeight: 700,
               textTransform: "uppercase",
               letterSpacing: "0.06em",
-              color: "#787B86",
+              color: "var(--color-text-muted)",
             }}
           >
             {l}
@@ -134,7 +134,7 @@ function ConfusionMatrix({ matrix, labels }: { matrix: number[][]; labels: strin
               fontWeight: 700,
               textTransform: "uppercase",
               letterSpacing: "0.06em",
-              color: "#787B86",
+              color: "var(--color-text-muted)",
               paddingRight: 4,
             }}
           >
@@ -148,12 +148,12 @@ function ConfusionMatrix({ matrix, labels }: { matrix: number[][]; labels: strin
               ? `rgba(41,98,255,${0.12 + 0.55 * intensity})`
               : val > 0
                 ? `rgba(242,54,69,${0.06 + 0.22 * intensity})`
-                : "#131722";
+                : "var(--color-app)";
             const tc = isDiag
               ? `rgba(79,131,255,${0.5 + 0.5 * intensity})`
               : val > 0
-                ? "#F23645"
-                : "#4A5568";
+                ? "var(--color-accent-danger)"
+                : "var(--color-text-dim)";
             return (
               <div
                 key={ci}
@@ -179,10 +179,10 @@ function ConfusionMatrix({ matrix, labels }: { matrix: number[][]; labels: strin
       {/* Axis labels */}
       <div
         className="flex items-center gap-2 mt-1"
-        style={{ fontSize: 9, color: "#4A5568", fontFamily: "Inter, sans-serif" }}
+        style={{ fontSize: 9, color: "var(--color-text-dim)", fontFamily: "Inter, sans-serif" }}
       >
         <span className="ml-8 uppercase tracking-wider">Predicted</span>
-        <span style={{ color: "#2A2E39" }}>|</span>
+        <span style={{ color: "var(--color-glass-border)" }}>|</span>
         <span className="uppercase tracking-wider">Row = Actual</span>
       </div>
     </div>
@@ -202,16 +202,16 @@ function PredictionHistogram({ bins }: { bins: { bin_start: number; bin_end: num
       <ChartCard title="" subtitle="" height={130}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={bins} margin={{ top: 2, right: 6, left: -8, bottom: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2A2E39" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-glass-border)" />
             <XAxis
               dataKey="bin_center"
               tickFormatter={(v: number) => v.toFixed(2)}
-              tick={{ fill: "#787B86", fontSize: 9, fontFamily: "JetBrains Mono" }}
+              tick={{ fill: "var(--color-text-muted)", fontSize: 9, fontFamily: "JetBrains Mono" }}
             />
-            <YAxis tick={{ fill: "#787B86", fontSize: 9, fontFamily: "JetBrains Mono" }} hide />
+            <YAxis tick={{ fill: "var(--color-text-muted)", fontSize: 9, fontFamily: "JetBrains Mono" }} hide />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#1E222D",
+                backgroundColor: "var(--color-surface)",
                 border: "1px solid #2A2E39",
                 borderRadius: 6,
                 fontSize: 11,
@@ -224,7 +224,7 @@ function PredictionHistogram({ bins }: { bins: { bin_start: number; bin_end: num
               {bins.map((b) => (
                 <Cell
                   key={b.bin_center}
-                  fill={b.bin_center >= 0.8 ? "#089981" : b.bin_center >= 0.65 ? BAR_TOP2 : BAR_REST}
+                  fill={b.bin_center >= 0.8 ? "var(--color-accent-success)" : b.bin_center >= 0.65 ? BAR_TOP2 : BAR_REST}
                 />
               ))}
             </Bar>
@@ -232,10 +232,10 @@ function PredictionHistogram({ bins }: { bins: { bin_start: number; bin_end: num
         </ResponsiveContainer>
       </ChartCard>
       <div className="flex items-center gap-4 mt-1">
-        <span className="text-[9px]" style={{ color: "#787B86", fontFamily: "JetBrains Mono" }}>
+        <span className="text-[9px]" style={{ color: "var(--color-text-muted)", fontFamily: "JetBrains Mono" }}>
           {pct07}% above 0.7
         </span>
-        <span className="text-[9px]" style={{ color: "#787B86", fontFamily: "JetBrains Mono" }}>
+        <span className="text-[9px]" style={{ color: "var(--color-text-muted)", fontFamily: "JetBrains Mono" }}>
           {pct08}% above 0.8
         </span>
       </div>
@@ -248,7 +248,7 @@ function ConfidenceBandTable({ bands }: { bands: { band_min: number; band_max: n
   return (
     <table className="w-full" style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10 }}>
       <thead>
-        <tr style={{ color: "#787B86" }}>
+        <tr style={{ color: "var(--color-text-muted)" }}>
           <th className="text-left py-1 pr-2" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Conf.</th>
           <th className="text-right py-1 pr-2" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Trades</th>
           <th className="text-right py-1 pr-2" style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Acc.</th>
@@ -257,14 +257,14 @@ function ConfidenceBandTable({ bands }: { bands: { band_min: number; band_max: n
       </thead>
       <tbody>
         {bands.map((b, i) => {
-          const ac = b.accuracy >= 0.55 ? "#089981" : b.accuracy >= 0.45 ? "#F59E0B" : "#F23645";
-          const rc = b.mean_return > 0 ? "#089981" : b.mean_return < 0 ? "#F23645" : "#787B86";
+          const ac = b.accuracy >= 0.55 ? "var(--color-accent-success)" : b.accuracy >= 0.45 ? "var(--color-accent-warning)" : "var(--color-accent-danger)";
+          const rc = b.mean_return > 0 ? "var(--color-accent-success)" : b.mean_return < 0 ? "var(--color-accent-danger)" : "var(--color-text-muted)";
           return (
             <tr key={i} style={{ borderTop: "1px solid #2A2E39" }}>
-              <td className="py-0.5 pr-2" style={{ color: "#E8ECF1" }}>
+              <td className="py-0.5 pr-2" style={{ color: "var(--color-text-primary)" }}>
                 {(b.band_min * 100).toFixed(0)}&ndash;{(b.band_max * 100).toFixed(0)}%
               </td>
-              <td className="text-right py-0.5 pr-2" style={{ color: "#787B86" }}>{b.count}</td>
+              <td className="text-right py-0.5 pr-2" style={{ color: "var(--color-text-muted)" }}>{b.count}</td>
               <td className="text-right py-0.5 pr-2" style={{ color: ac }}>{(b.accuracy * 100).toFixed(1)}%</td>
               <td className="text-right py-0.5" style={{ color: rc }}>
                 {b.mean_return >= 0 ? "+" : ""}{(b.mean_return * 100).toFixed(3)}%
@@ -283,16 +283,16 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
   if (!data) {
     return (
       <div
-        className="rounded-lg border p-4"
-        style={{ borderColor: "#2A2E39", backgroundColor: "#1E222D" }}
+        className="rounded-sm border p-4"
+        style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-surface)" }}
       >
         <div className="flex items-center gap-2 mb-3">
-          <BarChart3 size={14} style={{ color: "#787B86" }} />
-          <span className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: "#787B86" }}>
+          <BarChart3 size={14} style={{ color: "var(--color-text-muted)" }} />
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>
             Training Diagnostics
           </span>
         </div>
-        <p className="text-[11px]" style={{ color: "#4A5568" }}>
+        <p className="text-[11px]" style={{ color: "var(--color-text-dim)" }}>
           No diagnostics available for {modelName}.
         </p>
       </div>
@@ -315,11 +315,11 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
           style={{ backgroundColor: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.2)" }}
         >
           <div className="flex items-start gap-2 flex-1 min-w-0">
-            <span style={{ color: "#F59E0B", fontSize: 13, lineHeight: 1 }}>&#9888;</span>
+            <span style={{ color: "var(--color-accent-warning)", fontSize: 13, lineHeight: 1 }}>&#9888;</span>
             <div className="flex flex-col gap-1 min-w-0">
               <span
                 className="text-[10px] font-semibold uppercase tracking-wider"
-                style={{ color: "#F59E0B" }}
+                style={{ color: "var(--color-accent-warning)" }}
               >
                 Collinear Features (VIF &gt; 10)
               </span>
@@ -330,7 +330,7 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
                     className="rounded px-1.5 py-0.5 text-[9px]"
                     style={{
                       backgroundColor: "rgba(245,158,11,0.12)",
-                      color: "#F59E0B",
+                      color: "var(--color-accent-warning)",
                       fontFamily: "JetBrains Mono, monospace",
                     }}
                     title={`VIF = ${w.vif}`}
@@ -344,7 +344,7 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
           <button
             onClick={() => setVifDismissed(true)}
             className="ml-2 flex-shrink-0"
-            style={{ color: "#787B86", cursor: "pointer", background: "none", border: "none", fontSize: 12 }}
+            style={{ color: "var(--color-text-muted)", cursor: "pointer", background: "none", border: "none", fontSize: 12 }}
           >
             &#10005;
           </button>
@@ -355,17 +355,17 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
       {hasFeatures && (
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
-            <Layers size={11} style={{ color: "#787B86" }} />
-            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "#787B86" }}>
+            <Layers size={11} style={{ color: "var(--color-text-muted)" }} />
+            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
               Feature Importance (Top 15)
             </span>
             {method && (
               <span
                 className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
                 style={{
-                  backgroundColor: METHOD_COLORS[method]?.bg ?? "#1E222D",
-                  color: METHOD_COLORS[method]?.fg ?? "#787B86",
-                  border: `1px solid ${METHOD_COLORS[method]?.fg ?? "#2A2E39"}`,
+                  backgroundColor: METHOD_COLORS[method]?.bg ?? "var(--color-surface)",
+                  color: METHOD_COLORS[method]?.fg ?? "var(--color-text-muted)",
+                  border: `1px solid ${METHOD_COLORS[method]?.fg ?? "var(--color-glass-border)"}`,
                 }}
               >
                 {method}
@@ -397,8 +397,8 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
       {hasHist && (
         <div>
           <div className="flex items-center gap-1.5 mb-1">
-            <Activity size={11} style={{ color: "#787B86" }} />
-            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "#787B86" }}>
+            <Activity size={11} style={{ color: "var(--color-text-muted)" }} />
+            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
               Prediction Confidence
             </span>
           </div>
@@ -410,8 +410,8 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
       {hasCm && (
         <div>
           <div className="flex items-center gap-1.5 mb-2">
-            <Grid3X3 size={11} style={{ color: "#787B86" }} />
-            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "#787B86" }}>
+            <Grid3X3 size={11} style={{ color: "var(--color-text-muted)" }} />
+            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
               Confusion Matrix
             </span>
           </div>
@@ -426,8 +426,8 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
       {hasBands && (
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
-            <TrendingUp size={11} style={{ color: "#787B86" }} />
-            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "#787B86" }}>
+            <TrendingUp size={11} style={{ color: "var(--color-text-muted)" }} />
+            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
               Confidence vs Accuracy
             </span>
           </div>
@@ -436,7 +436,7 @@ export function TrainingDiagnosticsPanel({ data, modelName }: Props) {
       )}
 
       {!hasFeatures && !hasHist && !hasCm && !hasBands && (
-        <p className="text-[11px]" style={{ color: "#4A5568" }}>
+        <p className="text-[11px]" style={{ color: "var(--color-text-dim)" }}>
           No diagnostics available for {modelName}. Deep learning models do not produce feature importance.
         </p>
       )}

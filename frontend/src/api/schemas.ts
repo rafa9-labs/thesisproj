@@ -549,29 +549,61 @@ export interface LiveSentimentPairData {
   vader_magnitude: number;
   blended_sentiment: number;
   article_count: number;
-  last_updated: string;
+  last_updated: string | null;
+  next_update?: string | null;
+  cache_age_hours?: number;
   recommended_position: number;
   position_confidence: number;
   llm_sentiment?: number | null;
   llm_confidence?: number | null;
   llm_volatility?: number | null;
   llm_weight?: number;
+  vader_contribution?: number;
+  llm_contribution?: number;
+  article_count_by_tier?: { exact: number; partial: number; other: number };
   currencies_affected?: string[];
 }
 
 export interface LiveSentimentArticle {
   title: string;
+  body: string;
   source: string;
+  url: string;
+  pair_tags: string[];
   sentiment_score: number;
+  summary: string;
+  bias: string;
   timestamp: string;
+  relevance_tier?: number;
 }
 
 export interface LiveSentimentResponse {
   pairs: Record<string, LiveSentimentPairData>;
   top_articles: LiveSentimentArticle[];
+  article_count_by_tier?: { exact: number; partial: number; other: number };
   backend: string;
   model: string;
   error?: string;
+  from_cache?: boolean;
+  status?: string;
+}
+
+export interface NewsArticleFull {
+  title: string;
+  body: string;
+  source: string;
+  url: string;
+  timestamp: string;
+  pair_tags: string[];
+  sentiment_score: number;
+  summary: string;
+  bias: string;
+}
+
+export interface NewsArticlesResponse {
+  articles: NewsArticleFull[];
+  total: number;
+  pair: string;
 }
 
 export interface PaperSessionInfo {
@@ -645,6 +677,8 @@ export interface DeployPaperRequest {
   initial_equity?: number;
   position_sizing?: string;
   sizing_config?: Record<string, unknown>;
+  live_news_blend_enabled?: boolean;
+  live_news_blend_weight?: number;
 }
 
 export interface PaperSignalEvent {
@@ -743,6 +777,8 @@ export interface DeployLiveRequest {
   sizing_config?: Record<string, unknown>;
   mode?: string;
   risk_config?: Record<string, unknown>;
+  live_news_blend_enabled?: boolean;
+  live_news_blend_weight?: number;
 }
 
 export interface LiveSignalEvent {
@@ -782,4 +818,218 @@ export interface SeedDemoResponse {
   status: string;
   pairs: Record<string, SeedDemoTimeframe[]>;
   total_candles: number;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════
+
+export interface RegimeAssignmentSchema {
+  models: string[];
+  weights: number[];
+}
+
+export interface CommitteeConfigSchema {
+  version: number;
+  regimes: Record<string, RegimeAssignmentSchema>;
+  fallback: RegimeAssignmentSchema;
+  constraints?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RegimeMatrixEntry {
+  regime: string;
+  model: string;
+  sharpe: number;
+  trades: number;
+  hit_rate: number;
+}
+
+export interface RegimeMatrixResponse {
+  regimes: string[];
+  models: string[];
+  entries: RegimeMatrixEntry[];
+  generated_at?: string;
+}
+
+export interface RegimeLabelPoint {
+  timestamp: string;
+  regime_id: number;
+  regime_name: string;
+}
+
+export interface RegimeLabelsResponse {
+  pair: string;
+  timeframe: string;
+  labels: RegimeLabelPoint[];
+  count: number;
+}
+
+export interface CommitteeSnapshotInfo {
+  version: string;
+  created_at: string;
+  models: string[];
+}
+
+export interface CommitteeSnapshotListResponse {
+  snapshots: CommitteeSnapshotInfo[];
+}
+
+// ════════════════════════════════════════════════════════════════════
+export interface FactoryIterationRecord {
+  iteration: number;
+  action_type: string;
+  regime: string;
+  model_add: string;
+  model_remove: string;
+  before_sharpe: number;
+  after_sharpe: number;
+  delta_sharpe: number;
+  accepted: boolean;
+  rationale: string;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Full Cycle — Racecar (B→C→D) + Factory (optimization) in one shot
+// ════════════════════════════════════════════════════════════════════
+
+export interface FullCycleRequest {
+  models: string[];
+  pair?: string;
+  timeframe?: string;
+  sweep_n_estimators?: number;
+  sweep_max_depth?: number;
+  skip_feature_sweep?: boolean;
+  use_boruta_shap?: boolean;
+  boruta_percentile?: number;
+  boruta_max_iter?: number;
+  enable_phase3?: boolean;
+  enable_phase4?: boolean;
+  enable_phase5?: boolean;
+  enable_phase6?: boolean;
+  debug_mode?: boolean;
+  committee_top_k?: number;
+  committee_weight_method?: string;
+  committee_min_sharpe?: number;
+  train_months?: number;
+  test_months?: number;
+  hpo_sampler?: string;
+  cv_blocks?: number;
+  cv_val_frac?: number;
+  plateau_patience?: number;
+  proposer?: string;
+  llm_backend?: string;
+  ucb_c?: number;
+  max_iterations?: number;
+  patience?: number;
+  stopping_tolerance?: number;
+  regime_sharpe_floor?: number;
+  factory_proxy_months?: number;
+  factory_proxy_folds?: number;
+  hpo_trials?: Record<string, number>;
+  hpo_startup_trials?: Record<string, number>;
+}
+
+export interface FullCycleStatusResponse {
+  job_id: string;
+  phase: string;
+  phase_number: number;
+  phase_progress: string;
+  iteration: number;
+  total_iterations: number;
+  current_action: string;
+  best_sharpe_so_far: number;
+  started_at: string;
+  error: string;
+  surviving_models: string[];
+  locked_features_count: number;
+}
+
+export interface TrustScoreResult {
+  trust_score: number;
+  action: "deploy" | "proceed" | "flag" | "reject";
+  sub_scores: {
+    pbo_contribution: number;
+    dsr_contribution: number;
+    coverage_contribution: number;
+    floor_contribution: number;
+  };
+}
+
+export interface HpoStatusEntry {
+  model_type: string;
+  status: string;
+  best_score?: number | null;
+  committee_size?: number;
+}
+
+export interface FullCycleResultsResponse {
+  job_id: string;
+  status: string;
+  locked_features_count: number;
+  pruned_features_count: number;
+  top_importance_feature: string;
+  phase0_pruned: string[];
+  phase0_survivors: string[];
+  racecar_profile_matrix?: Record<string, unknown>;
+  racecar_committee_config?: Record<string, unknown>;
+  racecar_backtest?: Record<string, unknown>;
+  phase3_fold_consistency_cv: number;
+  phase3_regime_coverage?: Record<string, unknown>;
+  phase3_seed_robustness_sharpe: number;
+  phase3_seed_robustness_seeds: number;
+  phase3_seed_robustness_pass: boolean;
+  trust_score?: TrustScoreResult;
+  pbo: number;
+  dsr: number;
+  hpo_status?: Record<string, string>;
+  hpo_model_params_count?: number;
+  snapshot_dir?: string;
+  final_fold_consistency_cv: number;
+  final_fold_consistency_pass: boolean;
+  final_regime_coverage?: Record<string, unknown>;
+  final_seed_robustness_sharpe: number;
+  final_seed_robustness_pass: boolean;
+  final_full_wfo?: Record<string, unknown>;
+  factory_best_sharpe: number;
+  factory_total_iterations: number;
+  factory_accepted_count: number;
+  factory_best_config?: Record<string, unknown>;
+  factory_history: FactoryIterationRecord[];
+  factory_stop_reason: string;
+  total_time_s: number;
+}
+
+export interface FullCycleHistoryEntry {
+  job_id: string;
+  started_at: string;
+  status: string;
+  total_time_s: number;
+  locked_features_count: number;
+  survivors_count: number;
+  survivors: string[];
+  avg_sharpe: number;
+  trust_score: number;
+  factory_best_sharpe: number;
+}
+
+export interface FullCycleHistoryResponse {
+  entries: FullCycleHistoryEntry[];
+  total_runs: number;
+}
+
+export interface LogEntry {
+  index: number;
+  timestamp: string;
+  level: string;
+  message: string;
+  phase?: string;
+  phase_number?: number;
+  phase_progress?: string;
+  category?: string;
+  metrics?: Record<string, unknown>;
+}
+
+export interface LogsResponse {
+  entries: LogEntry[];
+  next_index: number;
 }

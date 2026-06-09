@@ -38,7 +38,7 @@ const ADVANCED_TOGGLES = [
   { key: "useIndicatorStates" as const, label: "Indicator States", param: "use_indicator_states", description: "Categorical buckets for each indicator's current regime." },
 ];
 
-const sectionClass = "rounded-xl border p-6";
+const sectionClass = "rounded-sm border p-6";
 const sectionStyle: React.CSSProperties = {
   borderColor: "var(--color-glass-border)",
   backgroundColor: "rgba(255,255,255,0.02)",
@@ -57,7 +57,7 @@ export function FeaturesPanel() {
 
   return (
     <div
-      className="flex flex-col gap-6 rounded-xl border p-6"
+      className="flex flex-col gap-6 rounded-sm border p-6"
       style={{
         backgroundColor: "var(--color-glass)",
         borderColor: "var(--color-glass-border)",

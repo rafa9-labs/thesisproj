@@ -23,6 +23,9 @@ const LiveTradingPage = lazy(() =>
 const DeployedModelsPage = lazy(() =>
   import("./pages/Models/DeployedModelsPage").then((m) => ({ default: m.DeployedModelsPage })),
 );
+const CommitteePage = lazy(() =>
+  import("./pages/Committee/CommitteePage").then((m) => ({ default: m.CommitteePage })),
+);
 
 function PageSpinner() {
   return (
@@ -73,6 +76,10 @@ export default function App() {
         <Route
           path="models"
           element={<Suspense fallback={<PageSpinner />}><DeployedModelsPage /></Suspense>}
+        />
+        <Route
+          path="committee"
+          element={<Suspense fallback={<PageSpinner />}><CommitteePage /></Suspense>}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

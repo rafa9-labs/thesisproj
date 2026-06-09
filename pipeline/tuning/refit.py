@@ -553,10 +553,13 @@ def _aggressive_free():
     except Exception:
         pass
 
-    # Optional: release joblib/loky workers (can reduce RAM high-water during long studies)
+    # Optional: release joblib/loky workers. Use timeout to prevent deadlock.
     try:
         from joblib.externals.loky import get_reusable_executor
-        get_reusable_executor().shutdown(wait=True, kill_workers=True)
+        try:
+            get_reusable_executor().shutdown(wait=True, timeout=10)
+        except TypeError:
+            get_reusable_executor().shutdown(wait=False)
     except Exception:
         pass
 

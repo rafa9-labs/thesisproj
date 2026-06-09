@@ -95,16 +95,16 @@ export const EquityCurveChart = forwardRef<EquityCurveChartHandle, EquityCurveCh
 
     if (eventMarkers && eventMarkers.length > 0) {
       const IMPACT_COLORS: Record<string, string> = {
-        high: "#EF4444",
-        medium: "#F59E0B",
-        low: "#787B86",
+        high: "var(--color-event-high)",
+        medium: "var(--color-accent-warning)",
+        low: "var(--color-text-muted)",
       };
       const markers = eventMarkers
         .filter((m) => data.some((d) => d.time === m.time) || data.some((d) => Math.abs(d.time - m.time) < 86400))
         .map((m) => ({
           time: m.time as unknown as import("lightweight-charts").UTCTimestamp,
           position: "belowBar" as const,
-          color: IMPACT_COLORS[m.impact] ?? "#787B86",
+          color: IMPACT_COLORS[m.impact] ?? "var(--color-text-muted)",
           shape: "arrowUp" as const,
           text: m.event,
         }));
@@ -132,7 +132,7 @@ export const EquityCurveChart = forwardRef<EquityCurveChartHandle, EquityCurveCh
   if (data.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-lg border"
+        className="flex items-center justify-center rounded-sm border"
         style={{
           height,
           backgroundColor: "var(--color-surface)",
@@ -147,7 +147,7 @@ export const EquityCurveChart = forwardRef<EquityCurveChartHandle, EquityCurveCh
 
   return (
     <div
-      className="rounded-lg border overflow-hidden"
+      className="rounded-sm border overflow-hidden"
       style={{ borderColor: "var(--color-border)" }}
     >
       <div ref={containerRef} />

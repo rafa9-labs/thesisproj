@@ -123,7 +123,7 @@ function OosPerformanceChartInner({ model, equity, totalPeriods, currentPeriod, 
           </ResponsiveContainer>
         ) : (
           <div
-            className="flex items-center justify-center h-full rounded-lg border"
+            className="flex items-center justify-center h-full rounded-sm border"
             style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
           >
             <span className="text-xs">Waiting for simulation data...</span>

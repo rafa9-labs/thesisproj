@@ -8,7 +8,7 @@ export function HyperparamsTab() {
   if (selectedModels.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-xl border py-16"
+        className="flex items-center justify-center rounded-sm border py-16"
         style={{ borderColor: "var(--color-glass-border)", color: "var(--color-text-muted)" }}
       >
         <span className="text-xs">Select a model first to see hyperparameters.</span>
@@ -18,7 +18,7 @@ export function HyperparamsTab() {
 
   return (
     <div
-      className="flex flex-col gap-6 rounded-xl border p-6"
+      className="flex flex-col gap-6 rounded-sm border p-6"
       style={{
         backgroundColor: "var(--color-glass)",
         borderColor: "var(--color-glass-border)",

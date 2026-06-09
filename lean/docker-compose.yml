@@ -1,0 +1,92 @@
+version: "3.9"
+
+services:
+  # ────────────────────────────────────────────────────────────
+  # IB Gateway — headless Interactive Brokers connection
+  # Handles: account auth, order routing, market data
+  # Port 4001: live trading, Port 4002: paper trading
+  # ────────────────────────────────────────────────────────────
+  ib-gateway:
+    image: ${IB_GATEWAY_IMAGE:-ghcr.io/gnzsnz/ib-gateway:latest}
+    container_name: kodaquant-ib-gateway
+    restart: unless-stopped
+    environment:
+      TWS_USERID: ${IB_USER_NAME}
+      TWS_PASSWORD: ${IB_PASSWORD}
+      TRADING_MODE: ${TRADING_MODE:-paper}
+      READ_ONLY_API: "no"
+      TWS_ACCEPT_INCOMING: "yes"
+      AUTO_RESTART: "yes"
+      AUTO_RESTART_TIME: "00:00"
+    ports:
+      - "${IB_GATEWAY_PORT:-4001}:4001"
+      - "4002:4002"
+    networks:
+      - lean-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "4001"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ────────────────────────────────────────────────────────────
+  # LEAN Engine — QuantConnect algorithmic trading engine
+  # Runs the KodaQuantBridge algorithm (passthrough).
+  # Accepts external trade commands via REST API on port 8888.
+  # Connects to IB Gateway for order execution.
+  # ────────────────────────────────────────────────────────────
+  lean-engine:
+    image: ${LEAN_ENGINE_IMAGE:-quantconnect/lean:latest}
+    container_name: kodaquant-lean-engine
+    restart: unless-stopped
+    depends_on:
+      ib-gateway:
+        condition: service_healthy
+    environment:
+      # IB connection
+      IB_USER_NAME: ${IB_USER_NAME}
+      IB_ACCOUNT: ${IB_ACCOUNT}
+      IB_PASSWORD: ${IB_PASSWORD}
+      IB_HOST: ib-gateway
+      IB_PORT: 4001
+
+      # Brokerage
+      LEAN_BROKERAGE: InteractiveBrokersBrokerage
+      LEAN_ENVIRONMENT: live
+
+      # Data provider
+      LEAN_DATA_PROVIDER: InteractiveBrokers
+      LEAN_DATA_FEED: InteractiveBrokers
+
+      # REST API for external commands (KodaQuant bridge)
+      KODAQUANT_API_PORT: 8888
+
+      # Algorithm
+      LEAN_ALGORITHM_LANGUAGE: Python
+      LEAN_ALGORITHM_FILE: /Lean/Launcher/bin/Debug/main.py
+    ports:
+      - "${LEAN_REST_PORT:-8888}:8888"
+    volumes:
+      - ./algorithm:/Lean/Launcher/bin/Debug:ro
+      - ./config/lean.json:/Lean/Launcher/config.json:ro
+      - lean-data:/Lean/Data
+      - lean-results:/Results
+    networks:
+      - lean-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/live/portfolio"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+networks:
+  lean-net:
+    driver: bridge
+
+volumes:
+  lean-data:
+    driver: local
+  lean-results:
+    driver: local

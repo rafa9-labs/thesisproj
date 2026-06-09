@@ -5,7 +5,7 @@ import { useSettingsStore } from "@/stores/useSettingsStore";
 import { AlertTriangle } from "lucide-react";
 import type { ModelInfo } from "@/api/schemas";
 
-const GPU_MODELS = new Set(["cnn", "lstm", "transformer", "dqn", "ensemble_adaptive_regime"]);
+const GPU_MODELS = new Set(["cnn", "lstm", "transformer", "gru", "gru_lstm", "dqn", "ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost", "meta_ensemble", "stacking_ensemble"]);
 
 export function ModelSelector() {
   const { data: models, isLoading } = useModels();
@@ -17,7 +17,7 @@ export function ModelSelector() {
 
   return (
     <div
-      className="flex flex-col gap-4 rounded-xl border p-6"
+      className="flex flex-col gap-4 rounded-sm border p-6"
       style={{
         backgroundColor: "var(--color-glass)",
         borderColor: "var(--color-glass-border)",
@@ -41,7 +41,7 @@ export function ModelSelector() {
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="h-28 animate-skeleton rounded-lg"
+              className="h-28 animate-skeleton rounded-sm"
               style={{ backgroundColor: "var(--color-glass-hover)" }}
             />
           ))}
@@ -111,7 +111,7 @@ function ModelCard({
     <button
       onClick={onToggle}
       disabled={isFull}
-      className="flex flex-col gap-2 rounded-lg border p-4 text-left transition-all duration-150"
+      className="flex flex-col gap-2 rounded-sm border p-4 text-left transition-all duration-150"
       style={{
         borderColor: isSelected ? "var(--color-brand)" : "#333",
         backgroundColor: isSelected ? "rgba(168,224,99,0.05)" : "var(--color-glass)",

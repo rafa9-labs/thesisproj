@@ -186,8 +186,8 @@ class TestS165Defaults:
         gamma = svm.get("gamma", [])
         assert isinstance(gamma, list), "gamma should be a list (categorical)"
         assert 1e-4 in gamma
-        assert 0.5 in gamma
-        assert gamma == [1e-4, 1e-3, 1e-2, 0.1, 0.5]
+        assert 0.05 in gamma
+        assert gamma == [1e-4, 1e-3, 1e-2, 0.05]
 
     def test_rf_max_depth_no_none(self):
         from config import SEARCH_SPACE

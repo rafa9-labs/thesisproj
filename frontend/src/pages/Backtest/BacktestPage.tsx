@@ -73,12 +73,12 @@ export function BacktestPage() {
       <ConfigSummaryBar />
 
       {/* 24px gap between status strip and tab nav */}
-      <div style={{ marginTop: 24 }}>
+      <div className="mt-6">
         <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
 
       {/* 24px gap between tab nav and main content */}
-      <div style={{ height: 24, flexShrink: 0 }} />
+      <div className="h-6 shrink-0" />
 
       {/* Content area grows to fill remaining space */}
       <div className="flex flex-col flex-1">
@@ -90,7 +90,7 @@ export function BacktestPage() {
 
       {/* Asset & Model */}
       {activeTab === "asset" && (
-        <div className="flex flex-col gap-5 pt-1">
+        <div className="flex flex-col gap-5 pt-4">
           <AssetSelector />
           <ModelSelector />
         </div>
@@ -98,14 +98,14 @@ export function BacktestPage() {
 
       {/* Study & HPO */}
       {activeTab === "study" && (
-        <div className="flex flex-col gap-5 pt-1">
+        <div className="flex flex-col gap-5 pt-4">
           <HpoPanel />
         </div>
       )}
 
       {/* Features */}
       {activeTab === "features" && (
-        <div className="flex flex-col gap-5 pt-1">
+        <div className="flex flex-col gap-5 pt-4">
           <FeaturesPanel />
           <LabelsPanel />
         </div>
@@ -113,21 +113,21 @@ export function BacktestPage() {
 
       {/* Hyperparameters */}
       {activeTab === "hyperparams" && (
-        <div className="flex flex-col gap-5 pt-1">
+        <div className="flex flex-col gap-5 pt-4">
           <HyperparamsTab />
         </div>
       )}
 
       {/* Execution */}
       {activeTab === "execution" && (
-        <div className="flex flex-col gap-5 pt-1">
+        <div className="flex flex-col gap-5 pt-4">
           <ExecutionPanel defaultOpen={true} />
         </div>
       )}
 
       {/* Forward Test */}
       {activeTab === "forwardtest" && (
-        <div className="flex flex-col gap-5 pt-1">
+        <div className="flex flex-col gap-5 pt-4">
           <ForwardTestTab />
         </div>
       )}
@@ -135,7 +135,7 @@ export function BacktestPage() {
       </div>{/* end flex-1 content area */}
 
       {/* Bottom spacer so content clears the sticky footer */}
-      <div style={{ height: 72, flexShrink: 0 }} />
+      <div className="h-[72px] shrink-0" />
 
       {/* Validation bar — sticky footer */}
       <ValidationBar
@@ -158,7 +158,7 @@ export function BacktestPage() {
           onClick={() => setShowSavePreset(false)}
         >
           <div
-            className="flex w-[400px] flex-col gap-4 rounded-lg border p-5"
+            className="flex w-[400px] flex-col gap-4 rounded-sm border p-5"
             style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
             onClick={(e) => e.stopPropagation()}
           >

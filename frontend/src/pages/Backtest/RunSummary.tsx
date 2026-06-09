@@ -23,7 +23,7 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors, isSubmit
       onClick={onClose}
     >
       <div
-        className="flex w-[640px] max-h-[80vh] flex-col gap-4 overflow-y-auto rounded-lg border p-6"
+        className="flex w-[640px] max-h-[80vh] flex-col gap-4 overflow-y-auto rounded-sm border p-6"
         style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
         onClick={(e) => e.stopPropagation()}
       >

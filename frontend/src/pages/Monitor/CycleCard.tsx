@@ -48,7 +48,7 @@ export function CycleCard({ cycle }: Props) {
 
   return (
     <div
-      className="flex flex-col rounded-lg border"
+      className="flex flex-col rounded-sm border"
       style={{
         borderColor: isDone
           ? "var(--color-accent-success)"
@@ -91,7 +91,7 @@ export function CycleCard({ cycle }: Props) {
             {/* Best Trial banner — always visible once we have trials */}
             {cycle.bestTrial && (
               <div
-                className="flex items-center gap-2 rounded-lg border px-3 py-2"
+                className="flex items-center gap-2 rounded-sm border px-3 py-2"
                 style={{
                   borderColor: "rgba(234,179,8,0.2)",
                   backgroundColor: "rgba(234,179,8,0.06)",

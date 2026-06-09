@@ -23,12 +23,18 @@ _TRIAL_COUNTS_FULL = {
     "random_forest":               {"random": 5,  "bayes": 10},
     "decision_tree":               {"random": 5,  "bayes": 5},
     "xgboost":                     {"random": 5,  "bayes": 15},
+    "lightgbm":                    {"random": 5,  "bayes": 15},
+    "catboost":                    {"random": 5,  "bayes": 15},
     "lstm":                        {"random": 3,  "bayes": 7},
     "cnn":                         {"random": 3,  "bayes": 7},
     "transformer":                 {"random": 3,  "bayes": 7},
+    "gru":                         {"random": 3,  "bayes": 7},
+    "gru_lstm":                    {"random": 3,  "bayes": 7},
     "dqn":                         {"random": 2,  "bayes": 3},
     "ensemble_cnn_lstm_xgboost":   {"random": 2,  "bayes": 3},
     "ensemble_adaptive_regime":    {"random": 2,  "bayes": 3},
+    "meta_ensemble":               {"random": 2,  "bayes": 3},
+    "stacking_ensemble":           {"random": 2,  "bayes": 3},
 }
 
 # Fast mode: reduced trials for rapid iteration (HURRY=1 env var or low HPO intensity)
@@ -38,12 +44,18 @@ _TRIAL_COUNTS_FAST = {
     "random_forest":               {"random": 2,  "bayes": 3},
     "decision_tree":               {"random": 2,  "bayes": 2},
     "xgboost":                     {"random": 2,  "bayes": 4},
+    "lightgbm":                    {"random": 2,  "bayes": 4},
+    "catboost":                    {"random": 2,  "bayes": 4},
     "lstm":                        {"random": 2,  "bayes": 4},
     "cnn":                         {"random": 2,  "bayes": 4},
     "transformer":                 {"random": 2,  "bayes": 4},
+    "gru":                         {"random": 2,  "bayes": 4},
+    "gru_lstm":                    {"random": 2,  "bayes": 4},
     "dqn":                         {"random": 2,  "bayes": 2},
     "ensemble_cnn_lstm_xgboost":   {"random": 2,  "bayes": 2},
     "ensemble_adaptive_regime":    {"random": 2,  "bayes": 2},
+    "meta_ensemble":               {"random": 2,  "bayes": 2},
+    "stacking_ensemble":           {"random": 2,  "bayes": 2},
 }
 
 TRIAL_COUNTS = dict(_TRIAL_COUNTS_FULL)
@@ -197,6 +209,30 @@ def main() ->  None:
     ]
     
     print(f"\n[TEST] Models for real trading simulation: {MODEL_LIST}")
+
+    # ── PROFILE MODE: run ExpertProfiler instead of normal backtest ──
+    _PROFILE = os.environ.get("PROFILE", "").strip().lower() in ("1", "true", "yes")
+    if _PROFILE:
+        _run_profile(MODEL_LIST, RUN_DIR, features_config, features_config_rep)
+        return
+
+    # ── COMMITTEE MODE: run CommitteeBacktester instead of normal backtest ──
+    _COMMITTEE = os.environ.get("COMMITTEE", "").strip().lower() in ("1", "true", "yes")
+    if _COMMITTEE:
+        _run_committee(MODEL_LIST, RUN_DIR, features_config, features_config_rep)
+        return
+
+    # ── RACECAR MODE: run full B→C→D pipeline ──
+    _RACECAR = os.environ.get("RACECAR", "").strip().lower() in ("1", "true", "yes")
+    if _RACECAR:
+        _run_racecar(MODEL_LIST, RUN_DIR, features_config, features_config_rep)
+        return
+
+    # ── FACTORY MODE: run iterative committee optimization ──
+    _FACTORY = os.environ.get("FACTORY", "").strip().lower() in ("1", "true", "yes")
+    if _FACTORY:
+        _run_factory(MODEL_LIST, RUN_DIR, features_config, features_config_rep)
+        return
 
     all_reps = []  # collect combined monthly results across all repeats
     eq_by_model: dict[str, list[pd.DataFrame]] = {}  # collect per-rep equity paths
@@ -1076,6 +1112,339 @@ def main() ->  None:
                 )
         except Exception as _e:
             print(f"[tables] detailed per-run table skipped: {_e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Expert Profiler — Phase B integration
+# ─────────────────────────────────────────────────────────────────────────
+
+def _run_profile(
+    model_list: list,
+    run_dir: str,
+    features_config: dict,
+    features_config_rep: dict,
+) -> None:
+    """Run the ExpertProfiler across all models and print the matrix.
+
+    Activated by setting PROFILE=1 in the environment.
+    Outputs the regime x model performance matrix to results/profile/.
+    """
+    from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
+
+    _profile_n_months = int(os.environ.get("N_MONTHS", "2"))
+    _profile_trials = int(os.environ.get("PROFILE_TRIALS", "5"))
+
+    print("\n" + "=" * 72)
+    print("  EXPERT PROFILER MODE")
+    print(f"  Models: {', '.join(model_list)}")
+    print(f"  WFO months: {_profile_n_months}  |  HPO trials: {_profile_trials}")
+    print("=" * 72)
+
+    # Pull data config from features_config
+    data_config = {
+        "symbol": features_config.get("symbol", "EURUSD"),
+        "start": features_config.get("start"),
+        "end": features_config.get("end"),
+        "timeframe": features_config.get("bars_timeframe", "H1"),
+        "spread_bps": features_config.get("spread_bps", 1.5),
+        "csv_data_path": features_config.get("csv_data_path") or os.path.join("csv_data", "EURUSD_10_years_H1_OANDA.csv"),
+    }
+
+    wfo_config = {
+        "n_months": _profile_n_months,
+        "n_trials": _profile_trials,
+        "n_startup_trials": max(1, _profile_trials // 3),
+        "hpo_mode": "static",
+        "smoke_test": True,
+    }
+    # Merge features config into wfo_config
+    for k in (
+        "hpo_sampler", "hpo_two_phase", "train_months", "test_months",
+        "period_unit", "label_threshold", "lags", "lag_depth",
+    ):
+        if k in features_config:
+            wfo_config[k] = features_config[k]
+
+    profiler = ExpertProfiler(
+        data_config=data_config,
+        wfo_config=wfo_config,
+        regime_cfg=RegimeConfig(),
+    )
+
+    result = profiler.profile(
+        models=model_list,
+        n_months=_profile_n_months,
+        n_trials=_profile_trials,
+        seed=int(features_config_rep.get("run_seed", 42)),
+        verbose=True,
+    )
+
+    profiler.print_summary(result)
+
+    # Save
+    out_dir = os.path.join(run_dir, "profile")
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, "regime_model_matrix.json")
+    profiler.save_matrix(result, out_path)
+
+    # Also save top-per-regime as readable CSV
+    top = result.matrix.top_model_per_regime(top_k=3)
+    rows = []
+    for regime, models in top.items():
+        for rank, (model, score) in enumerate(models, 1):
+            rows.append({"regime": regime, "rank": rank, "model": model, "sharpe": round(score, 4)})
+    if rows:
+        top_path = os.path.join(out_dir, "top_models_per_regime.csv")
+        pd.DataFrame(rows).to_csv(top_path, index=False)
+        print(f"\n[PROFILE] Top models CSV saved to {top_path}")
+
+
+def _run_committee(
+    model_list: list,
+    run_dir: str,
+    features_config: dict,
+    features_config_rep: dict,
+) -> None:
+    """Run the CommitteeBacktester with a committee config.
+
+    Activated by setting COMMITTEE=1 in the environment.
+    Reads committee_config.json from results/ directory or builds a default.
+    """
+    from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+    from pipeline.committee_backtester import CommitteeBacktester
+    from pipeline.regime_utils import RegimeConfig
+
+    _committee_months = int(os.environ.get("N_MONTHS", "4"))
+    _committee_config_path = os.environ.get("COMMITTEE_CONFIG", "")
+
+    print("\n" + "=" * 72)
+    print("  COMMITTEE BACKTEST MODE")
+    print(f"  Models: {', '.join(model_list)}")
+    print(f"  WFO months: {_committee_months}")
+    print("=" * 72)
+
+    # Load committee config from file, or build a default from model_list
+    if _committee_config_path and os.path.exists(_committee_config_path):
+        config = CommitteeConfig.from_json(_committee_config_path)
+        print(f"  Loaded config from {_committee_config_path}")
+    else:
+        regime_assignment = RegimeAssignment(models=model_list,
+                                             weights=[1.0 / len(model_list)] * len(model_list))
+        config = CommitteeConfig(
+            regimes={
+                "trend_up": regime_assignment,
+                "trend_down": regime_assignment,
+                "sideways": regime_assignment,
+            },
+            fallback=RegimeAssignment(models=[model_list[0]], weights=[1.0]),
+        )
+        print(f"  Built default config with {len(model_list)} model(s) per regime")
+
+    # Load data
+    csv_path = features_config.get("csv_data_path") or os.path.join(
+        "csv_data", "EURUSD_10_years_H1_OANDA.csv")
+    if not os.path.exists(csv_path):
+        print(f"[ERROR] Data file not found: {csv_path}")
+        return
+
+    print(f"  Loading data from {csv_path} ...")
+    df = pd.read_csv(csv_path)
+    if "timestamp" in df.columns or "date" in df.columns:
+        time_col = "timestamp" if "timestamp" in df.columns else "date"
+        df[time_col] = pd.to_datetime(df[time_col])
+        df = df.set_index(time_col)
+    # Compute returns if missing
+    if "returns" not in df.columns:
+        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+    # Run committee backtest
+    bt = CommitteeBacktester(
+        config,
+        regime_cfg=RegimeConfig(),
+        confidence_threshold=float(features_config.get("confidence_threshold", 0.5)),
+    )
+    result = bt.run_wfo(df, train_months=_committee_months, test_months=1, verbose=True)
+
+    # Summary
+    print("\n" + "-" * 40)
+    print(result.to_summary_dict())
+    print(f"[COMMITTEE] {result.total_folds} folds, avg Sharpe={result.avg_sharpe:.4f}, "
+          f"avg trades={result.avg_trades:.0f}")
+
+    # Save results
+    out_dir = os.path.join(run_dir, "committee")
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "summary.json"), "w") as f:
+        json.dump(result.to_summary_dict(), f, indent=2, default=str)
+    print(f"[COMMITTEE] Results saved to {out_dir}")
+
+
+def _run_racecar(
+    model_list: list,
+    run_dir: str,
+    features_config: dict,
+    features_config_rep: dict,
+) -> None:
+    """Run the full Racecar pipeline: B (profile) → C (build) → D (backtest).
+
+    Activated by setting RACECAR=1 in the environment.
+    """
+    from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
+    from pipeline.committee_builder import CommitteeBuilder
+    from pipeline.committee_backtester import CommitteeBacktester
+
+    _racecar_months = int(os.environ.get("N_MONTHS", "6"))
+    _profile_trials = int(os.environ.get("PROFILE_TRIALS", "5"))
+    _top_k = int(os.environ.get("COMMITTEE_TOP_K", "3"))
+
+    print("\n" + "=" * 72)
+    print("  RACECAR AUTO-OPTIMIZE")
+    print(f"  Models: {', '.join(model_list)}")
+    print(f"  WFO months: {_racecar_months}  |  Trials: {_profile_trials}  |  Top-k: {_top_k}")
+    print("=" * 72)
+
+    csv_path = features_config.get("csv_data_path") or os.path.join(
+        "csv_data", "EURUSD_10_years_H1_OANDA.csv")
+    if not os.path.exists(csv_path):
+        print(f"[ERROR] Data file not found: {csv_path}")
+        return
+
+    # ── Phase B: ExpertProfiler ──
+    print("\n[PHASE B] Running ExpertProfiler...")
+    profiler = ExpertProfiler(
+        data_config={
+            "symbol": features_config.get("symbol", "EURUSD"),
+            "csv_data_path": csv_path,
+        },
+        wfo_config={
+            "n_months": _racecar_months,
+            "n_trials": _profile_trials,
+            "hpo_mode": "static",
+            "smoke_test": True,
+        },
+        regime_cfg=RegimeConfig(),
+    )
+    result = profiler.profile(
+        models=model_list,
+        n_months=_racecar_months,
+        n_trials=_profile_trials,
+        seed=int(features_config_rep.get("run_seed", 42)),
+        verbose=True,
+    )
+    profiler.print_summary(result)
+
+    # Save matrix
+    out_dir = os.path.join(run_dir, "racecar")
+    os.makedirs(out_dir, exist_ok=True)
+    profiler.save_matrix(result, os.path.join(out_dir, "regime_model_matrix.json"))
+
+    # ── Phase C: CommitteeBuilder ──
+    print("\n[PHASE C] Building optimal committee...")
+    builder = CommitteeBuilder(top_k=_top_k, weight_type="sharpe_proportional")
+    config = builder.build(
+        result.matrix,
+        constraints={
+            "max_models_per_regime": _top_k,
+            "min_sharpe": -0.5,
+            "min_trades": 3,
+        },
+    )
+    config.to_json(os.path.join(out_dir, "committee_config.json"))
+
+    # ── Phase D: CommitteeBacktester ──
+    print("\n[PHASE D] Running committee backtest...")
+    df = pd.read_csv(csv_path)
+    if "timestamp" in df.columns:
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df = df.set_index("timestamp")
+    if "returns" not in df.columns:
+        df["returns"] = df["mid_c"].pct_change().fillna(0.0)
+
+    bt = CommitteeBacktester(config, regime_cfg=RegimeConfig(), confidence_threshold=0.5)
+    bt_result = bt.run_wfo(df, train_months=_racecar_months, test_months=1, verbose=True)
+
+    print("\n" + "-" * 40)
+    print(bt_result.to_summary_dict())
+    print(f"\n[RACECAR] {bt_result.total_folds} folds, avg Sharpe={bt_result.avg_sharpe:.4f}, "
+          f"avg trades={bt_result.avg_trades:.0f}")
+
+    with open(os.path.join(out_dir, "results.json"), "w") as f:
+        json.dump({
+            "committee_config": config.to_dict(),
+            "backtest_summary": bt_result.to_summary_dict(),
+        }, f, indent=2, default=str)
+    print(f"[RACECAR] Results saved to {out_dir}")
+
+
+def _run_factory(
+    model_list: list,
+    run_dir: str,
+    features_config: dict,
+    features_config_rep: dict,
+) -> None:
+    """Run the Factory iterative committee optimizer.
+
+    Activated by setting FACTORY=1. Iterates through swap/add/remove
+    proposals. Uses the LLM proposer when FACTORY_LLM_BACKEND is set,
+    otherwise falls back to deterministic greedy proposer. Stops on
+    patience, budget, hard gate, exhaustion, divergence, or confidence.
+    """
+    from pipeline.factory_state import load_state_from_disk
+    from pipeline.factory_executor import run_factory_from_disk
+    from pipeline.factory_llm import create_llm_proposer
+
+    _factory_patience = int(os.environ.get("FACTORY_PATIENCE", "5"))
+    _factory_tolerance = float(os.environ.get("FACTORY_TOLERANCE", "0.02"))
+    _factory_max_iter = int(os.environ.get("FACTORY_MAX_ITER", "20"))
+    _factory_regime_floor = float(os.environ.get("FACTORY_REGIME_FLOOR", "0.3"))
+
+    _llm_backend = os.environ.get("FACTORY_LLM_BACKEND", "deepseek").strip().lower()
+    proposer = None
+    if _llm_backend and _llm_backend not in ("none", "deterministic"):
+        proposer = create_llm_proposer()
+        print(f"\n[FACTORY] LLM backend: {_llm_backend}")
+        if not os.environ.get("DEEPSEEK_API_KEY") and _llm_backend == "deepseek":
+            print("[FACTORY] WARNING: DEEPSEEK_API_KEY not set — LLM will fall back to deterministic")
+
+    print("\n" + "=" * 72)
+    print("  FACTORY — Iterative Committee Optimizer")
+    if proposer is not None:
+        print(f"  Proposer: LLM ({_llm_backend})")
+    else:
+        print("  Proposer: Deterministic greedy")
+    print(f"  Patience: {_factory_patience}  |  Tolerance: {_factory_tolerance}")
+    print(f"  Max iterations: {_factory_max_iter}  |  Regime floor: {_factory_regime_floor}")
+    print("=" * 72)
+
+    # First, ensure we have a profiler matrix and initial config
+    matrix_path = os.path.join(run_dir, "racecar", "regime_model_matrix.json")
+    config_path = os.path.join(run_dir, "racecar", "committee_config.json")
+
+    if not os.path.exists(matrix_path) or not os.path.exists(config_path):
+        print("[FACTORY] No prior Racecar output found — running Racecar first...")
+        _run_racecar(model_list, run_dir, features_config, features_config_rep)
+        matrix_path = os.path.join(run_dir, "racecar", "regime_model_matrix.json")
+        config_path = os.path.join(run_dir, "racecar", "committee_config.json")
+
+    csv_path = features_config.get("csv_data_path") or os.path.join(
+        "csv_data", "EURUSD_10_years_H1_OANDA.csv")
+
+    result = run_factory_from_disk(
+        config_path=config_path,
+        matrix_path=matrix_path,
+        data_path=csv_path,
+        patience=_factory_patience,
+        tolerance=_factory_tolerance,
+        regime_floor=_factory_regime_floor,
+        max_iter=_factory_max_iter,
+        out_dir=os.path.join(run_dir, "factory"),
+        verbose=True,
+        proposer=proposer,
+    )
+    if result:
+        print(f"\n[FACTORY] Best Sharpe: {result.global_best_sharpe:.4f}")
+        print(f"[FACTORY] Iterations: {result.iteration}")
+
 
 if __name__ == "__main__":
     import atexit

@@ -30,12 +30,12 @@ if "%MODE%"=="quick" (
     set "N_MONTHS=1"
     set "N_TRIALS_ENV=1"
 ) else if "%MODE%"=="full" (
-    set "MODELS=logistic,xgboost,cnn,lstm,transformer,dqn,ensemble_cnn_lstm_xgboost,ensemble_adaptive_regime"
+    set "MODELS=logistic,xgboost,lightgbm,catboost,cnn,lstm,transformer,gru,gru_lstm,dqn,ensemble_cnn_lstm_xgboost,ensemble_adaptive_regime,meta_ensemble,stacking_ensemble"
     set "N_MONTHS=3"
     set "N_TRIALS_ENV=0"
 ) else (
     REM smoke mode
-    set "MODELS=logistic,xgboost,cnn,lstm,transformer,dqn,ensemble_cnn_lstm_xgboost,ensemble_adaptive_regime"
+    set "MODELS=logistic,xgboost,lightgbm,catboost,cnn,lstm,transformer,gru,gru_lstm,dqn,ensemble_cnn_lstm_xgboost,ensemble_adaptive_regime,meta_ensemble,stacking_ensemble"
     set "N_MONTHS=1"
     set "N_TRIALS_ENV=1"
 )

@@ -36,6 +36,8 @@ class HPOProgress:
 
     def set_n_trials(self, n):
         self._n_total = n
+        if self._start <= 0:
+            self._start = time.time()
 
     def update_trial(self, trial_num, best_val, fold_srs=None, cv_result=None):
         if not self._enabled:
@@ -43,10 +45,11 @@ class HPOProgress:
         elapsed = time.time() - self._start
         n = self._n_total
         bar = self._bar(trial_num, n)
+        avg_str = f"{(elapsed / max(1, trial_num)):.1f}s/t" if trial_num > 0 else "?"
         if self._is_tty:
             sys.stdout.write(
                 f"\r HPO {bar}  {trial_num}/{n}  │  Best SR: {best_val:.2f}  │  "
-                f"⌀ {elapsed/trial_num:.1f}s/t  │  ETA {self._eta(trial_num, n, elapsed)}"
+                f"⌀ {avg_str}  │  ETA {self._eta(trial_num, n, elapsed)}"
             )
         if fold_srs is not None and trial_num != self._last_trial:
             self._last_trial = trial_num
@@ -70,7 +73,8 @@ class HPOProgress:
             return
         bar = self._bar(fold, total)
         best = f"  │  Best SR: {best_sr:.2f}" if best_sr is not None else ""
-        sys.stdout.write(f"\r WFO {bar}  {fold}/{total} folds  │  ⌀ {elapsed_s/fold:.1f}s/fold{best}")
+        avg_str = f"{elapsed_s / max(1, fold):.1f}s/fold" if fold > 0 else "?"
+        sys.stdout.write(f"\r WFO {bar}  {fold}/{total} folds  │  ⌀ {avg_str}{best}")
         sys.stdout.flush()
 
     def draw_final(self, elapsed, trades, sr, sharpe, dd):
@@ -95,7 +99,11 @@ class HPOProgress:
     def _eta(n, total, elapsed):
         if n <= 0 or total <= 0:
             return "?"
+        if n <= 1:
+            return "?m"
         remaining = (elapsed / n) * (total - n)
         if remaining < 60:
             return f"{remaining:.0f}s"
-        return f"{remaining/60:.1f}m"
+        if remaining < 3600:
+            return f"{remaining/60:.1f}m"
+        return f"{remaining/3600:.1f}h"

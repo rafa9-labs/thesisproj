@@ -39,19 +39,16 @@ export function ConfigSummaryBar() {
 
   return (
     <div
-      className="flex items-center"
+      className="flex items-center px-6 pb-4"
       style={{
         borderBottom: "1px solid var(--color-glass-border)",
-        paddingBottom: 16,
-        gap: 0,
       }}
     >
       {readouts.map(({ label, value, active }, i) => (
         <div
           key={label}
-          className="flex flex-col"
+          className="flex flex-col flex-1"
           style={{
-            flex: 1,
             paddingLeft: i === 0 ? 0 : 24,
             paddingRight: 24,
           }}

@@ -12,9 +12,9 @@ function CompareSkeleton() {
   return (
     <div className="flex flex-col gap-6 animate-pulse">
       <div className="h-10 w-64 rounded" style={{ backgroundColor: "var(--color-elevated)" }} />
-      <div className="h-[280px] rounded-lg" style={{ backgroundColor: "var(--color-surface)" }} />
-      <div className="h-[400px] rounded-lg" style={{ backgroundColor: "var(--color-surface)" }} />
-      <div className="h-[300px] rounded-lg" style={{ backgroundColor: "var(--color-surface)" }} />
+      <div className="h-[280px] rounded-sm" style={{ backgroundColor: "var(--color-surface)" }} />
+      <div className="h-[400px] rounded-sm" style={{ backgroundColor: "var(--color-surface)" }} />
+      <div className="h-[300px] rounded-sm" style={{ backgroundColor: "var(--color-surface)" }} />
     </div>
   );
 }
@@ -122,7 +122,7 @@ export function ComparePage() {
 
       {selectedJobId && !resultsLoading && !results && (
         <div
-          className="flex items-center justify-center rounded-lg border p-8"
+          className="flex items-center justify-center rounded-sm border p-8"
           style={{
             backgroundColor: "var(--color-glass)",
             borderColor: "var(--color-glass-border)",

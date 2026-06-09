@@ -30,10 +30,10 @@ export function RuntimeEstimate() {
   const { estimated_minutes_low, estimated_minutes_high, total_trials } = data;
 
   let color = "var(--color-text-muted)";
-  if (estimated_minutes_high <= 2) color = "#22c55e";
-  else if (estimated_minutes_high <= 10) color = "#eab308";
+  if (estimated_minutes_high <= 2) color = "var(--color-accent-success)";
+  else if (estimated_minutes_high <= 10) color = "var(--color-accent-warning)";
   else if (estimated_minutes_high <= 60) color = "#f97316";
-  else color = "#ef4444";
+  else color = "var(--color-accent-danger)";
 
   const formatTime = (mins: number) => {
     if (mins < 1) return `${Math.round(mins * 60)}s`;

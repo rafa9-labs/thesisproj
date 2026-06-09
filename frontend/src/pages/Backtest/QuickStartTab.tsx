@@ -36,7 +36,7 @@ export function QuickStartTab(_props: Props) {
 
   return (
     <div
-      className="flex flex-col rounded-xl border p-6"
+      className="flex flex-col rounded-sm border p-6"
       style={{
         backgroundColor: "var(--color-glass)",
         borderColor: "var(--color-glass-border)",
@@ -82,7 +82,7 @@ export function QuickStartTab(_props: Props) {
                   <div
                     key={opt.key}
                     onClick={() => handlePreset(opt.key)}
-                    className="rounded-lg border p-5 flex flex-col cursor-pointer transition-all duration-150"
+                    className="rounded-sm border p-5 flex flex-col cursor-pointer transition-all duration-150"
                     style={{
                       backgroundColor: "var(--color-elevated)",
                       borderColor: "var(--color-glass-border)",
@@ -104,6 +104,18 @@ export function QuickStartTab(_props: Props) {
                       >
                         {opt.label}
                       </span>
+                      {(opt as any).isNew && (
+                        <span
+                          className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-[0.08em]"
+                          style={{
+                            color: "#A8E063",
+                            backgroundColor: "rgba(168, 224, 99, 0.1)",
+                            border: "1px solid rgba(168, 224, 99, 0.2)",
+                          }}
+                        >
+                          NEW
+                        </span>
+                      )}
                       <span
                         className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10px] tabular-nums font-medium"
                         style={{
@@ -177,7 +189,7 @@ export function QuickStartTab(_props: Props) {
             {Object.entries(customPresets).map(([key, p]) => (
               <div
                 key={key}
-                className="rounded-lg border p-6 flex items-center justify-between"
+                className="rounded-sm border p-6 flex items-center justify-between"
                 style={{
                   borderColor: "var(--color-glass-border)",
                   backgroundColor: "var(--color-elevated)",

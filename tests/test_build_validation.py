@@ -74,7 +74,7 @@ class TestPipelineModulesAvailable:
 
     def test_model_registry(self):
         from models.registry import MODEL_REGISTRY, build_model
-        assert len(MODEL_REGISTRY) >= 10
+        assert len(MODEL_REGISTRY) >= 16
 
     def test_execution_modules(self):
         from pipeline.execution.position_sizing import SizingMethod

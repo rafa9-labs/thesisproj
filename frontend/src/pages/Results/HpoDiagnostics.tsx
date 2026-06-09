@@ -61,7 +61,7 @@ export function OptimizationTrace({ trials }: { trials: HpoTrial[] }) {
         );
       })}
       {pts.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r={3} fill="#787B86" opacity={0.5} />
+        <circle key={i} cx={p.x} cy={p.y} r={3} fill="var(--color-text-muted)" opacity={0.5} />
       ))}
       <path d={linePath} fill="none" stroke="var(--color-accent-success)" strokeWidth={1.5} />
       {trials.length <= 30 &&
@@ -92,7 +92,7 @@ export function HpoDiagnostics({ paramImportance, trials }: HpoDiagnosticsProps)
   if (importance.length === 0 && trialData.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-lg border p-8"
+        className="flex items-center justify-center rounded-sm border p-8"
         style={{
           backgroundColor: "var(--color-surface)",
           borderColor: "var(--color-border)",
@@ -121,7 +121,7 @@ export function HpoDiagnostics({ paramImportance, trials }: HpoDiagnosticsProps)
       </h3>
       <div className="grid grid-cols-2 gap-4">
         <div
-          className="rounded-lg border p-3"
+          className="rounded-sm border p-3"
           style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
         >
           <span
@@ -133,7 +133,7 @@ export function HpoDiagnostics({ paramImportance, trials }: HpoDiagnosticsProps)
           <HorizontalBarChart data={barData} barColor="var(--color-accent-success)" />
         </div>
         <div
-          className="rounded-lg border p-3"
+          className="rounded-sm border p-3"
           style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
         >
           <span

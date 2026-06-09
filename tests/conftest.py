@@ -4,6 +4,8 @@ import os
 import sys
 import pytest
 
+os.environ.setdefault("MLB_DISABLE_OPTUNA_PRUNING", "1")
+
 import numpy as np
 import pandas as pd
 
@@ -149,3 +151,50 @@ def seed_placeholder_db(tmp_path_factory):
     """
     db_path = str(tmp_path_factory.mktemp("forex_test") / "forex.db")
     return _seed_placeholder_db_impl(db_path)
+
+
+@pytest.fixture(scope="session")
+def mock_ohlc_df():
+    """Synthetic 1000-bar OHLC DataFrame for fast pipeline testing.
+
+    Random walk with drift + sine overlay creates trend + mean-reverting regimes.
+    Columns match the pipeline's expected CSV format: time, mid_open, mid_high,
+    mid_low, mid_close, spread. Indexed by pd.DatetimeIndex at H1 frequency.
+    """
+    import numpy as np
+    import pandas as pd
+
+    rng = np.random.default_rng(42)
+    n = 1000
+
+    base = 1.10000
+    drift = 0.00002
+    noise_scale = 0.0005
+    sine_amp = 0.002
+    sine_period = 120
+
+    rw = np.cumsum(rng.normal(drift, noise_scale, n))
+    sine = sine_amp * np.sin(2 * np.pi * np.arange(n) / sine_period)
+    mid_close = base + rw + sine
+    mid_close = np.maximum(mid_close, 0.50)
+
+    wick = rng.uniform(0.0001, 0.0004, n)
+    mid_high = mid_close + wick
+    mid_low = mid_close - wick * rng.uniform(0.5, 1.5, n)
+    mid_open = mid_close - rng.normal(0, noise_scale * 2, n)
+
+    spread = rng.uniform(0.00005, 0.00025, n)
+
+    start = pd.Timestamp("2020-01-01 00:00:00")
+    idx = pd.date_range(start, periods=n, freq="h")
+
+    df = pd.DataFrame({
+        "time": idx,
+        "mid_open": mid_open,
+        "mid_high": mid_high,
+        "mid_low": mid_low,
+        "mid_close": mid_close,
+        "spread": spread,
+    })
+    df.set_index("time", inplace=True)
+    return df

@@ -40,6 +40,7 @@ class DataRangeResponse(BaseModel):
 class DownloadRequest(BaseModel):
     pair: str
     years: int = 10
+    base_timeframe: str = "M30"
 
 
 class DownloadResponse(BaseModel):

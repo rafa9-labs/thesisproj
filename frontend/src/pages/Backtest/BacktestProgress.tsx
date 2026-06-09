@@ -120,7 +120,7 @@ export function BacktestProgress({ jobId }: { jobId: string | null }) {
 
   return (
     <div
-      className="rounded-lg border p-4"
+      className="rounded-sm border p-4"
       style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
     >
       {/* Header */}

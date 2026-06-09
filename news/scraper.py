@@ -38,11 +38,18 @@ ECONOMIC_EVENTS = [
 ]
 
 RSS_FEEDS = {
-    "reuters_fx": "https://www.reuters.com/rssFeed/currenciesNews",
-    "reuters_markets": "https://www.reuters.com/rssFeed/marketsNews",
     "forexlive": "https://www.forexlive.com/feed",
     "investing_fx": "https://www.investing.com/rss/news_301.rss",
 }
+
+
+import re as _re
+
+_HTML_TAG = _re.compile(r"<[^>]*>")
+_MULTI_SPACE = _re.compile(r"\s+")
+
+def _strip_html(text: str) -> str:
+    return _MULTI_SPACE.sub(" ", _HTML_TAG.sub(" ", text or "")).strip()
 
 
 @dataclass
@@ -63,6 +70,21 @@ class NewsArticle:
     @property
     def dedup_hash(self) -> str:
         return self._dedup_hash
+
+    @property
+    def summary(self) -> str:
+        text = _strip_html(self.body)
+        if len(text) <= 180:
+            return text
+        return text[:177].rsplit(" ", 1)[0] + "..."
+    
+    @staticmethod
+    def bias_label(score: float) -> str:
+        if score > 0.05:
+            return "long"
+        if score < -0.05:
+            return "short"
+        return "neutral"
 
 
 class NewsScraper:
@@ -89,7 +111,6 @@ class NewsScraper:
         self.rate_limit_sec = rate_limit_sec
         self.newsapi_key = newsapi_key or os.environ.get("NEWSAPI_KEY", "")
         self._last_request_time = 0.0
-        self._seen_hashes: set = set()
 
     def _rate_limit(self):
         elapsed = time.time() - self._last_request_time
@@ -97,23 +118,17 @@ class NewsScraper:
             time.sleep(self.rate_limit_sec - elapsed)
         self._last_request_time = time.time()
 
-    def _add_to_seen(self, articles: List[NewsArticle]) -> List[NewsArticle]:
-        unique = []
-        for a in articles:
-            if a.dedup_hash not in self._seen_hashes:
-                self._seen_hashes.add(a.dedup_hash)
-                unique.append(a)
-        return unique
-
     # -- RSS ----------------------------------------------------------
 
-    def fetch_rss(self, feed_urls: Dict[str, str] | None = None) -> List[NewsArticle]:
+    def fetch_rss(self, feed_urls: Dict[str, str] | None = None, cached_hashes: set | None = None) -> List[NewsArticle]:
         """Fetch articles from RSS feeds.
 
         Parameters
         ----------
         feed_urls : dict or None
             ``{name: url}`` mapping. Defaults to :data:`RSS_FEEDS`.
+        cached_hashes : set or None
+            Dedup hashes already in cache -- skip entries that match.
 
         Returns
         -------
@@ -121,6 +136,7 @@ class NewsScraper:
         """
         feeds = feed_urls or RSS_FEEDS
         articles: List[NewsArticle] = []
+        hashes = cached_hashes or set()
 
         try:
             import feedparser
@@ -135,6 +151,10 @@ class NewsScraper:
                 for entry in getattr(parsed, "entries", []):
                     title = getattr(entry, "title", "").strip()
                     if not title:
+                        continue
+                    raw = f"{title}:{name}"
+                    entry_hash = hashlib.sha256(raw.encode()).hexdigest()[:16]
+                    if entry_hash in hashes:
                         continue
                     body = getattr(entry, "summary", getattr(entry, "description", ""))
                     if isinstance(body, list):
@@ -155,7 +175,7 @@ class NewsScraper:
             except Exception as exc:
                 logger.debug("RSS fetch failed for %s: %s", name, exc)
 
-        return self._add_to_seen(articles)
+        return articles
 
     # -- NewsAPI ------------------------------------------------------
 
@@ -224,7 +244,7 @@ class NewsScraper:
         except Exception as exc:
             logger.debug("NewsAPI fetch failed: %s", exc)
 
-        return self._add_to_seen(articles)
+        return articles
 
     # -- Economic Calendar --------------------------------------------
 
@@ -322,14 +342,23 @@ class NewsScraper:
     # -- Disk Cache ---------------------------------------------------
 
     def save_cache(self, articles: List[NewsArticle], label: str = "articles"):
-        """Save articles to Parquet cache."""
+        """Save articles to Parquet cache with atomic write and eviction."""
         if not articles:
             return
+
+        now = datetime.now(timezone.utc)
+        cutoff = now - pd.Timedelta(days=60)
+        articles = [a for a in articles
+                    if (isinstance(a.timestamp, datetime) and a.timestamp.replace(tzinfo=timezone.utc) >= cutoff)
+                    or (isinstance(a.timestamp, str) and a.timestamp >= cutoff.isoformat())]
+        articles.sort(key=lambda a: a.timestamp if isinstance(a.timestamp, datetime) else datetime.min, reverse=True)
+        articles = articles[:2000]
+
         rows = []
         for a in articles:
             rows.append({
                 "title": a.title,
-                "body": a.body,
+                "body": _strip_html(a.body),
                 "timestamp": a.timestamp.isoformat() if isinstance(a.timestamp, datetime) else str(a.timestamp),
                 "source": a.source,
                 "url": a.url,
@@ -338,7 +367,9 @@ class NewsScraper:
             })
         df = pd.DataFrame(rows)
         path = self.cache_dir / f"{label}.parquet"
-        df.to_parquet(path, index=False)
+        tmp_path = path.with_suffix(".tmp")
+        df.to_parquet(tmp_path, index=False)
+        os.replace(tmp_path, path)
         logger.debug("Cached %d articles to %s", len(df), path)
 
     def load_cache(self, label: str = "articles") -> List[NewsArticle]:
@@ -370,7 +401,6 @@ class NewsScraper:
                     url=str(row.get("url", "")),
                     pair_tags=pair_tags if isinstance(pair_tags, list) else [],
                 ))
-            self._add_to_seen(articles)
             logger.debug("Loaded %d cached articles from %s", len(articles), path)
             return articles
         except Exception as exc:
@@ -405,9 +435,10 @@ class NewsScraper:
         """
         cached = self.load_cache(cache_label)
         new_articles: List[NewsArticle] = []
+        cached_hashes = {a.dedup_hash for a in cached}
 
         if use_rss:
-            new_articles.extend(self.fetch_rss())
+            new_articles.extend(self.fetch_rss(cached_hashes=cached_hashes))
 
         if use_newsapi:
             api_articles = self.fetch_newsapi(from_date=from_date, to_date=to_date)
@@ -450,22 +481,86 @@ class NewsScraper:
                     pass
         return datetime.now(timezone.utc)
 
+    _CURRENCY_PATTERNS = [
+        ("EURUSD", r"\bEURUSD\b|\bEUR/USD\b"),
+        ("GBPUSD", r"\bGBPUSD\b|\bGBP/USD\b"),
+        ("USDJPY", r"\bUSDJPY\b|\bUSD/JPY\b"),
+        ("AUDUSD", r"\bAUDUSD\b|\bAUD/USD\b"),
+        ("USDCAD", r"\bUSDCAD\b|\bUSD/CAD\b"),
+        ("NZDUSD", r"\bNZDUSD\b|\bNZD/USD\b"),
+        ("USDCHF", r"\bUSDCHF\b|\bUSD/CHF\b"),
+        ("XAUUSD", r"\bXAUUSD\b|\bXAU/USD\b"),
+    ]
+
+    _CURRENCY_CODE_PATTERNS = [
+        ("EUR", r"\bEUR\b"),
+        ("USD", r"\bUSD\b"),
+        ("GBP", r"\bGBP\b"),
+        ("JPY", r"\bJPY\b"),
+        ("AUD", r"\bAUD\b"),
+        ("CAD", r"\bCAD\b"),
+        ("NZD", r"\bNZD\b"),
+        ("CHF", r"\bCHF\b"),
+    ]
+
+    _CURRENCY_KEYWORDS = {
+        "EUR": [r"\beuro(?:zone|pean)?\b", r"\becb\b", r"\bbundesbank\b", r"\blagarde\b",
+                r"\bgermany\b", r"\bgerman\b", r"\bfrance\b", r"\bfrench\b", r"\bparis\b", r"\bberlin\b"],
+        "USD": [r"\bdollar\b", r"\bfederal reserve\b", r"\bfomc\b", r"\bpowell\b", r"\bwall street\b"],
+        "GBP": [r"\bpound\b", r"\bsterling\b", r"\bboe\b", r"\bcable\b", r"\bkingdom\b",
+                r"\bbritain\b", r"\bbritish\b", r"\blondon\b", r"\buk\b"],
+        "JPY": [r"\byen\b", r"\bboj\b", r"\bkuroda\b", r"\btokyo\b", r"\bjapan\b", r"\bjapanese\b"],
+        "AUD": [r"\baussie\b", r"\brba\b", r"\bsydney\b", r"\baustralia\b", r"\baustralian\b"],
+        "CAD": [r"\bloonie\b", r"\bboc\b", r"\bottawa\b", r"\bcanada\b", r"\bcanadian\b"],
+        "NZD": [r"\bkiwi\b", r"\brbnz\b", r"\bwellington\b", r"\bnew zealand\b"],
+        "CHF": [r"\bfranc\b", r"\bsnb\b", r"\bzurich\b", r"\bswiss\b", r"\bswitzerland\b"],
+    }
+
+    _pair_regex = _re.compile(
+        "|".join(f"(?:{p})" for _, p in _CURRENCY_PATTERNS),
+        _re.IGNORECASE,
+    )
+    _currency_code_regex = _re.compile(
+        "|".join(f"(?:{p})" for _, p in _CURRENCY_CODE_PATTERNS),
+        _re.IGNORECASE,
+    )
+    _keyword_regex_map = {
+        cc: _re.compile("|".join(f"(?:{kw})" for kw in kws), _re.IGNORECASE)
+        for cc, kws in _CURRENCY_KEYWORDS.items()
+    }
+
     @staticmethod
     def _extract_pair_tags(text: str) -> List[str]:
-        pairs = [
-            "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
-            "NZDUSD", "USDCHF", "XAUUSD",
-            "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD",
-            "NZD/USD", "USD/CHF", "XAU/USD",
-        ]
-        text_upper = text.upper()
-        found = []
-        for p in pairs:
-            if p in text_upper:
-                tag = p.replace("/", "")
-                if tag not in found:
-                    found.append(tag)
+        found: List[str] = []
+
+        # Pass 1: full pair symbols (EURUSD, EUR/USD)
+        for match in NewsScraper._pair_regex.finditer(text):
+            tag = match.group(0).replace("/", "")
+            if tag not in found:
+                found.append(tag)
+
+        # Pass 2: individual currency codes (EUR, USD, etc.)
+        for match in NewsScraper._currency_code_regex.finditer(text):
+            tag = match.group(0).upper()
+            if tag not in found:
+                found.append(tag)
+
+        # Pass 3: keyword-derived currency tags (euro -> EUR, dollar -> USD, etc.)
+        for cc, regex in NewsScraper._keyword_regex_map.items():
+            if regex.search(text) and cc not in found:
+                found.append(cc)
+
         return found
+
+    @staticmethod
+    def _add_to_seen(articles: List[NewsArticle]) -> List[NewsArticle]:
+        seen: set = set()
+        unique: List[NewsArticle] = []
+        for a in articles:
+            if a.dedup_hash not in seen:
+                seen.add(a.dedup_hash)
+                unique.append(a)
+        return unique
 
     @staticmethod
     def filter_by_pair(articles: List[NewsArticle], pair: str) -> List[NewsArticle]:
@@ -474,12 +569,16 @@ class NewsScraper:
         Matches articles whose pair_tags include:
         - the full pair symbol (e.g. EURUSD)
         - either individual currency (e.g. EUR or USD)
+
+        Tags are populated by _extract_pair_tags at ingestion time.
+        No runtime text scanning or keyword fallback.
         """
         pair = pair.upper().replace("/", "").replace("-", "")
         if not pair or len(pair) < 6:
             return articles
         base = pair[:3]
         quote = pair[3:]
+
         relevant = []
         for article in articles:
             tags = [t.upper() for t in article.pair_tags]

@@ -904,6 +904,12 @@ class FeaturesMixin:
                 except Exception as e:
                     _debug_once("feat_cache_miss_diag", e)
 
+        # ── Phase -1 locked features filter ──
+        locked = cfg.get("locked_features")
+        if locked:
+            locked_set = set(locked)
+            features = [f for f in features if f in locked_set]
+
         return df_out, features
 
     

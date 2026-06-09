@@ -39,7 +39,10 @@ LOCKED_FEATURES: FrozenSet[str] = frozenset({
 
 PAID_MODELS: FrozenSet[str] = frozenset({
     "svm", "decision_tree", "cnn", "lstm", "transformer",
-    "dqn", "ensemble_cnn_lstm_xgboost", "ensemble_adaptive_regime",
+    "dqn", "gru", "gru_lstm",
+    "lightgbm", "catboost",
+    "ensemble_cnn_lstm_xgboost", "ensemble_adaptive_regime",
+    "meta_ensemble", "stacking_ensemble", "regime_classifier",
 })
 
 ALL_MODELS: FrozenSet[str] = FREE_MODELS | PAID_MODELS

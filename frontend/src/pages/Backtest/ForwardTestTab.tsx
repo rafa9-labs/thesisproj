@@ -97,12 +97,20 @@ interface ModelBadgeProps {
 }
 function ModelTypeBadge({ type }: ModelBadgeProps) {
   const palette: Record<string, { bg: string; color: string }> = {
-    logistic:  { bg: "rgba(0,229,255,0.10)",   color: "var(--color-brand)" },
-    xgboost:   { bg: "rgba(91,192,235,0.12)",  color: "#5BC0EB" },
-    lstm:      { bg: "rgba(180,120,255,0.10)", color: "#B478FF" },
-    cnn:       { bg: "rgba(255,165,0,0.10)",   color: "#FFA500" },
-    svm:       { bg: "rgba(255,82,82,0.10)",   color: "#FF5252" },
-    ensemble:  { bg: "rgba(72,213,151,0.10)",  color: "#48D597" },
+    logistic:       { bg: "rgba(0,229,255,0.10)",   color: "var(--color-brand)" },
+    xgboost:        { bg: "rgba(91,192,235,0.12)",  color: "var(--color-accent-classical)" },
+    random_forest:  { bg: "rgba(72,213,151,0.10)",  color: "var(--color-accent-success)" },
+    decision_tree:  { bg: "rgba(72,213,151,0.08)",  color: "var(--color-accent-success)" },
+    lightgbm:       { bg: "rgba(72,213,151,0.12)",  color: "var(--color-accent-success)" },
+    catboost:       { bg: "rgba(72,213,151,0.10)",  color: "var(--color-accent-success)" },
+    lstm:           { bg: "rgba(180,120,255,0.10)", color: "var(--color-accent-deep)" },
+    cnn:            { bg: "rgba(255,165,0,0.10)",   color: "var(--color-accent-warning)" },
+    transformer:    { bg: "rgba(180,120,255,0.12)", color: "var(--color-accent-deep)" },
+    gru:            { bg: "rgba(50,200,255,0.10)",  color: "var(--color-brand)" },
+    gru_lstm:       { bg: "rgba(50,200,255,0.12)",  color: "var(--color-brand)" },
+    svm:            { bg: "rgba(255,82,82,0.10)",   color: "var(--color-accent-danger)" },
+    dqn:            { bg: "rgba(255,82,82,0.12)",   color: "var(--color-accent-danger)" },
+    ensemble:       { bg: "rgba(72,213,151,0.10)",  color: "var(--color-accent-success)" },
   };
   const key = Object.keys(palette).find((k) => type?.toLowerCase().includes(k)) ?? "logistic";
   const { bg, color } = palette[key];
@@ -128,7 +136,7 @@ function ModelTypeBadge({ type }: ModelBadgeProps) {
 function StatChip({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
   return (
     <div
-      className="flex flex-col gap-0.5 rounded-lg px-3 py-2"
+      className="flex flex-col gap-0.5 rounded-sm px-3 py-2"
       style={{ backgroundColor: "var(--color-elevated)", minWidth: 80 }}
     >
       <span style={{ fontSize: 9, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -253,7 +261,7 @@ export function ForwardTestTab() {
       {/* ── error banner ── */}
       {error && (
         <div
-          className="flex items-center gap-2 rounded-lg border px-4 py-2.5"
+          className="flex items-center gap-2 rounded-sm border px-4 py-2.5"
           style={{ borderColor: "var(--color-accent-danger)", backgroundColor: "rgba(239,68,68,0.06)" }}
         >
           <TriangleAlert size={14} style={{ color: "var(--color-accent-danger)", flexShrink: 0 }} />
@@ -268,12 +276,12 @@ export function ForwardTestTab() {
         {loadingModels ? (
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-9 rounded-lg animate-pulse flex-1" style={{ backgroundColor: "var(--color-elevated)" }} />
+              <div key={i} className="h-9 rounded-sm animate-pulse flex-1" style={{ backgroundColor: "var(--color-elevated)" }} />
             ))}
           </div>
         ) : activeModels.length === 0 ? (
           <div
-            className="flex items-center gap-3 rounded-lg px-4 py-3"
+            className="flex items-center gap-3 rounded-sm px-4 py-3"
             style={{ backgroundColor: "var(--color-elevated)", border: "1px dashed var(--color-glass-border)" }}
           >
             <TriangleAlert size={14} style={{ color: "var(--color-accent-warning)" }} />
@@ -287,7 +295,7 @@ export function ForwardTestTab() {
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setModelOpen((o) => !o)}
-                className="flex w-full items-center justify-between rounded-lg border px-3 py-2.5 transition-all duration-150"
+                className="flex w-full items-center justify-between rounded-sm border px-3 py-2.5 transition-all duration-150"
                 style={{
                   backgroundColor: "var(--color-elevated)",
                   borderColor: modelOpen ? "var(--color-brand)" : "var(--color-glass-border)",
@@ -474,7 +482,7 @@ export function ForwardTestTab() {
               <button
                 key={opt.value}
                 onClick={() => setPosSizing(opt.value)}
-                className="flex flex-col gap-0.5 rounded-lg border px-3 py-2 text-left transition-all duration-150"
+                className="flex flex-col gap-0.5 rounded-sm border px-3 py-2 text-left transition-all duration-150"
                 style={{
                   borderColor: active ? "var(--color-brand)" : "var(--color-glass-border)",
                   backgroundColor: active ? "var(--color-brand-glow)" : "var(--color-elevated)",
@@ -508,7 +516,7 @@ export function ForwardTestTab() {
 
         <button
           onClick={() => setUseCosts((v) => !v)}
-          className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-all duration-150"
+          className="flex items-center gap-3 rounded-sm border px-4 py-3 transition-all duration-150"
           style={{
             borderColor: useCosts ? "var(--color-brand)" : "var(--color-glass-border)",
             backgroundColor: useCosts ? "var(--color-brand-glow)" : "var(--color-elevated)",
@@ -558,7 +566,7 @@ export function ForwardTestTab() {
         <button
           onClick={handleRun}
           disabled={!selectedModel || isSubmitting}
-          className="flex items-center gap-2.5 rounded-lg px-6 py-2.5 transition-all duration-150 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex items-center gap-2.5 rounded-sm px-6 py-2.5 transition-all duration-150 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
             backgroundColor: "var(--color-brand)",
             color: "var(--color-text-inverse)",

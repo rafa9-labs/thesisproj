@@ -95,16 +95,19 @@ class TestNewsScraper:
     def test_save_and_load_cache(self):
         with tempfile.TemporaryDirectory() as td:
             scraper = NewsScraper(cache_dir=td)
+            now = datetime.now(timezone.utc)
             articles = [
-                NewsArticle(title="Test 1", body="Body 1", timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc), source="s"),
-                NewsArticle(title="Test 2", body="Body 2", timestamp=datetime(2025, 1, 2, tzinfo=timezone.utc), source="s"),
+                NewsArticle(title="Test 1", body="Body 1", timestamp=now - timedelta(days=1), source="s"),
+                NewsArticle(title="Test 2", body="Body 2", timestamp=now, source="s"),
             ]
             scraper.save_cache(articles, label="test_cache")
 
             scraper2 = NewsScraper(cache_dir=td)
             loaded = scraper2.load_cache(label="test_cache")
             assert len(loaded) == 2
-            assert loaded[0].title == "Test 1"
+            titles = {a.title for a in loaded}
+            assert "Test 1" in titles
+            assert "Test 2" in titles
 
     def test_load_cache_empty_on_missing(self):
         scraper = NewsScraper(cache_dir=tempfile.mkdtemp())
@@ -114,8 +117,9 @@ class TestNewsScraper:
     def test_fetch_all_returns_cached(self):
         with tempfile.TemporaryDirectory() as td:
             scraper = NewsScraper(cache_dir=td)
+            now = datetime.now(timezone.utc)
             articles = [
-                NewsArticle(title="Cached", body="body", timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc), source="s"),
+                NewsArticle(title="Cached", body="body", timestamp=now - timedelta(days=1), source="s"),
             ]
             scraper.save_cache(articles, label="test")
 
@@ -465,3 +469,292 @@ class TestNewsFeatureIntegration:
 
         result_df = merge_news_features(df, news_df, config={"use_news": False})
         assert "sentiment_score" not in result_df.columns, "News features should not appear when use_news=False"
+
+
+# ── Enhanced pair tagging (Phase 1) ────────────────────────────────────
+
+class TestEnhancedPairTags:
+    def test_keyword_tagging_ecb_gives_eur(self):
+        text = "ECB raises rates by 25 basis points"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert "EUR" in tags
+
+    def test_keyword_tagging_fed_gives_usd(self):
+        text = "Federal Reserve signals rate cuts ahead"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert "USD" in tags
+
+    def test_keyword_tagging_boe_gives_gbp(self):
+        text = "BOE holds rates steady as pound weakens"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert "GBP" in tags
+
+    def test_currency_code_word_boundary(self):
+        text = "AUD strengthens against major currencies"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert "AUD" in tags
+
+    def test_no_false_positive_audit(self):
+        text = "AUDIT committee reviews financial statements"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert "AUD" not in tags
+
+    def test_multiple_keywords_same_currency(self):
+        text = "Dollar strengthens as Powell speaks at FOMC"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert "USD" in tags
+        assert tags.count("USD") == 1
+
+    def test_pair_and_currency_together(self):
+        text = "EURUSD rallies as ECB and Federal Reserve diverge"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert "EURUSD" in tags
+        assert "EUR" in tags
+        assert "USD" in tags
+
+    def test_lagarde_is_eur(self):
+        text = "Lagarde signals cautious approach"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert "EUR" in tags
+
+    def test_bundesbank_is_eur(self):
+        text = "Bundesbank warns on inflation risks"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert "EUR" in tags
+
+    def test_yen_is_jpy(self):
+        text = "Yen weakens as BOJ maintains policy"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert "JPY" in tags
+
+    def test_generic_terms_not_tagged(self):
+        text = "Global inflation and GDP growth outlook"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert "USD" not in tags
+        assert "EUR" not in tags
+
+    def test_no_pair_mention_gets_zero_tags(self):
+        text = "Markets rally on risk appetite"
+        tags = NewsScraper._extract_pair_tags(text)
+        assert len(tags) == 0
+
+
+class TestFilterByPairSimplified:
+    def setup_method(self):
+        self.eurusd_article = NewsArticle(
+            title="EURUSD rises",
+            body="dollar weakens",
+            timestamp=datetime.now(timezone.utc),
+            source="test",
+            pair_tags=["EURUSD", "EUR", "USD"],
+        )
+        self.gbp_article = NewsArticle(
+            title="BOE holds rates",
+            body="pound stable",
+            timestamp=datetime.now(timezone.utc),
+            source="test",
+            pair_tags=["GBP"],
+        )
+        self.usd_article = NewsArticle(
+            title="Fed minutes",
+            body="dollar outlook",
+            timestamp=datetime.now(timezone.utc),
+            source="test",
+            pair_tags=["USD"],
+        )
+        self.untagged_article = NewsArticle(
+            title="Global markets",
+            body="risk on sentiment",
+            timestamp=datetime.now(timezone.utc),
+            source="test",
+            pair_tags=[],
+        )
+
+    def test_eurusd_article_matches_eurusd(self):
+        result = NewsScraper.filter_by_pair([self.eurusd_article], "EURUSD")
+        assert len(result) == 1
+
+    def test_eurusd_article_does_not_match_gbpjpy(self):
+        result = NewsScraper.filter_by_pair([self.eurusd_article], "GBPJPY")
+        assert len(result) == 0
+
+    def test_eurusd_article_matches_gbpusd_via_usd_tag(self):
+        result = NewsScraper.filter_by_pair([self.eurusd_article], "GBPUSD")
+        assert len(result) == 1
+
+    def test_gbp_article_matches_gbpusd(self):
+        result = NewsScraper.filter_by_pair([self.gbp_article], "GBPUSD")
+        assert len(result) == 1
+
+    def test_gbp_article_does_not_match_eurusd(self):
+        result = NewsScraper.filter_by_pair([self.gbp_article], "EURUSD")
+        assert len(result) == 0
+
+    def test_untagged_article_matches_nothing(self):
+        result = NewsScraper.filter_by_pair([self.untagged_article], "EURUSD")
+        assert len(result) == 0
+
+    def test_usd_article_matches_all_usd_pairs(self):
+        pairs = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD", "USDCHF"]
+        for pair in pairs:
+            result = NewsScraper.filter_by_pair([self.usd_article], pair)
+            assert len(result) == 1, f"USD article should match {pair}"
+
+
+# ── Sentiment cache (Phase 3) ──────────────────────────────────────────
+
+class TestSentimentCache:
+    def test_cache_miss_on_empty(self):
+        from news.sentiment import SentimentAnalyzer
+        result = SentimentAnalyzer.get_cached_sentiment("EURUSD")
+        assert result is None
+
+    def test_cache_hit_after_set(self):
+        from news.sentiment import SentimentAnalyzer
+        SentimentAnalyzer.cache_sentiment("EURUSD", avg_score=0.42, article_count=10, magnitude=0.35)
+        result = SentimentAnalyzer.get_cached_sentiment("EURUSD", max_age_hours=6.0)
+        assert result is not None
+        assert result["score"] == 0.42
+        assert result["article_count"] == 10
+        assert result["magnitude"] == 0.35
+
+    def test_cache_stale_after_ttl(self):
+        from news.sentiment import SentimentAnalyzer
+        SentimentAnalyzer.cache_sentiment("EURUSD", avg_score=0.42, article_count=10)
+        result = SentimentAnalyzer.get_cached_sentiment("EURUSD", max_age_hours=-0.001)
+        assert result is None
+
+    def test_cache_state_returns_metadata(self):
+        from news.sentiment import SentimentAnalyzer
+        SentimentAnalyzer.cache_sentiment("GBPUSD", avg_score=-0.15, article_count=5, magnitude=0.20)
+        state = SentimentAnalyzer.get_sentiment_cache_state("GBPUSD", max_age_hours=6.0)
+        assert state["cached"] is True
+        assert state["last_updated_iso"] is not None
+        assert state["next_update_iso"] is not None
+
+    def test_cache_state_miss(self):
+        from news.sentiment import SentimentAnalyzer
+        state = SentimentAnalyzer.get_sentiment_cache_state("NONEXISTENT", max_age_hours=6.0)
+        assert state["cached"] is False
+
+    def test_pair_normalization(self):
+        from news.sentiment import SentimentAnalyzer
+        SentimentAnalyzer.cache_sentiment("eur/usd", avg_score=0.55, article_count=3)
+        result = SentimentAnalyzer.get_cached_sentiment("EURUSD")
+        assert result is not None
+        assert result["score"] == 0.55
+
+
+# ── Signal blending (Phase 2) ─────────────────────────────────────────
+
+class TestSignalBlending:
+    def setup_method(self):
+        from pipeline.backtester.real_trading_mixin import RealTradingMixin
+        RealTradingMixin._news_blend_timer = 0.0
+        RealTradingMixin._news_blend_cached_pair = ""
+        RealTradingMixin._news_blend_cached_score = 0.0
+
+    def test_blend_disabled_returns_signal_unchanged(self):
+        from pipeline.backtester.real_trading_mixin import RealTradingMixin
+        result = RealTradingMixin._blend_news_sentiment(
+            0.7, "EURUSD", {"live_news_blend_enabled": False}
+        )
+        assert result == 0.7
+
+    def test_blend_no_cache_returns_unchanged(self):
+        from pipeline.backtester.real_trading_mixin import RealTradingMixin
+        result = RealTradingMixin._blend_news_sentiment(
+            0.7, "EURUSD", {"live_news_blend_enabled": True, "live_news_blend_weight": 0.10}
+        )
+        assert result == 0.7
+
+    def test_blend_with_cache_applies_weight(self):
+        from news.sentiment import SentimentAnalyzer
+        from pipeline.backtester.real_trading_mixin import RealTradingMixin
+        SentimentAnalyzer.cache_sentiment("EURUSD", avg_score=0.50, article_count=10)
+        result = RealTradingMixin._blend_news_sentiment(
+            0.7, "EURUSD", {"live_news_blend_enabled": True, "live_news_blend_weight": 0.10}
+        )
+        expected = 0.7 + 0.50 * 0.10
+        assert abs(result - expected) < 1e-6
+
+    def test_blend_clamped_to_one(self):
+        from news.sentiment import SentimentAnalyzer
+        from pipeline.backtester.real_trading_mixin import RealTradingMixin
+        SentimentAnalyzer.cache_sentiment("EURUSD", avg_score=0.90, article_count=10)
+        result = RealTradingMixin._blend_news_sentiment(
+            1.0, "EURUSD", {"live_news_blend_enabled": True, "live_news_blend_weight": 0.30}
+        )
+        assert result == 1.0
+
+    def test_blend_clamped_to_negative_one(self):
+        from news.sentiment import SentimentAnalyzer
+        from pipeline.backtester.real_trading_mixin import RealTradingMixin
+        SentimentAnalyzer.cache_sentiment("EURUSD", avg_score=-0.90, article_count=10)
+        result = RealTradingMixin._blend_news_sentiment(
+            -1.0, "EURUSD", {"live_news_blend_enabled": True, "live_news_blend_weight": 0.30}
+        )
+        assert result == -1.0
+
+    def test_blend_neutral_signal_can_become_directional(self):
+        from news.sentiment import SentimentAnalyzer
+        from pipeline.backtester.real_trading_mixin import RealTradingMixin
+        SentimentAnalyzer.cache_sentiment("EURUSD", avg_score=0.80, article_count=10)
+        result = RealTradingMixin._blend_news_sentiment(
+            0.0, "EURUSD", {"live_news_blend_enabled": True, "live_news_blend_weight": 0.10}
+        )
+        assert result > 0.0
+
+    def test_blend_weight_zero_returns_unchanged(self):
+        from news.sentiment import SentimentAnalyzer
+        from pipeline.backtester.real_trading_mixin import RealTradingMixin
+        SentimentAnalyzer.cache_sentiment("EURUSD", avg_score=0.80, article_count=10)
+        result = RealTradingMixin._blend_news_sentiment(
+            0.7, "EURUSD", {"live_news_blend_enabled": True, "live_news_blend_weight": 0.0}
+        )
+        assert result == 0.7
+
+    # ── Live trading news blending integration tests ─────────────────
+
+    def test_deploy_request_schema_accepts_news_blend_fields(self):
+        from api.routers.live import DeployRequest, DeployCommitteeRequest
+        dr = DeployRequest(pair="EURUSD", model="logistic", live_news_blend_enabled=True, live_news_blend_weight=0.15)
+        assert dr.live_news_blend_enabled is True
+        assert dr.live_news_blend_weight == 0.15
+        dcr = DeployCommitteeRequest(pair="EURUSD", live_news_blend_enabled=True, live_news_blend_weight=0.20)
+        assert dcr.live_news_blend_enabled is True
+        assert dcr.live_news_blend_weight == 0.20
+
+    def test_deploy_request_defaults(self):
+        from api.routers.live import DeployRequest
+        dr = DeployRequest(pair="EURUSD")
+        assert dr.live_news_blend_enabled is False
+        assert dr.live_news_blend_weight == 0.10
+
+    def test_predict_signal_handles_missing_model_gracefully(self):
+        from api.routers.live import _predict_signal
+        session = {"live_news_blend_enabled": False, "pair": "EURUSD", "backtester": None, "model_obj": None}
+        result = _predict_signal(session, None)
+        assert result is None
+
+    def test_session_stores_news_blend_config(self):
+        from api.routers.live import DeployRequest
+        req = DeployRequest(pair="EURUSD", live_news_blend_enabled=True, live_news_blend_weight=0.15)
+        assert req.live_news_blend_enabled is True
+        assert req.live_news_blend_weight == 0.15
+
+    def test_session_config_defaults(self):
+        from api.routers.live import DeployRequest
+        req_enabled = DeployRequest(pair="GBPUSD", live_news_blend_enabled=True)
+        assert req_enabled.live_news_blend_enabled is True
+        assert req_enabled.live_news_blend_weight == 0.10
+        req_disabled = DeployRequest(pair="GBPUSD")
+        assert req_disabled.live_news_blend_enabled is False
+        assert req_disabled.live_news_blend_weight == 0.10
+
+    def test_blend_weight_range_in_deploy_request(self):
+        from api.routers.live import DeployRequest
+        req = DeployRequest(pair="EURUSD", live_news_blend_weight=0.30)
+        assert req.live_news_blend_weight == 0.30
+        req2 = DeployRequest(pair="EURUSD", live_news_blend_weight=0.0)
+        assert req2.live_news_blend_weight == 0.0

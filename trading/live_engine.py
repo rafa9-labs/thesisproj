@@ -139,6 +139,10 @@ class OandaTradingEngine:
         for k, v in sizing_cfg_overrides.items():
             if hasattr(self._sizing_config, k):
                 setattr(self._sizing_config, k, v)
+        trust_mult = float(config.get("trust_multiplier", 1.0))
+        if not (trust_mult >= 0 and trust_mult <= 1.0):
+            trust_mult = 0.0
+        self._sizing_config.trust_multiplier = trust_mult
 
         self._sizing_state = SizingState(equity=initial_equity)
 

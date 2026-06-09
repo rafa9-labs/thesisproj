@@ -37,7 +37,7 @@ export function HpoMonitor({ model, trials, bestTrial, totalTrials }: Props) {
     <div className="flex flex-col gap-3">
       {/* Best trial banner */}
       <div
-        className="flex items-center gap-2 rounded-lg border px-3 py-2"
+        className="flex items-center gap-2 rounded-sm border px-3 py-2"
         style={{
           backgroundColor: "rgba(234,179,8,0.06)",
           borderColor: "rgba(234,179,8,0.2)",
@@ -61,7 +61,7 @@ export function HpoMonitor({ model, trials, bestTrial, totalTrials }: Props) {
       {/* Current trial compact card */}
       {currentTrial ? (
         <div
-          className="flex flex-col gap-2 rounded-lg border px-3 py-2"
+          className="flex flex-col gap-2 rounded-sm border px-3 py-2"
           style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
         >
           <div className="flex items-center gap-3 flex-wrap">
@@ -102,7 +102,7 @@ export function HpoMonitor({ model, trials, bestTrial, totalTrials }: Props) {
         </div>
       ) : (
         <div
-          className="flex items-center justify-center rounded-lg border px-3 py-4"
+          className="flex items-center justify-center rounded-sm border px-3 py-4"
           style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
         >
           <span className="text-xs">HPO trials will appear here...</span>

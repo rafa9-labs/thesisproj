@@ -122,7 +122,7 @@ export function ModelHyperparamsPanel() {
         return (
           <div
             key={m.model}
-            className="rounded-xl border p-6"
+            className="rounded-sm border p-6"
             style={{ borderColor: "var(--color-glass-border)", backgroundColor: "rgba(255,255,255,0.02)" }}
           >
             <div className="flex items-center gap-2 mb-1">

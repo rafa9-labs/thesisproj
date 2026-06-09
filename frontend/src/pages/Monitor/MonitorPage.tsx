@@ -24,7 +24,6 @@ export function MonitorPage() {
   const handleWsEvent = useJobStore((s) => s.handleWsEvent);
   const markCompleted = useJobStore((s) => s.markCompleted);
   const clearCompletedJobs = useJobStore((s) => s.clearCompletedJobs);
-  const removeJob = useJobStore((s) => s.removeJob);
   const forceStop = useForceStopJob();
 
   const [wsConnected, setWsConnected] = useState(false);
@@ -153,7 +152,6 @@ export function MonitorPage() {
         job_id: jobId,
         error: "Stopped by user",
       });
-      removeJob(jobId);
     } catch (err) {
       console.error("Force stop failed:", err);
     }
@@ -186,7 +184,7 @@ export function MonitorPage() {
     return (
       <div className="flex flex-col gap-6">
         <div
-          className="flex flex-col items-center justify-center gap-4 rounded-xl border py-16"
+          className="flex flex-col items-center justify-center gap-4 rounded-sm border py-16"
           style={{
             borderColor: "var(--color-glass-border)",
             backgroundColor: "var(--color-surface)",
@@ -259,7 +257,7 @@ export function MonitorPage() {
             <div className="flex flex-col gap-3" style={{ maxHeight: "calc(100vh - 240px)", overflowY: "auto" }}>
               {selectedJob.cycles.length === 0 && (
                 <div
-                  className="flex items-center justify-center rounded-lg border py-12"
+                  className="flex items-center justify-center rounded-sm border py-12"
                   style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
                 >
                   <span className="text-xs">Waiting for cycles to start...</span>
@@ -271,7 +269,7 @@ export function MonitorPage() {
             </div>
 
             <div
-              className="rounded-lg border p-4"
+              className="rounded-sm border p-4"
               style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
             >
               <EquityChart

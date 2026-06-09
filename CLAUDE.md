@@ -56,7 +56,7 @@
 - `models/logistic.py`, `models/xgboost_model.py`, `models/svm.py`, `models/random_forest.py`
 - `models/cnn.py`, `models/lstm.py`, `models/transformer.py`
 - `models/ensemble_cnn_lstm_xgboost.py`, `models/ensemble_adaptive_regime.py`
-- **All 8 model types verified working end-to-end** (2026-04-15)
+- **All 17 model types verified working end-to-end** (2026-06-01)
 
 ### Frontend (`frontend/`)
 - React + Vite + TypeScript + TailwindCSS
@@ -94,7 +94,7 @@
 - `tests/test_build_validation.py` — PyInstaller spec + hidden imports validation (46 tests)
 - `tests/benchmarks/` — Model timing + memory benchmarks (11 tests, 4 slow)
 - `tests/golden/` — Deterministic output regression tests (7 tests + golden data files)
-- `tests/smoke_all_models.py` — Smoke test for all 8 model types
+- `tests/smoke_all_models.py` — Smoke test for all 17 model types
 - `tests/conftest.py` — Shared fixtures
 
 ### Key Utilities
@@ -229,7 +229,7 @@ celery -A api.tasks.celery_app worker --loglevel=info --pool=solo -Q celery
 # Start React frontend (separate terminal)
 cd frontend; npm run dev
 
-# Run smoke test (all 8 models, 1 trial)
+# Run smoke test (all 17 models, 1 trial)
 .\run_smoke.bat
 
 # Run model comparison

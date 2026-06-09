@@ -1,0 +1,16 @@
+{
+  "algorithm-language": "Python",
+  "algorithm-location": "algorithm/main.py",
+  "environment": "live",
+  "parameters": {},
+  "data-provider": "Interactive Brokers",
+  "live-mode": true,
+  "live-mode-brokerage": "InteractiveBrokersBrokerage",
+  "transaction-logging": true,
+  "job-queue-handling": false,
+  "results-destination-folder": "live",
+  "api": {
+    "port": 8888,
+    "bind": "0.0.0.0"
+  }
+}

@@ -10,6 +10,56 @@ class RealTradingMixin:
 
     Auto-extracted from MLBacktesterNoWFO.py lines 15359-18440.
     """
+    # ── News sentiment blending (live trading only) ──────────────────
+    _news_blend_timer: float = 0.0
+    _news_blend_cached_score: float = 0.0
+    _news_blend_cached_pair: str = ""
+
+    @staticmethod
+    def _blend_news_sentiment(
+        model_signal: float,
+        pair: str,
+        config: dict | None = None,
+    ) -> float:
+        """Blend news sentiment into model signal for live trading.
+
+        Called post-prediction, pre-position-sizing.
+        Formula: adjusted = model_signal + (news_score * weight)
+        Clamped to [-1, 1].
+
+        Uses a 6-hour cache -- only re-fetches news when stale.
+        If news is unavailable, returns model_signal unchanged.
+        """
+        cfg = config or {}
+        if not bool(cfg.get("live_news_blend_enabled", False)):
+            return model_signal
+
+        pair_clean = pair.upper().replace("/", "").replace("-", "")
+        weight = float(cfg.get("live_news_blend_weight", 0.10))
+        cache_hours = float(cfg.get("live_news_cache_hours", 6.0))
+
+        now = time.time()
+        if (
+            RealTradingMixin._news_blend_cached_pair != pair_clean
+            or (now - RealTradingMixin._news_blend_timer) > (cache_hours * 3600.0)
+        ):
+            try:
+                from news.sentiment import SentimentAnalyzer
+                cached = SentimentAnalyzer.get_cached_sentiment(
+                    pair_clean, max_age_hours=cache_hours
+                )
+                if cached is None:
+                    return model_signal
+                RealTradingMixin._news_blend_cached_score = cached["score"]
+                RealTradingMixin._news_blend_timer = now
+                RealTradingMixin._news_blend_cached_pair = pair_clean
+            except Exception:
+                return model_signal
+
+        news_score = RealTradingMixin._news_blend_cached_score
+        adjusted = model_signal + (news_score * weight)
+        return max(-1.0, min(1.0, adjusted))
+
     def real_trading_simulation(self, config, models_to_test=None, months=1):
         """
         Simulate sequential walk-forward live trading:
@@ -1775,6 +1825,18 @@ class RealTradingMixin:
 
                             # Majority vote on {-1,0,+1} (ties go to 0 because sign(0)=0)
                             consensus_raw = _np.sign(preds.sum(axis=0))
+                            # Apply news sentiment blend to consensus signal (live trading only)
+                            try:
+                                _blend_cfg = cfg_local if isinstance(locals().get("cfg_local", None), dict) else {}
+                                if bool(_blend_cfg.get("live_news_blend_enabled", False)):
+                                    _pair_blend = str(getattr(self, "symbol", "EURUSD"))
+                                    _blended = _np.array([
+                                        RealTradingMixin._blend_news_sentiment(float(v), _pair_blend, _blend_cfg)
+                                        for v in consensus_raw
+                                    ], dtype=float)
+                                    consensus_raw = _np.sign(_blended)
+                            except Exception:
+                                pass
                             # Feed decision-time signals; evaluator applies the 1-bar delay exactly once.
                             base_df["raw_pred"] = consensus_raw
                             # Keep pred numeric for preconditions; evaluator overwrites pred from raw_pred anyway.
@@ -2429,6 +2491,20 @@ class RealTradingMixin:
                         if ("cstrategy_cont" in df_for_cont.columns) and ("pred" in df_for_cont.columns):
                             df_for_cont = df_for_cont.copy()
                             df_for_cont["pred"] = df_for_cont["pred"].shift(-1).fillna(0.0)
+
+                        # Blend news sentiment into decision-time pred (live trading signal adjustment)
+                        try:
+                            _blend_cfg = cfg_local if isinstance(locals().get("cfg_local", None), dict) else {}
+                            if bool(_blend_cfg.get("live_news_blend_enabled", False)):
+                                _pair_blend = str(getattr(self, "symbol", "EURUSD"))
+                                _pred_vals = df_for_cont["pred"].astype(float).values
+                                _blended = _np.array([
+                                    RealTradingMixin._blend_news_sentiment(float(v), _pair_blend, _blend_cfg)
+                                    for v in _pred_vals
+                                ], dtype=float)
+                                df_for_cont["pred"] = _blended
+                        except Exception:
+                            pass
 
                         cont_metrics = compute_full_evaluation_metrics(
                             df_for_cont,

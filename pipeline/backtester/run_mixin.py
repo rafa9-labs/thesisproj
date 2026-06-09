@@ -1,5 +1,6 @@
 """Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
+from config import SEARCH_SPACE
 from pipeline._imports import *  # noqa: F401,F403
 from pipeline.printer import HPOProgress
 
@@ -9,6 +10,17 @@ try:
     _optuna_logger.setLevel(_logging.WARNING)
 except Exception:
     pass
+
+
+def _check_throttle():
+    try:
+        from pipeline.resource_monitor import get_throttle_signal
+        sig = get_throttle_signal()
+        if sig and sig.delay > 0:
+            import time
+            time.sleep(sig.delay)
+    except Exception:
+        pass
 
 
 class RunMixin:
@@ -89,6 +101,10 @@ class RunMixin:
 
         log_print(f"Models to test in this WFO: {models_to_test}", level="COMPACT")
 
+        full_data = self.data
+        walk_limit_start = full_data.index[0]
+        walk_data = full_data.loc[walk_limit_start:]
+
         self._progress = HPOProgress()
         try:
             self._progress.draw_header(
@@ -98,17 +114,13 @@ class RunMixin:
                 date_range=(str(walk_data.index[0])[:10], str(walk_data.index[-1])[:10]),
                 cv_info=f"mode={config.get('cv_mode', 'mini_block')}"
             )
-        except Exception:
-            pass
+        except Exception as _he:
+            log_print(f"[WARN] Progress header unavailable: {_he}", level="COMPACT")
 
         model_type = config.get("model_type", "svm")
         use_proba = config.get("use_proba", True)  # currently unused here, kept for parity
 
-        full_data = self.data
-
         # --- Session filter (NY hours) with tz-safety ---
-        walk_limit_start = full_data.index[0]
-        walk_data = full_data.loc[walk_limit_start:]
 
         # Optional: only filter for sessions if you explicitly want to plan WFO on a reduced clock.
         if bool(config.get("wfo_session_filter", False)):
@@ -137,12 +149,20 @@ class RunMixin:
             return [x]
 
         # --- Respect tuned months from Optuna or defaults ---
-        train_months_list = ensure_list(
-            config.get("train_months", TRAIN_TEST_MONTHS[model_type]["train"][0])
-        )
-        test_months_list = ensure_list(
-            config.get("test_months", TRAIN_TEST_MONTHS[model_type]["test"][0])
-        )
+        wfo_train = config.get("wfo_train_periods", None)
+        wfo_test  = config.get("wfo_test_periods", None)
+        if wfo_train is not None:
+            train_months_list = ensure_list(int(wfo_train))
+        else:
+            train_months_list = ensure_list(
+                config.get("train_months", TRAIN_TEST_MONTHS[model_type]["train"][0])
+            )
+        if wfo_test is not None:
+            test_months_list = ensure_list(int(wfo_test))
+        else:
+            test_months_list = ensure_list(
+                config.get("test_months", TRAIN_TEST_MONTHS[model_type]["test"][0])
+            )
         period_unit = config.get("period_unit", "months")
 
         tasks = self.get_walk_forward_splits(
@@ -650,7 +670,9 @@ class RunMixin:
                     # Base fractional geometry (depends only on config + total_len)
                     val_frac  = float(config.get("cv_val_frac", 0.09))
                     min_frac  = float(config.get("cv_min_train_frac", 0.80))
-                    k_blocks_cfg = int(config.get("cv_blocks", 5))
+                    # A: Adaptive K — data-aware block count [3, 10], overridable via cv_blocks
+                    _adaptive_k = max(3, min(10, total_len // 4000))
+                    k_blocks_cfg = int(config.get("cv_blocks", _adaptive_k))
 
                     # Stable identifiers for this train_data (month)
                     try:
@@ -701,14 +723,21 @@ class RunMixin:
                             tb_max_holding_local,
                         )
 
+                        # B: soft floor — min(120, 3% of data) for statistical significance
+                        _soft_floor = min(120, max(30, int(round(0.03 * total_len))))
                         val_window_local = max(
-                            30,
+                            _soft_floor,
                             int(round(val_frac * total_len)),
                         )
                         min_train_local = int(round(min_frac * total_len))
 
                         smin = max(0, min_train_local + int(embargo_bars))
                         smax = total_len - val_window_local
+
+                        # Cap K to what geometry actually supports (before shrink loop refines further)
+                        _fit_usable = max(1, int(smax) - int(smin))
+                        _max_fit_k = max(1, int(_fit_usable // max(1, val_window_local)) + 1)
+                        k_blocks = min(k_blocks, _max_fit_k)
 
                         # Store only small ints; no DataFrames are cached.
                         geom_cache[cv_key] = (
@@ -787,9 +816,9 @@ class RunMixin:
                                 cursor += val_window_local + gap_early
                             splits.append(smax)
 
-                    # Early-stopping knobs for deep models (treat all ensembles as deep)
+                    # Early-stopping knobs for deep models (treat all deep + ensemble as deep)
                     is_ensemble = isinstance(model_type_local, str) and model_type_local.startswith("ensemble_")
-                    is_deep = (model_type_local in {"cnn","lstm","transformer"}) or is_ensemble
+                    is_deep = (model_type_local in {"cnn","lstm","transformer","gru","gru_lstm"}) or is_ensemble
 
                     # =========================
                     # CV pre-setup (deep caps)
@@ -803,21 +832,45 @@ class RunMixin:
                             self._optuna_locked_keys = set()
 
                         cfg["deep_eval_mode"] = "cv_fast"
-
-                        # CV-only caps: install as defaults (won't override trial-set keys)
-                        cfg.setdefault("deep_cv_max_epochs", 8)
                         cfg.setdefault("deep_cv_batch_size", 256)
-                        cfg.setdefault("deep_cv_patience", 6)
 
-                        # Per-model early stopping defaults (don't override Optuna if set)
-                        cfg.setdefault("cnn_use_early_stopping", True)
-                        cfg.setdefault("lstm_use_early_stopping", True)
-                        cfg.setdefault("transformer_use_early_stopping", True)
-
-                        cv_pat = int(cfg.get("deep_cv_patience", 5))
-                        cfg.setdefault("cnn_patience", cv_pat)
-                        cfg.setdefault("lstm_patience", cv_pat)
-                        cfg.setdefault("transformer_patience", cv_pat)
+                        # Per-family CV caps — tuned to convergence speed of each arch
+                        if model_type_local == "transformer":
+                            cfg.setdefault("deep_cv_max_epochs", 6)
+                            cfg.setdefault("deep_cv_patience", 4)
+                            cfg.setdefault("transformer_use_early_stopping", True)
+                            cfg.setdefault("transformer_patience", 4)
+                        elif model_type_local in ("gru", "gru_lstm"):
+                            cfg.setdefault("deep_cv_max_epochs", 12)
+                            cfg.setdefault("deep_cv_patience", 8)
+                            cfg.setdefault("gru_use_early_stopping", True)
+                            cfg.setdefault("gru_lstm_use_early_stopping", True)
+                            cfg.setdefault(f"{model_type_local}_patience", 8)
+                        elif model_type_local == "cnn":
+                            cfg.setdefault("deep_cv_max_epochs", 10)
+                            cfg.setdefault("deep_cv_patience", 6)
+                            cfg.setdefault("cnn_use_early_stopping", True)
+                            cfg.setdefault("cnn_patience", 6)
+                        elif model_type_local == "lstm":
+                            cfg.setdefault("deep_cv_max_epochs", 10)
+                            cfg.setdefault("deep_cv_patience", 7)
+                            cfg.setdefault("lstm_use_early_stopping", True)
+                            cfg.setdefault("lstm_patience", 7)
+                        else:
+                            # ensemble / other: keep current defaults
+                            cfg.setdefault("deep_cv_max_epochs", 8)
+                            cfg.setdefault("deep_cv_patience", 6)
+                            cfg.setdefault("cnn_use_early_stopping", True)
+                            cfg.setdefault("lstm_use_early_stopping", True)
+                            cfg.setdefault("transformer_use_early_stopping", True)
+                            cfg.setdefault("gru_use_early_stopping", True)
+                            cfg.setdefault("gru_lstm_use_early_stopping", True)
+                            cv_pat = int(cfg.get("deep_cv_patience", 5))
+                            cfg.setdefault("cnn_patience", cv_pat)
+                            cfg.setdefault("lstm_patience", cv_pat)
+                            cfg.setdefault("transformer_patience", cv_pat)
+                            cfg.setdefault("gru_patience", cv_pat)
+                            cfg.setdefault("gru_lstm_patience", cv_pat)
 
                         cfg["skip_perm_importance"] = True
                         self.features_config = cfg
@@ -911,7 +964,8 @@ class RunMixin:
                         try:
                             import numpy as _np
                             import optuna as _opt
-                        except Exception:
+                        except Exception as _pe:
+                            log_print(f"[WARN] Early-pruning disabled: import failed ({_pe})", level="COMPACT")
                             return
 
                         # How many folds are planned
@@ -962,7 +1016,27 @@ class RunMixin:
                                 print(msg)
                             raise _opt.TrialPruned(msg)
 
-                    
+                        # -- (C) Early-abort hopeless Sharpe ----------------------------------
+                        # After cv_early_sharpe_folds (default 3) valid folds, if the mean
+                        # Sharpe is below the threshold (default -1.0), prune the trial.
+                        # No amount of additional folds will salvage a config this bad.
+                        _early_sharpe_folds = int(config.get("cv_early_sharpe_folds", 3))
+                        _early_sharpe_thr   = float(config.get("cv_early_sharpe_threshold", -1.0))
+                        if (_relax > 0.0 and processed >= _early_sharpe_folds
+                                and k_valid >= _early_sharpe_folds):
+                            _valid_scores = arr[_np.isfinite(arr)]
+                            if len(_valid_scores) >= _early_sharpe_folds:
+                                _mean_sharpe = float(_np.mean(_valid_scores))
+                                if _mean_sharpe < _early_sharpe_thr * _relax:
+                                    msg = (f"[MiniBlockCV:EARLY_HOPELESS] "
+                                           f"mean Sharpe={_mean_sharpe:.3f} "
+                                           f"< {_early_sharpe_thr:.0f} "
+                                           f"after {_early_sharpe_folds} folds -> prune trial")
+                                    if bool(config.get("print_cv_debug", False)):
+                                        print(msg)
+                                    raise _opt.TrialPruned(msg)
+
+
                     # --------------------------------------------
                     # Collectors BEFORE the mini-block evaluation
                     # --------------------------------------------
@@ -1193,6 +1267,7 @@ class RunMixin:
 
 
                     for j, fold in enumerate(fold_iter, start=1):
+                        _check_throttle()
                         if _use_monthly:
                             # fold is a dict like: {"train_iloc": (ts, te), "val_iloc": (vs, ve), ...}
                             try:
@@ -1309,7 +1384,7 @@ class RunMixin:
                             except Exception:
                                 pass
                             
-                            # Evaluate block (generic: any "ensemble_*" -> test_ensemble_strategy)
+                            # Evaluate block (ensemble routing — deep ensembles only)
                             if (
                                 isinstance(model_type_local, str)
                                 and model_type_local.startswith("ensemble_")
@@ -2811,13 +2886,9 @@ class RunMixin:
                                     )
 
                         except Exception as e:
-                            # Propagate real TrialPruned
-                            try:
-                                import optuna as _opt
-                                if isinstance(e, _opt.TrialPruned):
-                                    raise
-                            except Exception:
-                                pass
+                            import optuna as _opt
+                            if isinstance(e, _opt.TrialPruned):
+                                raise
 
                             # Normal block error -> mark invalid and continue
                             _cv_penalty(
@@ -3759,8 +3830,8 @@ class RunMixin:
                     fold_srs = getattr(self, "_last_fold_srs", None)
                     cv_res = getattr(self, "_last_cv_result", None)
                     self._progress.update_trial(trial.number + 1, best_val, fold_srs, cv_res)
-            except Exception:
-                pass
+            except Exception as _pe:
+                pass  # progress bar failure is non-critical
             return result
 
         _common_kwargs = dict(
@@ -3770,23 +3841,78 @@ class RunMixin:
             cv_config=cv_config_first,
             models_to_test=models_to_test,
             n_trials=int(config.get("n_trials", 1)),
+            n_startup_trials=int(config.get("n_startup_trials", 10)),
             return_top_n=rt_n,
-            study=None,  # one study here
+            study=None,
             sampler_seed=int(self.features_config.get("run_seed", 0)) or None,
             max_hpo_duration_minutes=float(config.get("max_hpo_duration_minutes", 0)),
+            sampler_method=str(config.get("hpo_sampler", "tpe")),
         )
 
-        if {"month_out_dir", "month_ix"} <= _sig_params:
-            best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = run_optuna_tuning(
-                **_common_kwargs,
-                month_out_dir=month_graphs_dir_local,
-                month_ix=month_ix_local,
-            )
-        else: 
-            # Legacy tuner signature (no per-month plot routing)
-            best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = run_optuna_tuning(
-                **_common_kwargs
-            )
+        # Auto-enable two-phase HPO for models with 4+ tunable hyperparameters
+        _auto_two_phase = False
+        if mt_local is not None and mt_local != "":
+            _n_tunable = sum(1 for v in SEARCH_SPACE.get(mt_local, {}).values()
+                             if isinstance(v, (list, tuple)))
+            _auto_two_phase = _n_tunable >= 4
+
+        if bool(config.get("hpo_two_phase", _auto_two_phase)):
+            # ── TWO-PHASE HPO ──
+            phase1_sampler = str(config.get("phase1_sampler", "cmaes"))
+            phase1_trials  = int(config.get("phase1_trials", 30))
+            phase2_trials  = int(config.get("phase2_trials", 15))
+            phase2_top_n   = int(config.get("phase2_top_n", 5))
+
+            kw1 = {**_common_kwargs, "sampler_method": phase1_sampler,
+                   "n_trials": phase1_trials}
+            if {"month_out_dir", "month_ix"} <= _sig_params:
+                best1, score1, top5_1, study1, pool1 = run_optuna_tuning(
+                    **kw1, month_out_dir=month_graphs_dir_local, month_ix=month_ix_local)
+            else:
+                best1, score1, top5_1, study1, pool1 = run_optuna_tuning(**kw1)
+
+            from optuna.trial import TrialState
+            valid = [t for t in (study1.trials or [])
+                    if getattr(t, "value", None) is not None
+                    and getattr(t, "state", None) == TrialState.COMPLETE]
+            topN = sorted(valid, key=lambda t: t.value, reverse=True)[:phase2_top_n]
+
+            if topN:
+                from optuna.samplers import TPESampler as _TPE2
+                _tpe_ei2 = int(os.environ.get("TPE_EI_CANDIDATES", "64"))
+                _s2 = _TPE2(seed=kw1["sampler_seed"],
+                           n_startup_trials=min(5, max(1, phase2_trials // 3)),
+                           multivariate=True, group=True,
+                           n_ei_candidates=_tpe_ei2)
+                study2 = optuna.create_study(direction="maximize", sampler=_s2)
+                for t in topN:
+                    study2.enqueue_trial(t.params)
+
+                kw2 = {**_common_kwargs, "sampler_method": "tpe",
+                       "n_trials": phase2_trials, "study": study2}
+                if {"month_out_dir", "month_ix"} <= _sig_params:
+                    best2, score2, top5_2, study2, pool2 = run_optuna_tuning(
+                        **kw2, month_out_dir=month_graphs_dir_local, month_ix=month_ix_local)
+                else:
+                    best2, score2, top5_2, study2, pool2 = run_optuna_tuning(**kw2)
+
+                best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = \
+                    best2, score2, top5_2, study2, pool2
+            else:
+                best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = \
+                    best1, score1, top5_1, study1, pool1
+        else:
+            # ── SINGLE-PHASE HPO ──
+            if {"month_out_dir", "month_ix"} <= _sig_params:
+                best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = run_optuna_tuning(
+                    **_common_kwargs,
+                    month_out_dir=month_graphs_dir_local,
+                    month_ix=month_ix_local,
+                )
+            else:
+                best_params_once, best_score_once, top5_once, study_obj, consensus_pool_once = run_optuna_tuning(
+                    **_common_kwargs
+                )
 
         log_print(
             f"[DONE] Optuna best trial: #{study_obj.best_trial.number} value={study_obj.best_value:.6f}",
@@ -4020,9 +4146,10 @@ class RunMixin:
                         models_to_test=models_to_test,
                         n_trials=int(config.get("retry_extra_trials", 20)),
                         return_top_n=rt_n,
-                        study=None,   # NEW study, but only here, after Top-5 fully failed
+                        study=None,
                         sampler_seed=int(self.features_config.get("run_seed", 0)) or None,
                         max_hpo_duration_minutes=float(config.get("max_hpo_duration_minutes", 0)),
+                        sampler_method=str(config.get("hpo_sampler", "tpe")),
                     )
                     if top5_2:
                         best2["__top5_params"] = top5_2
@@ -4171,13 +4298,59 @@ class RunMixin:
         else:
             # Use our unified CPU-centric thread knob
             n_jobs_actual = int(
-                os.getenv("MLB_THREADS", os.getenv("BLAS_THREADS_PER_TRIAL", "8"))
+                os.getenv("MLB_THREADS") or os.getenv("BLAS_THREADS_PER_TRIAL") or "8"
             )
 
 
-        all_results = Parallel(n_jobs=n_jobs_actual, backend=backend)(
-            delayed(evaluate_fold)(s, trn, tst, pu) for s, trn, tst, pu in tqdm(tasks, desc="Walk-forward splits")
-        )
+        hpo_mode = str(config.get("hpo_mode", "static")).lower()
+
+        if hpo_mode == "dynamic" and len(tasks) > 1:
+            from pipeline.tuning.runner import run_optuna_tuning as _dyn_run
+
+            _dyn_trials = int(config.get("dynamic_hpo_trials", int(config.get("n_trials", 10))))
+            print(f"[HPO] Dynamic mode: re-running HPO for each of {len(tasks)} walk-forward steps "
+                  f"({_dyn_trials} trials each)")
+            all_results = []
+            for s, trn, tst, pu in tqdm(tasks, desc="Walk-forward splits (dynamic HPO)"):
+                train_end = s + period_offset(trn, unit=pu)
+                fold_train = walk_data[(walk_data.index >= s) & (walk_data.index < train_end)]
+
+                if len(fold_train) >= 150:
+                    fold_features = [c for c in fold_train.columns
+                                   if c not in ("returns", "price", "spread",
+                                                "high", "low", "label", "time")]
+                    d_min = int(len(fold_train) * 0.75)
+                    d_val = max(1, int(len(fold_train) * 0.25))
+                    if d_min + d_val > len(fold_train):
+                        d_val = len(fold_train) - d_min
+                    fold_cv = {"min_train_window": d_min, "val_window": d_val,
+                              "cv_blocks": int(config.get("cv_blocks", 5)),
+                              "score_for_no_trades": -1.0}
+                    if "_progress_callback" in (config if isinstance(config, dict) else {}):
+                        fold_cv["_progress_callback"] = config["_progress_callback"]
+
+                    best_p, _best_s, top5, _st, _pool = _dyn_run(
+                        train_data=fold_train,
+                        base_features=fold_features,
+                        evaluate_cv_func=_single_study_cv,
+                        cv_config=fold_cv,
+                        models_to_test=models_to_test,
+                        n_trials=_dyn_trials,
+                        n_startup_trials=int(config.get("n_startup_trials", 10)),
+                        return_top_n=rt_n,
+                        study=None,
+                        sampler_seed=int(self.features_config.get("run_seed", 0)) or None,
+                        sampler_method=str(config.get("hpo_sampler", "tpe")),
+                    )
+                    self._optuna_best_for_wfo = best_p
+                    self._optuna_top5_for_wfo = top5 or []
+
+                result = evaluate_fold(s, trn, tst, pu)
+                all_results.append(result)
+        else:
+            all_results = Parallel(n_jobs=n_jobs_actual, backend=backend)(
+                delayed(evaluate_fold)(s, trn, tst, pu) for s, trn, tst, pu in tqdm(tasks, desc="Walk-forward splits")
+            )
 
 
         elapsed_wfo = time.time() - start

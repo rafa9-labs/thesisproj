@@ -104,7 +104,7 @@ export function UpdateNotification() {
   if (updateReady && !dismissed) {
     return (
       <div
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg"
+        className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-sm border px-4 py-3 shadow-lg"
         style={{
           backgroundColor: "var(--color-surface)",
           borderColor: "var(--color-accent)",
@@ -143,7 +143,7 @@ export function UpdateNotification() {
   if (downloading && downloadProgress) {
     return (
       <div
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg"
+        className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-sm border px-4 py-3 shadow-lg"
         style={{
           backgroundColor: "var(--color-surface)",
           borderColor: "var(--color-border)",
@@ -174,7 +174,7 @@ export function UpdateNotification() {
   if (updateAvailable && !downloading && !dismissed) {
     return (
       <div
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg"
+        className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-sm border px-4 py-3 shadow-lg"
         style={{
           backgroundColor: "var(--color-surface)",
           borderColor: "var(--color-border)",
@@ -213,7 +213,7 @@ export function UpdateNotification() {
   if (checking) {
     return (
       <div
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border px-3 py-2"
+        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-sm border px-3 py-2"
         style={{
           backgroundColor: "var(--color-surface)",
           borderColor: "var(--color-border)",

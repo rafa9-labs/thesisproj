@@ -1,7 +1,7 @@
 """
 End-to-end pipeline smoke test with memory profiling.
 
-Tests all 6 pairs and all 8 model types, logging peak RSS.
+Tests all 6 pairs and all 17 model types, logging peak RSS.
 Verifies RAM fixes are effective: peak RSS should stay under 2 GB.
 """
 import gc
@@ -19,8 +19,8 @@ from pipeline.backtester.composed import MLBacktester
 from pipeline.standalone_utils import clear_data_cache
 
 PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "GBPJPY"]
-MODELS = ["logistic", "xgboost", "random_forest", "svm"]
-DEEP_MODELS = ["cnn", "lstm", "transformer"]
+MODELS = ["logistic", "xgboost", "random_forest", "svm", "decision_tree", "lightgbm", "catboost"]
+DEEP_MODELS = ["cnn", "lstm", "transformer", "gru", "gru_lstm"]
 
 process = psutil.Process(os.getpid())
 

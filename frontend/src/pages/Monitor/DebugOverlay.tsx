@@ -82,7 +82,7 @@ export function DebugOverlay({ jobId, pollCursor }: { jobId: string | null; poll
 
   return (
     <div
-      className="fixed bottom-3 right-3 z-50 flex flex-col rounded-lg border shadow-lg"
+      className="fixed bottom-3 right-3 z-50 flex flex-col rounded-sm border shadow-lg"
       style={{
         width: 480,
         maxHeight: "calc(100vh - 120px)",

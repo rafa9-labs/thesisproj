@@ -24,6 +24,15 @@ import type {
   WsEvent,
   LlmAnalysisResponse,
   SeedDemoResponse,
+  CommitteeConfigSchema,
+  RegimeMatrixResponse,
+  RegimeLabelsResponse,
+  CommitteeSnapshotListResponse,
+  FullCycleRequest,
+  FullCycleStatusResponse,
+  FullCycleResultsResponse,
+  FullCycleHistoryResponse,
+  LogsResponse,
 } from "./schemas";
 
 export function useHealth() {
@@ -333,6 +342,20 @@ export function useNewsEvents(start: number | null, end: number | null, impact?:
     },
     enabled: start !== null && end !== null,
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useNewsArticles(pair?: string, days?: number) {
+  return useQuery({
+    queryKey: ["news-articles", pair, days],
+    queryFn: async () => {
+      const { data } = await apiClient.get<import("./schemas").NewsArticlesResponse>("/news/articles", {
+        params: { pair: pair ?? "", days: days ?? 30 },
+      });
+      return data;
+    },
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
   });
 }
 
@@ -777,6 +800,208 @@ export function useDemoSeed() {
     mutationFn: async (payload?: { pairs?: string[]; timeframes?: string[] }) => {
       const { data } = await apiClient.post<SeedDemoResponse>("/data/seed-demo", payload ?? {});
       return data;
+    },
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Committee (Racecar Phases A-E)
+// ════════════════════════════════════════════════════════════════════
+
+export function useCommitteeConfig() {
+  return useQuery({
+    queryKey: ["committee", "config"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CommitteeConfigSchema>("/committee/config");
+      return data;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useSaveCommitteeConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (config: CommitteeConfigSchema) => {
+      const { data } = await apiClient.post<{ status: string }>("/committee/config", config);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["committee", "config"] });
+    },
+  });
+}
+
+export function useRegimeMatrix() {
+  return useQuery({
+    queryKey: ["committee", "regime-matrix"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<RegimeMatrixResponse>("/committee/regime-matrix");
+      return data;
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function useRegimeLabels(pair: string, timeframe: string, bars: number = 500) {
+  return useQuery({
+    queryKey: ["committee", "regime-labels", pair, timeframe, bars],
+    queryFn: async () => {
+      const { data } = await apiClient.get<RegimeLabelsResponse>(
+        `/committee/regime-labels/${pair}/${timeframe}?bars=${bars}`,
+      );
+      return data;
+    },
+    staleTime: 60_000,
+    enabled: !!pair && !!timeframe,
+  });
+}
+export function useCommitteeSnapshots() {
+  return useQuery({
+    queryKey: ["committee", "snapshots"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CommitteeSnapshotListResponse>(
+        "/committee/snapshots",
+      );
+      return data;
+    },
+    staleTime: 30_000,
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Live Metrics (committee sessions)
+// ════════════════════════════════════════════════════════════════════
+
+export interface CommitteeMetricsResponse {
+  session_id: string;
+  uptime_seconds: number;
+  bar_count: number;
+  signal_count: number;
+  non_zero_signals: number;
+  committee_healthy: boolean;
+  current_regime: string;
+  regime_distribution: Record<string, number>;
+  trust_score: number | null;
+  trust_multiplier: number;
+  effective_multiplier: number;
+  throttle_summary: Record<string, { multiplier: number; level: string }>;
+  per_model_health: Record<string, {
+    rolling_sharpe: number | null;
+    rolling_hit_rate: number | null;
+    total_signals: number;
+    wins: number;
+    losses: number;
+    status: "healthy" | "unhealthy" | "insufficient_data";
+  }>;
+  recent_signals: Array<{
+    timestamp: string;
+    signal: number;
+    confidence: number;
+    regime: string;
+    is_healthy: boolean;
+    meta_override: boolean;
+    throttle_level: string;
+    active_models: string[];
+  }>;
+  error?: string;
+}
+
+export function useCommitteeMetrics(sessionId: string | null) {
+  return useQuery({
+    queryKey: ["live", "committee", "metrics", sessionId],
+    queryFn: async () => {
+      if (!sessionId) return null;
+      const { data } = await apiClient.get<CommitteeMetricsResponse>(
+        `/live/committee/${sessionId}/metrics`,
+      );
+      return data;
+    },
+    refetchInterval: 15_000,
+    enabled: !!sessionId,
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Full Cycle — Racecar (B→C→D) + Factory (optimization) in one shot
+// ════════════════════════════════════════════════════════════════════
+
+export function useStartFullCycle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: FullCycleRequest) => {
+      const { data } = await apiClient.post<FullCycleStatusResponse>(
+        "/committee/full-cycle", req,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["full-cycle"] });
+    },
+  });
+}
+
+export function useFullCycleStatus(jobId: string | null) {
+  return useQuery({
+    queryKey: ["full-cycle", "status", jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<FullCycleStatusResponse>(
+        `/committee/full-cycle/${jobId}/status`,
+      );
+      return data;
+    },
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const phase = query.state.data?.phase;
+      if (!phase || phase === "completed" || phase === "failed" || phase === "validation_failed" || phase === "cancelled" || phase === "orphaned") return false;
+      return 2_000;
+    },
+  });
+}
+
+export function useFullCycleResults(jobId: string | null) {
+  return useQuery({
+    queryKey: ["full-cycle", "results", jobId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<FullCycleResultsResponse>(
+        `/committee/full-cycle/${jobId}/results`,
+      );
+      return data;
+    },
+    enabled: !!jobId,
+    staleTime: 30_000,
+  });
+}
+
+export function useFullCycleHistory() {
+  return useQuery({
+    queryKey: ["full-cycle", "history"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<FullCycleHistoryResponse>(
+        "/committee/full-cycle/history",
+      );
+      return data;
+    },
+    staleTime: 10_000,
+  });
+}
+
+export function useFullCycleLogs(jobId: string | null, since: number) {
+  return useQuery({
+    queryKey: ["full-cycle", "logs", jobId, since],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LogsResponse>(
+        `/committee/full-cycle/${jobId}/logs`,
+        { params: { since } },
+      );
+      return data;
+    },
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const phase = query.state.data?.entries?.length
+        ? "running"
+        : "running";
+      return 1_500;
     },
   });
 }

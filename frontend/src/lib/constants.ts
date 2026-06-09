@@ -78,9 +78,23 @@ export const DEFAULTS = {
   optunaDirection: "maximize" as const,
   seed: 42,
   repeats: 1,
+  maxHpoDurationMinutes: 0,
 
   trainMonths: 36,
   testMonths: 1,
+
+  // HPO sampler & strategy
+  hpoSampler: "tpe" as const,
+  hpoTwoPhase: false,
+  hpoMode: "static" as const,
+  periodUnit: "months" as const,
+  phase1Sampler: "cmaes" as const,
+  phase1Trials: 30,
+  phase2Trials: 15,
+  phase2TopN: 5,
+  dynamicHpoTrials: 10,
+  wfoTrainPeriods: 0,
+  wfoTestPeriods: 0,
 
   sizingMethod: "fixed" as const,
   riskFraction: 0.02,
@@ -114,9 +128,16 @@ export const RANGES = {
   lagDepth: { min: 1, max: 3, step: 1 },
   nTrials: { min: 0, max: 150, step: 1 },
   repeats: { min: 1, max: 10, step: 1 },
+  maxHpoDurationMinutes: { min: 0, max: 120, step: 5 },
   seed: { min: 0, max: 9999, step: 1 },
   trainMonths: { min: 6, max: 60, step: 1 },
   testMonths: { min: 1, max: 6, step: 1 },
+  phase1Trials: { min: 1, max: 100, step: 1 },
+  phase2Trials: { min: 1, max: 50, step: 1 },
+  phase2TopN: { min: 1, max: 10, step: 1 },
+  dynamicHpoTrials: { min: 1, max: 50, step: 1 },
+  wfoTrainPeriods: { min: 1, max: 200, step: 1 },
+  wfoTestPeriods: { min: 1, max: 24, step: 1 },
   riskFraction: { min: 0.005, max: 0.1, step: 0.005 },
   kellyFraction: { min: 0.1, max: 1.0, step: 0.1 },
   kellyMinTrades: { min: 5, max: 100, step: 5 },
@@ -179,6 +200,25 @@ export const SELECT_OPTIONS = {
     { value: "standard", label: "Standard (per-model tuned)" },
     { value: "deep", label: "Deep (max trials)" },
   ],
+  hpoSampler: [
+    { value: "tpe", label: "Bayesian (TPE)" },
+    { value: "random", label: "Random Search" },
+    { value: "cmaes", label: "CMA-ES" },
+  ],
+  hpoMode: [
+    { value: "static", label: "Static (HPO once, retrain)" },
+    { value: "dynamic", label: "Dynamic (HPO per step)" },
+  ],
+  periodUnit: [
+    { value: "months", label: "Months" },
+    { value: "weeks", label: "Weeks" },
+    { value: "days", label: "Days" },
+  ],
+  phase1Sampler: [
+    { value: "cmaes", label: "CMA-ES" },
+    { value: "random", label: "Random" },
+    { value: "tpe", label: "TPE" },
+  ],
 } as const;
 
 export const TIMEFRAMES = [
@@ -204,7 +244,7 @@ export const STUDY_PRESETS = {
     targetActiveRate: 0.1,
     targetCoverage: 0.1,
     description: "Quick pipeline check. 10 trials per model, 1 run. Floor minimum — not statistically meaningful.",
-    estMinutes: { logistic: 2, xgboost: 3, svm: 3, random_forest: 4, decision_tree: 2, lstm: 5, cnn: 4, transformer: 6 },
+    estMinutes: { logistic: 2, xgboost: 3, svm: 3, random_forest: 4, decision_tree: 2, lightgbm: 3, catboost: 3, lstm: 5, cnn: 4, transformer: 6, gru: 5, gru_lstm: 6, dqn: 8, ensemble_adaptive_regime: 6, ensemble_cnn_lstm_xgboost: 6, meta_ensemble: 6, stacking_ensemble: 6 },
   },
   exploratory: {
     key: "exploratory",
@@ -220,7 +260,7 @@ export const STUDY_PRESETS = {
     targetActiveRate: 0.15,
     targetCoverage: 0.15,
     description: "Detects seed-dependent strategies. 10-20 trials per model × 3 runs.",
-    estMinutes: { logistic: 15, xgboost: 30, svm: 20, random_forest: 35, decision_tree: 10, lstm: 60, cnn: 45, transformer: 90 },
+    estMinutes: { logistic: 15, xgboost: 30, svm: 20, random_forest: 35, decision_tree: 10, lightgbm: 30, catboost: 30, lstm: 60, cnn: 45, transformer: 90, gru: 60, gru_lstm: 70, dqn: 90, ensemble_adaptive_regime: 70, ensemble_cnn_lstm_xgboost: 70, meta_ensemble: 70, stacking_ensemble: 70 },
   },
   validation: {
     key: "validation",
@@ -236,7 +276,7 @@ export const STUDY_PRESETS = {
     targetActiveRate: 0.15,
     targetCoverage: 0.15,
     description: "Median-of-5 robustness. 10-40 trials per model × 5 runs — model-aware budgets.",
-    estMinutes: { logistic: 45, xgboost: 90, svm: 60, random_forest: 100, decision_tree: 30, lstm: 180, cnn: 140, transformer: 240 },
+    estMinutes: { logistic: 45, xgboost: 90, svm: 60, random_forest: 100, decision_tree: 30, lightgbm: 90, catboost: 90, lstm: 180, cnn: 140, transformer: 240, gru: 180, gru_lstm: 200, dqn: 240, ensemble_adaptive_regime: 200, ensemble_cnn_lstm_xgboost: 200, meta_ensemble: 200, stacking_ensemble: 200 },
   },
   production: {
     key: "production",
@@ -252,7 +292,7 @@ export const STUDY_PRESETS = {
     targetActiveRate: 0.15,
     targetCoverage: 0.15,
     description: "Maximum statistical rigor. 10-40 trials per model × 10 runs. Decile confidence bands.",
-    estMinutes: { logistic: 120, xgboost: 240, svm: 160, random_forest: 280, decision_tree: 80, lstm: 480, cnn: 360, transformer: 600 },
+    estMinutes: { logistic: 120, xgboost: 240, svm: 160, random_forest: 280, decision_tree: 80, lightgbm: 240, catboost: 240, lstm: 480, cnn: 360, transformer: 600, gru: 480, gru_lstm: 550, dqn: 600, ensemble_adaptive_regime: 550, ensemble_cnn_lstm_xgboost: 550, meta_ensemble: 550, stacking_ensemble: 550 },
   },
 } as const;
 
@@ -324,8 +364,8 @@ export const QUICK_START_CATEGORIES = [
       {
         key: "classical_full",
         label: "Full Classical Suite",
-        subtitle: "All five classical models — Logit, SVM, Decision Tree, Random Forest, XGBoost — at 80 trials each. Use this to benchmark every traditional approach before moving to deep learning.",
-        models: ["logistic", "svm", "decision_tree", "random_forest", "xgboost"],
+        subtitle: "All seven classical models — Logit, SVM, Decision Tree, Random Forest, XGBoost, LightGBM, CatBoost — at 80 trials each. Use this to benchmark every traditional approach before moving to deep learning.",
+        models: ["logistic", "svm", "decision_tree", "random_forest", "xgboost", "lightgbm", "catboost"],
         hpoIntensity: "standard" as const,
         nTrials: 80,
         repeats: 1,
@@ -333,6 +373,20 @@ export const QUICK_START_CATEGORIES = [
         testMonths: 1,
         confidenceThreshold: 0.85,
         estMinutes: 120,
+      },
+      {
+        key: "classical_gbdt",
+        label: "Gradient Boosting Suite",
+        subtitle: "All three major boosting libraries — XGBoost, LightGBM, CatBoost — tested side-by-side. Identifies which algorithm adapts best to FX noise. 50 trials each on 3 years.",
+        models: ["xgboost", "lightgbm", "catboost"],
+        hpoIntensity: "standard" as const,
+        nTrials: 50,
+        repeats: 1,
+        trainMonths: 36,
+        testMonths: 1,
+        confidenceThreshold: 0.85,
+        estMinutes: 150,
+        isNew: true,
       },
       {
         key: "classical_hardened",
@@ -381,10 +435,38 @@ export const QUICK_START_CATEGORIES = [
         estMinutes: 150,
       },
       {
+        key: "deep_gru_explore",
+        label: "GRU Explorer",
+        subtitle: "Single GRU on 3 years of data. Simpler than LSTM, often faster to train. A good baseline for recurrent models — 30 trials.",
+        models: ["gru"],
+        hpoIntensity: "standard" as const,
+        nTrials: 30,
+        repeats: 1,
+        trainMonths: 36,
+        testMonths: 1,
+        confidenceThreshold: 0.8,
+        estMinutes: 45,
+        isNew: true,
+      },
+      {
+        key: "deep_gru_lstm",
+        label: "GRU+LSTM Hybrid",
+        subtitle: "Stacks GRU and LSTM layers. Combines GRU's fast learning with LSTM's long-memory retention. 40 trials.",
+        models: ["gru_lstm"],
+        hpoIntensity: "standard" as const,
+        nTrials: 40,
+        repeats: 1,
+        trainMonths: 36,
+        testMonths: 1,
+        confidenceThreshold: 0.8,
+        estMinutes: 60,
+        isNew: true,
+      },
+      {
         key: "deep_full_stack",
         label: "CNN + LSTM + Transformer",
-        subtitle: "Full deep learning stack at maximum depth. CNN for patterns, LSTM for memory, Transformer for global attention across the lag window. 100 trials each, 4-year training set.",
-        models: ["cnn", "lstm", "transformer"],
+        subtitle: "Full deep learning stack at maximum depth. CNN for patterns, LSTM for memory, GRU for efficiency, GRU-LSTM hybrid, Transformer for global attention across the lag window. 100 trials each, 4-year training set.",
+        models: ["cnn", "lstm", "transformer", "gru", "gru_lstm"],
         hpoIntensity: "deep" as const,
         nTrials: 100,
         repeats: 1,
@@ -427,10 +509,38 @@ export const QUICK_START_CATEGORIES = [
         estMinutes: 180,
       },
       {
+        key: "ensemble_stacking",
+        label: "Stacking Ensemble",
+        subtitle: "Meta-learner that stacks classical model predictions. Learns optimal weighting from out-of-fold data. 30 trials.",
+        models: ["stacking_ensemble"],
+        hpoIntensity: "standard" as const,
+        nTrials: 30,
+        repeats: 1,
+        trainMonths: 36,
+        testMonths: 1,
+        confidenceThreshold: 0.85,
+        estMinutes: 25,
+        isNew: true,
+      },
+      {
+        key: "ensemble_meta",
+        label: "Meta Learner",
+        subtitle: "Voting-based signal committee. Tunes majority vs soft vs weighted combination of all classical sub-models. Lightweight — 15 trials.",
+        models: ["meta_ensemble"],
+        hpoIntensity: "light" as const,
+        nTrials: 15,
+        repeats: 1,
+        trainMonths: 36,
+        testMonths: 1,
+        confidenceThreshold: 0.85,
+        estMinutes: 15,
+        isNew: true,
+      },
+      {
         key: "ensemble_full",
         label: "Both Ensembles, Deep HPO",
-        subtitle: "Adaptive Regime and CNN-LSTM-XGB run back-to-back at deep HPO on 4 years of data. The most complete ensemble benchmark — use when you want to deploy an ensemble strategy.",
-        models: ["ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost"],
+        subtitle: "All four ensembles — Adaptive Regime, CNN-LSTM-XGB, Signal Committee, and Stacking — run back-to-back at deep HPO on 4 years of data. The most complete ensemble benchmark — use when you want to deploy an ensemble strategy.",
+        models: ["ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost", "meta_ensemble", "stacking_ensemble"],
         hpoIntensity: "deep" as const,
         nTrials: 80,
         repeats: 1,
@@ -520,5 +630,100 @@ export const MODEL_CONSTRAINTS: Record<string, { rules: string[]; tips: string[]
   ensemble_cnn_lstm_xgboost: {
     rules: ["Combines CNN (pattern detection), LSTM (sequential memory), and XGBoost (tabular strength).", "Very slow per trial (~3 min). GPU strongly recommended."],
     tips: ["Feature importance extracted from XGBoost sub-model via TreeSHAP.", "Use Production preset only when you've validated component models individually."],
+  },
+  lightgbm: {
+    rules: ["Histogram-based gradient boosting (Microsoft). Leaf-wise growth is faster than XGBoost on structured data.", "n_trials floor is 10 even in light HPO mode."],
+    tips: ["num_leaves 15-127. Higher = more capacity but risk of overfitting.", "Learning rate 0.01-0.3 (log scale). Lower LR needs more trees.", "Subsample 0.6-1.0 helps prevent overfitting to noise."],
+  },
+  catboost: {
+    rules: ["Ordered boosting (Yandex). Handles categorical features natively with minimal tuning required.", "subsample < 1.0 requires Bernoulli bootstrap type — set automatically."],
+    tips: ["depth 3-8. Shallower trees generalize better on financial data.", "l2_leaf_reg 1-10. Higher = stronger regularization.", "Learning rate 0.01-0.3 (log scale)."],
+  },
+  gru: {
+    rules: ["Gated Recurrent Unit. Simpler than LSTM (fewer gates) with comparable or better FX prediction accuracy.", "lr in range 1e-4 to 5e-3 (log scale)."],
+    tips: ["Start with 32-64 units for 14 lags. Increase lags before increasing units.", "Use early stopping — patience=6 avoids overtraining on small validation sets."],
+  },
+  gru_lstm: {
+    rules: ["Hybrid architecture: GRU layer feeds into LSTM layer. Research shows this outperforms standalone models on forex.", "lr in range 1e-4 to 5e-3 (log scale)."],
+    tips: ["Tune GRU units and LSTM units independently for best results.", "Use early stopping — patience=6 recommended for stability."],
+  },
+  meta_ensemble: {
+    rules: ["Wraps multiple models and combines predictions via voting (majority, soft, or weighted).", "Sub-models are selected in the Model Selector — choose 2-4 diverse types."],
+    tips: ["Start with logistic + xgboost as sub-models for a cheap ensemble baseline.", "Use 'soft' voting for probability averaging, 'majority' for hard class voting."],
+  },
+  stacking_ensemble: {
+    rules: ["Trains a Logistic Regression meta-learner on out-of-fold predictions from base models.", "Requires >= 2 base models. Stacking CV folds must be <= training splits."],
+    tips: ["Start with 2-3 base models and default CV=5.", "Sklearn StackingClassifier handles passthrough automatically.", "Use 'auto' stack method -- it selects predict_proba when available."],
+  },
+};
+
+export const ALL_MODELS = [
+  "logistic", "svm", "random_forest", "decision_tree",
+  "xgboost", "lightgbm", "catboost",
+  "cnn", "lstm", "transformer", "gru", "gru_lstm",
+  "meta_ensemble", "stacking_ensemble", "ensemble_adaptive_regime",
+] as const;
+
+export const CORE_MODELS = [
+  "logistic", "svm", "random_forest", "xgboost",
+  "lightgbm", "catboost", "lstm", "ensemble_adaptive_regime",
+] as const;
+
+export const STOP_REASONS: Record<string, string> = {
+  budget: "Max iterations reached",
+  patience: "Global best Sharpe has not improved",
+  hard_gate: "All regimes above Sharpe floor",
+  exhaustion: "No untested model improves any regime",
+  divergence: "3 consecutive deteriorating iterations",
+};
+
+export function formatStopReason(raw: string): string {
+  for (const [key, label] of Object.entries(STOP_REASONS)) {
+    if (raw.startsWith(key)) return label + (raw.includes(":") ? raw.slice(raw.indexOf(":")) : "");
+  }
+  return raw || "Optimization stopped";
+}
+
+export const FC_PRESETS: Record<string, {
+  label: string;
+  desc: string;
+  icon: string;
+  color: string;
+  config: Record<string, unknown>;
+}> = {
+  debug: {
+    label: "Debug",
+    desc: "One model, minimal WFO. Verify pipeline works end-to-end.",
+    icon: "Bug",
+    color: "#8b949e",
+    config: { selectedModels: ["logistic"], trainMonths: 12, maxIterations: 3, proposer: "deterministic", skipFeatureSweep: true, debugMode: true },
+  },
+  classical: {
+    label: "Classical",
+    desc: "Tree + linear models. Fast, well-understood, interpretable.",
+    icon: "Cpu",
+    color: "#00E5FF",
+    config: { selectedModels: ["logistic","svm","random_forest","xgboost","lightgbm","catboost"], trainMonths: 36, maxIterations: 15, proposer: "llm", llmBackend: "deepseek" },
+  },
+  deep: {
+    label: "Deep Learning",
+    desc: "CNN + LSTM + GRU + Transformer. For complex non-linear patterns.",
+    icon: "Network",
+    color: "#a78bfa",
+    config: { selectedModels: ["cnn","lstm","transformer","gru","gru_lstm"], trainMonths: 36, maxIterations: 10, proposer: "llm", llmBackend: "deepseek" },
+  },
+  full: {
+    label: "Full Arsenal",
+    desc: "All 15 models, extended WFO. Production-grade optimization.",
+    icon: "Layers",
+    color: "#F2B436",
+    config: { selectedModels: ["logistic","svm","random_forest","decision_tree","xgboost","lightgbm","catboost","cnn","lstm","transformer","gru","gru_lstm","meta_ensemble","stacking_ensemble","ensemble_adaptive_regime"], trainMonths: 48, maxIterations: 30, proposer: "llm", llmBackend: "deepseek" },
+  },
+  llm: {
+    label: "LLM-Guided",
+    desc: "Core models + AI-driven optimization. DeepSeek V4 proposes config changes.",
+    icon: "Bot",
+    color: "#F23645",
+    config: { selectedModels: ["logistic","svm","random_forest","xgboost","lightgbm","catboost","lstm","ensemble_adaptive_regime"], proposer: "llm", llmBackend: "deepseek", maxIterations: 20 },
   },
 };
