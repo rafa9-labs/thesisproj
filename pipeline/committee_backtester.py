@@ -216,6 +216,7 @@ class CommitteeBacktester:
         label_threshold: float = 0.0001,
         model_params: Optional[Dict[str, Dict]] = None,
         seq_len: int = 30,
+        cancel_check: Optional[callable] = None,
     ):
         self.config = config
         self._regime_clf = regime_clf
@@ -228,6 +229,17 @@ class CommitteeBacktester:
         self._regime_clf: Optional[Any] = None
         self._feature_names: List[str] = []
         self._n_seq_features: int = 0
+        self._cancel_check = cancel_check or (lambda: None)
+        self._collect_predictions = False
+        self._fold_predictions: List[Dict[str, Any]] = []
+
+    def save_fold_predictions(self, path: str):
+        import json
+        with open(path, "w") as f:
+            json.dump(self._fold_predictions, f, indent=2, default=str)
+
+    def get_fold_predictions(self) -> List[Dict[str, Any]]:
+        return list(self._fold_predictions)
 
     # ── Main entry point ─────────────────────────────────────────────
 
@@ -237,6 +249,7 @@ class CommitteeBacktester:
         train_months: int = 12,
         test_months: int = 1,
         verbose: bool = True,
+        collect_predictions: bool = False,
     ) -> CommitteeBacktestResult:
         """Run walk-forward evaluation of the committee.
 
@@ -258,6 +271,8 @@ class CommitteeBacktester:
         """
         t0 = time.time()
         warnings: List[str] = []
+        self._fold_predictions = []
+        self._collect_predictions = collect_predictions
 
         # Compute features on full dataframe (indicators needed for model training)
         df_full = self._prepare_features(df)
@@ -273,6 +288,7 @@ class CommitteeBacktester:
 
         fold_results: List[CommitteeFoldResult] = []
         for fold_idx, (train_slice, test_slice) in enumerate(splits):
+            self._cancel_check()
             try:
                 result = self._evaluate_fold(
                     fold_idx, train_slice, test_slice
@@ -571,6 +587,35 @@ class CommitteeBacktester:
             regime_ids = regime_ids[-len(preds):]
 
         eval_df["pred"] = preds
+
+        # Collect per-bar predictions for meta-learner training
+        if getattr(self, "_collect_predictions", False):
+            bar_predictions = []
+            returns_arr = eval_df["returns"].values.astype(float)
+            n_bars = len(preds)
+            for i in range(n_bars):
+                if i + 1 < n_bars:
+                    next_ret = float(returns_arr[i + 1])
+                else:
+                    next_ret = 0.0
+                bar_predictions.append({
+                    "committee_signal": int(preds[i]) if not np.isnan(preds[i]) else 0,
+                    "committee_confidence": float(np.max(blended_probs[i])) if i < len(blended_probs) else 0.0,
+                    "committee_prob_short": float(blended_probs[i][0]) if i < len(blended_probs) else 0.0,
+                    "committee_prob_flat": float(blended_probs[i][1]) if i < len(blended_probs) else 0.0,
+                    "committee_prob_long": float(blended_probs[i][2]) if i < len(blended_probs) else 0.0,
+                    "regime_id": int(regime_ids[i]) if i < len(regime_ids) else 6,
+                    "next_return": next_ret,
+                    "next_direction": 2 if next_ret > self.label_threshold else (0 if next_ret < -self.label_threshold else 1),
+                    "bar_index": i,
+                })
+            self._fold_predictions.append({
+                "fold_idx": fold_idx,
+                "test_start": str(test_slice.index[0]),
+                "test_end": str(test_slice.index[-1]),
+                "n_bars": n_bars,
+                "bars": bar_predictions,
+            })
 
         # Fill NaN predictions
         nan_count = int(np.isnan(preds).sum())

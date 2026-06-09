@@ -1,1 +1,1 @@
-["catboost", "cnn", "gru", "gru_lstm", "lightgbm", "logistic", "lstm", "meta_ensemble", "random_forest", "stacking_ensemble", "svm", "transformer", "xgboost"]
+["catboost", "cnn", "decision_tree", "ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost", "gru", "gru_lstm", "lightgbm", "logistic", "lstm", "meta_ensemble", "random_forest", "stacking_ensemble", "svm", "transformer", "xgboost"]

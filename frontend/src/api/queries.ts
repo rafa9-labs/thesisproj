@@ -27,20 +27,12 @@ import type {
   CommitteeConfigSchema,
   RegimeMatrixResponse,
   RegimeLabelsResponse,
-  CommitteeBacktestRequest,
-  CommitteeBacktestSubmitResponse,
-  CommitteeBacktestResultResponse,
   CommitteeSnapshotListResponse,
-  RacecarAutoOptimizeRequest,
-  RacecarJobStatus,
-  RacecarJobResults,
-  FactoryStartRequest,
-  FactoryStatusResponse,
-  FactoryResultsResponse,
   FullCycleRequest,
   FullCycleStatusResponse,
   FullCycleResultsResponse,
   FullCycleHistoryResponse,
+  LogsResponse,
 } from "./schemas";
 
 export function useHealth() {
@@ -864,42 +856,6 @@ export function useRegimeLabels(pair: string, timeframe: string, bars: number = 
     enabled: !!pair && !!timeframe,
   });
 }
-
-export function useSubmitCommitteeBacktest() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (req: CommitteeBacktestRequest) => {
-      const { data } = await apiClient.post<CommitteeBacktestSubmitResponse>(
-        "/committee/backtest", req,
-      );
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["committee"] });
-    },
-  });
-}
-
-export function useCommitteeBacktestResults(jobId: string | null) {
-  return useQuery({
-    queryKey: ["committee", "results", jobId],
-    queryFn: async () => {
-      const { data } = await apiClient.get<CommitteeBacktestResultResponse>(
-        `/committee/backtest/${jobId}/results`,
-      );
-      return data;
-    },
-    staleTime: 10_000,
-    enabled: !!jobId,
-    refetchInterval: (query) => {
-      if (query.state.data?.status === "completed" || query.state.data?.status === "failed") {
-        return false;
-      }
-      return 3_000;
-    },
-  });
-}
-
 export function useCommitteeSnapshots() {
   return useQuery({
     queryKey: ["committee", "snapshots"],
@@ -914,106 +870,55 @@ export function useCommitteeSnapshots() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Racecar Auto-Optimize (B→C→D pipeline)
+// Live Metrics (committee sessions)
 // ════════════════════════════════════════════════════════════════════
 
-export function useStartRacecar() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (req: RacecarAutoOptimizeRequest) => {
-      const { data } = await apiClient.post<RacecarJobStatus>(
-        "/committee/auto-optimize", req,
-      );
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["racecar"] });
-    },
-  });
+export interface CommitteeMetricsResponse {
+  session_id: string;
+  uptime_seconds: number;
+  bar_count: number;
+  signal_count: number;
+  non_zero_signals: number;
+  committee_healthy: boolean;
+  current_regime: string;
+  regime_distribution: Record<string, number>;
+  trust_score: number | null;
+  trust_multiplier: number;
+  effective_multiplier: number;
+  throttle_summary: Record<string, { multiplier: number; level: string }>;
+  per_model_health: Record<string, {
+    rolling_sharpe: number | null;
+    rolling_hit_rate: number | null;
+    total_signals: number;
+    wins: number;
+    losses: number;
+    status: "healthy" | "unhealthy" | "insufficient_data";
+  }>;
+  recent_signals: Array<{
+    timestamp: string;
+    signal: number;
+    confidence: number;
+    regime: string;
+    is_healthy: boolean;
+    meta_override: boolean;
+    throttle_level: string;
+    active_models: string[];
+  }>;
+  error?: string;
 }
 
-export function useRacecarStatus(jobId: string | null) {
+export function useCommitteeMetrics(sessionId: string | null) {
   return useQuery({
-    queryKey: ["racecar", "status", jobId],
+    queryKey: ["live", "committee", "metrics", sessionId],
     queryFn: async () => {
-      const { data } = await apiClient.get<RacecarJobStatus>(
-        `/committee/auto-optimize/${jobId}/status`,
+      if (!sessionId) return null;
+      const { data } = await apiClient.get<CommitteeMetricsResponse>(
+        `/live/committee/${sessionId}/metrics`,
       );
       return data;
     },
-    enabled: !!jobId,
-    refetchInterval: (query) => {
-      if (query.state.data?.phase === "completed" || query.state.data?.phase === "failed") {
-        return false;
-      }
-      return 2_000;
-    },
-  });
-}
-
-export function useRacecarResults(jobId: string | null) {
-  return useQuery({
-    queryKey: ["racecar", "results", jobId],
-    queryFn: async () => {
-      const { data } = await apiClient.get<RacecarJobResults>(
-        `/committee/auto-optimize/${jobId}/results`,
-      );
-      return data;
-    },
-    enabled: !!jobId,
-    staleTime: 30_000,
-  });
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Factory — Iterative Committee Optimizer
-// ════════════════════════════════════════════════════════════════════
-
-export function useStartFactory() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (req: FactoryStartRequest) => {
-      const { data } = await apiClient.post<FactoryStatusResponse>(
-        "/committee/factory/start", req,
-      );
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["factory"] });
-    },
-  });
-}
-
-export function useFactoryStatus(jobId: string | null) {
-  return useQuery({
-    queryKey: ["factory", "status", jobId],
-    queryFn: async () => {
-      const { data } = await apiClient.get<FactoryStatusResponse>(
-        `/committee/factory/${jobId}/status`,
-      );
-      return data;
-    },
-    enabled: !!jobId,
-    refetchInterval: (query) => {
-      if (query.state.data?.phase === "completed" || query.state.data?.phase === "failed") {
-        return false;
-      }
-      return 3_000;
-    },
-  });
-}
-
-export function useFactoryResults(jobId: string | null) {
-  return useQuery({
-    queryKey: ["factory", "results", jobId],
-    queryFn: async () => {
-      const { data } = await apiClient.get<FactoryResultsResponse>(
-        `/committee/factory/${jobId}/results`,
-      );
-      return data;
-    },
-    enabled: !!jobId,
-    staleTime: 30_000,
+    refetchInterval: 15_000,
+    enabled: !!sessionId,
   });
 }
 
@@ -1048,7 +953,7 @@ export function useFullCycleStatus(jobId: string | null) {
     enabled: !!jobId,
     refetchInterval: (query) => {
       const phase = query.state.data?.phase;
-      if (phase === "completed" || phase === "failed" || phase === "validation_failed") return false;
+      if (!phase || phase === "completed" || phase === "failed" || phase === "validation_failed" || phase === "cancelled" || phase === "orphaned") return false;
       return 2_000;
     },
   });
@@ -1078,5 +983,25 @@ export function useFullCycleHistory() {
       return data;
     },
     staleTime: 10_000,
+  });
+}
+
+export function useFullCycleLogs(jobId: string | null, since: number) {
+  return useQuery({
+    queryKey: ["full-cycle", "logs", jobId, since],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LogsResponse>(
+        `/committee/full-cycle/${jobId}/logs`,
+        { params: { since } },
+      );
+      return data;
+    },
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const phase = query.state.data?.entries?.length
+        ? "running"
+        : "running";
+      return 1_500;
+    },
   });
 }

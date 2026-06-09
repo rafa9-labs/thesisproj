@@ -298,10 +298,13 @@ class EnsembleMixin:
                 except Exception:
                     pass
 
-        # 4) Kill cached joblib/loky workers (optional; can be heavy per-trial)
+        # 4) Kill cached joblib/loky workers. Use timeout to prevent deadlock.
         try:
             from joblib.externals.loky import get_reusable_executor
-            get_reusable_executor().shutdown(wait=True, kill_workers=True)
+            try:
+                get_reusable_executor().shutdown(wait=True, timeout=10)
+            except TypeError:
+                get_reusable_executor().shutdown(wait=False)
         except Exception:
             pass
 
@@ -1539,9 +1542,9 @@ class EnsembleMixin:
 
         # Coverage should be based on **trade intent**, not certainty about "flat".
         if proba.shape[1] >= 3:
+            max_conf = proba.max(axis=1)
             p_short = proba[:, 0]
             p_long  = proba[:, 2]
-            max_conf = np.maximum(p_short, p_long)
             decoded_raw = np.where(p_long > p_short, 1, np.where(p_short > p_long, -1, 0))
             raw_classes = np.where(p_long > p_short, 2, np.where(p_short > p_long, 0, 1)).astype(int)
         else:

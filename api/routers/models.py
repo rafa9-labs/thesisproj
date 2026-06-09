@@ -27,6 +27,7 @@ MODEL_DESCRIPTIONS = {
     "gru_lstm": ("GRU-LSTM Hybrid", "deep", "Hybrid GRU+LSTM network for sequential data"),
     "dqn": ("Dueling DQN", "rl", "Deep Q-Network reinforcement learning agent"),
     "ensemble_adaptive_regime": ("Adaptive Regime Ensemble", "ensemble", "Regime-aware ensemble combining multiple models"),
+    "ensemble_cnn_lstm_xgboost": ("CNN-LSTM-XGBoost Ensemble", "ensemble", "Hybrid CNN+LSTM+XGBoost ensemble"),
     "meta_ensemble": ("Signal Committee", "ensemble", "Multi-model voting committee combining multiple models"),
     "stacking_ensemble": ("Stacking Ensemble", "ensemble", "OOF meta-learner combining multiple base models"),
     "regime_classifier": ("Regime Classifier", "ensemble", "RF-based market regime classifier for committee routing"),
@@ -472,6 +473,7 @@ def save_model_from_job(job_id: str, model_name: str = Query("", description="Mo
         raise HTTPException(500, f"Snapshot invalid: {reason}")
 
     from pipeline.model_registry_disk import register_snapshot
-    model_id = register_snapshot(snapshot_path, DB_PATH)
+    from api.config import settings
+    model_id = register_snapshot(snapshot_path, settings.db_full_path)
 
     return SaveFromJobResponse(status="ok", model_id=model_id, snapshot_path=snapshot_path)

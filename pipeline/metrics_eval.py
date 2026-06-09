@@ -596,125 +596,137 @@ def compute_full_evaluation_metrics(
 
     trades_sig = np.zeros(n, dtype=float)
 
-    # --- Build PatchConfig and delegate to execution_patches ---
-    from pipeline.backtester.execution_patches import PatchConfig, run_execution_loop
+    _is_cv = bool(eval_context) and (str(eval_context).startswith("cv:") or str(eval_context).startswith("hpo:"))
 
-    cfg = PatchConfig(
-        bars_per_day=bars_per_day,
-        annual_bars=annual_bars,
-        vol_floor=vol_floor,
-        use_vol_target=use_vol_target,
-        target_bar=target_bar,
-        max_lev=max_lev,
-        use_trail=use_trail,
-        tp1_z_base=tp1_z_base,
-        trail_k_base=trail_k_base,
-        dyn_vol=dyn_vol,
-        move_to_be=move_to_be,
-        max_hold_bars=max_hold_bars,
-        min_hold_bars=min_hold_bars,
-        use_twap=use_twap,
-        twap_span=twap_span,
-        impact_eta=impact_eta,
-        twap_freeze=twap_freeze,
-        use_regime=use_regime,
-        tp1_z_calm=tp1_z_calm,
-        tp1_z_normal=tp1_z_normal,
-        tp1_z_volatile=tp1_z_volatile,
-        trail_k_calm=trail_k_calm,
-        trail_k_normal=trail_k_normal,
-        trail_k_volatile=trail_k_volatile,
-        use_kill=use_kill,
-        kill_mode=kill_mode,
-        kill_pct=kill_pct,
-        kill_sigma_k=kill_sigma_k,
-        kill_until_session_end=kill_until_session_end,
-        kill_cooloff_bars=kill_cooloff_bars,
-        use_spread_guard=use_spread_guard,
-        spread_cap=spread_cap,
-        debug_costs=debug_costs,
-        eval_context=eval_context,
-        stop_pip_value=_cfg("stop_pip_value", 0.0001),
-        trailing_pip_value=_cfg("trailing_pip_value", 0.0001),
-        sizing_method=_cfg("sizing_method", "fixed"),
-        sizing_risk_fraction=_cfg("sizing_risk_fraction", 0.02),
-        sizing_kelly_fraction=_cfg("sizing_kelly_fraction", 0.5),
-        sizing_kelly_min_trades=_cfg("sizing_kelly_min_trades", 10),
-        sizing_atr_risk_pct=_cfg("sizing_atr_risk_pct", 0.02),
-        sizing_atr_sl_mult=_cfg("sizing_atr_sl_mult", 2.0),
-        sizing_initial_equity=_cfg("sizing_initial_equity", 10_000.0),
-        sizing_max_leverage=_cfg("sizing_max_leverage", 5.0),
-        sizing_contract_size=_cfg("sizing_contract_size", 100_000.0),
-        stop_method=_cfg("stop_method", "none"),
-        stop_sl_pips=_cfg("stop_sl_pips", 30.0),
-        stop_tp_pips=_cfg("stop_tp_pips", 60.0),
-        stop_sl_atr_mult=_cfg("stop_sl_atr_mult", 2.0),
-        stop_tp_atr_mult=_cfg("stop_tp_atr_mult", 3.0),
-        stop_sl_sigma_mult=_cfg("stop_sl_sigma_mult", 2.0),
-        stop_tp_sigma_mult=_cfg("stop_tp_sigma_mult", 3.0),
-        stop_use_be=_cfg("stop_use_be", False),
-        stop_be_trigger_pips=_cfg("stop_be_trigger_pips", 20.0),
-        stop_use_partial_close=_cfg("stop_use_partial_close", False),
-        stop_tp1_ratio=_cfg("stop_tp1_ratio", 0.5),
-        stop_tp1_pips=_cfg("stop_tp1_pips", 30.0),
-        stop_tp2_pips=_cfg("stop_tp2_pips", 0.0),
-        trailing_method=_cfg("trailing_method", "none"),
-        trailing_pips=_cfg("trailing_pips", 30.0),
-        trailing_atr_mult=_cfg("trailing_atr_mult", 3.0),
-        trailing_chandelier_atr_mult=_cfg("trailing_chandelier_atr_mult", 3.0),
-        trailing_chandelier_lookback=_cfg("trailing_chandelier_lookback", 22),
-        trailing_activation_pips=_cfg("trailing_activation_pips", 10.0),
-        risk_use_dd_breaker=_cfg("risk_use_dd_breaker", False),
-        risk_max_drawdown_pct=_cfg("risk_max_drawdown_pct", 0.20),
-        risk_dd_resume=_cfg("risk_dd_resume", "session_end"),
-        risk_dd_cooloff_bars=_cfg("risk_dd_cooloff_bars", 48),
-        risk_use_daily_loss=_cfg("risk_use_daily_loss", False),
-        risk_max_daily_loss_pct=_cfg("risk_max_daily_loss_pct", 0.03),
-        risk_max_daily_loss_sigma=_cfg("risk_max_daily_loss_sigma", 3.0),
-        risk_daily_loss_mode=_cfg("risk_daily_loss_mode", "pct"),
-        risk_use_consec_loss=_cfg("risk_use_consec_loss", False),
-        risk_max_consecutive_losses=_cfg("risk_max_consecutive_losses", 5),
-        risk_consec_resume=_cfg("risk_consec_resume", "session_end"),
-        risk_consec_cooloff_bars=_cfg("risk_consec_cooloff_bars", 48),
-        risk_initial_equity=_cfg("risk_initial_equity", 10_000.0),
-        risk_max_open_positions=_cfg("risk_max_open_positions", 1),
-    )
+    if _is_cv:
+        pos_actual = np.clip(pred, -1.0, 1.0)
+        spread_arr = df["spread"].values.astype(float) if "spread" in df.columns else np.zeros(n)
+        pos_diff = np.abs(np.diff(pos_actual, prepend=0.0))
+        strat = (pos_actual * rets) - (spread_arr * pos_diff)
+        tp1_hits = 0; stop_hits = 0; timeouts = 0; flips_exits = 0
+        twap_events = 0; total_ramp_bars = 0
+        total_impact_cost = 0.0; total_slippage_cost = 0.0
+        spread_spike_blocked = 0; kills_triggered = 0; bars_flat_due_kill = 0
+        record_cost_columns = False
+    else:
+        # --- Build PatchConfig and delegate to execution_patches ---
+        from pipeline.backtester.execution_patches import PatchConfig, run_execution_loop
 
-    record_cost_columns = bool(_cfg("eval_record_cost_columns", False)) or bool(debug_costs)
+        cfg = PatchConfig(
+            bars_per_day=bars_per_day,
+            annual_bars=annual_bars,
+            vol_floor=vol_floor,
+            use_vol_target=use_vol_target,
+            target_bar=target_bar,
+            max_lev=max_lev,
+            use_trail=use_trail,
+            tp1_z_base=tp1_z_base,
+            trail_k_base=trail_k_base,
+            dyn_vol=dyn_vol,
+            move_to_be=move_to_be,
+            max_hold_bars=max_hold_bars,
+            min_hold_bars=min_hold_bars,
+            use_twap=use_twap,
+            twap_span=twap_span,
+            impact_eta=impact_eta,
+            twap_freeze=twap_freeze,
+            use_regime=use_regime,
+            tp1_z_calm=tp1_z_calm,
+            tp1_z_normal=tp1_z_normal,
+            tp1_z_volatile=tp1_z_volatile,
+            trail_k_calm=trail_k_calm,
+            trail_k_normal=trail_k_normal,
+            trail_k_volatile=trail_k_volatile,
+            use_kill=use_kill,
+            kill_mode=kill_mode,
+            kill_pct=kill_pct,
+            kill_sigma_k=kill_sigma_k,
+            kill_until_session_end=kill_until_session_end,
+            kill_cooloff_bars=kill_cooloff_bars,
+            use_spread_guard=use_spread_guard,
+            spread_cap=spread_cap,
+            debug_costs=debug_costs,
+            eval_context=eval_context,
+            stop_pip_value=_cfg("stop_pip_value", 0.0001),
+            trailing_pip_value=_cfg("trailing_pip_value", 0.0001),
+            sizing_method=_cfg("sizing_method", "fixed"),
+            sizing_risk_fraction=_cfg("sizing_risk_fraction", 0.02),
+            sizing_kelly_fraction=_cfg("sizing_kelly_fraction", 0.5),
+            sizing_kelly_min_trades=_cfg("sizing_kelly_min_trades", 10),
+            sizing_atr_risk_pct=_cfg("sizing_atr_risk_pct", 0.02),
+            sizing_atr_sl_mult=_cfg("sizing_atr_sl_mult", 2.0),
+            sizing_initial_equity=_cfg("sizing_initial_equity", 10_000.0),
+            sizing_max_leverage=_cfg("sizing_max_leverage", 5.0),
+            sizing_contract_size=_cfg("sizing_contract_size", 100_000.0),
+            stop_method=_cfg("stop_method", "none"),
+            stop_sl_pips=_cfg("stop_sl_pips", 30.0),
+            stop_tp_pips=_cfg("stop_tp_pips", 60.0),
+            stop_sl_atr_mult=_cfg("stop_sl_atr_mult", 2.0),
+            stop_tp_atr_mult=_cfg("stop_tp_atr_mult", 3.0),
+            stop_sl_sigma_mult=_cfg("stop_sl_sigma_mult", 2.0),
+            stop_tp_sigma_mult=_cfg("stop_tp_sigma_mult", 3.0),
+            stop_use_be=_cfg("stop_use_be", False),
+            stop_be_trigger_pips=_cfg("stop_be_trigger_pips", 20.0),
+            stop_use_partial_close=_cfg("stop_use_partial_close", False),
+            stop_tp1_ratio=_cfg("stop_tp1_ratio", 0.5),
+            stop_tp1_pips=_cfg("stop_tp1_pips", 30.0),
+            stop_tp2_pips=_cfg("stop_tp2_pips", 0.0),
+            trailing_method=_cfg("trailing_method", "none"),
+            trailing_pips=_cfg("trailing_pips", 30.0),
+            trailing_atr_mult=_cfg("trailing_atr_mult", 3.0),
+            trailing_chandelier_atr_mult=_cfg("trailing_chandelier_atr_mult", 3.0),
+            trailing_chandelier_lookback=_cfg("trailing_chandelier_lookback", 22),
+            trailing_activation_pips=_cfg("trailing_activation_pips", 10.0),
+            risk_use_dd_breaker=_cfg("risk_use_dd_breaker", False),
+            risk_max_drawdown_pct=_cfg("risk_max_drawdown_pct", 0.20),
+            risk_dd_resume=_cfg("risk_dd_resume", "session_end"),
+            risk_dd_cooloff_bars=_cfg("risk_dd_cooloff_bars", 48),
+            risk_use_daily_loss=_cfg("risk_use_daily_loss", False),
+            risk_max_daily_loss_pct=_cfg("risk_max_daily_loss_pct", 0.03),
+            risk_max_daily_loss_sigma=_cfg("risk_max_daily_loss_sigma", 3.0),
+            risk_daily_loss_mode=_cfg("risk_daily_loss_mode", "pct"),
+            risk_use_consec_loss=_cfg("risk_use_consec_loss", False),
+            risk_max_consecutive_losses=_cfg("risk_max_consecutive_losses", 5),
+            risk_consec_resume=_cfg("risk_consec_resume", "session_end"),
+            risk_consec_cooloff_bars=_cfg("risk_consec_cooloff_bars", 48),
+            risk_initial_equity=_cfg("risk_initial_equity", 10_000.0),
+            risk_max_open_positions=_cfg("risk_max_open_positions", 1),
+        )
 
-    result = run_execution_loop(
-        df=df,
-        pred=pred,
-        rets=rets,
-        bar_vol=bar_vol,
-        gap_from_prev_bool=gap_from_prev_bool,
-        regime_code=regime_code,
-        cfg=cfg,
-        trading_costs=trading_costs,
-        slippage_factor=slippage_factor,
-        session_flag_arr=session_flag_arr,
-        record_cost_columns=record_cost_columns,
-    )
+        record_cost_columns = bool(_cfg("eval_record_cost_columns", False)) or bool(debug_costs)
 
-    # Unpack results into local variables for post-loop code
-    pos_actual = result.pos_actual
-    strat = result.strat
-    tp1_hits = result.tp1_hits
-    stop_hits = result.stop_hits
-    timeouts = result.timeouts
-    flips_exits = result.flips_exits
-    twap_events = result.twap_events
-    total_ramp_bars = result.total_ramp_bars
-    total_impact_cost = result.total_impact_cost
-    total_slippage_cost = result.total_slippage_cost
-    spread_spike_blocked = result.spread_spike_blocked
-    kills_triggered = result.kills_triggered
-    bars_flat_due_kill = result.bars_flat_due_kill
-    if record_cost_columns:
-        cost_spread_pf = result.cost_spread_pf
-        cost_slip_pf = result.cost_slip_pf
-        cost_impact_bar = result.cost_impact_bar
-        cost_total_turn = result.cost_total_turn
+        result = run_execution_loop(
+            df=df,
+            pred=pred,
+            rets=rets,
+            bar_vol=bar_vol,
+            gap_from_prev_bool=gap_from_prev_bool,
+            regime_code=regime_code,
+            cfg=cfg,
+            trading_costs=trading_costs,
+            slippage_factor=slippage_factor,
+            session_flag_arr=session_flag_arr,
+            record_cost_columns=record_cost_columns,
+        )
+
+        pos_actual = result.pos_actual
+        strat = result.strat
+        tp1_hits = result.tp1_hits
+        stop_hits = result.stop_hits
+        timeouts = result.timeouts
+        flips_exits = result.flips_exits
+        twap_events = result.twap_events
+        total_ramp_bars = result.total_ramp_bars
+        total_impact_cost = result.total_impact_cost
+        total_slippage_cost = result.total_slippage_cost
+        spread_spike_blocked = result.spread_spike_blocked
+        kills_triggered = result.kills_triggered
+        bars_flat_due_kill = result.bars_flat_due_kill
+        if record_cost_columns:
+            cost_spread_pf = result.cost_spread_pf
+            cost_slip_pf = result.cost_slip_pf
+            cost_impact_bar = result.cost_impact_bar
+            cost_total_turn = result.cost_total_turn
 
 
     # Trades (reporting continuity)

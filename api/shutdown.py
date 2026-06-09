@@ -78,12 +78,17 @@ def shutdown_deep_pool() -> None:
 
 
 def startup_cleanup(db_path: str) -> int:
-    """Run all startup cleanup: prune stale jobs, do nothing destructive."""
+    """Run all startup cleanup: prune stale jobs, reap orphaned processes."""
+    from api.process_cleanup import cleanup_all, reap_orphaned_processes
+    reap_orphaned_processes()
+    cleanup_all()
     return mark_stale_jobs_failed(db_path)
 
 
 def shutdown_cleanup(db_path: str) -> None:
     """Run all shutdown cleanup: kill pools, checkpoint WAL, mark interrupted jobs."""
+    from api.process_cleanup import cleanup_all
+    cleanup_all()
     shutdown_deep_pool()
     mark_running_jobs_interrupted(db_path)
     wal_checkpoint(db_path)

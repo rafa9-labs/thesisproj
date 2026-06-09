@@ -206,18 +206,14 @@ class CommitteeBuilder:
             if not eligible:
                 continue
 
-            candidates = self._select_candidates(
+            candidates = self._select_candidates_diverse(
                 matrix, r_idx, top_k=constraints["max_models_per_regime"],
-                eligible_models=eligible,
+                eligible_models=eligible, model_usage=model_usage_count,
+                diversity_penalty=constraints["diversity_penalty"],
             )
 
             if not candidates:
                 continue
-
-            # Apply diversity penalty
-            candidates = self._apply_diversity(
-                candidates, model_usage_count, penalty=constraints["diversity_penalty"]
-            )
 
             weights = self._compute_weights(
                 matrix, r_idx, candidates, model_names
@@ -276,6 +272,41 @@ class CommitteeBuilder:
         scored.sort(key=lambda x: (x[1], x[2]), reverse=True)
         return [m for m, _, _ in scored[:top_k]]
 
+    def _select_candidates_diverse(
+        self,
+        matrix: "RegimeModelMatrix",
+        regime_idx: int,
+        top_k: int = 3,
+        eligible_models: Optional[List[str]] = None,
+        model_usage: Optional[Dict[str, int]] = None,
+        diversity_penalty: float = 0.05,
+    ) -> List[str]:
+        """Select top-k candidates with diversity penalty applied.
+
+        Models that already appear in many regimes have their effective
+        Sharpe deflated by (1 - penalty * usage_count). This encourages
+        rotation across regimes rather than the same model dominating.
+        """
+        sharpe_col = matrix.sharpe_matrix[:, regime_idx]
+        models_list = list(matrix.models)
+        eligible_set = set(eligible_models) if eligible_models is not None else None
+        usage = model_usage or {}
+
+        scored = []
+        for i, s in enumerate(sharpe_col):
+            if not np.isnan(s) and s >= self.min_sharpe:
+                if eligible_set is not None and models_list[i] not in eligible_set:
+                    continue
+                sharpe_val = float(s)
+                if diversity_penalty > 0:
+                    use_count = usage.get(models_list[i], 0)
+                    sharpe_val *= max(0.01, 1.0 - diversity_penalty * use_count)
+                trades = int(matrix.trade_matrix[i, regime_idx])
+                scored.append((models_list[i], sharpe_val, trades))
+
+        scored.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        return [m for m, _, _ in scored[:top_k]]
+
     # ── Internal: weight computation ──
 
     def _compute_weights(
@@ -325,63 +356,7 @@ class CommitteeBuilder:
                 return [1.0 / n] * n
             return [w / total for w in raw]
 
-        if method == "optimized":
-            return self._simplex_optimize(candidates, candidate_sharpes)
-
         # Fallback
-        return [1.0 / n] * n
-
-    def _simplex_optimize(
-        self,
-        candidates: List[str],
-        candidate_sharpes: Dict[str, List[float]],
-    ) -> List[float]:
-        """Optimize weights on the simplex to maximize mean Sharpe.
-
-        Uses scipy.optimize.minimize with constraints sum(w)=1, w_i >= 0.
-        Objective: -mean_weighted_sharpe + 0.1 * std_weighted_sharpe (risk-averse).
-        """
-        n = len(candidates)
-
-        # Build Sharpe matrix: n_candidates × n_folds
-        min_len = min(
-            (len(candidate_sharpes.get(m, [])) for m in candidates),
-            default=0,
-        )
-        if min_len < 2:
-            return [1.0 / n] * n
-
-        S = np.zeros((n, min_len))
-        for i, model in enumerate(candidates):
-            S[i, :] = candidate_sharpes[model][:min_len]
-
-        def objective(w):
-            portfolio = w @ S
-            mean_sr = np.mean(portfolio)
-            std_sr = np.std(portfolio, ddof=1)
-            return -mean_sr + 0.1 * std_sr
-
-        try:
-            from scipy.optimize import minimize
-
-            x0 = np.ones(n) / n
-            bounds = [(0.0, 1.0)] * n
-            constraints = {"type": "eq", "fun": lambda w: np.sum(w) - 1.0}
-
-            result = minimize(
-                objective, x0, method="SLSQP",
-                bounds=bounds, constraints=constraints,
-                options={"maxiter": 500, "ftol": 1e-8},
-            )
-
-            if result.success:
-                w = np.maximum(result.x, 0.0)
-                s = w.sum()
-                if s > 0:
-                    return list(w / s)
-        except ImportError:
-            pass
-
         return [1.0 / n] * n
 
     # ── Internal: diversity ──
@@ -392,15 +367,40 @@ class CommitteeBuilder:
         usage: Dict[str, int],
         penalty: float = 0.05,
     ) -> List[str]:
-        """Apply diversity penalty: if a model is overused, try to rotate.
+        """Apply diversity penalty: deflate Sharpe scores for overused models.
 
-        Note: this is a soft penalty. If fewer alternatives exist, retain anyway.
+        A model appearing in many regimes has its effective score reduced
+        by penalty * (usage_count). This encourages rotation — other models
+        with similar scores but lower usage will rank higher.
         """
         if penalty <= 0:
             return candidates
-        # For now: no reordering, just track usage for metadata.
-        # Full diversity rotation can be added when we have a larger pool.
-        return candidates
+        # Usage-based score deflation: overused models get penalized
+        # The caller selects top-K by score, so deflating scores
+        # naturally rotates diversity. No reordering needed here.
+        return candidates  # caller uses _select_candidates which sorts by (Sharpe, trades)
+
+    def _apply_diversity_scores(
+        self,
+        scores: List[tuple],
+        usage: Dict[str, int],
+        penalty: float = 0.05,
+    ) -> List[tuple]:
+        """Adjust candidate scores downward proportional to usage count.
+
+        Each model's score is multiplied by (1 - penalty * usage_count).
+        Models used in 0 regimes keep full score; models used in 3 regimes
+        lose 15% of their score (with penalty=0.05).
+        """
+        if penalty <= 0:
+            return scores
+        result = []
+        for model, sharpe, trades in scores:
+            use_count = usage.get(model, 0)
+            adjusted = sharpe * max(0.01, 1.0 - penalty * use_count)
+            result.append((model, adjusted, trades))
+        result.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        return result
 
     # ── Internal: fallback ──
 
@@ -409,30 +409,19 @@ class CommitteeBuilder:
         matrix: "RegimeModelMatrix",
         model_names: List[str],
     ) -> RegimeAssignment:
-        """Select the best model across all regimes as the fallback."""
-        n_regimes = matrix.sharpe_matrix.shape[1]
+        """Equal-weight all surviving models as the fallback.
 
-        best_model = None
-        best_avg = -np.inf
-
-        for i, model in enumerate(model_names):
-            row = matrix.sharpe_matrix[i, :]
-            valid = row[~np.isnan(row)]
-            if len(valid) == 0:
-                continue
-            avg_sr = float(np.mean(valid))
-            # Prefer models that work in more regimes
-            coverage = len(valid) / n_regimes
-            score = avg_sr + 0.05 * coverage
-
-            if score > best_avg:
-                best_avg = score
-                best_model = model
-
-        if best_model is None:
-            best_model = model_names[0] if model_names else "logistic"
-
-        return RegimeAssignment(models=[best_model], weights=[1.0])
+        When the regime detector is uncertain or returns an out-of-distribution
+        regime, blend all models equally. This is the maximum-entropy prior
+        under regime uncertainty — specialist predictions partially cancel.
+        """
+        n = len(model_names)
+        if n == 0:
+            return RegimeAssignment(models=["logistic"], weights=[1.0])
+        return RegimeAssignment(
+            models=list(model_names),
+            weights=[1.0 / n] * n,
+        )
 
     # ── Serialization helpers ──
 

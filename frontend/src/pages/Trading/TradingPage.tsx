@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, AlertTriangle, ShieldOff, X } from "lucide-react";
+import { Activity, AlertTriangle, ShieldOff, X, ChevronDown, ChevronRight } from "lucide-react";
 import {
   usePairs,
   useLivePrices,
@@ -9,13 +9,15 @@ import {
   useDeployLiveSession,
   useStopLiveSession,
   useEmergencyKillSession,
+  useLiveSentiment,
 } from "@/api/queries";
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/api/client";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";
 import type { OverlayLine } from "@/components/charts/CandlestickChart";
 import { TIMEFRAMES } from "@/lib/constants";
-import type { PaperSignalEvent, LiveSignalEvent, PaperSummary } from "@/api/schemas";
+import type { PaperSignalEvent, LiveSignalEvent, PaperSummary, LiveSentimentResponse, LiveSentimentArticle } from "@/api/schemas";
+import { useSettingsStore } from "@/stores/useSettingsStore";
 
 import { PositionMonitor } from "./PositionMonitor";
 import type { SignalDirection } from "./PositionMonitor";
@@ -158,6 +160,10 @@ export default function TradingPage() {
   const [riskConfig, setRiskConfig] = useState(RISK_DEFAULTS);
   const [confirmLive, setConfirmLive] = useState(false);
   const [live, setLive] = useState<LiveState>(INITIAL_LIVE_STATE);
+  const newsBlendEnabled = useSettingsStore((s) => s.liveNewsBlendEnabled);
+  const newsBlendWeight = useSettingsStore((s) => s.liveNewsBlendWeight);
+  const setField = useSettingsStore((s) => s.setField);
+  const { data: sentiment } = useLiveSentiment(selectedPair);
 
   const wsRef = useRef<WebSocket | null>(null);
   const { data: priceData } = useLivePrices([selectedPair], 50);
@@ -261,6 +267,8 @@ export default function TradingPage() {
       const basePayload = {
         pair: selectedPair, model_id: selectedModelId, model_type: selected?.model_type ?? "logistic",
         timeframe, initial_equity: initialEquity, position_sizing: positionSizing, sizing_config: {},
+        live_news_blend_enabled: newsBlendEnabled,
+        live_news_blend_weight: newsBlendWeight,
       };
       let result: { session_id: string };
       if (tradingMode === "paper") {
@@ -283,7 +291,7 @@ export default function TradingPage() {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setLive((prev) => ({ ...prev, deploying: false, error: detail ?? String(err) }));
     }
-  }, [selectedPair, selectedModelId, timeframe, initialEquity, positionSizing, tradingMode, confirmLive, riskConfig, deployPaper, deployLive, deployedModels]);
+  }, [selectedPair, selectedModelId, timeframe, initialEquity, positionSizing, tradingMode, confirmLive, riskConfig, deployPaper, deployLive, deployedModels, newsBlendEnabled, newsBlendWeight]);
 
   const handleStop = useCallback(async () => {
     if (!live.sessionId) return;
@@ -490,6 +498,41 @@ export default function TradingPage() {
 
           <TradeHistory trades={live.trades} />
 
+          {/* News Sentiment sidebar — toggle + weight only */}
+          <div className="rounded-sm border p-3" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
+            <h4 className="text-[10px] font-medium uppercase tracking-[0.12em] mb-2" style={{ color: "var(--color-text-muted)" }}>News Sentiment</h4>
+            <label className="flex items-center gap-2 cursor-pointer mb-2">
+              <input type="checkbox" checked={newsBlendEnabled} onChange={(e) => setField("liveNewsBlendEnabled", e.target.checked)} disabled={isRunning || live.deploying}
+                className="rounded" style={{ accentColor: "var(--color-brand)" }} />
+              <span className="text-[10px]" style={{ color: newsBlendEnabled ? "var(--color-text-primary)" : "var(--color-text-muted)" }}>Blend into signals</span>
+            </label>
+            {newsBlendEnabled && (
+              <div className="flex flex-col gap-1">
+                <div className="flex justify-between">
+                  <span className="text-[9px]" style={{ color: "var(--color-text-muted)" }}>Influence</span>
+                  <span className="text-[9px] tabular-nums" style={{ color: "var(--color-brand)", fontFamily: "var(--font-mono)" }}>{(newsBlendWeight * 100).toFixed(0)}%</span>
+                </div>
+                <input type="range" min="0" max="0.30" step="0.01" value={newsBlendWeight}
+                  onChange={(e) => setField("liveNewsBlendWeight", parseFloat(e.target.value))}
+                  disabled={isRunning || live.deploying}
+                  className="w-full h-1 rounded-full appearance-none cursor-pointer disabled:opacity-50"
+                  style={{ accentColor: "var(--color-brand)", background: "var(--color-glass-hover)" }} />
+              </div>
+            )}
+            {sentiment?.pairs?.[selectedPair] && (
+              <div className="mt-2 rounded-sm px-2 py-1 flex items-center justify-between" style={{ backgroundColor: "var(--color-glass-hover)" }}>
+                <span className="text-[9px]" style={{ color: "var(--color-text-muted)" }}>Current</span>
+                <span className="text-[10px] font-semibold tabular-nums" style={{
+                  color: sentiment.pairs[selectedPair].blended_sentiment >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)",
+                  fontFamily: "var(--font-mono)",
+                }}>
+                  {sentiment.pairs[selectedPair].blended_sentiment > 0 ? "+" : ""}
+                  {sentiment.pairs[selectedPair].blended_sentiment.toFixed(2)}
+                </span>
+              </div>
+            )}
+          </div>
+
           <div className="rounded-sm border p-3" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
             <h4 className="text-[10px] font-medium uppercase tracking-[0.12em] mb-2" style={{ color: "var(--color-text-muted)" }}>Configuration</h4>
             <div className="flex flex-col gap-1">
@@ -497,10 +540,14 @@ export default function TradingPage() {
               <Row label="Pair" value={selectedPair} />
               <Row label="Timeframe" value={timeframe} />
               {live.sessionId && <Row label="Session" value={live.sessionId} muted />}
+              {newsBlendEnabled && <Row label="News Blend" value={`${(newsBlendWeight * 100).toFixed(0)}%`} muted />}
             </div>
           </div>
         </div>
       </div>
+
+      {/* ── Full-width News Sentiment Panel (below chart) ── */}
+      <NewsSentimentPanel pair={selectedPair} sentiment={sentiment} />
     </div>
   );
 }
@@ -512,4 +559,131 @@ function Row({ label, value, muted }: { label: string; value: string; muted?: bo
       <span className="text-[10px] font-medium" style={{ color: muted ? "var(--color-text-muted)" : "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>{value}</span>
     </div>
   );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// News Sentiment Panel
+// ════════════════════════════════════════════════════════════════════
+
+function NewsSentimentPanel({ pair, sentiment }: { pair: string; sentiment?: LiveSentimentResponse | null }) {
+  const [expandedTiers, setExpandedTiers] = useState<Record<string, boolean>>({ exact: true });
+  const [panelOpen, setPanelOpen] = useState(true);
+
+  if (!sentiment) return null;
+
+  const pairData = sentiment.pairs?.[pair];
+  const articles = (sentiment.top_articles ?? []) as LiveSentimentArticle[];
+  const tierCounts = sentiment.article_count_by_tier ?? pairData?.article_count_by_tier;
+  const tierLabels: Record<string, string> = {
+    exact: `${pair} articles`,
+    partial: "Related currency",
+    other: "Other / untagged",
+  };
+
+  const tiers = [
+    { key: "exact", label: tierLabels.exact, filter: (a: LiveSentimentArticle) => a.relevance_tier === 1 },
+    { key: "partial", label: tierLabels.partial, filter: (a: LiveSentimentArticle) => a.relevance_tier === 2 },
+    { key: "other", label: tierLabels.other, filter: (a: LiveSentimentArticle) => (a.relevance_tier ?? 0) === 0 },
+  ];
+
+  const toggle = (key: string) => setExpandedTiers((p) => ({ ...p, [key]: !p[key] }));
+
+  return (
+    <div className="rounded-sm border" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
+      <button onClick={() => setPanelOpen((v) => !v)} className="flex items-center gap-2 w-full px-4 py-2 text-left">
+        {panelOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <h4 className="text-[10px] font-medium uppercase tracking-[0.12em]" style={{ color: "var(--color-text-muted)" }}>News Sentiment</h4>
+        <span className="text-[10px] tabular-nums" style={{ color: "var(--color-text-dim)", fontFamily: "var(--font-mono)" }}>
+          {articles.length} articles
+        </span>
+        <span className="text-[8px] uppercase ml-auto" style={{ color: "var(--color-text-dim)" }}>{sentiment.backend ?? "vader"}</span>
+      </button>
+
+      {panelOpen && (
+        <div className="px-4 pb-3">
+          {/* Sentiment score + contributions */}
+          {pairData && (
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] uppercase tracking-[0.08em]" style={{ color: "var(--color-text-muted)" }}>Blended</span>
+                <span className="text-sm font-semibold tabular-nums" style={{
+                  color: pairData.blended_sentiment >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)",
+                  fontFamily: "var(--font-mono)",
+                }}>
+                  {pairData.blended_sentiment > 0 ? "+" : ""}{pairData.blended_sentiment.toFixed(3)}
+                </span>
+              </div>
+              {pairData.vader_contribution != null && pairData.llm_contribution != null && (
+                <div className="flex items-center gap-3 text-[10px]" style={{ color: "var(--color-text-dim)", fontFamily: "var(--font-mono)" }}>
+                  <span>VADER: {pairData.vader_contribution > 0 ? "+" : ""}{pairData.vader_contribution.toFixed(2)}</span>
+                  <span>LLM: {pairData.llm_contribution > 0 ? "+" : ""}{pairData.llm_contribution.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-3 text-[9px]" style={{ color: "var(--color-text-dim)" }}>
+                <span>VADER score: {pairData.vader_sentiment > 0 ? "+" : ""}{pairData.vader_sentiment.toFixed(3)}</span>
+                <span>magnitude: {pairData.vader_magnitude.toFixed(2)}</span>
+                {pairData.llm_sentiment != null && (
+                  <span>LLM dir: {pairData.llm_sentiment > 0 ? "+" : ""}{pairData.llm_sentiment.toFixed(2)}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tier counts + articles */}
+          {articles.length > 0 ? (
+            <div className="flex flex-col gap-0 overflow-y-auto max-h-[420px]">
+              {tiers.map(({ key, label, filter }) => {
+                const tierArticles = articles.filter(filter);
+                if (tierArticles.length === 0) return null;
+                const count = tierCounts?.[key as keyof typeof tierCounts] ?? tierArticles.length;
+                const isExpanded = expandedTiers[key] ?? (key === "exact");
+                return (
+                  <div key={key}>
+                    <button onClick={() => toggle(key)} className="flex items-center gap-1.5 w-full text-left py-1.5 border-b" style={{ borderColor: "var(--color-glass-border)" }}>
+                      {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                      <span className="text-[9px] uppercase tracking-[0.06em] font-medium" style={{ color: "var(--color-text-muted)" }}>{label}</span>
+                      <span className="text-[8px] tabular-nums" style={{ color: "var(--color-text-dim)", fontFamily: "var(--font-mono)" }}>({count})</span>
+                    </button>
+                    {isExpanded && tierArticles.map((a, i) => (
+                      <div key={`${a.title}-${i}`} className="flex items-center gap-2 px-3 py-1.5 border-b" style={{ borderColor: "var(--color-glass-border)" }}>
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: a.sentiment_score >= 0.05 ? "var(--color-accent-success)" : a.sentiment_score <= -0.05 ? "var(--color-accent-danger)" : "var(--color-text-dim)" }} />
+                        <span className="text-[9px] truncate flex-1" style={{ color: "var(--color-text-secondary)" }}>{a.title}</span>
+                        <span className="text-[8px] tabular-nums flex-shrink-0" style={{ color: "var(--color-text-dim)", fontFamily: "var(--font-mono)" }}>
+                          {formatTimeAgo(a.timestamp)}
+                        </span>
+                        <span className="text-[9px] font-semibold tabular-nums w-[42px] text-right flex-shrink-0" style={{
+                          color: a.sentiment_score >= 0.05 ? "var(--color-accent-success)" : a.sentiment_score <= -0.05 ? "var(--color-accent-danger)" : "var(--color-text-dim)",
+                          fontFamily: "var(--font-mono)",
+                        }}>
+                          {a.sentiment_score > 0 ? "+" : ""}{a.sentiment_score.toFixed(2)}
+                        </span>
+                        <span className="text-[7px] uppercase w-[48px] text-right flex-shrink-0" style={{ color: "var(--color-text-dim)" }}>{a.source}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>No articles available. RSS feeds will populate over time.</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatTimeAgo(ts: string): string {
+  try {
+    const d = new Date(ts);
+    const now = Date.now();
+    const diff = now - d.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h`;
+    return `${Math.floor(hrs / 24)}d`;
+  } catch {
+    return "";
+  }
 }

@@ -186,62 +186,79 @@ export function DashboardPage() {
             ALGO Metrics
           </span>
           <div className="flex flex-col divide-y" style={{ borderColor: "var(--color-glass-border)" }}>
-            {[
-              {
-                label: "AVG SHARPE",
-                value: formatMetric(kpis.avgSharpe),
-                color: (kpis.avgSharpe ?? 0) >= 1
-                  ? "var(--color-accent-success)"
-                  : (kpis.avgSharpe ?? 0) >= 0.5
-                  ? "var(--color-accent-warning)"
-                  : "var(--color-accent-danger)",
-              },
-              {
-                label: "WIN RATE",
-                value: formatPercent(kpis.avgWinRate, 1),
-                color: (kpis.avgWinRate ?? 0) >= 0.5
-                  ? "var(--color-accent-success)"
-                  : "var(--color-accent-danger)",
-              },
-              {
-                label: "PROFIT. MONTHS",
-                value: formatPercent(kpis.profitableMonthsPct, 0),
-                color: (kpis.profitableMonthsPct ?? 0) >= 0.6
-                  ? "var(--color-accent-success)"
-                  : "var(--color-text-secondary)",
-              },
-              {
-                label: "AVG RETURN",
-                value: formatPercent(kpis.avgReturn, 2),
-                color: (kpis.avgReturn ?? 0) >= 0
-                  ? "var(--color-accent-success)"
-                  : "var(--color-accent-danger)",
-              },
-              {
-                label: "MAX DRAWDOWN",
-                value: formatPercent(kpis.maxDrawdown, 2),
-                color: "var(--color-accent-danger)",
-              },
-            ].map(({ label, value, color }) => (
-              <div
-                key={label}
-                className="flex items-center justify-between py-2"
-                style={{ borderColor: "var(--color-glass-border)" }}
-              >
-                <span
-                  className="text-[10px] font-medium uppercase tracking-[0.08em]"
-                  style={{ color: "var(--color-text-muted)" }}
-                >
-                  {label}
-                </span>
-                <span
-                  className="text-[13px] font-semibold tabular-nums"
-                  style={{ fontFamily: "var(--font-mono)", color }}
-                >
-                  {value}
+            {(allResults.isLoading || jobsLoading) ? (
+              [...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center justify-between py-2 animate-pulse">
+                  <div className="h-3 w-20 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+                  <div className="h-4 w-14 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+                </div>
+              ))
+            ) : completedIds.length === 0 ? (
+              <div className="py-3 text-center">
+                <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-dim)" }}>
+                  Run a backtest to see metrics
                 </span>
               </div>
-            ))}
+            ) : (
+              <>
+                {[
+                  {
+                    label: "AVG SHARPE",
+                    value: formatMetric(kpis.avgSharpe),
+                    color: (kpis.avgSharpe ?? 0) >= 1
+                      ? "var(--color-accent-success)"
+                      : (kpis.avgSharpe ?? 0) >= 0.5
+                      ? "var(--color-accent-warning)"
+                      : "var(--color-accent-danger)",
+                  },
+                  {
+                    label: "WIN RATE",
+                    value: formatPercent(kpis.avgWinRate, 1),
+                    color: (kpis.avgWinRate ?? 0) >= 0.5
+                      ? "var(--color-accent-success)"
+                      : "var(--color-accent-danger)",
+                  },
+                  {
+                    label: "PROFIT. MONTHS",
+                    value: formatPercent(kpis.profitableMonthsPct, 0),
+                    color: (kpis.profitableMonthsPct ?? 0) >= 0.6
+                      ? "var(--color-accent-success)"
+                      : "var(--color-text-secondary)",
+                  },
+                  {
+                    label: "AVG RETURN",
+                    value: formatPercent(kpis.avgReturn, 2),
+                    color: (kpis.avgReturn ?? 0) >= 0
+                      ? "var(--color-accent-success)"
+                      : "var(--color-accent-danger)",
+                  },
+                  {
+                    label: "MAX DRAWDOWN",
+                    value: formatPercent(kpis.maxDrawdown, 2),
+                    color: "var(--color-accent-danger)",
+                  },
+                ].map(({ label, value, color }) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-between py-2"
+                  style={{ borderColor: "var(--color-glass-border)" }}
+                >
+                  <span
+                    className="text-[10px] font-medium uppercase tracking-[0.08em]"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    {label}
+                  </span>
+                  <span
+                    className="text-[13px] font-semibold tabular-nums"
+                    style={{ fontFamily: "var(--font-mono)", color }}
+                  >
+                    {value}
+                  </span>
+                </div>
+              ))}
+              </>
+            )}
           </div>
         </div>
 

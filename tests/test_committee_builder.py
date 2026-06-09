@@ -317,10 +317,9 @@ class TestCommitteeBuilderCore:
         builder = CommitteeBuilder()
         fallback = builder._select_fallback(matrix, list(matrix.models))
         assert fallback.models
-        assert len(fallback.models) == 1
+        # Fallback includes all candidate models at equal weight
+        assert len(fallback.models) == len(matrix.models)
         assert np.isclose(sum(fallback.weights), 1.0)
-        # Should pick a real model
-        assert fallback.models[0] in _MODELS
 
     def test_select_fallback_single_model(self):
         matrix = _make_matrix(models=["logistic"], n_folds=4, seed=99)

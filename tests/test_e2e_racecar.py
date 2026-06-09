@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import tempfile
+import pytest
 
 import numpy as np
 import pandas as pd
@@ -558,111 +559,22 @@ class TestFullCycleBuilderToBacktest:
 
 
 # ════════════════════════════════════════════════════════════════════
-# Phase 0: prune_models + Phase 3: fold consistency + regime coverage
+# Phase 0: prune_models tests — SKIPPED (Phase 2 removed)
 # ════════════════════════════════════════════════════════════════════
 
+@pytest.mark.skip(reason="prune_models removed with Phase 2")
 class TestPruneModels:
     def test_prune_models_selects_top_by_sharpe(self):
-        from pipeline.expert_profiler import prune_models, RegimeModelMatrix, FoldResult
-
-        matrix = RegimeModelMatrix(
-            regimes=["trend_up", "sideways"],
-            models=["logistic", "svm", "random_forest"],
-            sharpe_matrix=np.array([
-                [0.8, -0.2],
-                [0.3, 0.1],
-                [0.6, 0.7],
-            ], dtype=float),
-            trade_matrix=np.array([
-                [20, 5],
-                [15, 10],
-                [25, 18],
-            ], dtype=int),
-            hitrate_matrix=np.array([
-                [0.6, 0.4],
-                [0.5, 0.5],
-                [0.55, 0.6],
-            ], dtype=float),
-            fold_counts=np.array([[3], [3], [3]], dtype=int),
-            raw_folds=[],
-        )
-
-        survivors, pruned = prune_models(matrix, min_sharpe=0.0, max_models=2)
-        assert len(survivors) <= 2
-        # Diversity may force-include, but at most 2 survivors
-        assert len(pruned) >= 1
+        pass
 
     def test_prune_models_excludes_below_min_sharpe(self):
-        from pipeline.expert_profiler import prune_models, RegimeModelMatrix, FoldResult
-
-        matrix = RegimeModelMatrix(
-            regimes=["trend_up"],
-            models=["good_model", "bad_model"],
-            sharpe_matrix=np.array([[1.2], [-0.5]], dtype=float),
-            trade_matrix=np.array([[20], [5]], dtype=int),
-            hitrate_matrix=np.array([[0.6], [0.4]], dtype=float),
-            fold_counts=np.array([[3], [3]], dtype=int),
-            raw_folds=[],
-        )
-
-        survivors, pruned = prune_models(matrix, min_sharpe=0.0, max_models=5)
-        assert "good_model" in survivors
-        assert "bad_model" in pruned
+        pass
 
     def test_prune_models_diversity_force_includes_missing_family(self):
-        from pipeline.expert_profiler import prune_models, RegimeModelMatrix, FoldResult
-
-        # All models are tree-based → no linear or deep
-        matrix = RegimeModelMatrix(
-            regimes=["trend_up", "sideways"],
-            models=["xgboost", "lightgbm", "random_forest"],
-            sharpe_matrix=np.array([
-                [1.2, 0.8],
-                [1.0, 0.7],
-                [0.9, 0.6],
-            ], dtype=float),
-            trade_matrix=np.array([
-                [30, 15],
-                [25, 12],
-                [20, 10],
-            ], dtype=int),
-            hitrate_matrix=np.array([
-                [0.6, 0.5],
-                [0.58, 0.48],
-                [0.55, 0.45],
-            ], dtype=float),
-            fold_counts=np.array([[3], [3], [3]], dtype=int),
-            raw_folds=[],
-        )
-
-        survivors, pruned = prune_models(matrix, min_sharpe=0.0, max_models=7)
-        # Should still be 3 because diversity can't force-include what doesn't exist
-        assert len(survivors) == 3
-        # No model was pruned
-        assert len(pruned) == 0
+        pass
 
     def test_prune_models_returns_all_survivors_and_pruned(self):
-        from pipeline.expert_profiler import prune_models, RegimeModelMatrix, FoldResult
-
-        matrix = RegimeModelMatrix(
-            regimes=["trend_up"],
-            models=["logistic", "xgboost", "lstm", "svm"],
-            sharpe_matrix=np.array([
-                [0.9], [0.7], [1.1], [0.3],
-            ], dtype=float),
-            trade_matrix=np.array([
-                [20], [25], [15], [10],
-            ], dtype=int),
-            hitrate_matrix=np.array([
-                [0.6], [0.55], [0.65], [0.5],
-            ], dtype=float),
-            fold_counts=np.array([[3], [3], [3], [3]], dtype=int),
-            raw_folds=[],
-        )
-
-        survivors, pruned = prune_models(matrix, min_sharpe=0.0, max_models=2)
-        assert 2 <= len(survivors) <= 3  # 2 capped + optional diversity force
-        assert len(pruned) >= 1
+        pass
 
 
 class TestCommitteePhase3Metrics:

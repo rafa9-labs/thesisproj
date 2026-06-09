@@ -129,6 +129,9 @@ CLASS_DEFAULTS = {
         "final_embargo_bars": 0,
         "enforce_day1_start": True,
 
+        # --- Base timeframe (M15, M30, H1, H4) ---
+        "base_timeframe": "M30",
+
         # --- Feature pipeline / lags ---
         "lag_depth": 1,
         "roll_windows": [5, 10, 30, 60],
@@ -318,7 +321,7 @@ CLASS_DEFAULTS = {
         # Fallback floor when coverage intent is OFF.
         # When coverage intent is ON (target_active_rate/target_coverage > 0),
         # train-anchored coverage calibration overrides this.
-        "confidence_threshold": 0.80,
+        "confidence_threshold": 0.50,
 
         # Never "force trades" by lowering conf_thr unless explicitly enabled.
         "allow_conf_backoff_cv": False,

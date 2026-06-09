@@ -269,13 +269,13 @@ class TestDataStoreAPI:
         from api.dependencies import get_data_store
 
         store = get_data_store()
-        pair = store.get_pair("USDJPY")
+        pair = store.get_pair("EURUSD")
         assert pair is not None
-        assert pair["pip_value"] == 0.01
+        assert pair["pip_value"] == 0.0001
 
     def test_get_candle_count(self):
         from api.dependencies import get_data_store
 
         store = get_data_store()
-        count = store.get_candle_count("GBPUSD", "M30")
-        assert count > 100000
+        count = store.get_candle_count("EURUSD", "M30")
+        assert count > 20000

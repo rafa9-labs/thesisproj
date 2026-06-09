@@ -24,7 +24,6 @@ export function MonitorPage() {
   const handleWsEvent = useJobStore((s) => s.handleWsEvent);
   const markCompleted = useJobStore((s) => s.markCompleted);
   const clearCompletedJobs = useJobStore((s) => s.clearCompletedJobs);
-  const removeJob = useJobStore((s) => s.removeJob);
   const forceStop = useForceStopJob();
 
   const [wsConnected, setWsConnected] = useState(false);
@@ -153,7 +152,6 @@ export function MonitorPage() {
         job_id: jobId,
         error: "Stopped by user",
       });
-      removeJob(jobId);
     } catch (err) {
       console.error("Force stop failed:", err);
     }

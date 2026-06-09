@@ -88,13 +88,14 @@ if not _TF_SKIP:
             pass
 
 # -- Compute safe core count --
+BLAS_THREADS = _settings.compute.blas_threads
 SAFE_CORES = _settings.compute.safe_cores
 CPU_TOTAL = _settings.compute.cpu_total
 
 # -- Apply BLAS / OpenMP cap --
 try:
     from threadpoolctl import threadpool_limits
-    threadpool_limits(limits=SAFE_CORES)
+    threadpool_limits(limits=BLAS_THREADS)
 except Exception:
     pass
 
@@ -102,13 +103,13 @@ except Exception:
 if not _TF_SKIP:
     try:
         import tensorflow as _tf3
-        _tf3.config.threading.set_intra_op_parallelism_threads(SAFE_CORES)
-        _tf3.config.threading.set_inter_op_parallelism_threads(min(4, SAFE_CORES // 2))
+        _tf3.config.threading.set_intra_op_parallelism_threads(BLAS_THREADS)
+        _tf3.config.threading.set_inter_op_parallelism_threads(max(2, BLAS_THREADS // 4))
     except Exception:
         pass
 
 try:
-    print(f"Trial thread budget = {SAFE_CORES} cores active per model fit.")
+    print(f"Trial thread budget = {BLAS_THREADS} cores active per model fit.")
 except UnicodeEncodeError:
     pass
 

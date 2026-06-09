@@ -221,6 +221,9 @@ def _build_svm(*, use_proba=True, **params):
     shrinking = bool(svm_params.get("shrinking", True))
     cache_sz  = _to_float(svm_params.get("cache_size", 2048.0), 2048.0)
 
+    max_iter = min(max_iter, 100_000)
+    cache_sz = min(cache_sz, 1024.0)
+
     svc = SVC(
         C=C, gamma=gamma, kernel=kernel, degree=degree,
         class_weight=cw, probability=False,
@@ -233,7 +236,7 @@ def _build_svm(*, use_proba=True, **params):
         calibrate_method = "isotonic"
     cal_jobs = int(params.get("svm_calib_n_jobs", 0)) or int(os.environ.get("SKLEARN_JOBS", -1))
     cal_jobs = max(1, min(cal_jobs, 2))
-    return CalibratedClassifierCV(estimator=svc, cv=3, method=calibrate_method, n_jobs=cal_jobs)
+    return CalibratedClassifierCV(estimator=svc, cv=2, method=calibrate_method, n_jobs=cal_jobs)
 
 
 @register_model("random_forest")

@@ -131,6 +131,8 @@ class ExpertProfiler:
         verbose: bool = True,
         progress_callback: Optional[Callable] = None,
         raw_df: Optional[pd.DataFrame] = None,
+        log_callback: Optional[Callable[[str], None]] = None,
+        job_id: str = "",
     ) -> ExpertProfileResult:
         """Run full profiling sweep across all models.
 
@@ -151,6 +153,8 @@ class ExpertProfiler:
         raw_df : pd.DataFrame, optional
             Full OHLC DataFrame with 'time' column for anchored regime detection.
             Columns required: mid_high, mid_low, mid_close, time (or mid_h/mid_l/mid_c).
+        log_callback : Callable[[str], None] or None
+            Optional callback(msg) for diagnostic messages (exceptions, tracebacks, skips).
 
         Returns
         -------
@@ -182,7 +186,8 @@ class ExpertProfiler:
                 progress_callback(model_type, idx + 1, len(models), "started")
 
             fold_results, df_wfo, _ = self._run_single_model(
-                model_type, config, seed, verbose
+                model_type, config, seed, verbose,
+                progress_callback=log_callback,
             )
 
             if fold_results is None or len(fold_results) == 0:
@@ -209,13 +214,28 @@ class ExpertProfiler:
         if not all_fold_results:
             raise RuntimeError("No models produced any valid fold results. Check data/config.")
 
+        if log_callback:
+            log_callback("Computing per-fold regime distributions...")
+        if progress_callback:
+            progress_callback(None, len(models), len(models), "regimes")
+
         # Compute regime distributions per fold (using the first model's fold boundaries)
         self._attach_regime_distributions(all_fold_results, first_df_wfo, verbose=verbose)
 
         # Build the performance matrix
+        if log_callback:
+            log_callback("Building regime × model performance matrix...")
+        if progress_callback:
+            progress_callback(None, len(models), len(models), "matrix")
+
         matrix = self._build_matrix(all_fold_results)
 
         # Run statistical tests
+        if log_callback:
+            log_callback("Running paired significance tests...")
+        if progress_callback:
+            progress_callback(None, len(models), len(models), "significance")
+
         significance = self._run_significance_tests(all_fold_results, matrix)
 
         elapsed = time.time() - t0
@@ -234,6 +254,7 @@ class ExpertProfiler:
         config: dict,
         seed: int,
         verbose: bool,
+        progress_callback: Optional[Callable[[str], None]] = None,
     ) -> Tuple[Optional[List[FoldResult]], Optional[pd.DataFrame], Optional[Dict]]:
         """Run one model through the WFO pipeline and collect fold results + best params.
 
@@ -244,11 +265,13 @@ class ExpertProfiler:
 
         model_config = dict(config)
         model_config["model_type"] = model_type
+        n_trials = model_config.get("n_trials", 5)
 
         locked_features = model_config.pop("locked_features", None)
 
         bt = None
         best_params: Optional[Dict] = None
+        job_id = getattr(self, "_job_id", "") or ""
         try:
             bt = MLBacktester(
                 symbol=model_config.get("symbol", "EURUSD"),
@@ -256,14 +279,31 @@ class ExpertProfiler:
                 end=model_config.get("end"),
                 model_type=model_type,
             )
+            bt._job_id = job_id
+            if job_id:
+                from api.process_cleanup import register_backtester as _reg_bt
+                _reg_bt(job_id, bt)
             if locked_features:
                 if isinstance(bt.features_config, dict):
                     bt.features_config["locked_features"] = list(locked_features)
 
+            if progress_callback:
+                progress_callback(f"HPO on {model_type}: {n_trials} trials")
+
+            # Wire per-trial completion logging — user sees each trial's score in real-time
+            from pipeline.tuning.objective import set_trial_result_callback, set_trial_error_callback
+            _trial_results = {}
+            def _on_trial_done(trial_num, score_val):
+                _trial_results[trial_num] = score_val
+                done = len(_trial_results)
+                if progress_callback:
+                    progress_callback(f"Trial {done}/{n_trials}: score={score_val:.4f}")
+            set_trial_result_callback(_on_trial_done)
+
             df_wfo, best_combo = bt.run_strategy(
                 model_config,
                 models_to_test=[model_type],
-                n_trials=model_config.get("n_trials", 5),
+                n_trials=n_trials,
                 n_startup_trials=model_config.get("n_startup_trials", 2),
             )
 
@@ -271,8 +311,11 @@ class ExpertProfiler:
                 best_params = _strip_model_prefix(best_combo, model_type)
 
             if df_wfo is None or df_wfo.empty:
+                msg = f"[SKIP] {model_type}: no WFO results produced (0 valid folds)"
                 if verbose:
-                    print(f"  [SKIP] {model_type}: no WFO results produced")
+                    print(f"  {msg}")
+                if progress_callback:
+                    progress_callback(msg)
                 return None, None, best_params
 
             # Extract fold results from df_wfo
@@ -290,13 +333,42 @@ class ExpertProfiler:
             return fold_results, df_wfo, best_params
 
         except Exception as e:
-            if verbose:
-                print(f"  [FAIL] {model_type}: {e}")
             import traceback
+            tb = traceback.format_exc()
+            err = str(e)
+            # Categorize failure for human-readable debug
+            el = err.lower()
+            if any(k in el for k in ("memory", "oom", "cuda out of", "cublas")):
+                cat = "memory"
+            elif any(k in el for k in ("shape", "dimension", "expected", "got", "broadcast")):
+                cat = "shape_mismatch"
+            elif any(k in el for k in ("no valid", "0 fold", "no fold", "fold_size", "fold size")):
+                cat = "no_folds"
+            elif any(k in el for k in ("feature", "column", "keyerror", "not found", "lock")):
+                cat = "features"
+            elif any(k in el for k in ("optuna", "trial", "study", "prune")):
+                cat = "hpo"
+            else:
+                cat = f"unknown({type(e).__name__})"
+            msg = f"[FAIL] {model_type}: [{cat}] {err[:200]}"
             if verbose:
+                print(f"  {msg}")
                 traceback.print_exc()
+            if progress_callback:
+                progress_callback(msg)
+                # Send last 600 chars of traceback for context
+                tb_short = tb.strip().split("\n")
+                tb_last = "\n".join(tb_short[-8:]) if len(tb_short) > 8 else tb
+                if tb_last:
+                    progress_callback(f"  Traceback:\n{tb_last}")
             return None, None, None
         finally:
+            # Clear per-trial callback to avoid leaking to next model
+            try:
+                from pipeline.tuning.objective import set_trial_result_callback
+                set_trial_result_callback(None)
+            except Exception:
+                pass
             if bt is not None:
                 try:
                     bt.free(release_data=True)
@@ -720,90 +792,6 @@ class ExpertProfiler:
             print("    (no statistically significant differences at p<0.05)")
 
         print("\n" + "=" * 72)
-
-
-# ══════════════════════════════════════════════════════════════════════
-# Phase 0: Pre-screening model pruning
-# ══════════════════════════════════════════════════════════════════════
-
-def prune_models(
-    matrix: "RegimeModelMatrix",
-    min_sharpe: float = 0.0,
-    max_models: int = 7,
-) -> tuple[list[str], list[str]]:
-    """Filter a RegimeModelMatrix to the top-k models with diversity enforcement.
-
-    Parameters
-    ----------
-    matrix : RegimeModelMatrix
-        Output from ExpertProfiler (Phase B).
-    min_sharpe : float
-        Absolute threshold: a model must have *any* regime with Sharpe > this
-        value to survive (default 0.0).
-    max_models : int
-        Maximum number of survivors after pruning (default 7).
-
-    Returns
-    -------
-    survivors : list[str]
-        Model names that passed all gates (sorted by best regime Sharpe desc).
-    pruned : list[str]
-        Model names that were eliminated.
-    """
-    import numpy as np
-
-    if matrix.models is None or len(matrix.models) == 0:
-        raise ValueError("Matrix has no models — cannot prune.")
-    if matrix.regimes is None or len(matrix.regimes) == 0:
-        raise ValueError("Matrix has no regimes — cannot prune.")
-
-    # Score each model by its best Sharpe across all regimes
-    scored: list[tuple[str, float]] = []
-    for i, model in enumerate(matrix.models):
-        row = matrix.sharpe_matrix[i, :]
-        valid = [float(s) for s in row if not (isinstance(s, float) and np.isnan(s))]
-        best = max(valid) if valid else -float("inf")
-        scored.append((model, best))
-
-    # Sort descending by best Sharpe
-    scored.sort(key=lambda x: x[1], reverse=True)
-
-    # Absolute threshold: eliminate models that never reach min_sharpe
-    survivors = [m for m, s in scored if s > min_sharpe]
-    pruned = [m for m, s in scored if s <= min_sharpe]
-
-    # Cap to max_models
-    if len(survivors) > max_models:
-        pruned.extend(survivors[max_models:])
-        survivors = survivors[:max_models]
-
-    # Diversity enforcement: ensure at least 1 tree, 1 linear, 1 deep
-    has_tree = any(m in TREE_MODELS for m in survivors)
-    has_linear = any(m in LINEAR_MODELS for m in survivors)
-    has_deep = any(m in DEEP_MODELS for m in survivors)
-
-    missing_families = []
-    if not has_tree:
-        missing_families.append(("tree", TREE_MODELS))
-    if not has_linear:
-        missing_families.append(("linear", LINEAR_MODELS))
-    if not has_deep:
-        missing_families.append(("deep", DEEP_MODELS))
-
-    for family_name, family_set in missing_families:
-        best_from_family = None
-        best_score_family = -float("inf")
-        for model, s in scored:
-            if model in family_set and model in pruned:
-                if s > best_score_family:
-                    best_score_family = s
-                    best_from_family = model
-        if best_from_family is not None and best_score_family > min_sharpe:
-            survivors.append(best_from_family)
-            pruned.remove(best_from_family)
-            survivors.sort(key=lambda m: next(s for _m, s in scored if _m == m), reverse=True)
-
-    return survivors, pruned
 
 
 # ══════════════════════════════════════════════════════════════════════

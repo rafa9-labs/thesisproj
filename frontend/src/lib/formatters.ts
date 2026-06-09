@@ -5,7 +5,7 @@ export function formatMetric(value: number | null | undefined, decimals = 2): st
 
 export function formatPercent(value: number | null | undefined, decimals = 1): string {
   if (value == null) return "—";
-  const pct = value * 100;
+  const pct = Math.abs(value) <= 1 ? value * 100 : value;
   const sign = pct >= 0 ? "+" : "";
   return `${sign}${pct.toFixed(decimals)}%`;
 }

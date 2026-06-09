@@ -13,6 +13,11 @@ from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
 from pipeline.committee_backtester import CommitteeBacktester
 from pipeline.factory_proposer import ActionProposal, DeterministicProposer
 from pipeline.factory_state import FactoryState, IterationRecord
+
+try:
+    from pipeline.factory_hybrid import HybridLLMUCB1Proposer
+except ImportError:
+    HybridLLMUCB1Proposer = None
 from pipeline.regime_utils import RegimeConfig
 
 
@@ -178,6 +183,10 @@ class FactoryExecutor:
             record, result = self.execute_iteration(proposal)
             if record is None:
                 continue
+
+            if isinstance(self.proposer, HybridLLMUCB1Proposer):
+                delta = record.after_sharpe - record.before_sharpe
+                self.proposer.record_result(proposal, delta)
 
             if verbose:
                 status = "ACCEPTED" if record.accepted else "REJECTED"

@@ -6,19 +6,26 @@ Provides two backends:
 
 Per-article scoring is aggregated into time-bucketed DataFrames
 (hourly or daily) suitable for merging with OHLC bars.
+
+Sentiment results are cached per pair with a configurable TTL
+(default 6 hours) to avoid re-scoring on every bar in live trading.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
-from datetime import datetime
-from typing import List, Optional
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+_SENTIMENT_CACHE: Dict[str, Tuple[float, int, float, float]] = {}
+"""Per-pair cache: {pair: (avg_score, article_count, timestamp, magnitude)}"""
 
 
 @dataclass
@@ -133,6 +140,88 @@ class SentimentAnalyzer:
             neutral=neu,
             backend="finbert",
         )
+
+    @staticmethod
+    def get_cached_sentiment(
+        pair: str,
+        max_age_hours: float = 6.0,
+    ) -> Optional[Dict]:
+        """Retrieve cached sentiment for a pair if still fresh.
+
+        Parameters
+        ----------
+        pair : str
+            Currency pair (e.g. EURUSD).
+        max_age_hours : float
+            Maximum age in hours before cache is considered stale.
+
+        Returns
+        -------
+        dict or None
+            ``{score, article_count, magnitude, last_updated_iso}``
+            or None if cache miss or stale.
+        """
+        pair_key = pair.upper().replace("/", "").replace("-", "")
+        entry = _SENTIMENT_CACHE.get(pair_key)
+        if entry is None:
+            return None
+        avg_score, article_count, cached_ts, magnitude = entry
+        age_hours = (time.time() - cached_ts) / 3600.0
+        if age_hours > max_age_hours:
+            return None
+        last_updated = datetime.fromtimestamp(cached_ts, tz=timezone.utc).isoformat()
+        return {
+            "score": float(avg_score),
+            "article_count": int(article_count),
+            "magnitude": float(magnitude),
+            "last_updated_iso": last_updated,
+            "cache_age_hours": round(age_hours, 2),
+        }
+
+    @staticmethod
+    def cache_sentiment(
+        pair: str,
+        avg_score: float,
+        article_count: int,
+        magnitude: float = 0.0,
+    ) -> None:
+        """Store sentiment result in cache."""
+        pair_key = pair.upper().replace("/", "").replace("-", "")
+        _SENTIMENT_CACHE[pair_key] = (avg_score, article_count, time.time(), magnitude)
+
+    @staticmethod
+    def recency_weight(timestamp, half_life_days: float = 3.0) -> float:
+        """Exponential decay weight based on article age.
+
+        ``weight = 2^(-age_days / half_life_days)``
+        Today's article → 1.0, half_life days ago → 0.5, 2× half_life → 0.25.
+        """
+        if isinstance(timestamp, str):
+            try:
+                timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                return 0.0
+        ts = timestamp.replace(tzinfo=timezone.utc) if timestamp.tzinfo is None else timestamp
+        age_hours = (datetime.now(timezone.utc) - ts).total_seconds() / 3600.0
+        age_days = max(0.0, age_hours / 24.0)
+        return 2.0 ** (-age_days / half_life_days)
+
+    @staticmethod
+    def get_sentiment_cache_state(pair: str, max_age_hours: float = 6.0) -> Dict:
+        """Return cache metadata including freshness for UI display."""
+        pair_key = pair.upper().replace("/", "").replace("-", "")
+        entry = _SENTIMENT_CACHE.get(pair_key)
+        if entry is None:
+            return {"cached": False, "last_updated_iso": None, "next_update_iso": None, "age_hours": None}
+        _, _, cached_ts, _ = entry
+        age_hours = (time.time() - cached_ts) / 3600.0
+        next_ts = cached_ts + max_age_hours * 3600.0
+        return {
+            "cached": True,
+            "last_updated_iso": datetime.fromtimestamp(cached_ts, tz=timezone.utc).isoformat(),
+            "next_update_iso": datetime.fromtimestamp(next_ts, tz=timezone.utc).isoformat(),
+            "age_hours": round(age_hours, 2),
+        }
 
     def score_articles(self, articles: list) -> List[tuple]:
         """Score a list of ``NewsArticle`` objects.

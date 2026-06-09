@@ -1261,6 +1261,7 @@ cd frontend && npm run dev
 | **S21** | Live Trading with OANDA | 12-16h | ✅ COMPLETE (OANDA client, paper engine, live engine, 17 risk gates, trading dashboard UI) |
 | **S22** | Commercial Infrastructure (deferred from S12) | 8-10h | TODO |
 | **S23** | Pipeline Stability & Live Monitor UX | 6-8h | ✅ DONE (2026-05-14) |
+| **S24** | Historical News as Backtest Features | 6-8h | ⬜ NOT STARTED |
 
 ## Completion Criteria Summary
 
@@ -1382,3 +1383,50 @@ cd frontend && npm run dev
   - Conversion funnel monitoring (trial → paid)
   - **Files**: `api/middleware/analytics.py`
   - **Est**: 1h
+
+---
+
+## Sprint 24: Historical News as Backtest Features ⬜ NOT STARTED
+
+> **Goal**: Enable news sentiment features in backtesting for full historical periods.
+> Currently news is live-trading only (no historical data). This sprint makes it
+> a trainable, backtestable feature.
+> **Est**: 6-8h
+
+- [ ] **S23.1** Acquire historical news data source
+  - Free options: GDELT Project (gdeltproject.org), NewsCatcher free tier
+  - Paid options: Benzinga, Refinitiv, Bloomberg
+  - Target: daily forex news articles covering 2015-2026 for EUR/USD + major pairs
+  - Store in `news_cache/` as timestamped Parquet or SQLite
+  - **Est**: 2h (research + integration)
+
+- [ ] **S23.2** Implement point-in-time merge
+  - Fix current hourly-bucket look-ahead leak in `merge_news_features`
+  - Per-bar aggregation: only articles with `timestamp < bar_time` contribute
+  - Assign each article to next bar boundary, groupby bar, aggregate
+  - Walk-forward safe: early training windows see only past news
+  - **Files**: `news/features.py`
+  - **Est**: 2h
+
+- [ ] **S23.3** Enable news in CLI backtester + forward test
+  - Inject news into `pipeline/main_cli.py` (mirror API pattern)
+  - Remove `use_news = False` hardcode in `pipeline/forward_test.py`
+  - Gate behind `use_news` config toggle
+  - Graceful zero-fill when news unavailable for historical windows
+  - **Files**: `pipeline/main_cli.py`, `pipeline/forward_test.py`
+  - **Est**: 1.5h
+
+- [ ] **S23.4** Add `news_coverage_pct` metric
+  - Fraction of bars with non-zero news features per walk-forward window
+  - Surface in backtest results + frontend run summary
+  - Display: "News Coverage: 23% (last 60 of 260 months)"
+  - **Files**: `pipeline/backtester/features_mixin.py`, `api/tasks.py`, `frontend/.../RunSummary.tsx`
+  - **Est**: 1h
+
+- [ ] **S23.5** HPO integration for news weight
+  - Treat news sentiment weight as a tunable hyperparameter
+  - Search space: `live_news_blend_weight` [0.0, 0.3]
+  - Compare TA-only vs TA+news models in model comparison
+  - Validate improvement is statistically significant
+  - **Files**: `config.py`, `pipeline/tuning/`, `pipeline/model_comparison.py`
+  - **Est**: 1.5h

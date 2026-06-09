@@ -57,7 +57,7 @@ def trigger_download(req: DownloadRequest, background_tasks: BackgroundTasks):
 
     # Run synchronously in-process (no Celery dependency)
     from api.tasks import _download_data_impl
-    background_tasks.add_task(_download_data_impl, job_id, pair, req.years)
+    background_tasks.add_task(_download_data_impl, job_id, pair, req.years, req.base_timeframe)
 
     return DownloadResponse(job_id=job_id, pair=pair, status="running")
 

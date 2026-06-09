@@ -5,22 +5,39 @@ import { ExternalLink, TrendingUp, ChevronDown, ChevronRight } from "lucide-reac
 
 const PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD", "USDCHF"] as const;
 
-function BullBearBar({ position }: { position: number }) {
+function articleMatchesPair(article: NewsArticleFull, pair: string): boolean {
+  const upperPair = pair.toUpperCase();
+  const base = upperPair.slice(0, 3);
+  const quote = upperPair.slice(3);
+
+  const tags = article.pair_tags.map((t) => t.toUpperCase());
+  return tags.includes(upperPair) || tags.includes(base) || tags.includes(quote);
+}
+
+function BullBearBar({ position, articleCount = 0, confidence = null }: { position: number; articleCount?: number; confidence?: number | null }) {
   const clamped = Math.max(-1, Math.min(1, position));
   const pct = ((clamped + 1) / 2) * 100;
   const isLong = clamped > 0;
+  const hasData = articleCount > 0;
+  const isLowData = hasData && articleCount < 3;
   const color = isLong ? "var(--color-accent-success)" : clamped < 0 ? "var(--color-accent-danger)" : "var(--color-text-muted)";
+  const barOpacity = hasData
+    ? isLowData ? 0.4 : confidence != null && confidence < 0.3 ? 0.6 : 1
+    : 0.12;
+
   return (
-    <div className="flex items-center gap-3 flex-1 min-w-0">
-      <span className="text-[9px] uppercase tracking-[0.08em] font-medium shrink-0" style={{ color: "var(--color-accent-danger)" }}>SHORT</span>
-      <div className="relative h-1.5 flex-1 rounded-full overflow-hidden" style={{ backgroundColor: "var(--color-glass-hover)" }}>
-        <div
-          className="absolute top-0 h-full rounded-full transition-all duration-500"
-          style={{ left: clamped >= 0 ? "50%" : `${pct}%`, width: `${Math.abs(clamped) * 50}%`, backgroundColor: color }}
-        />
+    <div className="flex items-center gap-2 flex-1 min-w-0">
+      <span className="text-[8px] uppercase tracking-[0.08em] font-medium w-[34px] text-right shrink-0" style={{ color: "var(--color-accent-danger)" }}>SHORT</span>
+      <div className="relative h-2 flex-1 rounded-full overflow-hidden" style={{ backgroundColor: "var(--color-glass-hover)" }}>
+        {hasData && (
+          <div
+            className="absolute top-0 h-full rounded-full transition-all duration-500"
+            style={{ left: clamped >= 0 ? "50%" : `${pct}%`, width: `${Math.abs(clamped) * 50}%`, backgroundColor: color, opacity: barOpacity }}
+          />
+        )}
         <div className="absolute top-0 h-full w-px" style={{ left: "50%", backgroundColor: "var(--color-text-muted)" }} />
       </div>
-      <span className="text-[9px] uppercase tracking-[0.08em] font-medium shrink-0" style={{ color: "var(--color-accent-success)" }}>LONG</span>
+      <span className="text-[8px] uppercase tracking-[0.08em] font-medium w-[34px] shrink-0" style={{ color: "var(--color-accent-success)" }}>LONG</span>
     </div>
   );
 }
@@ -207,29 +224,34 @@ export function NewsPage() {
 
   const filteredArticles = useMemo(() => {
     if (!pair || pair === "ALL") return allArticles;
-    const upperPair = pair.toUpperCase();
-    return allArticles.filter((a) => {
-      if (a.pair_tags.length === 0) return true;
-      const tags = a.pair_tags.map((t) => t.toUpperCase());
-      const base = upperPair.slice(0, 3);
-      const quote = upperPair.slice(3);
-      return tags.includes(upperPair) || tags.includes(base) || tags.includes(quote);
-    });
+    return allArticles.filter((a) => articleMatchesPair(a, pair));
   }, [allArticles, pair]);
 
-  const groups = useMemo(() => groupArticles(filteredArticles, pair), [filteredArticles, pair]);
+  const groups = useMemo(() => {
+    const result = groupArticles(filteredArticles, pair);
+    const totalMatched = filteredArticles.length;
+    if (totalMatched < 5) {
+      const unmatched = allArticles.filter((a) => !articleMatchesPair(a, pair));
+      const fillCount = Math.min(5 - totalMatched, unmatched.length);
+      if (fillCount > 0) {
+        const fillArts = unmatched.slice(0, fillCount);
+        const fillAvg = fillArts.reduce((s, a) => s + a.sentiment_score, 0) / fillArts.length;
+        result.push({ label: "Other News", pair: "OTHER", articles: fillArts, avgScore: fillAvg });
+      }
+    }
+    let shown = 0;
+    for (const g of result) {
+      const keep = Math.min(g.articles.length, Math.max(0, 20 - shown));
+      if (keep < g.articles.length) g.articles = g.articles.slice(0, keep);
+      shown += keep;
+    }
+    return result;
+  }, [filteredArticles, allArticles, pair]);
 
   const articleCountByPair = useMemo(() => {
     const map: Record<string, number> = {};
     for (const p of PAIRS) {
-      const upper = p.toUpperCase();
-      map[p] = allArticles.filter((a) => {
-        if (a.pair_tags.length === 0) return false;
-        const tags = a.pair_tags.map((t) => t.toUpperCase());
-        const base = upper.slice(0, 3);
-        const quote = upper.slice(3);
-        return tags.includes(upper) || tags.includes(base) || tags.includes(quote);
-      }).length;
+      map[p] = allArticles.filter((a) => articleMatchesPair(a, p)).length;
     }
     return map;
   }, [allArticles]);
@@ -267,7 +289,7 @@ export function NewsPage() {
                 <option key={p} value={p}>{p} ({articleCountByPair[p] ?? 0})</option>
               ))}
             </select>
-            <BullBearBar position={recommendedPosition} />
+            <BullBearBar position={recommendedPosition} articleCount={articleCount} confidence={pairData?.position_confidence ?? null} />
             <span className="text-[10px] tabular-nums shrink-0" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
               {articleCount} articles
             </span>
@@ -294,7 +316,7 @@ export function NewsPage() {
                   ))
                 ) : (
                   <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
-                    No upcoming events. Events are preloaded for {new Date().getFullYear()}.
+                    No upcoming events. Dates are approximate -- actual release dates may vary by days.
                   </span>
                 )}
                 <span className="text-[9px] shrink-0" style={{ color: "var(--color-text-muted)", marginLeft: "auto" }}>

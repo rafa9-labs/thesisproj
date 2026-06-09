@@ -9,7 +9,7 @@ interface Props {
   isSubmitting: boolean;
   hasModels: boolean;
   hasPair: boolean;
-  hasDates: boolean;
+  hasDates?: boolean;
   onDeploy: () => void;
   onSavePreset?: () => void;
 }
@@ -75,10 +75,11 @@ export function ValidationBar({
   onDeploy,
   onSavePreset,
 }: Props) {
+  const hasDatesValue = hasDates ?? true;
   const missingItems: string[] = [];
   if (!hasPair) missingItems.push("a currency pair");
   if (!hasModels) missingItems.push("at least one model");
-  if (!hasDates) missingItems.push("date range");
+  if (!hasDatesValue) missingItems.push("date range");
 
   return (
     <div

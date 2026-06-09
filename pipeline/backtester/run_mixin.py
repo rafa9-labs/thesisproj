@@ -12,6 +12,17 @@ except Exception:
     pass
 
 
+def _check_throttle():
+    try:
+        from pipeline.resource_monitor import get_throttle_signal
+        sig = get_throttle_signal()
+        if sig and sig.delay > 0:
+            import time
+            time.sleep(sig.delay)
+    except Exception:
+        pass
+
+
 class RunMixin:
     """
     run_strategy (HPO loop)
@@ -90,6 +101,10 @@ class RunMixin:
 
         log_print(f"Models to test in this WFO: {models_to_test}", level="COMPACT")
 
+        full_data = self.data
+        walk_limit_start = full_data.index[0]
+        walk_data = full_data.loc[walk_limit_start:]
+
         self._progress = HPOProgress()
         try:
             self._progress.draw_header(
@@ -99,17 +114,13 @@ class RunMixin:
                 date_range=(str(walk_data.index[0])[:10], str(walk_data.index[-1])[:10]),
                 cv_info=f"mode={config.get('cv_mode', 'mini_block')}"
             )
-        except Exception:
-            pass
+        except Exception as _he:
+            log_print(f"[WARN] Progress header unavailable: {_he}", level="COMPACT")
 
         model_type = config.get("model_type", "svm")
         use_proba = config.get("use_proba", True)  # currently unused here, kept for parity
 
-        full_data = self.data
-
         # --- Session filter (NY hours) with tz-safety ---
-        walk_limit_start = full_data.index[0]
-        walk_data = full_data.loc[walk_limit_start:]
 
         # Optional: only filter for sessions if you explicitly want to plan WFO on a reduced clock.
         if bool(config.get("wfo_session_filter", False)):
@@ -953,7 +964,8 @@ class RunMixin:
                         try:
                             import numpy as _np
                             import optuna as _opt
-                        except Exception:
+                        except Exception as _pe:
+                            log_print(f"[WARN] Early-pruning disabled: import failed ({_pe})", level="COMPACT")
                             return
 
                         # How many folds are planned
@@ -1255,6 +1267,7 @@ class RunMixin:
 
 
                     for j, fold in enumerate(fold_iter, start=1):
+                        _check_throttle()
                         if _use_monthly:
                             # fold is a dict like: {"train_iloc": (ts, te), "val_iloc": (vs, ve), ...}
                             try:
@@ -2873,13 +2886,9 @@ class RunMixin:
                                     )
 
                         except Exception as e:
-                            # Propagate real TrialPruned
-                            try:
-                                import optuna as _opt
-                                if isinstance(e, _opt.TrialPruned):
-                                    raise
-                            except Exception:
-                                pass
+                            import optuna as _opt
+                            if isinstance(e, _opt.TrialPruned):
+                                raise
 
                             # Normal block error -> mark invalid and continue
                             _cv_penalty(
@@ -3821,8 +3830,8 @@ class RunMixin:
                     fold_srs = getattr(self, "_last_fold_srs", None)
                     cv_res = getattr(self, "_last_cv_result", None)
                     self._progress.update_trial(trial.number + 1, best_val, fold_srs, cv_res)
-            except Exception:
-                pass
+            except Exception as _pe:
+                pass  # progress bar failure is non-critical
             return result
 
         _common_kwargs = dict(
@@ -3832,6 +3841,7 @@ class RunMixin:
             cv_config=cv_config_first,
             models_to_test=models_to_test,
             n_trials=int(config.get("n_trials", 1)),
+            n_startup_trials=int(config.get("n_startup_trials", 10)),
             return_top_n=rt_n,
             study=None,
             sampler_seed=int(self.features_config.get("run_seed", 0)) or None,
@@ -3869,8 +3879,11 @@ class RunMixin:
 
             if topN:
                 from optuna.samplers import TPESampler as _TPE2
+                _tpe_ei2 = int(os.environ.get("TPE_EI_CANDIDATES", "64"))
                 _s2 = _TPE2(seed=kw1["sampler_seed"],
-                           n_startup_trials=min(5, max(1, phase2_trials // 3)))
+                           n_startup_trials=min(5, max(1, phase2_trials // 3)),
+                           multivariate=True, group=True,
+                           n_ei_candidates=_tpe_ei2)
                 study2 = optuna.create_study(direction="maximize", sampler=_s2)
                 for t in topN:
                     study2.enqueue_trial(t.params)

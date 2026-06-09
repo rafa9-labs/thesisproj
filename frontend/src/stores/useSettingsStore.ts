@@ -11,6 +11,8 @@ interface SettingsState {
   mixedPrecision: boolean;
   sidebarCollapsed: boolean;
   terminalCollapsed: boolean;
+  liveNewsBlendEnabled: boolean;
+  liveNewsBlendWeight: number;
 }
 
 interface SettingsActions {
@@ -32,6 +34,8 @@ const DEFAULTS: SettingsState = {
   mixedPrecision: true,
   sidebarCollapsed: false,
   terminalCollapsed: true,
+  liveNewsBlendEnabled: false,
+  liveNewsBlendWeight: 0.10,
 };
 
 function loadSaved(): Partial<SettingsState> {
@@ -60,10 +64,10 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()((set, 
 
   saveToStorage: () => {
     try {
-      const { verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, oandaAccountId, dataDir } = get();
+      const { verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, oandaAccountId, dataDir, liveNewsBlendEnabled, liveNewsBlendWeight } = get();
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, oandaAccountId, dataDir }),
+        JSON.stringify({ verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, oandaAccountId, dataDir, liveNewsBlendEnabled, liveNewsBlendWeight }),
       );
     } catch {
       /* ignore */

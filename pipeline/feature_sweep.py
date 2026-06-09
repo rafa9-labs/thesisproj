@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -35,6 +35,9 @@ INDICATOR_GRID: Dict[str, List[int]] = {
     "atr": [7, 14, 28],
     "bbands": [10, 20, 50, 100],
     "donchian": [20, 60],
+    "stochastic": [7, 14, 21],
+    "kaufman_er": [10, 20, 50],
+    "hv": [5, 10, 20, 50],
 }
 
 RETURNS_LAGS = [1, 2, 3, 5, 10]
@@ -140,6 +143,24 @@ def expand_features(df: pd.DataFrame) -> pd.DataFrame:
         out["macd_diff"] = np.zeros(len(out), dtype=np.float32)
         out["macd_signal"] = np.zeros(len(out), dtype=np.float32)
 
+    # Stochastic oscillator %K and %D (Lane, 1950s)
+    for w in INDICATOR_GRID["stochastic"]:
+        roll_high = high.rolling(w).max()
+        roll_low = low.rolling(w).min()
+        raw_k = 100.0 * (close - roll_low) / (roll_high - roll_low + 1e-12)
+        out[f"stoch_k_{w}"] = raw_k.astype(np.float32)
+        out[f"stoch_d_{w}"] = raw_k.rolling(3, min_periods=1).mean().astype(np.float32)
+
+    # Kaufman Efficiency Ratio — directional efficiency (Kaufman, 2013)
+    for w in INDICATOR_GRID["kaufman_er"]:
+        net_change = np.abs(close - close.shift(w))
+        path_length = np.abs(close.diff()).rolling(w, min_periods=1).sum()
+        out[f"er_{w}"] = (net_change / (path_length + 1e-12)).astype(np.float32)
+
+    # Historical volatility — rolling std of returns at short horizons
+    for w in INDICATOR_GRID["hv"]:
+        out[f"hv_{w}"] = out["returns"].rolling(w, min_periods=2).std().astype(np.float32)
+
     # Realized volatility at short/long windows
     ret_sq = out["returns"] ** 2
     out["rv_48"] = (ret_sq.rolling(48).sum() ** 0.5).astype(np.float32)
@@ -168,11 +189,16 @@ def sweep_features(
     label_threshold: float = 0.0001,
     n_estimators: int = 100,
     max_depth: int = 5,
-    n_folds: int = 3,
+    n_folds: int = 5,
     n_repeats: int = 5,
     random_state: int = 42,
+    progress_callback: Optional[Callable[[str], None]] = None,
+    use_boruta: bool = True,
+    boruta_percentile: int = 90,
+    boruta_max_iter: int = 20,
+    boruta_economic_floor_pct: float = 0.02,
 ) -> Tuple[List[str], Dict[str, float], Dict]:
-    """Run feature sweep: expand → label → 3-fold time-series RF → prune.
+    """Run feature sweep: expand -> label -> BorutaSHAP or majority-vote RF -> MI filter.
 
     Parameters
     ----------
@@ -190,18 +216,37 @@ def sweep_features(
         Permutation shuffles per feature (higher = more stable).
     random_state : int
         Seed for reproducibility.
+    use_boruta : bool
+        If True (default), use BorutaSHAP (game-theoretic, shadow features).
+        If False, use legacy majority-vote permutation importance.
+    boruta_percentile : int
+        Confirmation percentile for BorutaSHAP (90 = must beat noise in >=90% of folds).
+    boruta_max_iter : int
+        Maximum Boruta iterations before forced convergence.
 
     Returns
     -------
     locked_features : list[str]
-        Feature names that survived all folds with positive importance.
+        Feature names that passed selection.
     importance_scores : dict[str, float]
-        Mean permutation importance per feature across all folds.
+        Mean importance per locked feature.
     report : dict
         Full report with fold-level details, pruned features, etc.
     """
+    if use_boruta:
+        from pipeline.boruta_sweep import boruta_sweep_features
+        return boruta_sweep_features(
+            df, label_threshold=label_threshold,
+            n_estimators=n_estimators, max_depth=max_depth,
+            n_folds=n_folds, percentile=boruta_percentile,
+            max_iter=boruta_max_iter, random_state=random_state,
+            progress_callback=progress_callback,
+            economic_floor_pct=boruta_economic_floor_pct,
+        )
+
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.inspection import permutation_importance
+    from sklearn.feature_selection import mutual_info_classif
 
     print("\n" + "=" * 64)
     print("  PHASE -1: FEATURE SWEEP")
@@ -232,8 +277,10 @@ def sweep_features(
     if fold_size < 100:
         fold_size = max(50, n // 3)
 
-    print(f"  Features expanded: {len(numeric_cols)}")
+    print(f"      Features expanded: {len(numeric_cols)}")
     print(f"  Bars: {n}, Folds: {n_folds}, RF: depth={max_depth}, trees={n_estimators}")
+    if progress_callback:
+        progress_callback(f"Expanded {len(numeric_cols)} features across {n} bars")
 
     feature_names = list(df_feat.columns)
     X = df_feat.to_numpy(np.float32)
@@ -257,8 +304,12 @@ def sweep_features(
             random_state=random_state + fi, n_jobs=-1,
             class_weight="balanced",
         )
+        if progress_callback:
+            progress_callback(f"Fold {fi + 1}/{n_folds}: training RF...")
         rf.fit(X_train, y_train)
 
+        if progress_callback:
+            progress_callback(f"Fold {fi + 1}/{n_folds}: permutation importance ({n_repeats} repeats)...")
         perm = permutation_importance(
             rf, X_test, y_test, n_repeats=n_repeats,
             random_state=random_state + fi, scoring="accuracy",
@@ -269,26 +320,55 @@ def sweep_features(
 
         n_pos = int(np.sum(perm.importances_mean > 0))
         acc = rf.score(X_test, y_test)
-        print(f"  Fold {fi + 1}/{n_folds}: accuracy={acc:.4f}, "
-              f"features with importance>0: {n_pos}/{len(feature_names)}")
+        msg = f"Fold {fi + 1}/{n_folds}: accuracy={acc:.4f}, features with importance>0: {n_pos}/{len(feature_names)}"
+        print(f"  {msg}")
+        if progress_callback:
+            progress_callback(msg)
 
-    # ── Consensus: positive importance in ALL folds ──
+    # -- Majority vote: feature survives if importance > 0 in >= majority of folds --
+    majority_threshold = max(1, (len(fold_importances) + 1) // 2)  # ceil(n/2)
     mean_imp: Dict[str, float] = {}
-    consensus: List[str] = []
-    all_pos = set(feature_names)
-    for fold_imp in fold_importances:
-        all_pos &= {k for k, v in fold_imp.items() if v > 0}
+    pos_count: Dict[str, int] = {}
 
     for name in feature_names:
         vals = [fi.get(name, 0.0) for fi in fold_importances]
         mean_imp[name] = float(np.mean(vals))
+        pos_count[name] = sum(1 for v in vals if v > 0)
 
-    consensus = sorted(all_pos, key=lambda x: mean_imp[x], reverse=True)
+    consensus = sorted(
+        [n for n in feature_names if pos_count[n] >= majority_threshold],
+        key=lambda x: mean_imp[x], reverse=True,
+    )
 
-    pruned = sorted(set(feature_names) - all_pos)
+    pruned = sorted(set(feature_names) - set(consensus))
 
-    print(f"\n  Pruned: {len(pruned)} features with zero or negative importance in >=1 fold")
-    print(f"  Locked: {len(consensus)} features")
+    print(f"\n  Pruned (majority vote < {majority_threshold}/{len(fold_importances)} folds): {len(pruned)} features")
+    print(f"  Survived: {len(consensus)} features")
+
+    # -- Stage 2: Mutual information filter (catches nonlinear patterns RF misses) --
+    if len(consensus) > 50:
+        X_consensus = df_feat[consensus].to_numpy(np.float32)
+        mi_scores = mutual_info_classif(
+            X_consensus, y, discrete_features=False,
+            random_state=random_state,
+        )
+        mi_ranked = sorted(zip(consensus, mi_scores), key=lambda x: x[1], reverse=True)
+        consensus = [n for n, _ in mi_ranked[:50]]
+        print(f"  MI filter: capped at 50 features")
+
+    # -- Stage 3: Minimum floor --
+    MIN_FEATURES = 8
+    if len(consensus) < MIN_FEATURES and len(feature_names) >= MIN_FEATURES:
+        # Fall back to top-N by mean importance for the difference
+        fallback = sorted(mean_imp.items(), key=lambda x: x[1], reverse=True)
+        fallback = [n for n, _ in fallback if n not in consensus][:MIN_FEATURES - len(consensus)]
+        consensus = sorted(set(consensus + fallback), key=lambda x: mean_imp[x], reverse=True)
+        print(f"  Feature floor: {len(consensus)} features (added {len(fallback)} by mean importance)")
+
+    if progress_callback:
+        progress_callback(f"Feature sweep complete: {len(consensus)} locked, {len(pruned)} pruned")
+        top5_str = ", ".join(f"{n}={mean_imp.get(n, 0):.4f}" for n in consensus[:5])
+        progress_callback(f"Top 5 by importance: {top5_str}")
 
     report = {
         "total_features": len(feature_names),
@@ -306,6 +386,7 @@ def sweep_features(
             "max_depth": max_depth,
             "n_folds": n_folds,
             "n_repeats": n_repeats,
+            "signature": f"n{n_estimators}_d{max_depth}_f{n_folds}",
         },
     }
 
@@ -336,8 +417,12 @@ def run_phase_minus1(
     label_threshold: float = 0.0001,
     n_estimators: int = 100,
     max_depth: int = 5,
-    n_folds: int = 3,
+    n_folds: int = 5,
     random_state: int = 42,
+    progress_callback: Optional[Callable[[str], None]] = None,
+    use_boruta: bool = True,
+    boruta_percentile: int = 90,
+    boruta_max_iter: int = 20,
 ) -> Tuple[List[str], Dict]:
     """Run the full Phase -1 pipeline and save results.
 
@@ -348,10 +433,16 @@ def run_phase_minus1(
     report : dict
         Full sweep report with importance scores and pruned features.
     """
+    if progress_callback:
+        progress_callback("Expanding features...")
     locked, scores, report = sweep_features(
         df, label_threshold=label_threshold,
         n_estimators=n_estimators, max_depth=max_depth,
         n_folds=n_folds, random_state=random_state,
+        progress_callback=progress_callback,
+        use_boruta=use_boruta,
+        boruta_percentile=boruta_percentile,
+        boruta_max_iter=boruta_max_iter,
     )
     save_locked_features(locked, output_path)
 
@@ -394,6 +485,13 @@ def _generate_feature_names() -> list[str]:
     names.append("macd_signal")
     names.append("rv_48")
     names.append("rv_240")
+    for w in INDICATOR_GRID["stochastic"]:
+        names.append(f"stoch_k_{w}")
+        names.append(f"stoch_d_{w}")
+    for w in INDICATOR_GRID["kaufman_er"]:
+        names.append(f"er_{w}")
+    for w in INDICATOR_GRID["hv"]:
+        names.append(f"hv_{w}")
     return sorted(names)
 
 

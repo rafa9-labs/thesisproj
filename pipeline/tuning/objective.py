@@ -35,6 +35,21 @@ from pipeline.tuning.helpers import (
 from pipeline.tuning.sampler import sample_param_set
 from pipeline.tuning.refit import final_refit_if_deep, _aggressive_free, _assert_free_ram
 
+# Module-level callback for routing trial errors to external log sinks
+_trial_error_callback = None
+_trial_result_cb = None
+
+
+def set_trial_error_callback(cb):
+    global _trial_error_callback
+    _trial_error_callback = cb
+
+
+def set_trial_result_callback(cb):
+    global _trial_result_cb
+    _trial_result_cb = cb
+
+
 def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_config, models_to_test, vol_stats=None):
     """
     Objective used by Optuna. Adds:
@@ -1037,13 +1052,20 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
 
 
     except optuna.TrialPruned as e:
-        # Let Optuna-level prunes bubble up cleanly; this is expected control flow.
+        # When pruning is globally disabled, suppress ANY TrialPruned
+        # (including those raised from _single_study_cv's CV gates).
+        if DISABLE_OPTUNA_PRUNING:
+            log_print(f"Trial {trial.number} prune-suppressed: {e}", level="DEBUG")
+            return _bad_obj(direction)
         log_print(f"Trial {trial.number} pruned: {e}", level="DEBUG")
         raise
 
     except Exception as e:
         # Real unexpected error: log and, unless disabled, prune so the study can continue.
         cause = f"{type(e).__name__}: {str(e)}"
+
+        if _trial_error_callback:
+            _trial_error_callback(f"Trial {trial.number}: {cause}")
 
         log_print("\n" + "#" * 80, level="DEBUG")
         log_print(f"[WARN] Error in optuna_objective(): {cause}", level="DEBUG")
@@ -1072,6 +1094,12 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
             _aggressive_free()
         except Exception:
             gc.collect()
+
+    if _trial_result_cb:
+        try:
+            _trial_result_cb(trial.number, float(score))
+        except Exception:
+            pass
 
     return score  # TRUE Sharpe (maximize)
 

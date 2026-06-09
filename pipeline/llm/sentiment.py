@@ -144,11 +144,8 @@ class VADERFallback:
     """Fallback using VADER when LLM backends are unavailable."""
 
     def analyze(self, text: str, pair: str) -> Dict[str, Any]:
-        try:
-            from vaderSentiment.vaderSentiment import SentimentIntensityEngine
-        except ImportError:
-            from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SentimentIntensityEngine
-        analyzer = SentimentIntensityEngine()
+        from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+        analyzer = SentimentIntensityAnalyzer()
         scores = analyzer.polarity_scores(text)
         compound = scores["compound"]
         return {
@@ -237,6 +234,13 @@ class LLMSentimentEngine:
         self._backend: LLMSentimentBackend | None = None
         self._fallback = VADERFallback()
         self._cache_db: sqlite3.Connection | None = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
 
     @property
     def backend(self) -> LLMSentimentBackend:

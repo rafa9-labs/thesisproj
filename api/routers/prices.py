@@ -139,18 +139,17 @@ def get_live_prices(
 
         sparkline = []
         try:
-            df = store.get_latest_candles(sym, "M30", lookback_bars)
-            if not df.empty:
-                for _, row in df.iterrows():
-                    t_val = row["time"]
-                    if hasattr(t_val, "timestamp"):
-                        t_epoch = int(t_val.timestamp())
-                    else:
-                        t_epoch = 0
-                    sparkline.append({
-                        "t": t_epoch,
-                        "v": round(float(row["mid_close"]), 10),
-                    })
+            for tf in ("M30", "H1", "H4"):
+                df = store.get_latest_candles(sym, tf, lookback_bars)
+                if not df.empty:
+                    for _, row in df.iterrows():
+                        t_val = row["time"]
+                        t_epoch = int(t_val.timestamp()) if hasattr(t_val, "timestamp") else 0
+                        sparkline.append({
+                            "t": t_epoch,
+                            "v": round(float(row["mid_close"]), 10),
+                        })
+                    break
         except Exception:
             pass
 

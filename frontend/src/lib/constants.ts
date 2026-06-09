@@ -653,6 +653,77 @@ export const MODEL_CONSTRAINTS: Record<string, { rules: string[]; tips: string[]
   },
   stacking_ensemble: {
     rules: ["Trains a Logistic Regression meta-learner on out-of-fold predictions from base models.", "Requires >= 2 base models. Stacking CV folds must be <= training splits."],
-    tips: ["Start with 2-3 base models and default CV=5.", "Sklearn StackingClassifier handles passthrough automatically.", "Use 'auto' stack method — it selects predict_proba when available."],
+    tips: ["Start with 2-3 base models and default CV=5.", "Sklearn StackingClassifier handles passthrough automatically.", "Use 'auto' stack method -- it selects predict_proba when available."],
+  },
+};
+
+export const ALL_MODELS = [
+  "logistic", "svm", "random_forest", "decision_tree",
+  "xgboost", "lightgbm", "catboost",
+  "cnn", "lstm", "transformer", "gru", "gru_lstm",
+  "meta_ensemble", "stacking_ensemble", "ensemble_adaptive_regime",
+] as const;
+
+export const CORE_MODELS = [
+  "logistic", "svm", "random_forest", "xgboost",
+  "lightgbm", "catboost", "lstm", "ensemble_adaptive_regime",
+] as const;
+
+export const STOP_REASONS: Record<string, string> = {
+  budget: "Max iterations reached",
+  patience: "Global best Sharpe has not improved",
+  hard_gate: "All regimes above Sharpe floor",
+  exhaustion: "No untested model improves any regime",
+  divergence: "3 consecutive deteriorating iterations",
+};
+
+export function formatStopReason(raw: string): string {
+  for (const [key, label] of Object.entries(STOP_REASONS)) {
+    if (raw.startsWith(key)) return label + (raw.includes(":") ? raw.slice(raw.indexOf(":")) : "");
+  }
+  return raw || "Optimization stopped";
+}
+
+export const FC_PRESETS: Record<string, {
+  label: string;
+  desc: string;
+  icon: string;
+  color: string;
+  config: Record<string, unknown>;
+}> = {
+  debug: {
+    label: "Debug",
+    desc: "One model, minimal WFO. Verify pipeline works end-to-end.",
+    icon: "Bug",
+    color: "#8b949e",
+    config: { selectedModels: ["logistic"], trainMonths: 12, maxIterations: 3, proposer: "deterministic", skipFeatureSweep: true, debugMode: true },
+  },
+  classical: {
+    label: "Classical",
+    desc: "Tree + linear models. Fast, well-understood, interpretable.",
+    icon: "Cpu",
+    color: "#00E5FF",
+    config: { selectedModels: ["logistic","svm","random_forest","xgboost","lightgbm","catboost"], trainMonths: 36, maxIterations: 15, proposer: "llm", llmBackend: "deepseek" },
+  },
+  deep: {
+    label: "Deep Learning",
+    desc: "CNN + LSTM + GRU + Transformer. For complex non-linear patterns.",
+    icon: "Network",
+    color: "#a78bfa",
+    config: { selectedModels: ["cnn","lstm","transformer","gru","gru_lstm"], trainMonths: 36, maxIterations: 10, proposer: "llm", llmBackend: "deepseek" },
+  },
+  full: {
+    label: "Full Arsenal",
+    desc: "All 15 models, extended WFO. Production-grade optimization.",
+    icon: "Layers",
+    color: "#F2B436",
+    config: { selectedModels: ["logistic","svm","random_forest","decision_tree","xgboost","lightgbm","catboost","cnn","lstm","transformer","gru","gru_lstm","meta_ensemble","stacking_ensemble","ensemble_adaptive_regime"], trainMonths: 48, maxIterations: 30, proposer: "llm", llmBackend: "deepseek" },
+  },
+  llm: {
+    label: "LLM-Guided",
+    desc: "Core models + AI-driven optimization. DeepSeek V4 proposes config changes.",
+    icon: "Bot",
+    color: "#F23645",
+    config: { selectedModels: ["logistic","svm","random_forest","xgboost","lightgbm","catboost","lstm","ensemble_adaptive_regime"], proposer: "llm", llmBackend: "deepseek", maxIterations: 20 },
   },
 };

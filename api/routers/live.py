@@ -34,6 +34,8 @@ class DeployRequest(BaseModel):
     timeframe: str = "M30"
     initial_equity: float = 10000.0
     model_id: str | None = None
+    live_news_blend_enabled: bool = False
+    live_news_blend_weight: float = 0.10
 
 
 class DeployCommitteeRequest(BaseModel):
@@ -41,8 +43,12 @@ class DeployCommitteeRequest(BaseModel):
     timeframe: str = "H1"
     initial_equity: float = 10000.0
     committee_config_path: str | None = None
+    full_cycle_job_id: str | None = None
     confidence_threshold: float = 0.55
     lookback_bars: int = 100
+    live_news_blend_enabled: bool = False
+    live_news_blend_weight: float = 0.10
+    execution_mode: str = "paper"
 
 
 class SessionInfo(BaseModel):
@@ -102,7 +108,10 @@ def _run_backtest_for_model(pair: str, model: str, timeframe: str):
 
 
 def _predict_signal(session: dict, candles_df):
-    """Generate a signal prediction from a trained model for the latest bar."""
+    """Generate a signal prediction from a trained model for the latest bar.
+
+    Applies news sentiment blending post-prediction if enabled in session config.
+    """
     bt = session.get("backtester")
     trained_model = session.get("model_obj")
 
@@ -133,6 +142,24 @@ def _predict_signal(session: dict, candles_df):
             direction = "SHORT"
         else:
             direction = "FLAT"
+
+        raw_signal = 1.0 if direction == "LONG" else -1.0 if direction == "SHORT" else 0.0
+
+        blend_cfg = {
+            "live_news_blend_enabled": session.get("live_news_blend_enabled", False),
+            "live_news_blend_weight": session.get("live_news_blend_weight", 0.10),
+        }
+        if blend_cfg["live_news_blend_enabled"]:
+            from pipeline.backtester.real_trading_mixin import RealTradingMixin
+            blended = RealTradingMixin._blend_news_sentiment(raw_signal, session["pair"], blend_cfg)
+            if blended > 0.3:
+                direction = "LONG"
+                confidence = max(confidence, abs(blended) * 100)
+            elif blended < -0.3:
+                direction = "SHORT"
+                confidence = max(confidence, abs(blended) * 100)
+            else:
+                direction = "FLAT"
 
         return {
             "direction": direction,
@@ -297,7 +324,21 @@ async def deploy_live_session(req: DeployRequest):
         "model_obj": model_obj,
         "backtester": bt,
         "ws_queues": [],
+        "live_news_blend_enabled": req.live_news_blend_enabled,
+        "live_news_blend_weight": req.live_news_blend_weight,
     }
+
+    if req.live_news_blend_enabled:
+        try:
+            from news.scraper import NewsScraper
+            from news.sentiment import SentimentAnalyzer
+            scraper = NewsScraper()
+            articles = scraper.fetch_all()
+            if articles:
+                engine = SentimentAnalyzer(backend="vader")
+                engine.score_articles(articles, pair=pair)
+        except Exception:
+            logger.warning("Failed to pre-warm news cache for session %s", session_id)
 
     active_sessions[session_id] = session
 
@@ -314,6 +355,17 @@ async def deploy_live_session(req: DeployRequest):
         signal_count=0,
         created_at=session["created_at"],
     )
+
+
+# ── Trust score → sizing multiplier ──────────────────────────────────────
+
+def _trust_to_multiplier(trust_score: float) -> float:
+    if trust_score >= 0.80: return 1.00
+    if trust_score >= 0.70: return 0.80
+    if trust_score >= 0.60: return 0.60
+    if trust_score >= 0.50: return 0.40
+    if trust_score >= 0.40: return 0.20
+    return 0.00
 
 
 # ── Committee model training ────────────────────────────────────────
@@ -427,7 +479,15 @@ async def deploy_committee_session(req: DeployCommitteeRequest):
 
     # 1. Load committee config
     config_json = None
-    if req.committee_config_path:
+    parent_job_dir = None
+    if req.full_cycle_job_id:
+        parent_job_dir = Path("results/full_cycle") / req.full_cycle_job_id
+        config_path = parent_job_dir / "committee_config_final.json"
+        if not config_path.exists():
+            config_path = parent_job_dir / "committee_config.json"
+        if not config_path.exists():
+            raise HTTPException(404, f"Full Cycle job {req.full_cycle_job_id} not found or has no config")
+    elif req.committee_config_path:
         config_path = Path(req.committee_config_path)
     else:
         config_path = Path("results/full_cycle")
@@ -441,6 +501,7 @@ async def deploy_committee_session(req: DeployCommitteeRequest):
             if base_cfg.exists():
                 config_path = base_cfg
                 break
+        logger.warning("No full_cycle_job_id specified — auto-discovering latest config. This may deploy an unintended committee if pipeline runs overlap.")
 
     if not config_path or not config_path.exists():
         raise HTTPException(404, "No committee config found. Run the Full Cycle first.")
@@ -453,10 +514,35 @@ async def deploy_committee_session(req: DeployCommitteeRequest):
 
     model_params = committee_config.model_params or config_json.get("model_params", {})
 
-    # Detect the parent full-cycle job dir for locked features + snapshot
-    parent_job_dir = config_path.parent if config_path.parent.name.startswith("fullcycle_") else None
+    # Detect the parent full-cycle job dir for locked features + snapshot + trust score
+    if parent_job_dir is None:
+        parent_job_dir = config_path.parent if config_path.parent.name.startswith("fullcycle_") else None
     if parent_job_dir is None:
         parent_job_dir = config_path.parent.parent if "full_cycle" in str(config_path) else None
+
+    # Load trust score from the same full-cycle job
+    trust_multiplier = 1.0
+    trust_data = None
+    if parent_job_dir:
+        trust_path = parent_job_dir / "trust_score.json"
+        if trust_path.exists():
+            try:
+                with open(trust_path) as f:
+                    trust_data = json.load(f)
+                ts = trust_data.get("trust_score", 1.0)
+                action = trust_data.get("action", "deploy")
+                if action == "reject":
+                    raise HTTPException(400,
+                        f"Committee trust_score={ts:.2f} — deployment rejected. "
+                        "Re-run the Full Cycle with different models or parameters.")
+                trust_multiplier = _trust_to_multiplier(ts)
+                logger.info("Trust multiplier: %.2f (score=%.3f, action=%s)",
+                             trust_multiplier, ts, action)
+            except HTTPException:
+                raise
+            except Exception:
+                logger.warning("Failed to load trust score — using full sizing")
+                pass
 
     # 2. Load locked features if available
     locked_features = None
@@ -512,6 +598,22 @@ async def deploy_committee_session(req: DeployCommitteeRequest):
     if not trained_models:
         raise HTTPException(500, "Failed to obtain committee models")
 
+    # 5.5 Load meta-learner if available
+    meta_learner = None
+    if parent_job_dir:
+        meta_path = parent_job_dir / "committee_snapshot" / "meta" / "meta_model.joblib"
+        if meta_path.exists():
+            try:
+                from pipeline.committee_meta import CommitteeMetaLearner
+                meta_learner = CommitteeMetaLearner.load(str(meta_path))
+                if meta_learner.is_trained:
+                    logger.info("Meta-learner loaded from %s (accuracy=%.3f)",
+                                 str(meta_path), meta_learner.accuracy)
+                else:
+                    meta_learner = None
+            except Exception:
+                logger.warning("Meta-learner load failed — continuing without it")
+
     # 6. Create runner
     from trading.live_committee_runner import LiveCommitteeRunner
     from pipeline.regime_utils import RegimeConfig
@@ -523,6 +625,7 @@ async def deploy_committee_session(req: DeployCommitteeRequest):
         regime_cfg=RegimeConfig(),
         confidence_threshold=req.confidence_threshold,
         lookback_bars=req.lookback_bars,
+        meta_learner=meta_learner,
     )
     runner.start()
 
@@ -545,10 +648,115 @@ async def deploy_committee_session(req: DeployCommitteeRequest):
         "backtester": None,
         "ws_queues": [],
         "model_obj": None,
+        "trust_multiplier": trust_multiplier,
+        "trust_score": trust_data,
+        "alert_manager": None,
+        "regime_throttle": None,
+        "rotation_scheduler": None,
+        "effective_multiplier": trust_multiplier,
+        "live_news_blend_enabled": req.live_news_blend_enabled,
+        "live_news_blend_weight": req.live_news_blend_weight,
     }
+
+    # Initialize alerting if configured
+    if hasattr(req, "alert_config") and req.alert_config:
+        try:
+            from trading.alerting import AlertConfig, AlertManager
+            alert_cfg = AlertConfig(**req.alert_config) if isinstance(req.alert_config, dict) else AlertConfig()
+            alert_mgr = AlertManager(alert_cfg)
+            session["alert_manager"] = alert_mgr
+        except Exception:
+            pass
+
+    # Initialize regime throttle from Phase 5 coverage report
+    if parent_job_dir:
+        results_path = parent_job_dir / "results.json"
+        if results_path.exists():
+            try:
+                with open(results_path) as f:
+                    full_results = json.load(f)
+                coverage = full_results.get("phase3_regime_coverage", {})
+                if coverage:
+                    from trading.regime_throttle import RegimeThrottle
+                    config_regimes = set(committee_config.regimes.keys())
+                    session["regime_throttle"] = RegimeThrottle(coverage, config_regimes)
+                    n_throttled = sum(1 for m in session["regime_throttle"]._throttles.values() if m < 1.0)
+                    if n_throttled > 0:
+                        logger.info("Regime throttle: %d/%d regimes throttled",
+                                     n_throttled, len(coverage))
+            except Exception:
+                logger.warning("Failed to load regime throttle — all regimes trade at full size")
+                pass
+
+    # Initialize auto-rotation scheduler
+    if snapshot_loaded and parent_job_dir:
+        snapshot_dir = parent_job_dir / "committee_snapshot"
+        matrix_path = parent_job_dir / "regime_matrix_tuned.json"
+        if snapshot_dir.exists() and len(unique_models) > 1:
+            try:
+                from trading.rotation_scheduler import RotationScheduler
+                session["rotation_scheduler"] = RotationScheduler(
+                    runner=runner,
+                    snapshot_dir=str(snapshot_dir),
+                    matrix_path=str(matrix_path) if matrix_path.exists() else None,
+                )
+                logger.info("Auto-rotation scheduler initialized "
+                             "(check interval: %sh, max rotations/24h: %d)",
+                             session["rotation_scheduler"].check_interval_hours,
+                             session["rotation_scheduler"].max_rotations_per_24h)
+            except Exception:
+                logger.warning("Failed to initialize rotation scheduler")
+
+    # Initialize LEAN bridge (if execution_mode == "lean")
+    session["execution_mode"] = req.execution_mode
+    if req.execution_mode == "lean":
+        try:
+            from trading.lean_bridge import LeanBridge
+
+            async def _lean_alert(alert_type: str, message: str):
+                if mgr := session.get("alert_manager"):
+                    try:
+                        await mgr.send_alert(alert_type, message)
+                    except Exception:
+                        pass
+
+            lean_url = os.environ.get("LEAN_BRIDGE_URL", "http://localhost:8888")
+            session["lean_bridge"] = LeanBridge(
+                base_url=lean_url,
+                alert_callback=_lean_alert,
+            )
+            ok = await session["lean_bridge"].health_check()
+            if not ok:
+                logger.warning("LEAN bridge health check failed — is the LEAN engine running?")
+            else:
+                logger.info("LEAN bridge initialized at %s — health OK", lean_url)
+                session["lean_portfolio_updated"] = 0.0
+        except Exception:
+            logger.exception("Failed to initialize LEAN bridge")
+
+    if req.live_news_blend_enabled:
+        try:
+            from news.scraper import NewsScraper
+            from news.sentiment import SentimentAnalyzer
+            scraper = NewsScraper()
+            articles = scraper.fetch_all()
+            if articles:
+                engine = SentimentAnalyzer(backend="vader")
+                engine.score_articles(articles, pair=pair)
+        except Exception:
+            logger.warning("Failed to pre-warm news cache for committee session %s", session_id)
 
     active_sessions[session_id] = session
     asyncio.create_task(_committee_signal_loop(session_id))
+
+    # Start rotation scheduler as background task
+    if scheduler := session.get("rotation_scheduler"):
+        async def _rotation_runner():
+            await scheduler.run(
+                lambda: session.get("status", "stopped"),
+                session.get("alert_manager"),
+            )
+        asyncio.create_task(_rotation_runner())
 
     return {
         "session_id": session_id,
@@ -567,6 +775,57 @@ async def deploy_committee_session(req: DeployCommitteeRequest):
     }
 
 
+def build_committee_metrics_snapshot(session: dict) -> dict:
+    """Build full metrics snapshot from a committee session for API/WS broadcast."""
+    runner = session.get("runner")
+    if not runner:
+        return {"error": "no runner", "session_id": session.get("session_id", "")}
+
+    health = runner.get_health_summary()
+    regimes = runner.get_recent_regimes(100)
+    regime_dist: Dict[str, float] = {}
+    for r in regimes:
+        regime_dist[r] = regime_dist.get(r, 0) + 1
+    total_r = len(regimes)
+    if total_r > 0:
+        for r in regime_dist:
+            regime_dist[r] = round(regime_dist[r] / total_r, 4)
+
+    trust_data = session.get("trust_score") or {}
+
+    return {
+        "session_id": session["session_id"],
+        "uptime_seconds": round(time.time() - runner._start_time.timestamp(),
+                                1) if runner._start_time else 0,
+        "bar_count": runner._bar_count,
+        "signal_count": len(runner._signal_history),
+        "non_zero_signals": sum(1 for s in runner._signal_history if s.signal != 0),
+        "committee_healthy": runner._check_health(),
+        "current_regime": regimes[-1] if regimes else "unknown",
+        "regime_distribution": regime_dist,
+        "trust_score": trust_data.get("trust_score"),
+        "trust_multiplier": session.get("trust_multiplier", 1.0),
+        "effective_multiplier": session.get("effective_multiplier", 1.0),
+        "throttle_summary": session["regime_throttle"].to_dict() if session.get("regime_throttle") else {},
+        "per_model_health": {
+            m: {
+                "rolling_sharpe": h["rolling_sharpe"],
+                "rolling_hit_rate": h["rolling_hit_rate"],
+                "total_signals": h["total_signals"],
+                "wins": h["wins"],
+                "losses": h["losses"],
+                "status": (
+                    "insufficient_data" if h.get("total_signals", 0) < 3
+                    else "healthy" if h.get("is_healthy", True)
+                    else "unhealthy"
+                ),
+            }
+            for m, h in health.items()
+        },
+        "recent_signals": [s.to_dict() for s in runner.get_recent_signals(5)],
+    }
+
+
 async def _committee_signal_loop(session_id: str):
     """Background loop: poll prices → build bar → runner.process_bar() → broadcast."""
     session = active_sessions.get(session_id)
@@ -581,6 +840,7 @@ async def _committee_signal_loop(session_id: str):
 
     tf_seconds = {"M15": 900, "M30": 1800, "H1": 3600, "H4": 14400}
     poll_interval = min(tf_seconds.get(timeframe, 1800) // 4, 60)
+    last_metrics_time = 0.0
 
     while session.get("status") == "running":
         try:
@@ -613,12 +873,40 @@ async def _committee_signal_loop(session_id: str):
 
             live_signal = runner.process_bar(bar)
 
+            # Apply regime throttle
+            effective_mult = session.get("trust_multiplier", 1.0)
+            throttle_level = "full"
+            if live_signal is not None:
+                throttle = session.get("regime_throttle")
+                if throttle is not None:
+                    regime_mult = throttle.get_multiplier(live_signal.regime)
+                    throttle_level = throttle.get_throttle_level(live_signal.regime)
+                    effective_mult = effective_mult * regime_mult
+                    if regime_mult == 0.0 and live_signal.signal != 0:
+                        live_signal.signal = 0
+            session["effective_multiplier"] = effective_mult
+
             direction = "FLAT"
             confidence = 50.0
             regime = "unknown"
             active_models = []
 
             if live_signal is not None:
+                raw_signal_val = float(live_signal.signal)
+                blend_cfg = {
+                    "live_news_blend_enabled": session.get("live_news_blend_enabled", False),
+                    "live_news_blend_weight": session.get("live_news_blend_weight", 0.10),
+                }
+                if blend_cfg["live_news_blend_enabled"]:
+                    from pipeline.backtester.real_trading_mixin import RealTradingMixin
+                    blended = RealTradingMixin._blend_news_sentiment(raw_signal_val, pair, blend_cfg)
+                    if blended > 0.3:
+                        live_signal.signal = 1
+                    elif blended < -0.3:
+                        live_signal.signal = -1
+                    else:
+                        live_signal.signal = 0
+
                 if live_signal.signal == 1:
                     direction = "LONG"
                 elif live_signal.signal == -1:
@@ -627,6 +915,47 @@ async def _committee_signal_loop(session_id: str):
                 regime = live_signal.regime
                 active_models = live_signal.active_models
 
+            # ── LEAN Bridge Execution ───────────────────────────
+            lean_bridge = session.get("lean_bridge")
+            is_lean = session.get("execution_mode") == "lean" and lean_bridge is not None
+
+            if is_lean and direction != "FLAT":
+                try:
+                    qty = round(effective_mult * 10000, 0)
+                    if qty > 0:
+                        order = await lean_bridge.submit_order(
+                            symbol=pair,
+                            direction=1 if direction == "LONG" else -1,
+                            quantity=qty,
+                            tag=f"kodaquant_{session_id}_{int(time.time())}",
+                        )
+                        if not order.success:
+                            logger.error("LEAN order failed: %s", order.error)
+                except Exception:
+                    logger.exception("LEAN bridge submit_order failed")
+
+            # ── LEAN Portfolio Sync (every 60s) ─────────────────
+            if is_lean:
+                now_sync = time.time()
+                last_lean_sync = session.get("lean_portfolio_updated", 0.0)
+                if now_sync - last_lean_sync >= 60:
+                    try:
+                        pf = await lean_bridge.get_portfolio()
+                        if pf is not None:
+                            session["equity"] = pf.total_portfolio_value
+                            session["lean_portfolio_updated"] = now_sync
+                            long_pos = [p for p in pf.positions if p.quantity > 0]
+                            short_pos = [p for p in pf.positions if p.quantity < 0]
+                            if long_pos and not short_pos:
+                                session["position"] = "LONG"
+                            elif short_pos and not long_pos:
+                                session["position"] = "SHORT"
+                            else:
+                                session["position"] = "FLAT"
+                    except Exception:
+                        logger.exception("LEAN portfolio sync failed")
+
+            # ── Equity / PnL Calculation ────────────────────────
             prev_equity = session["equity"]
             pos = 1 if direction == "LONG" else -1 if direction == "SHORT" else 0
             if session["last_mid"] is not None and session["last_mid"] > 0 and mid_price:
@@ -635,7 +964,11 @@ async def _committee_signal_loop(session_id: str):
             else:
                 pnl = 0.0
 
-            new_equity = prev_equity + pnl
+            if not is_lean:
+                new_equity = prev_equity + pnl
+                session["equity"] = new_equity
+            else:
+                new_equity = session["equity"]
 
             signal_msg = {
                 "event": "signal",
@@ -649,6 +982,8 @@ async def _committee_signal_loop(session_id: str):
                 "position": direction,
                 "regime": regime,
                 "active_models": active_models,
+                "throttle_level": throttle_level,
+                "effective_multiplier": round(effective_mult, 2),
             }
 
             session["equity"] = new_equity
@@ -662,6 +997,27 @@ async def _committee_signal_loop(session_id: str):
                 except Exception:
                     pass
 
+            # Broadcast metrics snapshot every 60 seconds
+            now = time.time()
+            if now - last_metrics_time >= 60:
+                try:
+                    metrics = build_committee_metrics_snapshot(session)
+                    metrics_msg = {"event": "metrics_update", "timestamp": int(now), **metrics}
+                    for q in list(ws_queues):
+                        try:
+                            q.put_nowait(metrics_msg)
+                        except Exception:
+                            pass
+                    # Check alert thresholds
+                    if alert_mgr := session.get("alert_manager"):
+                        try:
+                            alert_mgr.check_and_notify(metrics, session_id)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                last_metrics_time = now
+
         except Exception:
             logger.exception("Committee signal loop error for session %s", session_id)
 
@@ -669,6 +1025,18 @@ async def _committee_signal_loop(session_id: str):
 
     session["status"] = "stopped"
     runner.stop()
+
+    # Liquidate LEAN positions and close bridge
+    if lean_bridge := session.get("lean_bridge"):
+        try:
+            await lean_bridge.liquidate_all()
+        except Exception:
+            logger.exception("LEAN liquidation failed during session stop")
+        try:
+            await lean_bridge.close()
+        except Exception:
+            pass
+
     stop_msg = {
         "event": "stopped",
         "session_id": session_id,
@@ -722,6 +1090,13 @@ async def stop_live_session(session_id: str):
                 model_obj.close()
         except Exception:
             pass
+
+    # Liquidate LEAN positions on manual stop
+    if lean_bridge := session.get("lean_bridge"):
+        try:
+            await lean_bridge.liquidate_all()
+        except Exception:
+            logger.exception("LEAN liquidation failed during stop_live_session")
 
     equity = session["equity"]
     signal_count = session["signal_count"]

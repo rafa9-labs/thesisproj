@@ -69,6 +69,19 @@ class JobManager:
             )
             return cur.rowcount > 0
 
+    def clear_pending_queue(self) -> int:
+        """Mark all pending/running jobs as failed. Returns count updated."""
+        now = self._now()
+        with self.store._cursor() as (conn, cur):
+            cur.execute(
+                "UPDATE jobs SET status = ?, error = ?, updated_at = ? "
+                "WHERE status IN ('pending', 'running')",
+                ("failed", "Queue cleared by cancellation or restart", now),
+            )
+            count = cur.rowcount
+            conn.commit()
+            return count
+
     def update_status(self, job_id: str, status: str, result: Optional[Dict] = None, error: Optional[str] = None):
         now = self._now()
         with self.store._cursor() as (conn, cur):

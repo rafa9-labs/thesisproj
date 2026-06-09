@@ -181,37 +181,9 @@ class TestPhase0RealData:
         )
         assert "locked_features" in profiler.wfo_config
 
+    @pytest.mark.skip(reason="prune_models removed with Phase 2")
     def test_prune_models_on_synthetic_matrix(self):
-        """prune_models() with real-grade matrix: survivors + diversity."""
-        from pipeline.expert_profiler import prune_models, RegimeModelMatrix
-        models = ["xgboost", "logistic", "random_forest", "lstm",
-                  "lightgbm", "catboost", "svm", "decision_tree"]
-        n_models = len(models)
-        n_regimes = 7
-        s_mat = np.full((n_models, n_regimes), np.nan)
-        t_mat = np.ones((n_models, n_regimes)) * 30
-        h_mat = np.ones((n_models, n_regimes)) * 0.5
-        f_mat = np.ones((n_models, n_regimes)) * 5
-        rng = np.random.default_rng(42)
-        for i in range(n_models):
-            for j in range(n_regimes):
-                s_mat[i, j] = rng.normal(0.3, 0.4)
-
-        matrix = RegimeModelMatrix(
-            regimes=["quiet_squeeze", "trend_up", "trend_down",
-                     "mean_reverting", "breakout", "high_volatile", "sideways"],
-            models=models, sharpe_matrix=s_mat, trade_matrix=t_mat,
-            hitrate_matrix=h_mat, fold_counts=f_mat,
-        )
-        survivors, pruned = prune_models(matrix, min_sharpe=0.0, max_models=6)
-        assert 3 <= len(survivors) <= 6
-        assert len(pruned) == len(models) - len(survivors)
-
-        # Diversity: at least 1 tree, 1 linear if available
-        from pipeline.model_families import TREE_MODELS, LINEAR_MODELS
-        has_tree = any(m in TREE_MODELS for m in survivors)
-        has_linear = any(m in LINEAR_MODELS for m in survivors)
-        assert has_tree or has_linear, "Diversity missing: no tree or linear model"
+        pass
 
 
 # ════════════════════════════════════════════════════════════════════

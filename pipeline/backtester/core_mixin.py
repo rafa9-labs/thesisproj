@@ -21,6 +21,7 @@ class CoreMixin:
         use_oof: bool = False,
         data_store = None,
         db_path: str = "data/forex.db",
+        base_timeframe: str = "M30",
     ):
         """
         Initialize the backtester for a specific instrument and date range.
@@ -47,6 +48,8 @@ class CoreMixin:
             Pre-existing DataStore instance. Takes priority over db_path.
         db_path : str
             Path to SQLite database. Used to create DataStore if data_store not provided.
+        base_timeframe : str
+            Primary trading timeframe (M15, M30, H1, H4). MTF timeframes derived from hierarchy.
         """
         self.symbol = symbol
         self.start = start
@@ -71,9 +74,24 @@ class CoreMixin:
         else:
             self._store = DataStore(db_path)
 
+        # --- Resolve base_timeframe from features_config if not explicitly provided ---
+        if base_timeframe == "M30" and isinstance(features_config, dict):
+            base_timeframe = str(features_config.get("base_timeframe", "M30"))
+        self.base_timeframe = base_timeframe
+
+        # --- Resolve MTF timeframes from hierarchy ---
+        from config import TIMEFRAME_HIERARCHY, DEFAULT_BASE_TIMEFRAME
+        tf_h = TIMEFRAME_HIERARCHY.get(self.base_timeframe)
+        if tf_h is None:
+            print(f"[WARN] Unknown base_timeframe '{self.base_timeframe}', falling back to {DEFAULT_BASE_TIMEFRAME}")
+            self.base_timeframe = DEFAULT_BASE_TIMEFRAME
+            tf_h = TIMEFRAME_HIERARCHY[self.base_timeframe]
+        self._mtf_fast_tf = tf_h["mtf_fast"]
+        self._mtf_slow_tf = tf_h["mtf_slow"]
+
         # --- Validate required timeframes exist ---
         _tfs = self._store.list_timeframes(self.symbol)
-        _required = {"M30", "H1", "H4"}
+        _required = {self.base_timeframe, self._mtf_fast_tf, self._mtf_slow_tf}
         _missing = _required - set(_tfs)
         if _missing:
             raise DataNotAvailableError(
@@ -625,7 +643,7 @@ class CoreMixin:
     def _short_param_string(self, p: dict) -> str:
         def _getint(k, default=0):
             try: return int(p.get(k, default))
-            except: return default
+            except (TypeError, ValueError): return default
 
         lags = _getint("lags", _getint("lags_range", 0))
         d    = _getint("lag_depth", 0)

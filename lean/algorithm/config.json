@@ -1,0 +1,9 @@
+{
+  "algorithm-language": "Python",
+  "algorithm-type-name": "KodaQuantBridge",
+  "parameters": {},
+  "description": "KodaQuant LEAN Bridge — passthrough algorithm for external signal execution via REST API",
+  "local-id": 1,
+  "cloud-id": null,
+  "organization-id": null
+}

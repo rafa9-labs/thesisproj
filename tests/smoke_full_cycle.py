@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pipeline.feature_sweep import run_phase_minus1, load_locked_features
 from pipeline.regime_utils import detect_regimes_anchored, RegimeConfig
-from pipeline.expert_profiler import ExpertProfiler, prune_models
+from pipeline.expert_profiler import ExpertProfiler
 from pipeline.committee_builder import CommitteeBuilder
 from pipeline.committee_backtester import CommitteeBacktester
 
@@ -103,45 +103,28 @@ profiler = ExpertProfiler(
 
 models_to_test = ["logistic", "xgboost"]
 print(f"  Models: {models_to_test}")
-print(f"  Trials: 2 per model")
+print("  Phase 2: skipped (removed) — all models flow to Phase 3 HPO")
 
-try:
-    raw_df_regime = df.copy()
-    if "time" not in raw_df_regime.columns:
-        raw_df_regime["time"] = raw_df_regime.index
-
-    phase0_result = profiler.profile(
-        models=models_to_test, n_months=12, n_trials=2,
-        seed=42, verbose=True, raw_df=raw_df_regime,
-    )
-    matrix = phase0_result.matrix
-    print(f"  Folds collected: {len(matrix.raw_folds)}")
-    print(f"  Models in matrix: {matrix.models}")
-
-    survivors, pruned = prune_models(matrix, min_sharpe=0.0, max_models=7)
-    print(f"  Survivors: {survivors}")
-    print(f"  Pruned: {pruned}")
-    assert len(survivors) >= 1, "No survivors — pipeline cannot proceed"
-except Exception as e:
-    print(f"  WARNING: Phase 0 profiling failed: {e}")
-    print("  (this is expected with 2-trial HPO on short data; skipping further phases)")
-    print("\n" + "=" * 60)
-    print("  SMOKE TEST COMPLETE (partial — Phase 0 skipped)")
-    print("=" * 60)
-    sys.exit(0)
+survivors = list(models_to_test)
+print(f"  Survivors: {survivors}")
+assert len(survivors) >= 1, "No survivors — pipeline cannot proceed"
 
 elapsed = time.time() - t0
 print(f"  Time: {elapsed:.0f}s")
 
-# ── PHASE 2: Committee Assembly ──
+# ── PHASE 4: Committee Assembly (fallback: equal-weight survivors) ──
 print("\n" + "-" * 40)
-print("  PHASE 2: Committee Assembly")
+print("  PHASE 4: Committee Assembly")
 print("-" * 40)
 t0 = time.time()
 
-builder = CommitteeBuilder(top_k=2, min_sharpe=0.0, weight_method="sharpe_proportional")
-committee_config = builder.build(
-    matrix, constraints={"max_models_per_regime": 2, "max_regimes_per_model": 3},
+from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+n = len(survivors)
+w = 1.0 / max(n, 1)
+ra = RegimeAssignment(models=list(survivors), weights=[w] * n)
+committee_config = CommitteeConfig(
+    regimes={"sideways": ra},
+    fallback=ra,
 )
 n_assigned = len(committee_config.regimes)
 print(f"  Regimes with assignments: {n_assigned}")

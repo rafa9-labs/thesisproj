@@ -23,7 +23,7 @@ client = TestClient(app) if _API_AVAILABLE else None
 _API_PREFIX = "/api/v1"
 
 # Expected model counts
-_EXPECTED_TOTAL = 17  # registry-compatible models (excludes ensemble_cnn_lstm_xgboost)
+_EXPECTED_TOTAL = 18  # registry-compatible models
 _CLASSICAL_MODELS = {"logistic", "svm", "random_forest", "decision_tree", "xgboost", "lightgbm", "catboost"}
 _DEEP_MODELS = {"cnn", "lstm", "transformer", "gru", "gru_lstm"}
 _RL_MODELS = {"dqn"}

@@ -549,13 +549,18 @@ export interface LiveSentimentPairData {
   vader_magnitude: number;
   blended_sentiment: number;
   article_count: number;
-  last_updated: string;
+  last_updated: string | null;
+  next_update?: string | null;
+  cache_age_hours?: number;
   recommended_position: number;
   position_confidence: number;
   llm_sentiment?: number | null;
   llm_confidence?: number | null;
   llm_volatility?: number | null;
   llm_weight?: number;
+  vader_contribution?: number;
+  llm_contribution?: number;
+  article_count_by_tier?: { exact: number; partial: number; other: number };
   currencies_affected?: string[];
 }
 
@@ -569,14 +574,18 @@ export interface LiveSentimentArticle {
   summary: string;
   bias: string;
   timestamp: string;
+  relevance_tier?: number;
 }
 
 export interface LiveSentimentResponse {
   pairs: Record<string, LiveSentimentPairData>;
   top_articles: LiveSentimentArticle[];
+  article_count_by_tier?: { exact: number; partial: number; other: number };
   backend: string;
   model: string;
   error?: string;
+  from_cache?: boolean;
+  status?: string;
 }
 
 export interface NewsArticleFull {
@@ -668,6 +677,8 @@ export interface DeployPaperRequest {
   initial_equity?: number;
   position_sizing?: string;
   sizing_config?: Record<string, unknown>;
+  live_news_blend_enabled?: boolean;
+  live_news_blend_weight?: number;
 }
 
 export interface PaperSignalEvent {
@@ -766,6 +777,8 @@ export interface DeployLiveRequest {
   sizing_config?: Record<string, unknown>;
   mode?: string;
   risk_config?: Record<string, unknown>;
+  live_news_blend_enabled?: boolean;
+  live_news_blend_weight?: number;
 }
 
 export interface LiveSignalEvent {
@@ -808,7 +821,6 @@ export interface SeedDemoResponse {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Committee (Racecar Phases A-E)
 // ════════════════════════════════════════════════════════════════════
 
 export interface RegimeAssignmentSchema {
@@ -852,48 +864,6 @@ export interface RegimeLabelsResponse {
   count: number;
 }
 
-export interface CommitteeBacktestRequest {
-  config: CommitteeConfigSchema;
-  pair?: string;
-  timeframe?: string;
-  train_months?: number;
-  test_months?: number;
-  confidence_threshold?: number;
-  seq_len?: number;
-}
-
-export interface CommitteeBacktestSubmitResponse {
-  job_id: string;
-  status: string;
-}
-
-export interface CommitteeFoldData {
-  fold_idx: number;
-  train_start: string;
-  train_end: string;
-  test_start: string;
-  test_end: string;
-  sharpe: number;
-  trades: number;
-  active_rate: number;
-  win_rate: number;
-  return_val: number;
-  drawdown: number;
-  regime_distribution?: Record<string, number>;
-}
-
-export interface CommitteeBacktestResultResponse {
-  job_id: string;
-  status: string;
-  total_folds: number;
-  avg_sharpe: number;
-  avg_trades: number;
-  models: string[];
-  warnings: string[];
-  folds: CommitteeFoldData[];
-  execution_time_s: number;
-}
-
 export interface CommitteeSnapshotInfo {
   version: string;
   created_at: string;
@@ -905,53 +875,6 @@ export interface CommitteeSnapshotListResponse {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Racecar Auto-Optimize (B→C→D pipeline)
-// ════════════════════════════════════════════════════════════════════
-
-export interface RacecarAutoOptimizeRequest {
-  models: string[];
-  pair?: string;
-  timeframe?: string;
-  train_months?: number;
-  test_months?: number;
-  profile_trials?: number;
-  committee_top_k?: number;
-}
-
-export interface RacecarJobStatus {
-  job_id: string;
-  phase: string;
-  phase_progress: string;
-  started_at: string;
-  error: string;
-}
-
-export interface RacecarJobResults {
-  job_id: string;
-  status: string;
-  profile_matrix?: Record<string, unknown>;
-  committee_config?: Record<string, unknown>;
-  backtest?: Record<string, unknown>;
-  total_time_s: number;
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Factory — Iterative Committee Optimizer
-// ════════════════════════════════════════════════════════════════════
-
-export interface FactoryStartRequest {
-  models: string[];
-  proposer?: string;
-  llm_backend?: string;
-  max_iterations?: number;
-  patience?: number;
-  stopping_tolerance?: number;
-  regime_sharpe_floor?: number;
-  train_months?: number;
-  pair?: string;
-  timeframe?: string;
-}
-
 export interface FactoryIterationRecord {
   iteration: number;
   action_type: string;
@@ -965,35 +888,6 @@ export interface FactoryIterationRecord {
   rationale: string;
 }
 
-export interface FactoryStatusResponse {
-  job_id: string;
-  phase: string;
-  iteration: number;
-  total_iterations: number;
-  current_action: string;
-  current_regime: string;
-  before_sharpe: number;
-  after_sharpe: number;
-  delta_sharpe: number;
-  accepted: boolean;
-  best_sharpe_so_far: number;
-  stopped: boolean;
-  stop_reason: string;
-  history: FactoryIterationRecord[];
-}
-
-export interface FactoryResultsResponse {
-  job_id: string;
-  status: string;
-  best_sharpe: number;
-  total_iterations: number;
-  accepted_count: number;
-  total_time_s: number;
-  best_config?: Record<string, unknown>;
-  history: FactoryIterationRecord[];
-  stop_reason: string;
-}
-
 // ════════════════════════════════════════════════════════════════════
 // Full Cycle — Racecar (B→C→D) + Factory (optimization) in one shot
 // ════════════════════════════════════════════════════════════════════
@@ -1002,25 +896,37 @@ export interface FullCycleRequest {
   models: string[];
   pair?: string;
   timeframe?: string;
-  profile_trials_phase0?: number;
   sweep_n_estimators?: number;
   sweep_max_depth?: number;
+  skip_feature_sweep?: boolean;
+  use_boruta_shap?: boolean;
+  boruta_percentile?: number;
+  boruta_max_iter?: number;
+  enable_phase3?: boolean;
+  enable_phase4?: boolean;
+  enable_phase5?: boolean;
+  enable_phase6?: boolean;
+  debug_mode?: boolean;
   committee_top_k?: number;
+  committee_weight_method?: string;
+  committee_min_sharpe?: number;
   train_months?: number;
   test_months?: number;
   hpo_sampler?: string;
   cv_blocks?: number;
   cv_val_frac?: number;
   plateau_patience?: number;
-  max_surviving_models?: number;
   proposer?: string;
   llm_backend?: string;
+  ucb_c?: number;
   max_iterations?: number;
   patience?: number;
   stopping_tolerance?: number;
   regime_sharpe_floor?: number;
   factory_proxy_months?: number;
   factory_proxy_folds?: number;
+  hpo_trials?: Record<string, number>;
+  hpo_startup_trials?: Record<string, number>;
 }
 
 export interface FullCycleStatusResponse {
@@ -1034,9 +940,26 @@ export interface FullCycleStatusResponse {
   best_sharpe_so_far: number;
   started_at: string;
   error: string;
-  pruned_models: string[];
   surviving_models: string[];
   locked_features_count: number;
+}
+
+export interface TrustScoreResult {
+  trust_score: number;
+  action: "deploy" | "proceed" | "flag" | "reject";
+  sub_scores: {
+    pbo_contribution: number;
+    dsr_contribution: number;
+    coverage_contribution: number;
+    floor_contribution: number;
+  };
+}
+
+export interface HpoStatusEntry {
+  model_type: string;
+  status: string;
+  best_score?: number | null;
+  committee_size?: number;
 }
 
 export interface FullCycleResultsResponse {
@@ -1051,11 +974,16 @@ export interface FullCycleResultsResponse {
   racecar_committee_config?: Record<string, unknown>;
   racecar_backtest?: Record<string, unknown>;
   phase3_fold_consistency_cv: number;
-  phase3_fold_consistency_pass: boolean;
   phase3_regime_coverage?: Record<string, unknown>;
   phase3_seed_robustness_sharpe: number;
   phase3_seed_robustness_seeds: number;
   phase3_seed_robustness_pass: boolean;
+  trust_score?: TrustScoreResult;
+  pbo: number;
+  dsr: number;
+  hpo_status?: Record<string, string>;
+  hpo_model_params_count?: number;
+  snapshot_dir?: string;
   final_fold_consistency_cv: number;
   final_fold_consistency_pass: boolean;
   final_regime_coverage?: Record<string, unknown>;
@@ -1080,11 +1008,28 @@ export interface FullCycleHistoryEntry {
   survivors_count: number;
   survivors: string[];
   avg_sharpe: number;
-  phase3_passed: boolean;
+  trust_score: number;
   factory_best_sharpe: number;
 }
 
 export interface FullCycleHistoryResponse {
   entries: FullCycleHistoryEntry[];
   total_runs: number;
+}
+
+export interface LogEntry {
+  index: number;
+  timestamp: string;
+  level: string;
+  message: string;
+  phase?: string;
+  phase_number?: number;
+  phase_progress?: string;
+  category?: string;
+  metrics?: Record<string, unknown>;
+}
+
+export interface LogsResponse {
+  entries: LogEntry[];
+  next_index: number;
 }

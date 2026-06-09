@@ -253,7 +253,7 @@ class EvaluationMixin:
                     if model_type in {"cnn", "lstm", "transformer"}:
                         confidence_threshold = float(cfg.get("confidence_threshold", 0.0))
                     else:
-                        confidence_threshold = float(cfg.get("confidence_threshold", 0.80))
+                        confidence_threshold = float(cfg.get("confidence_threshold", 0.50))
                 else:
                     confidence_threshold = float(confidence_threshold)
 

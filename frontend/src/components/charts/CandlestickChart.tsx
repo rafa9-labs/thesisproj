@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createChart, type IChartApi, CandlestickSeries, HistogramSeries, LineSeries, ColorType } from "lightweight-charts";
+import { createChart, type IChartApi, type ISeriesApi, CandlestickSeries, HistogramSeries, LineSeries, ColorType } from "lightweight-charts";
 import { useCandles } from "@/api/queries";
 import { TIMEFRAMES } from "@/lib/constants";
 
@@ -32,9 +32,14 @@ export function CandlestickChart({
 }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const volSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const lineSeriesRefs = useRef<ISeriesApi<"Line">[]>([]);
+  const observerRef = useRef<ResizeObserver | null>(null);
   const [activeTf, setActiveTf] = useState(timeframe);
 
   const { data, isLoading } = useCandles(pair, activeTf, limit);
+  const candles = data?.candles ?? [];
 
   const handleTimeframeChange = (tf: string) => {
     setActiveTf(tf);
@@ -43,15 +48,6 @@ export function CandlestickChart({
 
   useEffect(() => {
     if (!containerRef.current) return;
-    if (isLoading) return;
-
-    if (chartRef.current) {
-      chartRef.current.remove();
-      chartRef.current = null;
-    }
-
-    const candles = data?.candles ?? [];
-    if (candles.length === 0) return;
 
     const chart = createChart(containerRef.current, {
       layout: {
@@ -85,6 +81,47 @@ export function CandlestickChart({
       wickUpColor: "#26a69a",
       wickDownColor: "#ef5350",
     });
+    candleSeriesRef.current = candleSeries;
+
+    if (showVolume) {
+      const volSeries = chart.addSeries(HistogramSeries, {
+        color: "#26a69a60",
+        priceFormat: { type: "volume" },
+        priceScaleId: "volume",
+      });
+      chart.priceScale("volume").applyOptions({
+        scaleMargins: { top: 0.8, bottom: 0 },
+        visible: false,
+      });
+      volSeriesRef.current = volSeries;
+    }
+
+    const observer = new ResizeObserver(() => {
+      if (containerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
+      }
+    });
+    observer.observe(containerRef.current);
+    observerRef.current = observer;
+
+    chartRef.current = chart;
+
+    return () => {
+      observer.disconnect();
+      chart.remove();
+      chartRef.current = null;
+      candleSeriesRef.current = null;
+      volSeriesRef.current = null;
+      lineSeriesRefs.current = [];
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!chartRef.current || isLoading || candles.length === 0) return;
+
+    const chart = chartRef.current;
+    const candleSeries = candleSeriesRef.current;
+    if (!candleSeries) return;
 
     candleSeries.setData(
       candles.map((c) => ({
@@ -96,6 +133,21 @@ export function CandlestickChart({
       })),
     );
 
+    if (showVolume && volSeriesRef.current) {
+      volSeriesRef.current.setData(
+        candles.map((c) => ({
+          time: c.t as number,
+          value: c.volume || 0,
+          color: c.c >= c.o ? "#26a69a40" : "#ef535040",
+        })),
+      );
+    }
+
+    for (const ls of lineSeriesRefs.current) {
+      chart.removeSeries(ls);
+    }
+    lineSeriesRefs.current = [];
+
     if (overlayLines && overlayLines.length > 0) {
       for (const line of overlayLines) {
         const lineSeries = chart.addSeries(LineSeries, {
@@ -106,47 +158,18 @@ export function CandlestickChart({
           crosshairMarkerVisible: false,
         });
         lineSeries.setData(line.data);
+        lineSeriesRefs.current.push(lineSeries);
       }
-    }
-
-    if (showVolume) {
-      const volSeries = chart.addSeries(HistogramSeries, {
-        color: "#26a69a60",
-        priceFormat: { type: "volume" },
-        priceScaleId: "volume",
-      });
-
-      chart.priceScale("volume").applyOptions({
-        scaleMargins: { top: 0.8, bottom: 0 },
-        visible: false,
-      });
-
-      volSeries.setData(
-        candles.map((c) => ({
-          time: c.t as number,
-          value: c.volume || 0,
-          color: c.c >= c.o ? "#26a69a40" : "#ef535040",
-        })),
-      );
     }
 
     chart.timeScale().fitContent();
+  }, [data, isLoading, pair, overlayLines, showVolume, candles]);
 
-    const observer = new ResizeObserver(() => {
-      if (containerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
-      }
-    });
-    observer.observe(containerRef.current);
-
-    chartRef.current = chart;
-
-    return () => {
-      observer.disconnect();
-      chart.remove();
-      chartRef.current = null;
-    };
-  }, [data, isLoading, height, pair, overlayLines, showVolume]);
+  useEffect(() => {
+    if (chartRef.current && containerRef.current) {
+      chartRef.current.applyOptions({ height });
+    }
+  }, [height]);
 
   return (
     <div className="flex flex-col gap-2">
@@ -183,7 +206,7 @@ export function CandlestickChart({
             <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>Loading candles...</span>
           </div>
         )}
-        {!isLoading && (data?.candles ?? []).length === 0 && (
+        {!isLoading && candles.length === 0 && (
           <div className="flex items-center justify-center" style={{ height }}>
             <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
               No data for {pair} at {activeTf}

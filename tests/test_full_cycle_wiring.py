@@ -52,10 +52,10 @@ class TestStatusPolling:
         """phase_number maps correctly to UI phases."""
         from api.routers.committee import FullCycleStatusResponse
         phases = [
-            ("feature_sweep", -1), ("prescreening", 0), ("profiling", 0),
-            ("prescreening_complete", 0), ("tuning", 1), ("building", 2),
-            ("validating", 3), ("validation_failed", 3), ("optimizing", 4),
-            ("completed", 4), ("failed", -1),
+            ("feature_sweep", 1), ("prescreening", 2), ("profiling", 2),
+            ("prescreening_complete", 2), ("tuning", 3), ("building", 4),
+            ("validating", 5), ("validation_failed", 5), ("optimizing", 6),
+            ("completed", 6), ("failed", 0),
         ]
         for phase_str, expected_num in phases:
             resp = FullCycleStatusResponse(job_id="test", phase=phase_str,

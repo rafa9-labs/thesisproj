@@ -26,15 +26,15 @@ from pipeline.execution.position_sizing import (
 # ──────────────────────────────────────────────────────
 #  DATA LOADING
 # ──────────────────────────────────────────────────────
-def _load_m30_data(pair: str, start: str, end: str, db_path: str = "data/forex.db") -> pd.DataFrame:
-    """Load M30 candles, remap columns to backtester format (price, high, low, etc.)."""
+def _load_m30_data(pair: str, start: str, end: str, db_path: str = "data/forex.db", timeframe: str = "M30") -> pd.DataFrame:
+    """Load base candles, remap columns to backtester format (price, high, low, etc.)."""
     from pipeline.data_sqlite import DataStore
 
     store = DataStore(db_path)
-    raw = store.get_candles(pair.upper(), "M30", start=start, end=end)
+    raw = store.get_candles(pair.upper(), timeframe, start=start, end=end)
     if raw is None or raw.empty:
         raise FileNotFoundError(
-            f"No M30 candles for {pair} in [{start}, {end}]. Run data download first."
+            f"No {timeframe} candles for {pair} in [{start}, {end}]. Run data download first."
         )
 
     raw.rename(columns={
@@ -57,7 +57,7 @@ def _load_m30_data(pair: str, start: str, end: str, db_path: str = "data/forex.d
 
     raw.dropna(inplace=True)
     if raw.empty:
-        raise ValueError(f"No valid bars for {pair} M30 in [{start}, {end}]")
+        raise ValueError(f"No valid bars for {pair} {timeframe} in [{start}, {end}]")
     return raw
 
 
@@ -70,6 +70,7 @@ def _compute_features_from_data(
     pair: str = "EURUSD",
     start_date: str = "2020-01-01",
     end_date: str = "2025-01-01",
+    base_timeframe: str = "M30",
 ) -> pd.DataFrame:
     from pipeline.backtester.composed import MLBacktester
 
@@ -103,6 +104,7 @@ def _compute_features_from_data(
         model_type=merged_fc.get("model_type", "logistic"),
         features_config=dict(merged_fc),
         db_path="data/forex.db",
+        base_timeframe=base_timeframe,
     )
 
     lags = int(merged_fc.get("lags", 10))
@@ -261,8 +263,7 @@ def run_forward_test(
     pair : str
         Currency pair (EURUSD)
     timeframe : str
-        Target timeframe. Note: features are always computed on M30 (same as the
-        training pipeline); higher timeframes are built from M30 data.
+        Target timeframe (M15, M30, H1, H4). MTF features adapt based on this.
     start_date, end_date : str
         Date range for the forward test (e.g. "2026-05-01")
     position_sizing : str
@@ -294,9 +295,9 @@ def run_forward_test(
     train_start = metadata.get("train_start", "?")
     train_end = metadata.get("train_end", "?")
 
-    raw_data = _load_m30_data(pair, start_date, end_date)
+    raw_data = _load_m30_data(pair, start_date, end_date, timeframe=timeframe)
 
-    features_df, _computed_names = _compute_features_from_data(raw_data, features_config, pair=pair, start_date=start_date, end_date=end_date)
+    features_df, _computed_names = _compute_features_from_data(raw_data, features_config, pair=pair, start_date=start_date, end_date=end_date, base_timeframe=timeframe)
 
     exclude_cols = {"time", "target", "side", "returns", "spread", "label"}
     if feature_names:

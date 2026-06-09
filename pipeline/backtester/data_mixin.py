@@ -12,15 +12,19 @@ class DataMixin:
         """
         Load and preprocess raw market data from SQLite for the specified window.
 
-        - 30m data -> index=time (tz-aware), rename to price/high/low, compute log returns.
-        - 1H / 4H data -> loaded for multi-timeframe (MTF) features.
-        - Precompute/Load 'mtf_ma_fast' (1H fast MA, shifted) and 'mtf_ma_slow' (4H slow MA, shifted).
-        Uses tuned windows from features_config['indicator_windows'] and prefers precomputed columns if present.
+        - Base data (e.g. M30) -> index=time (tz-aware), rename to price/high/low, compute log returns.
+        - MTF data (e.g. H1 / H4) -> loaded for multi-timeframe (MTF) features.
+        - Precompute/Load 'mtf_ma_fast' and 'mtf_ma_slow' (shifted MAs on higher timeframes).
+        Uses tuned windows from features_config['indicator_windows'] and prefers precomputed
+        columns if present.
+
+        The base and MTF timeframes are resolved from self.base_timeframe and the
+        TIMEFRAME_HIERARCHY in config.py during CoreMixin.__init__.
         """
-        # ---- 30m base data ----
-        raw = self._store.get_candles(self.symbol, "M30", self.start, self.end)
+        # ---- Base timeframe data ----
+        raw = self._store.get_candles(self.symbol, self.base_timeframe, self.start, self.end)
         if raw.empty:
-            raise RuntimeError(f"No M30 data for {self.symbol} in [{self.start}, {self.end}]")
+            raise RuntimeError(f"No {self.base_timeframe} data for {self.symbol} in [{self.start}, {self.end}]")
         raw.set_index("time", inplace=True)
 
         # normalize column names expected downstream
@@ -75,19 +79,20 @@ class DataMixin:
             print(f"[WARN] Failed to precompute NY session mask: {_e}")
             self._ny_mask = pd.Series(True, index=self.data.index)  # safe fallback
 
-        # ---- 1H and 4H for MTF features ----
-        self.df_1h = self._store.get_candles(self.symbol, "H1", self.start, self.end)
-        self.df_4h = self._store.get_candles(self.symbol, "H4", self.start, self.end)
+        # ---- MTF (higher timeframe) data ----
+        mtf_fast_tf = self._mtf_fast_tf
+        mtf_slow_tf = self._mtf_slow_tf
 
-        # Set time as index for H1/H4 (required for MTF MA computation below)
+        self.df_1h = self._store.get_candles(self.symbol, mtf_fast_tf, self.start, self.end)
+        self.df_4h = self._store.get_candles(self.symbol, mtf_slow_tf, self.start, self.end)
+
+        # Set time as index for MTF data (required for MTF MA computation below)
         if not self.df_1h.empty:
             self.df_1h.set_index("time", inplace=True)
         if not self.df_4h.empty:
             self.df_4h.set_index("time", inplace=True)
 
-        # H1/H4 already filtered by date range from DataStore
-
-        # [DOWN] Downcast numeric columns in 1H / 4H to float32 as well
+        # [DOWN] Downcast numeric columns in MTF data to float32 as well
         for _df in (self.df_1h, self.df_4h):
             for _col in _df.columns:
                 # only downcast numeric dtypes
@@ -97,49 +102,47 @@ class DataMixin:
         # ---- Precompute/Load MTF MAs on full history (shift(1) to avoid leakage) ----
         try:
             ind = (self.features_config or {}).get("indicator_windows", {}) or {}
-            fast_w = int(ind.get("mtf_ma_fast_window", 10))   # default 10 (1H)
-            slow_w = int(ind.get("mtf_ma_slow_window", 50))   # default 50 (4H)
+            fast_w = int(ind.get("mtf_ma_fast_window", 10))   # default 10
+            slow_w = int(ind.get("mtf_ma_slow_window", 50))   # default 50
 
             df1 = self.df_1h.copy()
             df4 = self.df_4h.copy()
 
             # Prefer precomputed columns if present; else compute from mid_close
             fast_candidates = [
-                f"mtf_1h_ma{fast_w}", "mtf_1h_ma_fast", f"ma_1h_{fast_w}", f"ma_fast_{fast_w}"
+                f"mtf_ma_fast", "mtf_1h_ma_fast", f"mtf_1h_ma{fast_w}", f"ma_1h_{fast_w}", f"ma_fast_{fast_w}"
             ]
             slow_candidates = [
-                f"mtf_4h_ma{slow_w}", "mtf_4h_ma_slow", f"ma_4h_{slow_w}", f"ma_slow_{slow_w}"
+                f"mtf_ma_slow", "mtf_4h_ma_slow", f"mtf_4h_ma{slow_w}", f"ma_4h_{slow_w}", f"ma_slow_{slow_w}"
             ]
             col_fast = next((c for c in fast_candidates if c in df1.columns), None)
             col_slow = next((c for c in slow_candidates if c in df4.columns), None)
 
             if col_fast is None:
-                if "mid_close" not in df1:
-                    raise KeyError("1H data missing 'mid_close' for MTF compute")
-                df1["mtf_1h_ma_fast"] = (
-                    df1["mid_close"]
+                close_col = "mid_close" if "mid_close" in df1 else df1.columns[0]
+                df1["mtf_ma_fast"] = (
+                    df1[close_col]
                     .rolling(fast_w, min_periods=fast_w)
                     .mean()
                     .shift(1)
                 )
-                col_fast = "mtf_1h_ma_fast"
+                col_fast = "mtf_ma_fast"
 
             if col_slow is None:
-                if "mid_close" not in df4:
-                    raise KeyError("4H data missing 'mid_close' for MTF compute")
-                df4["mtf_4h_ma_slow"] = (
-                    df4["mid_close"]
+                close_col = "mid_close" if "mid_close" in df4 else df4.columns[0]
+                df4["mtf_ma_slow"] = (
+                    df4[close_col]
                     .rolling(slow_w, min_periods=slow_w)
                     .mean()
                     .shift(1)
                 )
-                col_slow = "mtf_4h_ma_slow"
+                col_slow = "mtf_ma_slow"
 
             # Normalize names for merge
-            df1 = df1[[col_fast]].reset_index().rename(columns={col_fast: "mtf_1h_ma_fast"})
-            df4 = df4[[col_slow]].reset_index().rename(columns={col_slow: "mtf_4h_ma_slow"})
+            df1 = df1[[col_fast]].reset_index().rename(columns={col_fast: "mtf_ma_fast"})
+            df4 = df4[[col_slow]].reset_index().rename(columns={col_slow: "mtf_ma_slow"})
 
-            # Align timestamps to minute grid so merge_asof matches 30m bars robustly
+            # Align timestamps to minute grid so merge_asof matches base bars robustly
             df1["time"] = pd.to_datetime(df1["time"], utc=True) + pd.Timedelta(minutes=1)
             df4["time"] = pd.to_datetime(df4["time"], utc=True) + pd.Timedelta(minutes=1)
 
@@ -149,18 +152,18 @@ class DataMixin:
 
             mtf_fast = pd.merge_asof(
                 base.sort_values("time"), df1.sort_values("time"), on="time", direction="backward"
-            ).set_index("time")["mtf_1h_ma_fast"]
+            ).set_index("time")["mtf_ma_fast"]
 
             mtf_slow = pd.merge_asof(
                 base.sort_values("time"), df4.sort_values("time"), on="time", direction="backward"
-            ).set_index("time")["mtf_4h_ma_slow"]
+            ).set_index("time")["mtf_ma_slow"]
 
             # assign to self.data aligned to index
             self.data["mtf_ma_fast"] = mtf_fast.reindex(self.data.index).astype("float32")
             self.data["mtf_ma_slow"] = mtf_slow.reindex(self.data.index).astype("float32")
 
             if self._is_debug():
-                print(f"[MTF] fast_w={fast_w}, slow_w={slow_w} (mtf_ma_fast/slow ready)")
+                print(f"[MTF] base={self.base_timeframe} fast={mtf_fast_tf}(w={fast_w}) slow={mtf_slow_tf}(w={slow_w})")
 
         except Exception as _e:
             print(f"[WARN] Precompute/Load MTF features failed: {_e}")

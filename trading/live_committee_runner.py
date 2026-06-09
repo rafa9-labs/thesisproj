@@ -44,6 +44,8 @@ class LiveSignal:
     active_models: List[str]          # which models contributed
     model_weights: List[float]        # blending weights used
     is_healthy: bool = True           # False if models are underperforming
+    meta_override: bool = False       # True if meta-learner overrode committee
+    throttle_level: str = "full"      # "full", "half", "observe"
 
     def to_dict(self) -> dict:
         return {
@@ -56,6 +58,8 @@ class LiveSignal:
             "active_models": self.active_models,
             "model_weights": [round(w, 3) for w in self.model_weights],
             "is_healthy": self.is_healthy,
+            "meta_override": self.meta_override,
+            "throttle_level": self.throttle_level,
         }
 
 
@@ -128,6 +132,7 @@ class LiveCommitteeRunner:
         health_window: int = 50,
         rotation_sharpe_threshold: float = -0.5,
         rotation_hitrate_threshold: float = 0.35,
+        meta_learner=None,
     ):
         self.config = config
         self.models = models
@@ -138,6 +143,7 @@ class LiveCommitteeRunner:
         self.health_window = health_window
         self.rotation_sharpe_threshold = rotation_sharpe_threshold
         self.rotation_hitrate_threshold = rotation_hitrate_threshold
+        self._meta_learner = meta_learner
 
         # Internal state
         self._bar_buffer: Deque[Dict[str, float]] = deque(maxlen=lookback_bars)
@@ -232,6 +238,27 @@ class LiveCommitteeRunner:
         if not is_healthy and signal != 0:
             signal = 0  # suppress trades when unhealthy
 
+        # 7. Apply meta-learner gate (learns when to override committee)
+        meta_override = False
+        if self._meta_learner is not None:
+            try:
+                prev_sig = 0
+                if self._signal_history:
+                    prev_sig = self._signal_history[-1].signal
+                meta_signal, meta_conf, meta_override = self._meta_learner.predict(
+                    committee_signal=signal,
+                    committee_confidence=max_prob,
+                    prob_short=float(blended[0]),
+                    prob_flat=float(blended[1]),
+                    prob_long=float(blended[2]),
+                    regime_id=regime_id,
+                    prev_signal=prev_sig,
+                )
+                if meta_override:
+                    signal = meta_signal
+            except Exception:
+                pass
+
         live_signal = LiveSignal(
             timestamp=bar.get("timestamp", self._bar_count),
             signal=signal,
@@ -246,6 +273,7 @@ class LiveCommitteeRunner:
             active_models=active_models,
             model_weights=used_weights,
             is_healthy=is_healthy,
+            meta_override=meta_override,
         )
         self._signal_history.append(live_signal)
         return live_signal

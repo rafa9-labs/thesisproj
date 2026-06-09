@@ -25,6 +25,24 @@ export function RegimeHeatmap() {
 
   const isLoading = matrixLoading || labelsLoading;
 
+  if (isLoading) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 60 }}>
+        <div style={{ width: 24, height: 24, borderRadius: "50%", border: "3px solid var(--color-glass-border)", borderTopColor: "var(--color-brand)", animation: "spin 1s linear infinite" }} />
+        <span style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 16 }}>Loading regime data...</span>
+      </div>
+    );
+  }
+
+  if (!matrix?.entries?.length) {
+    return (
+      <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-glass-border)", borderRadius: 4, padding: 60, textAlign: "center" }}>
+        <span style={{ fontSize: 12, color: "var(--color-text-dim)", display: "block", marginBottom: 8 }}>No regime matrix available</span>
+        <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>Run the Full Cycle pipeline first to generate regime performance data.</span>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       {/* Regime Distribution Chart */}

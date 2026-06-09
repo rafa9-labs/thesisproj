@@ -2941,9 +2941,9 @@ class StrategyMixin:
 
                 # Coverage should be based on **trade intent**, not certainty about "flat".
                 if proba.shape[1] >= 3:
+                    max_conf = proba.max(axis=1)
                     p_short = proba[:, 0]
                     p_long  = proba[:, 2]
-                    max_conf = np.maximum(p_short, p_long)
                     decoded_raw = np.where(p_long > p_short, 1, np.where(p_short > p_long, -1, 0))
                     raw_classes = np.where(p_long > p_short, 2, np.where(p_short > p_long, 0, 1)).astype(int)
                 else:
@@ -3284,8 +3284,11 @@ class StrategyMixin:
                 pass
 
             _in_cv_mode = bool(getattr(self, "_in_optuna_cv", False) or getattr(self, "_in_cv", False))
+            _in_profiling = bool(getattr(self, "_in_profiling", False))
             if _in_cv_mode:
                 _eval_ctx = "cv:fold_or_month_eval:test_strategy"
+            elif _in_profiling:
+                _eval_ctx = "cv:profiling:test_strategy"
             elif bool(getattr(self, "_in_real_sim", False)):
                 _eval_ctx = "real_sim:month_eval:test_strategy"
             else:

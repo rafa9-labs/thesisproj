@@ -731,6 +731,16 @@ async def get_live_risk_state(session_id: str):
     return {"session_id": session_id, "risk": engine.get_risk_state()}
 
 
+@live_router.get("/{session_id}/attribution")
+async def get_live_attribution(session_id: str):
+    session = live_sessions.get(session_id)
+    if not session:
+        raise HTTPException(404, f"Session {session_id} not found")
+    from pipeline.attribution import compute_attribution_from_session
+    report = compute_attribution_from_session(session)
+    return report.to_dict()
+
+
 @live_router.get("/sessions")
 async def list_live_sessions():
     return [

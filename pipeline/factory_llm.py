@@ -236,26 +236,85 @@ For "remove_model": omit model_add, include model_remove.
 For "halt": omit model_add and model_remove, set type to "halt".
 Confidence must be "high", "medium", or "low"."""
 
+SHORTLIST_SYSTEM_PROMPT = """You are a strategic committee optimization agent for a Forex trading system.
+Your job is to analyze the performance matrix and current committee configuration
+and propose up to 5 LOGICALLY SOUND candidate actions. UCB1 will then optimize
+over your shortlist.
+
+Strategy Rules (prune illogical pairings):
+- Do NOT propose mean-reversion models (svm, logistic) for trending regimes (trend_up, trend_down).
+- Do NOT propose momentum models (cnn, lstm) for mean-reverting regimes (sideways).
+- Only propose swaps where the candidate model has HIGHER regime Sharpe than the target.
+- Only propose adding a model if it diversifies the regime (different model family).
+- Propose removing a model only if it has negative Sharpe in its regime and the regime has 3+ models.
+- Propose at most 5 candidates. Fewer is better if fewer are logical.
+
+Output format (JSON only, no markdown fences, no explanations outside JSON):
+{
+  "analysis": "2-3 sentence strategic assessment of the committee",
+  "shortlist": [
+    {
+      "type": "swap_model",
+      "regime": "trend_down",
+      "model_add": "cnn",
+      "model_remove": "xgboost",
+      "rationale": "CNN processes non-linear trend signals better than XGBoost for this regime"
+    }
+  ],
+  "pruned_actions": [
+    {"type": "swap_model", "regime": "sideways", "model_add": "lstm", "model_remove": "xgboost", "prune_reason": "LSTM not suitable for mean-reverting regime"}
+  ]
+}
+
+For "add_model": omit model_remove, include model_add.
+For "remove_model": omit model_add, include model_remove.
+For "halt": return empty shortlist array, explain why in analysis."""
+
 
 class PromptBuilder:
     def build(self, state: FactoryState) -> Tuple[str, str]:
         user_prompt_parts = []
 
-        # Matrix table
         user_prompt_parts.append(self._build_matrix_section(state))
-        # Committee config
         user_prompt_parts.append(self._build_config_section(state))
-        # History
         user_prompt_parts.append(self._build_history_section(state))
-        # Available models
         user_prompt_parts.append(self._build_available_section(state))
-        # Stats
         user_prompt_parts.append(
             f"Current Best Sharpe: {state.global_best_sharpe:.4f}\n"
             f"Total Iterations: {state.iteration}"
         )
 
         return SYSTEM_PROMPT, "\n\n".join(user_prompt_parts)
+
+    def build_shortlist(self, state: FactoryState, max_candidates: int = 5) -> str:
+        parts = []
+
+        parts.append(self._build_matrix_section(state))
+        parts.append(self._build_config_section(state))
+        parts.append(self._build_available_section(state))
+
+        model_families = {}
+        for m in (state.matrix.models if state.matrix else []):
+            if m in ("cnn", "lstm", "transformer", "gru", "gru_lstm"):
+                model_families[m] = "deep"
+            elif m in ("ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost", "stacking_ensemble", "meta_ensemble"):
+                model_families[m] = "ensemble"
+            else:
+                model_families[m] = "classical"
+
+        parts.append("## Model Families\n")
+        for m, fam in sorted(model_families.items()):
+            parts.append(f"- {m}: {fam}")
+
+        parts.append(
+            f"\n## Instructions\n"
+            f"Propose at most {max_candidates} logically sound candidate actions.\n"
+            f"Current Best Sharpe: {state.global_best_sharpe:.4f}\n"
+            f"Iteration: {state.iteration}\n"
+            f"Return ONLY a JSON object with 'shortlist' array and 'analysis' string."
+        )
+
+        return "\n\n".join(parts)
 
     def _build_matrix_section(self, state: FactoryState) -> str:
         if state.matrix is None or not state.matrix.models:
@@ -501,6 +560,104 @@ class LLMProposer:
                 print(f"[FACTORY-LLM] Fallback to deterministic ({last_error})")
             return self._fallback.propose(state)
         return ActionProposal.halt()
+
+    def shortlist(self, state: FactoryState, max_candidates: int = 5) -> List[ActionProposal]:
+        if self._llm is None:
+            return self._enumerate_candidates(state)[:max_candidates]
+
+        user_prompt = self.prompt_builder.build_shortlist(state, max_candidates)
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                raw = self._llm.complete(SHORTLIST_SYSTEM_PROMPT, user_prompt)
+                if _DEBUG:
+                    print(f"[FACTORY-LLM] Shortlist raw:\n{raw[:500]}")
+                candidates = self._parse_shortlist(raw, state)
+                if candidates:
+                    return candidates[:max_candidates]
+                if attempt == self.max_retries:
+                    break
+            except requests.Timeout:
+                if attempt < self.max_retries:
+                    time.sleep(2)
+            except requests.RequestException:
+                if attempt < self.max_retries:
+                    time.sleep(2)
+            except Exception:
+                break
+
+        return self._enumerate_candidates(state)[:max_candidates]
+
+    def _parse_shortlist(self, raw: str, state: FactoryState) -> List[ActionProposal]:
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            raw_clean = raw.strip()
+            if raw_clean.startswith("```"):
+                raw_clean = raw_clean.split("```")[1]
+                if raw_clean.startswith("json"):
+                    raw_clean = raw_clean[4:]
+                try:
+                    data = json.loads(raw_clean)
+                except json.JSONDecodeError:
+                    return []
+            else:
+                return []
+
+        items = data.get("shortlist", [])
+        if not isinstance(items, list):
+            return []
+
+        candidates = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            action_type = item.get("type", "")
+            if action_type not in ("swap_model", "add_model", "remove_model"):
+                continue
+            regime = item.get("regime", "")
+            model_add = item.get("model_add", "")
+            model_remove = item.get("model_remove", "")
+
+            if action_type == "swap_model" and model_add and model_remove:
+                candidates.append(ActionProposal(
+                    type=action_type, regime=regime,
+                    model_add=model_add, model_remove=model_remove,
+                    rationale=item.get("rationale", ""),
+                ))
+            elif action_type == "add_model" and model_add:
+                candidates.append(ActionProposal(
+                    type=action_type, regime=regime,
+                    model_add=model_add, model_remove="",
+                    rationale=item.get("rationale", ""),
+                ))
+            elif action_type == "remove_model" and model_remove:
+                candidates.append(ActionProposal(
+                    type=action_type, regime=regime,
+                    model_add="", model_remove=model_remove,
+                    rationale=item.get("rationale", ""),
+                ))
+
+        return candidates
+
+    def _enumerate_candidates(self, state: FactoryState) -> List[ActionProposal]:
+        if self._fallback is None:
+            return []
+        from pipeline.factory_proposer import DeterministicProposer
+        fallback = self._fallback if isinstance(self._fallback, DeterministicProposer) else DeterministicProposer()
+        candidates = []
+        for _ in range(10):
+            proposal = fallback.propose(state)
+            if proposal.type == "halt":
+                break
+            already = any(
+                p.regime == proposal.regime and p.model_add == proposal.model_add
+                and p.model_remove == proposal.model_remove
+                for p in candidates
+            )
+            if not already:
+                candidates.append(proposal)
+        return candidates
 
 
 def create_llm_proposer(

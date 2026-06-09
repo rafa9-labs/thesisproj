@@ -428,8 +428,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
     # ensemble_adaptive_regime: TA profile must run BEFORE suggest (sets indicator toggles)
     if model_type == "ensemble_adaptive_regime":
-        from pipeline.tuning.helpers import _apply_ta_profile_fixed
-        params = _apply_ta_profile_fixed("ensemble_adaptive_regime", params, trial)
+        _apply_ta_profile_fixed(trial, params)
         _suggest_from_search_space(trial, model_type)
     else:
         _suggest_from_search_space(trial, model_type)
