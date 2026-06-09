@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, Upload, Key, Zap, Database, CheckCircle, AlertCircle, FileText } from "lucide-react";
+import { X, ChevronLeft, Upload, Key, Zap, Database, CheckCircle, AlertCircle, FileText } from "lucide-react";
 import { useDemoSeed, useStoreApiKey, useUploadCsv } from "@/api/queries";
 import apiClient from "@/api/client";
 
@@ -232,11 +232,16 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
                 {step === "oanda-download" && "Choose which data to fetch from OANDA"}
               </p>
             </div>
-            {step !== "choice" && (
-              <button onClick={goBack} style={backBtn}>
-                <ChevronLeft size={16} />
+            <div className="flex items-center gap-2">
+              {step !== "choice" && (
+                <button onClick={goBack} style={backBtn}>
+                  <ChevronLeft size={16} />
+                </button>
+              )}
+              <button onClick={onBack} style={{ ...backBtn, padding: "8px 8px" }}>
+                <X size={16} />
               </button>
-            )}
+            </div>
           </div>
 
           {/* ── ERROR ── */}
