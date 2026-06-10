@@ -5,40 +5,13 @@ import {
   Play,
   TriangleAlert,
   ChevronDown,
-  Brain,
-  TrendingUp,
-  Calendar,
-  SlidersHorizontal,
-  ShieldCheck,
 } from "lucide-react";
 import apiClient from "@/api/client";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { useJobStore } from "@/stores/useJobStore";
+import { Panel, PanelHeader, Section } from "@/components/shared/Panel";
 
 /* ─────────────────────── shared style tokens ─────────────────────── */
-const card: React.CSSProperties = {
-  borderRadius: 12,
-  border: "1px solid var(--color-glass-border)",
-  backgroundColor: "rgba(255,255,255,0.02)",
-  padding: "20px 24px",
-};
-
-const outerCard: React.CSSProperties = {
-  borderRadius: 12,
-  border: "1px solid var(--color-glass-border)",
-  backgroundColor: "var(--color-glass)",
-  backdropFilter: "blur(12px)",
-  padding: 24,
-};
-
-const sectionLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 500,
-  textTransform: "uppercase",
-  letterSpacing: "0.12em",
-  color: "var(--color-text-secondary)",
-};
-
 const fieldLabel: React.CSSProperties = {
   fontSize: 10,
   fontWeight: 500,
@@ -72,16 +45,6 @@ const SIZING_OPTIONS = [
 const TIMEFRAMES = ["M30", "H1", "H4"] as const;
 
 /* ─────────────────────── sub-components ─────────────────────── */
-
-function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-5">
-      <div className="h-3.5 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-      <div style={{ color: "var(--color-brand)", display: "flex", alignItems: "center" }}>{icon}</div>
-      <span style={sectionLabel}>{title}</span>
-    </div>
-  );
-}
 
 function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -249,14 +212,8 @@ export function ForwardTestTab() {
     n != null ? `${n >= 0 ? "+" : ""}${n.toFixed(places)}${suffix}` : "—";
 
   return (
-    <div style={{ ...outerCard, display: "flex", flexDirection: "column", gap: 20 }}>
-
-      {/* ── page header ── */}
-      <div className="flex items-center gap-2 pb-2">
-        <h3 style={{ fontSize: 11, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--color-text-muted)" }}>
-          Forward Test
-        </h3>
-      </div>
+    <Panel>
+      <PanelHeader title="Forward Test" subtitle="Validate a saved model on out-of-sample data." />
 
       {/* ── error banner ── */}
       {error && (
@@ -270,8 +227,7 @@ export function ForwardTestTab() {
       )}
 
       {/* ── section 1: model selection ── */}
-      <section style={card}>
-        <SectionHeader icon={<Brain size={13} />} title="Model" />
+      <Section title="Model" description="Choose a previously saved model to forward test.">
 
         {loadingModels ? (
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -387,11 +343,10 @@ export function ForwardTestTab() {
             )}
           </div>
         )}
-      </section>
+      </Section>
 
       {/* ── section 2: market ── */}
-      <section style={card}>
-        <SectionHeader icon={<TrendingUp size={13} />} title="Market" />
+      <Section title="Market" accent="var(--color-accent-classical)" description="Instrument and timeframe for the test window.">
 
         <div className="grid grid-cols-2 gap-x-8 gap-y-4" style={{ maxWidth: 480 }}>
           {/* pair */}
@@ -437,11 +392,10 @@ export function ForwardTestTab() {
             </div>
           </FieldGroup>
         </div>
-      </section>
+      </Section>
 
       {/* ── section 3: date range ── */}
-      <section style={card}>
-        <SectionHeader icon={<Calendar size={13} />} title="Date Range" />
+      <Section title="Date Range" accent="var(--color-accent-deep)" description="Leave blank to use the full available range.">
 
         <div className="grid grid-cols-2 gap-x-8" style={{ maxWidth: 480 }}>
           <FieldGroup label="Start Date">
@@ -469,11 +423,10 @@ export function ForwardTestTab() {
         <p style={{ fontSize: 10, color: "var(--color-text-muted)", marginTop: 10 }}>
           Leave blank to use the full available data range for the selected pair.
         </p>
-      </section>
+      </Section>
 
       {/* ── section 4: position sizing ── */}
-      <section style={card}>
-        <SectionHeader icon={<SlidersHorizontal size={13} />} title="Position Sizing" />
+      <Section title="Position Sizing" accent="var(--color-accent-warning)" description="How trade size is determined during the test.">
 
         <div className="flex flex-wrap gap-2">
           {SIZING_OPTIONS.map((opt) => {
@@ -508,11 +461,10 @@ export function ForwardTestTab() {
             );
           })}
         </div>
-      </section>
+      </Section>
 
       {/* ── section 5: execution ── */}
-      <section style={card}>
-        <SectionHeader icon={<ShieldCheck size={13} />} title="Execution" />
+      <Section title="Execution" accent="var(--color-accent-success)" description="Cost-simulation settings for realistic results.">
 
         <button
           onClick={() => setUseCosts((v) => !v)}
@@ -559,7 +511,7 @@ export function ForwardTestTab() {
             </span>
           </div>
         </button>
-      </section>
+      </Section>
 
       {/* ── run button ── */}
       <div className="flex items-center gap-4 pt-1">
@@ -587,6 +539,6 @@ export function ForwardTestTab() {
           </span>
         )}
       </div>
-    </div>
+    </Panel>
   );
 }

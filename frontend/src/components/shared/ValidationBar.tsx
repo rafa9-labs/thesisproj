@@ -1,4 +1,4 @@
-import { TriangleAlert, Bookmark } from "lucide-react";
+import { TriangleAlert, Bookmark, Rocket, ArrowRight } from "lucide-react";
 import { useRuntimeEstimate } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 
@@ -81,70 +81,100 @@ export function ValidationBar({
   if (!hasModels) missingItems.push("at least one model");
   if (!hasDatesValue) missingItems.push("date range");
 
+  const ready = missingItems.length === 0 && errors === 0;
+
   return (
     <div
       className="sticky bottom-0 z-20 flex items-center justify-between px-6"
       style={{
-        height: 56,
+        height: 72,
         borderTop: "1px solid var(--color-glass-border)",
-        backgroundColor: "var(--color-app)",
+        backgroundColor: "var(--color-surface)",
       }}
     >
-      {/* Left: status + runtime */}
-      <div className="flex items-center gap-6">
-        {/* Status text */}
-        <div className="flex items-center gap-2">
-          {missingItems.length > 0 ? (
-            <span
-              style={{
-                fontSize: 11,
-                fontFamily: "var(--font-mono)",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              Select {missingItems.join(" and ")} to start
-            </span>
-          ) : errors > 0 ? (
-            <div className="flex items-center gap-1.5">
-              <TriangleAlert size={12} style={{ color: "var(--color-accent-danger)" }} />
-              <span
-                style={{
-                  fontSize: 11,
-                  fontFamily: "var(--font-mono)",
-                  color: "var(--color-text-secondary)",
-                }}
-              >
-                {errors} config error{errors > 1 ? "s" : ""}
-              </span>
-            </div>
-          ) : warnings > 0 ? (
-            <div className="flex items-center gap-1.5">
-              <TriangleAlert size={12} style={{ color: "var(--color-accent-warning)" }} />
-              <span
-                style={{
-                  fontSize: 11,
-                  fontFamily: "var(--font-mono)",
-                  color: "var(--color-text-secondary)",
-                }}
-              >
-                {warnings} warning{warnings > 1 ? "s" : ""}
-              </span>
-            </div>
-          ) : (
-            <span
-              style={{
-                fontSize: 11,
-                fontFamily: "var(--font-mono)",
-                color: "var(--color-text-secondary)",
-              }}
-            >
-              Ready to deploy
-            </span>
-          )}
+      {/* Left: deploy status with rocket */}
+      <div className="flex items-center gap-4">
+        <div
+          className="flex items-center justify-center rounded-lg"
+          style={{
+            width: 40,
+            height: 40,
+            backgroundColor: ready ? "var(--color-brand-glow)" : "var(--color-glass)",
+            border: `1px solid ${ready ? "var(--color-border-active)" : "var(--color-glass-border)"}`,
+            color: ready ? "var(--color-brand)" : "var(--color-text-muted)",
+          }}
+        >
+          <Rocket size={18} strokeWidth={1.75} />
         </div>
 
-        {/* Divider + runtime */}
-        <RuntimeInline />
+        <div className="flex flex-col gap-0.5">
+          {missingItems.length > 0 ? (
+            <>
+              <span
+                className="text-[13px] font-semibold"
+                style={{ color: "var(--color-text-secondary)" }}
+              >
+                Setup incomplete
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--color-text-muted)",
+                }}
+              >
+                Select {missingItems.join(" and ")} to start
+              </span>
+            </>
+          ) : errors > 0 ? (
+            <>
+              <div className="flex items-center gap-1.5">
+                <TriangleAlert size={13} style={{ color: "var(--color-accent-danger)" }} />
+                <span
+                  className="text-[13px] font-semibold"
+                  style={{ color: "var(--color-accent-danger)" }}
+                >
+                  {errors} config error{errors > 1 ? "s" : ""}
+                </span>
+              </div>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--color-text-muted)",
+                }}
+              >
+                Resolve errors before deploying
+              </span>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <span
+                  className="text-[14px] font-bold"
+                  style={{ color: "var(--color-text-primary)" }}
+                >
+                  Ready to Deploy
+                </span>
+                {warnings > 0 && (
+                  <span className="flex items-center gap-1">
+                    <TriangleAlert size={11} style={{ color: "var(--color-accent-warning)" }} />
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontFamily: "var(--font-mono)",
+                        color: "var(--color-accent-warning)",
+                      }}
+                    >
+                      {warnings} warning{warnings > 1 ? "s" : ""}
+                    </span>
+                  </span>
+                )}
+              </div>
+              <RuntimeInline />
+            </>
+          )}
+        </div>
       </div>
 
       {/* Right: save preset + deploy CTA */}
@@ -152,35 +182,45 @@ export function ValidationBar({
         {onSavePreset && canDeploy && (
           <button
             onClick={onSavePreset}
-            className="flex items-center gap-1.5 rounded border px-3 text-[10px] font-semibold uppercase tracking-[0.06em] transition-colors duration-150 hover:brightness-110"
+            className="flex items-center gap-1.5 rounded-md border px-4 text-[11px] font-semibold uppercase tracking-[0.06em] transition-colors duration-150"
             style={{
-              height: 34,
+              height: 44,
               borderColor: "var(--color-glass-border)",
               color: "var(--color-text-secondary)",
               background: "transparent",
             }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "var(--color-border-active)";
+              e.currentTarget.style.color = "var(--color-text-primary)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "var(--color-glass-border)";
+              e.currentTarget.style.color = "var(--color-text-secondary)";
+            }}
           >
-            <Bookmark size={11} />
-            Save Preset
+            <Bookmark size={13} />
+            Save Draft
           </button>
         )}
 
         <button
           onClick={onDeploy}
           disabled={!canDeploy || isSubmitting}
-          className="rounded text-[11px] font-bold uppercase tracking-[0.08em] transition-all duration-150 hover:brightness-110"
+          className="flex items-center gap-2 rounded-md text-[12px] font-bold uppercase tracking-[0.08em] transition-all duration-150 hover:brightness-110"
           style={{
-            height: 34,
-            paddingLeft: 24,
-            paddingRight: 24,
+            height: 44,
+            paddingLeft: 28,
+            paddingRight: 28,
             backgroundColor: "var(--color-brand)",
-            color: "var(--color-app)",
+            color: "var(--color-text-inverse)",
             cursor: canDeploy && !isSubmitting ? "pointer" : "not-allowed",
             opacity: canDeploy ? (isSubmitting ? 0.7 : 1) : 0.35,
             border: "none",
+            boxShadow: canDeploy ? "0 0 20px rgba(0,229,255,0.25)" : "none",
           }}
         >
           {isSubmitting ? "Submitting..." : "Deploy Backtest"}
+          {!isSubmitting && <ArrowRight size={15} strokeWidth={2.25} />}
         </button>
       </div>
     </div>

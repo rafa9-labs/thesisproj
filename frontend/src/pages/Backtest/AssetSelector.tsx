@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Download, CheckCircle, AlertTriangle } from "lucide-react";
 import { usePairs, useDataStatus, useDownloadData, useDownloadJobStatus, useDefinePair } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
+import { Panel, PanelHeader } from "@/components/shared/Panel";
 
 export function AssetSelector() {
   const { data: pairs, isLoading } = usePairs();
@@ -97,32 +98,14 @@ export function AssetSelector() {
   };
 
   return (
-    <div
-      className="flex flex-col gap-6 rounded-sm border p-6"
-      style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
-      }}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-        <h3
-          className="text-[11px] font-medium uppercase tracking-[0.12em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          Asset Selection
-        </h3>
-      </div>
-      <p className="mb-2 text-[11px] font-light leading-relaxed max-w-[720px]" style={{ color: "var(--color-text-muted)" }}>
-        Choose the currency pair, timeframe, and date range for the backtest. The model trains on historical OHLCV data from the selected period.
-      </p>
+    <Panel>
+      <PanelHeader title="Configuration" subtitle="Instrument, timeframe & data range." />
 
       {isLoading ? (
         <div className="h-8 animate-skeleton rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
       ) : (
         <>
-          <div className="flex gap-4">
+          <div className="flex flex-col gap-4">
             <div className="flex flex-1 flex-col gap-1.5">
               <label style={labelStyle}>Pair</label>
               <select
@@ -173,30 +156,32 @@ export function AssetSelector() {
               </span>
             </div>
 
-            <div className="flex flex-1 flex-col gap-1.5">
-              <label style={labelStyle}>Start Date</label>
-              <input
-                type="date"
-                value={startDate}
-                min={dataMin}
-                max={endDate || dataMax}
-                onChange={(e) => handleStartChange(e.target.value)}
-                className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
-                style={inputStyle}
-              />
-            </div>
+            <div className="flex gap-3">
+              <div className="flex flex-1 flex-col gap-1.5">
+                <label style={labelStyle}>Start Date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  min={dataMin}
+                  max={endDate || dataMax}
+                  onChange={(e) => handleStartChange(e.target.value)}
+                  className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
+                  style={inputStyle}
+                />
+              </div>
 
-            <div className="flex flex-1 flex-col gap-1.5">
-              <label style={labelStyle}>End Date</label>
-              <input
-                type="date"
-                value={endDate}
-                min={startDate || dataMin}
-                max={dataMax}
-                onChange={(e) => handleEndChange(e.target.value)}
-                className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
-                style={inputStyle}
-              />
+              <div className="flex flex-1 flex-col gap-1.5">
+                <label style={labelStyle}>End Date</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  min={startDate || dataMin}
+                  max={dataMax}
+                  onChange={(e) => handleEndChange(e.target.value)}
+                  className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
+                  style={inputStyle}
+                />
+              </div>
             </div>
           </div>
 
@@ -354,6 +339,6 @@ export function AssetSelector() {
           </div>
         </div>
       )}
-    </div>
+    </Panel>
   );
 }

@@ -3,6 +3,7 @@ import { useModelHyperparams } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamSelect } from "@/components/shared/ParamSelect";
+import { Section } from "@/components/shared/Panel";
 import type { HyperparamSpec, HyperparamRange, HyperparamFixed } from "@/api/schemas";
 
 const MODEL_COLORS: Record<string, string> = {
@@ -120,27 +121,12 @@ export function ModelHyperparamsPanel() {
         const fixedParams = Object.entries(m.params).filter(([, s]) => s.type === "fixed");
 
         return (
-          <div
+          <Section
             key={m.model}
-            className="rounded-sm border p-6"
-            style={{ borderColor: "var(--color-glass-border)", backgroundColor: "rgba(255,255,255,0.02)" }}
+            title={`${m.display_name} — Hyperparameters`}
+            accent={accent}
+            description={`Fine-tune ${m.display_name}. Overrides take priority over HPO search — set a value to fix it, or leave default to let the optimizer explore.`}
           >
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: accent }} />
-              <h4
-                className="text-[11px] font-medium uppercase tracking-[0.12em]"
-                style={{ color: accent }}
-              >
-                {m.display_name} — Hyperparameters
-              </h4>
-            </div>
-            <p
-              className="text-[11px] font-light leading-relaxed max-w-[720px] mb-5"
-              style={{ color: "var(--color-text-muted)" }}
-            >
-              Fine-tune {m.display_name}. Overrides take priority over HPO search — set a value to fix it, or leave default to let the optimizer explore.
-            </p>
-
             {tunableParams.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-6 mb-4">
                 {tunableParams.map(([param, spec]) => {
@@ -174,7 +160,7 @@ export function ModelHyperparamsPanel() {
                 ))}
               </div>
             )}
-          </div>
+          </Section>
         );
       })}
 
