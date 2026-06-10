@@ -3,6 +3,7 @@ import { useSettingsStore } from "@/stores/useSettingsStore";
 import { ParamToggle } from "@/components/shared/ParamToggle";
 import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamSelect } from "@/components/shared/ParamSelect";
+import { Panel, PanelHeader, Section } from "@/components/shared/Panel";
 import { SELECT_OPTIONS } from "@/lib/constants";
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -38,16 +39,6 @@ const ADVANCED_TOGGLES = [
   { key: "useIndicatorStates" as const, label: "Indicator States", param: "use_indicator_states", description: "Categorical buckets for each indicator's current regime." },
 ];
 
-const sectionClass = "rounded-lg border p-5";
-const sectionStyle: React.CSSProperties = {
-  borderColor: "var(--color-glass-border)",
-  backgroundColor: "rgba(255,255,255,0.02)",
-};
-const sectionTitleClass = "mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]";
-const sectionTitleStyle: React.CSSProperties = { color: "var(--color-brand)" };
-const explainerClass = "mb-3 text-[11px] font-light leading-relaxed max-w-[720px]";
-const explainerStyle: React.CSSProperties = { color: "var(--color-text-muted)" };
-
 export function FeaturesPanel() {
   const setField = useBacktestStore((s) => s.setField);
   const verbose = useSettingsStore((s) => s.verboseMode);
@@ -56,35 +47,14 @@ export function FeaturesPanel() {
   const state = useBacktestStore.getState();
 
   return (
-    <div
-      className="flex flex-col gap-6 rounded-sm border p-6"
-      style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
-      }}
-    >
-      <div className="flex flex-col gap-1">
-        <h3
-          className="text-[20px] font-bold tracking-tight"
-          style={{ color: "var(--color-text-primary)" }}
-        >
-          Feature Engineering
-        </h3>
-        <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
-          Select and configure input signals.
-        </p>
-      </div>
+    <Panel>
+      <PanelHeader title="Feature Engineering" subtitle="Select and configure input signals." />
 
       {/* Core Indicators */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Core Indicators</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          Standard technical indicators that form the base signal set. Toggle each to include it in the model input vector.
-        </p>
+      <Section
+        title="Core Indicators"
+        description="Standard technical indicators that form the base signal set. Toggle each to include it in the model input vector."
+      >
         <div className="flex flex-col gap-2.5">
           {CORE_INDICATORS.map(({ key, label, description }) => (
             <ParamToggle
@@ -96,17 +66,13 @@ export function FeaturesPanel() {
             />
           ))}
         </div>
-      </section>
+      </Section>
 
       {/* Transformations */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Transformations</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          Derived features that preprocess raw price data into more informative representations.
-        </p>
+      <Section
+        title="Transformations"
+        description="Derived features that preprocess raw price data into more informative representations."
+      >
         <div className="flex flex-col gap-2.5">
           <ParamToggle
             label="FracDiff"
@@ -140,17 +106,13 @@ export function FeaturesPanel() {
             onChange={(v) => setField("usePriceMaZ", v)}
           />
         </div>
-      </section>
+      </Section>
 
       {/* Lag Features */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Lag Features</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          Lookback windows that feed historical values into the model as additional dimensions.
-        </p>
+      <Section
+        title="Lag Features"
+        description="Lookback windows that feed historical values into the model as additional dimensions."
+      >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6 max-w-lg">
           <ParamSlider
             label="Lags"
@@ -171,17 +133,13 @@ export function FeaturesPanel() {
             onChange={(v) => setField("lagDepth", v)}
           />
         </div>
-      </section>
+      </Section>
 
       {/* Advanced Toggles */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Advanced Toggles</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          Experimental features for power users. Each adds a specialized signal layer to the feature vector.
-        </p>
+      <Section
+        title="Advanced Toggles"
+        description="Experimental features for power users. Each adds a specialized signal layer to the feature vector."
+      >
         <button
           className="flex w-full items-center gap-2 text-[11px] font-medium uppercase tracking-[0.1em] transition-colors duration-200 hover:text-[var(--color-text-primary)] mb-4"
           style={{ color: "var(--color-text-muted)" }}
@@ -204,17 +162,13 @@ export function FeaturesPanel() {
             ))}
           </div>
         )}
-      </section>
+      </Section>
 
       {/* News & Sentiment */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>News &amp; Sentiment</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          External sentiment signals from RSS feeds and economic calendars. Adds a macro-awareness layer to the model.
-        </p>
+      <Section
+        title="News & Sentiment"
+        description="External sentiment signals from RSS feeds and economic calendars. Adds a macro-awareness layer to the model."
+      >
         <div className="flex flex-col gap-2.5">
           <ParamToggle
             label="News Features"
@@ -262,28 +216,30 @@ export function FeaturesPanel() {
                       </div>
                       {(state.llmBackend === "openai" || state.llmBackend === "anthropic") && (
                         <div className="max-w-sm">
-                          <label className="text-sm text-gray-400 block mb-1">API Key</label>
+                          <label className="text-[11px] font-medium uppercase tracking-[0.1em] block mb-1.5" style={{ color: "var(--color-text-muted)" }}>API Key</label>
                           <input
                             type="password"
                             value={state.llmApiKey || ""}
                             placeholder={state.llmBackend === "openai" ? "sk-..." : "sk-ant-..."}
                             onChange={(e) => setField("llmApiKey", e.target.value)}
-                            className="w-full rounded-md border border-gray-600 bg-gray-800 px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                            className="w-full rounded-md border px-3 py-1.5 text-xs focus:outline-none"
+                            style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-input-bg)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}
                           />
                         </div>
                       )}
                       <div className="max-w-sm">
-                        <label className="text-sm text-gray-400 block mb-1">Model</label>
+                        <label className="text-[11px] font-medium uppercase tracking-[0.1em] block mb-1.5" style={{ color: "var(--color-text-muted)" }}>Model</label>
                         <input
                           type="text"
                           value={state.llmModel}
                           placeholder={state.llmBackend === "ollama" ? "llama3" : state.llmBackend === "openai" ? "gpt-4o-mini" : "claude-3-haiku-20240307"}
                           onChange={(e) => setField("llmModel", e.target.value)}
-                          className="w-full rounded-md border border-gray-600 bg-gray-800 px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                          className="w-full rounded-md border px-3 py-1.5 text-xs focus:outline-none"
+                            style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-input-bg)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}
                         />
                       </div>
                       <div className="max-w-sm">
-                        <label className="text-sm text-gray-400 block mb-1">
+                        <label className="text-[11px] font-medium uppercase tracking-[0.1em] block mb-1.5" style={{ color: "var(--color-text-muted)" }}>
                           LLM Weight: {Number(state.llmWeight).toFixed(1)} vs VADER {(((1 - Number(state.llmWeight)) * 100)).toFixed(0)}%
                         </label>
                         <input
@@ -301,9 +257,9 @@ export function FeaturesPanel() {
                 </div>
               )}
             </div>
-          )}
-        </div>
-      </section>
-    </div>
+  )}
+  </div>
+      </Section>
+    </Panel>
   );
 }

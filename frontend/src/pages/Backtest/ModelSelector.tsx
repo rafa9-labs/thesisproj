@@ -2,6 +2,7 @@ import { useModels } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { modelCategories, modelDescriptions } from "@/lib/tokens";
 import { useSettingsStore } from "@/stores/useSettingsStore";
+import { Panel, PanelHeader } from "@/components/shared/Panel";
 import { Cpu, Network, GitBranch, Layers, Boxes, Zap } from "lucide-react";
 import type { ModelInfo } from "@/api/schemas";
 
@@ -30,37 +31,23 @@ export function ModelSelector() {
   const modelsByCategory = categorizeModels(models ?? []);
 
   return (
-    <div
-      className="flex flex-col gap-4 rounded-sm border p-6"
-      style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
-      }}
-    >
-      <div className="mb-1 flex items-center justify-between">
-        <div className="flex flex-col gap-1">
+    <Panel>
+      <PanelHeader
+        title="Model Architecture"
+        subtitle="Choose one or more models to train and compare."
+        accessory={
           <span
-            className="text-[20px] font-bold tracking-tight"
-            style={{ color: "var(--color-text-primary)" }}
+            className="rounded-md border px-3 py-1 text-[11px] font-semibold"
+            style={{
+              borderColor: "var(--color-glass-border)",
+              color: "var(--color-text-secondary)",
+              fontFamily: "var(--font-mono)",
+            }}
           >
-            Model Architecture
+            {selected.length}/5 selected
           </span>
-          <span className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
-            Choose one or more models to train and compare.
-          </span>
-        </div>
-        <span
-          className="rounded-md border px-3 py-1 text-[11px] font-semibold"
-          style={{
-            borderColor: "var(--color-glass-border)",
-            color: "var(--color-text-secondary)",
-            fontFamily: "var(--font-mono)",
-          }}
-        >
-          {selected.length}/5 selected
-        </span>
-      </div>
+        }
+      />
 
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -112,7 +99,7 @@ export function ModelSelector() {
           })}
         </div>
       )}
-    </div>
+    </Panel>
   );
 }
 
@@ -142,7 +129,7 @@ function ModelCard({
     <button
       onClick={onToggle}
       disabled={isFull}
-      className="flex flex-col gap-3 rounded-xl border p-4 text-left transition-all duration-150"
+      className="flex flex-col gap-3 rounded-lg border p-4 text-left transition-all duration-150"
       style={{
         borderColor: isSelected ? "var(--color-brand)" : "var(--color-glass-border)",
         backgroundColor: isSelected ? "rgba(0,229,255,0.05)" : "var(--color-input-bg)",

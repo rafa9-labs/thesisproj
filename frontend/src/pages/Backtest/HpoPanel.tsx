@@ -2,18 +2,9 @@ import { useBacktestStore } from "@/stores/useBacktestStore";
 import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamToggle } from "@/components/shared/ParamToggle";
 import { ParamSelect } from "@/components/shared/ParamSelect";
+import { Panel, PanelHeader, Section } from "@/components/shared/Panel";
 import { RANGES, SELECT_OPTIONS } from "@/lib/constants";
 import { ModelHyperparamsPanel } from "./ModelHyperparamsPanel";
-
-const sectionClass = "rounded-sm border p-6";
-const sectionStyle: React.CSSProperties = {
-  borderColor: "var(--color-glass-border)",
-  backgroundColor: "rgba(255,255,255,0.02)",
-};
-const sectionTitleClass = "mb-1 text-[11px] font-medium uppercase tracking-[0.12em]";
-const sectionTitleStyle: React.CSSProperties = { color: "var(--color-text-secondary)" };
-const explainerClass = "mb-5 text-[11px] font-light leading-relaxed max-w-[720px]";
-const explainerStyle: React.CSSProperties = { color: "var(--color-text-muted)" };
 
 export function HpoPanel() {
   const setField = useBacktestStore((s) => s.setField);
@@ -23,34 +14,17 @@ export function HpoPanel() {
   const hpoManualOverride = useBacktestStore((s) => s.hpoManualOverride);
 
   return (
-    <div
-      className="flex flex-col gap-6 rounded-sm border p-6"
-      style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
-      }}
-    >
-      {/* Header */}
-      <div className="flex items-center pb-2">
-        <h3
-          className="text-[11px] font-medium uppercase tracking-[0.12em]"
-          style={{ color: "var(--color-text-muted)" }}
-        >
-          Walk-Forward &amp; HPO
-        </h3>
-      </div>
+    <Panel>
+      <PanelHeader
+        title="Walk-Forward & HPO"
+        subtitle="Configure the hyperparameter search and rolling validation windows."
+      />
 
       {/* ── Optimization Strategy ── */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Optimization Strategy</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          Controls how aggressively the engine searches hyperparameters. Deeper searches find better configs but take longer.
-        </p>
-
+      <Section
+        title="Optimization Strategy"
+        description="Controls how aggressively the engine searches hyperparameters. Deeper searches find better configs but take longer."
+      >
         <div className="flex flex-col gap-6">
           <div className="max-w-sm">
             <ParamSlider
@@ -185,17 +159,13 @@ export function HpoPanel() {
             )}
           </div>
         </div>
-      </section>
+      </Section>
 
       {/* ── Walk-Forward Windows ── */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Walk-Forward Windows</h4>
-        </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Splits data into rolling train/test chunks. The model retrains on each window and tests on the next, preventing look-ahead bias.
-            </p>
+      <Section
+        title="Walk-Forward Windows"
+        description="Splits data into rolling train/test chunks. The model retrains on each window and tests on the next, preventing look-ahead bias."
+      >
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-6">
               <ParamSlider
@@ -265,17 +235,13 @@ export function HpoPanel() {
                 />
               </div>
             </div>
-          </section>
+          </Section>
 
       {/* ── Quality Gates ── */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Quality Gates</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          Minimum thresholds a model must pass to be considered viable. Configs below any gate are discarded automatically.
-        </p>
+      <Section
+        title="Quality Gates"
+        description="Minimum thresholds a model must pass to be considered viable. Configs below any gate are discarded automatically."
+      >
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-6">
           <ParamSlider
@@ -306,17 +272,13 @@ export function HpoPanel() {
             onChange={(v) => setField("confidenceThreshold", v)}
           />
         </div>
-      </section>
+      </Section>
 
       {/* ── Execution Reality ── */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Execution Reality</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          Simulates real-world trading friction. Sharper backtests include slippage and spread to avoid overestimating returns.
-        </p>
+      <Section
+        title="Execution Reality"
+        description="Simulates real-world trading friction. Sharper backtests include slippage and spread to avoid overestimating returns."
+      >
 
         <div className="flex flex-col gap-6">
           <div className="max-w-xs">
@@ -339,16 +301,16 @@ export function HpoPanel() {
                 description="Average execution slippage in basis points. 1 bps = 0.01%."
                 onChange={(v) => setField("slipNormBps", v)}
               />
-            </div>
-          )}
-        </div>
-      </section>
+  </div>
+  )}
+  </div>
+      </Section>
 
       {/* ── Per-Model Hyperparameters ── */}
       <ModelHyperparamsPanel />
-    </div>
+    </Panel>
   );
-}
+  }
 
 // Per-model trial counts mirroring backend HPO_TRIAL_MAPS (api/schemas/backtest.py)
 const _HPO_TRIALS: Record<string, Record<string, { r: number; b: number }>> = {

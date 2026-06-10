@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Download, CheckCircle, AlertTriangle } from "lucide-react";
 import { usePairs, useDataStatus, useDownloadData, useDownloadJobStatus, useDefinePair } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
+import { Panel, PanelHeader } from "@/components/shared/Panel";
 
 export function AssetSelector() {
   const { data: pairs, isLoading } = usePairs();
@@ -97,25 +98,8 @@ export function AssetSelector() {
   };
 
   return (
-    <div
-      className="flex flex-col gap-6 rounded-sm border p-6"
-      style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
-      }}
-    >
-      <div className="flex flex-col gap-1 mb-1">
-        <h3
-          className="text-[14px] font-bold uppercase tracking-[0.06em]"
-          style={{ color: "var(--color-text-primary)" }}
-        >
-          Configuration
-        </h3>
-        <p className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
-          Instrument, timeframe & data range.
-        </p>
-      </div>
+    <Panel>
+      <PanelHeader title="Configuration" subtitle="Instrument, timeframe & data range." />
 
       {isLoading ? (
         <div className="h-8 animate-skeleton rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
@@ -355,6 +339,6 @@ export function AssetSelector() {
           </div>
         </div>
       )}
-    </div>
+    </Panel>
   );
 }
