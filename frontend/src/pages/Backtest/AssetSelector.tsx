@@ -107,13 +107,13 @@ export function AssetSelector() {
     >
       <div className="flex flex-col gap-1 mb-1">
         <h3
-          className="text-[20px] font-bold tracking-tight"
+          className="text-[14px] font-bold uppercase tracking-[0.06em]"
           style={{ color: "var(--color-text-primary)" }}
         >
-          Asset & Strategy Setup
+          Configuration
         </h3>
-        <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
-          Configure the currency pair, timeframe, and historical data range.
+        <p className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
+          Instrument, timeframe & data range.
         </p>
       </div>
 
@@ -121,7 +121,7 @@ export function AssetSelector() {
         <div className="h-8 animate-skeleton rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
       ) : (
         <>
-          <div className="flex gap-4">
+          <div className="flex flex-col gap-4">
             <div className="flex flex-1 flex-col gap-1.5">
               <label style={labelStyle}>Pair</label>
               <select
@@ -172,30 +172,32 @@ export function AssetSelector() {
               </span>
             </div>
 
-            <div className="flex flex-1 flex-col gap-1.5">
-              <label style={labelStyle}>Start Date</label>
-              <input
-                type="date"
-                value={startDate}
-                min={dataMin}
-                max={endDate || dataMax}
-                onChange={(e) => handleStartChange(e.target.value)}
-                className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
-                style={inputStyle}
-              />
-            </div>
+            <div className="flex gap-3">
+              <div className="flex flex-1 flex-col gap-1.5">
+                <label style={labelStyle}>Start Date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  min={dataMin}
+                  max={endDate || dataMax}
+                  onChange={(e) => handleStartChange(e.target.value)}
+                  className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
+                  style={inputStyle}
+                />
+              </div>
 
-            <div className="flex flex-1 flex-col gap-1.5">
-              <label style={labelStyle}>End Date</label>
-              <input
-                type="date"
-                value={endDate}
-                min={startDate || dataMin}
-                max={dataMax}
-                onChange={(e) => handleEndChange(e.target.value)}
-                className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
-                style={inputStyle}
-              />
+              <div className="flex flex-1 flex-col gap-1.5">
+                <label style={labelStyle}>End Date</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  min={startDate || dataMin}
+                  max={dataMax}
+                  onChange={(e) => handleEndChange(e.target.value)}
+                  className="rounded border px-3 py-2 text-sm transition-all duration-200 focus:outline-none"
+                  style={inputStyle}
+                />
+              </div>
             </div>
           </div>
 

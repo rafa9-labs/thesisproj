@@ -5,7 +5,7 @@ import { useJobStore } from "@/stores/useJobStore";
 import { useValidation } from "@/hooks/useValidation";
 import { useSubmitBacktest } from "@/api/queries";
 import { ConfigSummaryBar } from "@/components/shared/ConfigSummaryBar";
-import { TabBar } from "@/components/shared/TabBar";
+import { StepTracker } from "@/components/shared/StepTracker";
 import { ValidationBar } from "@/components/shared/ValidationBar";
 import { AssetSelector } from "./AssetSelector";
 import { ModelSelector } from "./ModelSelector";
@@ -28,6 +28,16 @@ const TABS = [
   { key: "execution", label: "Execution" },
   { key: "forwardtest", label: "Forward Test" },
 ];
+
+const STEP_META: Record<string, { title: string; subtitle: string }> = {
+  quickstart: { title: "Quick Start", subtitle: "Launch from a preset configuration." },
+  asset: { title: "Asset & Strategy Setup", subtitle: "Select the instrument and model architecture." },
+  study: { title: "Study & Optimization", subtitle: "Configure hyperparameter search and validation." },
+  features: { title: "Feature Engineering", subtitle: "Select input signals and target labels." },
+  hyperparams: { title: "Model Hyperparameters", subtitle: "Configure the underlying execution logic." },
+  execution: { title: "Execution Settings", subtitle: "Define costs, risk, and trade simulation rules." },
+  forwardtest: { title: "Forward Test", subtitle: "Validate on out-of-sample data." },
+};
 
 export function BacktestPage() {
   const navigate = useNavigate();
@@ -69,15 +79,30 @@ export function BacktestPage() {
 
   return (
     <div className="flex flex-col flex-1" style={{ minHeight: "100%" }}>
-      {/* Status strip */}
-      <ConfigSummaryBar />
-
-      {/* 24px gap between status strip and tab nav */}
-      <div className="mt-6">
-        <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+      {/* Page title */}
+      <div className="flex flex-col gap-1">
+        <h1
+          className="text-[28px] font-bold tracking-tight"
+          style={{ color: "var(--color-text-primary)" }}
+        >
+          {STEP_META[activeTab]?.title ?? "Backtest Setup"}
+        </h1>
+        <p className="text-[13px]" style={{ color: "var(--color-text-muted)" }}>
+          {STEP_META[activeTab]?.subtitle ?? ""}
+        </p>
       </div>
 
-      {/* 24px gap between tab nav and main content */}
+      {/* Step progress tracker */}
+      <div className="mt-5 max-w-[640px]">
+        <StepTracker steps={TABS} activeStep={activeTab} onStepChange={setActiveTab} />
+      </div>
+
+      {/* Config summary strip */}
+      <div className="mt-6">
+        <ConfigSummaryBar />
+      </div>
+
+      {/* 24px gap between header and main content */}
       <div className="h-6 shrink-0" />
 
       {/* Content area grows to fill remaining space */}
@@ -90,7 +115,7 @@ export function BacktestPage() {
 
       {/* Asset & Model */}
       {activeTab === "asset" && (
-        <div className="flex flex-col gap-5 pt-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(300px,360px)_1fr] gap-5">
           <AssetSelector />
           <ModelSelector />
         </div>
@@ -105,7 +130,7 @@ export function BacktestPage() {
 
       {/* Features */}
       {activeTab === "features" && (
-        <div className="flex flex-col gap-5 pt-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
           <FeaturesPanel />
           <LabelsPanel />
         </div>
