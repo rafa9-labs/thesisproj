@@ -6,6 +6,7 @@ import { useValidation } from "@/hooks/useValidation";
 import { useSubmitBacktest } from "@/api/queries";
 import { ConfigSummaryBar } from "@/components/shared/ConfigSummaryBar";
 import { StepTracker } from "@/components/shared/StepTracker";
+import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { ValidationBar } from "@/components/shared/ValidationBar";
 import { AssetSelector } from "./AssetSelector";
 import { ModelSelector } from "./ModelSelector";
@@ -14,29 +15,22 @@ import { FeaturesPanel } from "./FeaturesPanel";
 import { LabelsPanel } from "./LabelsPanel";
 import { ExecutionPanel } from "./ExecutionPanel";
 import { HyperparamsTab } from "./HyperparamsTab";
-import { QuickStartTab } from "./QuickStartTab";
 import { RunSummary } from "./RunSummary";
 
 import { ForwardTestTab } from "./ForwardTestTab";
 
 const TABS = [
-  { key: "quickstart", label: "Quick Start" },
   { key: "asset", label: "Asset & Model" },
-  { key: "study", label: "Study & HPO" },
-  { key: "features", label: "Features" },
-  { key: "hyperparams", label: "Hyperparameters" },
-  { key: "execution", label: "Execution" },
-  { key: "forwardtest", label: "Forward Test" },
+  { key: "study", label: "Optimization" },
+  { key: "design", label: "Features & Tuning" },
+  { key: "execution", label: "Execution & Testing" },
 ];
 
 const STEP_META: Record<string, { title: string; subtitle: string }> = {
-  quickstart: { title: "Quick Start", subtitle: "Launch from a preset configuration." },
   asset: { title: "Asset & Strategy Setup", subtitle: "Select the instrument and model architecture." },
-  study: { title: "Study & Optimization", subtitle: "Configure hyperparameter search and validation." },
-  features: { title: "Feature Engineering", subtitle: "Select input signals and target labels." },
-  hyperparams: { title: "Model Hyperparameters", subtitle: "Configure the underlying execution logic." },
-  execution: { title: "Execution Settings", subtitle: "Define costs, risk, and trade simulation rules." },
-  forwardtest: { title: "Forward Test", subtitle: "Validate on out-of-sample data." },
+  study: { title: "Study & Optimization", subtitle: "Configure hyperparameter search and walk-forward validation." },
+  design: { title: "Features & Tuning", subtitle: "Engineer input signals, define labels, and tune model hyperparameters." },
+  execution: { title: "Execution & Testing", subtitle: "Define trade simulation rules and validate on out-of-sample data." },
 };
 
 export function BacktestPage() {
@@ -49,7 +43,9 @@ export function BacktestPage() {
   const submit = useSubmitBacktest();
 
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("quickstart");
+  const [activeTab, setActiveTab] = useState("asset");
+  const [designSeg, setDesignSeg] = useState("features");
+  const [execSeg, setExecSeg] = useState("execution");
 
   const [presetName, setPresetName] = useState("");
   const [showSavePreset, setShowSavePreset] = useState(false);
@@ -93,7 +89,7 @@ export function BacktestPage() {
       </div>
 
       {/* Step progress tracker */}
-      <div className="mt-5 max-w-[640px]">
+      <div className="mt-5 max-w-[720px]">
         <StepTracker steps={TABS} activeStep={activeTab} onStepChange={setActiveTab} />
       </div>
 
@@ -108,11 +104,6 @@ export function BacktestPage() {
       {/* Content area grows to fill remaining space */}
       <div className="flex flex-col flex-1">
 
-      {/* Quick Start */}
-      {activeTab === "quickstart" && (
-        <QuickStartTab />
-      )}
-
       {/* Asset & Model */}
       {activeTab === "asset" && (
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(300px,360px)_1fr] gap-5">
@@ -121,39 +112,44 @@ export function BacktestPage() {
         </div>
       )}
 
-      {/* Study & HPO */}
+      {/* Optimization */}
       {activeTab === "study" && (
-        <div className="flex flex-col gap-5 pt-4">
+        <div className="flex flex-col gap-5">
           <HpoPanel />
         </div>
       )}
 
-      {/* Features */}
-      {activeTab === "features" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-          <FeaturesPanel />
-          <LabelsPanel />
+      {/* Features & Tuning */}
+      {activeTab === "design" && (
+        <div className="flex flex-col gap-5">
+          <SegmentedControl
+            segments={[
+              { key: "features", label: "Feature Engineering" },
+              { key: "labels", label: "Labels" },
+              { key: "hyperparams", label: "Hyperparameters", badge: selectedModels.length },
+            ]}
+            active={designSeg}
+            onChange={setDesignSeg}
+          />
+          {designSeg === "features" && <FeaturesPanel />}
+          {designSeg === "labels" && <LabelsPanel />}
+          {designSeg === "hyperparams" && <HyperparamsTab />}
         </div>
       )}
 
-      {/* Hyperparameters */}
-      {activeTab === "hyperparams" && (
-        <div className="flex flex-col gap-5 pt-4">
-          <HyperparamsTab />
-        </div>
-      )}
-
-      {/* Execution */}
+      {/* Execution & Testing */}
       {activeTab === "execution" && (
-        <div className="flex flex-col gap-5 pt-4">
-          <ExecutionPanel defaultOpen={true} />
-        </div>
-      )}
-
-      {/* Forward Test */}
-      {activeTab === "forwardtest" && (
-        <div className="flex flex-col gap-5 pt-4">
-          <ForwardTestTab />
+        <div className="flex flex-col gap-5">
+          <SegmentedControl
+            segments={[
+              { key: "execution", label: "Execution Settings" },
+              { key: "forwardtest", label: "Forward Test" },
+            ]}
+            active={execSeg}
+            onChange={setExecSeg}
+          />
+          {execSeg === "execution" && <ExecutionPanel defaultOpen={true} />}
+          {execSeg === "forwardtest" && <ForwardTestTab />}
         </div>
       )}
 
