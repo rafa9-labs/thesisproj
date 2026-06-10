@@ -1128,13 +1128,14 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
 
                 # -- Compute DSR --
                 dsr = 0.0
+                total_hpo_trials = sum(
+                    get_trial_budget(m)[0] for m in survivors
+                )
                 try:
                     from pipeline.dsr import deflated_sharpe_ratio
                     avg_sharpe = float(np.mean(fold_sharpes)) if fold_sharpes else 0.0
-                    total_hpo_trials = sum(
-                        get_trial_budget(m)[0] for m in survivors
-                    )
-                    T_obs = max(1, len(fold_sharpes) * 30 * 21 * 24)  # approx H1 OOS bars
+                    bars_per_fold = req.test_months * 21 * 24
+                    T_obs = max(1, len(fold_sharpes) * bars_per_fold)
                     dsr = deflated_sharpe_ratio(
                         sr_hat=max(0.0, avg_sharpe),
                         T=T_obs, N_trials=max(1, total_hpo_trials),
@@ -1204,6 +1205,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                     alt_bt = CommitteeBacktester(
                         committee_config, regime_cfg=RegimeConfig(), confidence_threshold=0.5,
                         model_params=hpo_model_params,
+                        seed=seed,
                         cancel_check=_cancel,
                     )
                     alt_r = alt_bt.run_wfo(
@@ -1239,6 +1241,8 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                         phase3_seed_robustness_sharpe=seed_avg,
                         phase3_seed_robustness_seeds=3,
                         phase3_seed_robustness_pass=seed_pass,
+                        pbo=pbo,
+                        dsr=dsr,
                         total_time_s=elapsed,
                     )
                     results_extra = results.model_dump()

@@ -216,6 +216,7 @@ class CommitteeBacktester:
         label_threshold: float = 0.0001,
         model_params: Optional[Dict[str, Dict]] = None,
         seq_len: int = 30,
+        seed: int = 42,
         cancel_check: Optional[callable] = None,
     ):
         self.config = config
@@ -225,6 +226,7 @@ class CommitteeBacktester:
         self.label_threshold = label_threshold
         self.model_params = model_params or {}
         self.seq_len = int(seq_len)
+        self.seed = int(seed)
         self._trained_models: Dict[str, Any] = {}
         self._regime_clf: Optional[Any] = None
         self._feature_names: List[str] = []
@@ -449,7 +451,7 @@ class CommitteeBacktester:
 
         clf = RegimeClassifier(
             n_estimators=50, max_depth=6, min_samples_leaf=30,
-            random_state=42,
+            random_state=self.seed,
         )
         if "regime_7class" not in df.columns:
             return clf  # return untrained — predict_regimes falls back to rule-based
@@ -690,7 +692,7 @@ class CommitteeBacktester:
             return LogisticRegression(
                 C=float(p.get("C", 1.0)), max_iter=int(p.get("max_iter", 500)),
                 class_weight=p.get("class_weight", "balanced"),
-                random_state=42, n_jobs=1,
+                random_state=self.seed, n_jobs=1,
             )
         elif model_type == "svm":
             from sklearn.svm import SVC
@@ -698,7 +700,7 @@ class CommitteeBacktester:
                 C=float(p.get("C", 1.0)), kernel=p.get("kernel", "rbf"),
                 gamma=p.get("gamma", "scale"),
                 probability=True, class_weight=p.get("class_weight", "balanced"),
-                random_state=42,
+                random_state=self.seed,
             )
         elif model_type in ("random_forest", "rf"):
             return RandomForestClassifier(
@@ -706,7 +708,7 @@ class CommitteeBacktester:
                 max_depth=int(p.get("max_depth", 6)) if p.get("max_depth") else 6,
                 min_samples_leaf=int(p.get("min_samples_leaf", 10)),
                 class_weight=p.get("class_weight", "balanced_subsample"),
-                random_state=42, n_jobs=1,
+                random_state=self.seed, n_jobs=1,
             )
         elif model_type == "xgboost":
             try:
@@ -716,11 +718,11 @@ class CommitteeBacktester:
                     max_depth=int(p.get("max_depth", 4)),
                     learning_rate=float(p.get("learning_rate", 0.1)),
                     objective="multi:softprob", num_class=3,
-                    random_state=42, n_jobs=1, verbosity=0,
+                    random_state=self.seed, n_jobs=1, verbosity=0,
                 )
             except ImportError:
                 return RandomForestClassifier(
-                    n_estimators=50, max_depth=6, n_jobs=1, random_state=42,
+                    n_estimators=50, max_depth=6, n_jobs=1, random_state=self.seed,
                 )
         elif model_type == "lightgbm":
             try:
@@ -728,17 +730,17 @@ class CommitteeBacktester:
                 return LGBMClassifier(
                     n_estimators=int(p.get("n_estimators", 50)),
                     max_depth=int(p.get("max_depth", 5)),
-                    random_state=42, n_jobs=1, verbose=-1,
+                    random_state=self.seed, n_jobs=1, verbose=-1,
                 )
             except ImportError:
-                return RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=1)
+                return RandomForestClassifier(n_estimators=50, random_state=self.seed, n_jobs=1)
         elif model_type == "decision_tree":
             from sklearn.tree import DecisionTreeClassifier
             return DecisionTreeClassifier(
                 max_depth=int(p.get("max_depth", 6)),
                 min_samples_leaf=int(p.get("min_samples_leaf", 10)),
                 class_weight=p.get("class_weight", "balanced"),
-                random_state=42,
+                random_state=self.seed,
             )
         elif model_type == "stacking_ensemble":
             from models.stacking_ensemble import StackingEnsemble
@@ -806,7 +808,7 @@ class CommitteeBacktester:
         else:
             return LogisticRegression(
                 C=1.0, max_iter=300, class_weight="balanced",
-                random_state=42, n_jobs=1,
+                random_state=self.seed, n_jobs=1,
             )
 
     # ── Regime routing ──────────────────────────────────────────────
@@ -821,9 +823,9 @@ class CommitteeBacktester:
         if df_train is not None:
             return detect_regimes_anchored(
                 df, df_train=df_train, window=252,
-                random_state=42 + fold_idx,
+                random_state=self.seed + fold_idx,
             )
-        return detect_regimes_anchored(df, window=252, random_state=42)
+        return detect_regimes_anchored(df, window=252, random_state=self.seed)
 
     def _blend_predictions(
         self,
