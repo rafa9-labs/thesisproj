@@ -106,6 +106,19 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Page header */}
+      <div className="flex flex-col gap-1">
+        <h1
+          className="text-[28px] font-bold tracking-tight"
+          style={{ color: "var(--color-text-primary)" }}
+        >
+          Dashboard
+        </h1>
+        <p className="text-[13px]" style={{ color: "var(--color-text-muted)" }}>
+          Live market overview and recent backtest performance.
+        </p>
+      </div>
+
       {demoMode && (
         <div
           className="flex items-center gap-3 px-4 py-2.5 rounded-sm text-xs"
@@ -128,7 +141,7 @@ export function DashboardPage() {
 
       {/* ── Full-width candlestick chart with embedded pair selector ──────── */}
       <div
-        className="rounded-sm border flex flex-col"
+        className="rounded-lg border flex flex-col"
         style={{
           borderColor: "var(--color-glass-border)",
           backgroundColor: "var(--color-glass)",
@@ -173,7 +186,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-3 gap-4">
         {/* Col 1: ALGO Metrics — flat label/value list, no nested boxes */}
         <div
-          className="rounded-sm border flex flex-col p-5"
+          className="rounded-lg border flex flex-col p-5"
           style={{
             borderColor: "var(--color-glass-border)",
             backgroundColor: "var(--color-glass)",
@@ -264,7 +277,7 @@ export function DashboardPage() {
 
         {/* Col 2: Market Sentiment */}
         <div
-          className="rounded-sm border flex flex-col p-5"
+          className="rounded-lg border flex flex-col p-5"
           style={{
             borderColor: "var(--color-glass-border)",
             backgroundColor: "var(--color-glass)",
@@ -281,7 +294,7 @@ export function DashboardPage() {
 
         {/* Col 3: Top News Articles */}
         <div
-          className="rounded-sm border flex flex-col p-5"
+          className="rounded-lg border flex flex-col p-5"
           style={{
             borderColor: "var(--color-glass-border)",
             backgroundColor: "var(--color-glass)",

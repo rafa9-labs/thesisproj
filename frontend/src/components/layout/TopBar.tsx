@@ -1,4 +1,4 @@
-import { Search, Bell, User, Info } from "lucide-react";
+import { Search, Bell, User, HelpCircle } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AboutDialog } from "@/components/shared/AboutDialog";
@@ -21,6 +21,53 @@ function usePageTitle(): string {
   return routeTitles[segment] ?? segment;
 }
 
+function IconButton({
+  label,
+  onClick,
+  children,
+  hasBadge,
+}: {
+  label: string;
+  onClick?: () => void;
+  children: React.ReactNode;
+  hasBadge?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="relative flex items-center justify-center rounded-full border transition-all duration-200"
+      style={{
+        width: 34,
+        height: 34,
+        borderColor: "var(--color-glass-border)",
+        backgroundColor: "transparent",
+        color: "var(--color-text-secondary)",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = "var(--color-border-active)";
+        e.currentTarget.style.color = "var(--color-text-primary)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "var(--color-glass-border)";
+        e.currentTarget.style.color = "var(--color-text-secondary)";
+      }}
+    >
+      {children}
+      {hasBadge && (
+        <span
+          className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full"
+          style={{
+            backgroundColor: "var(--color-brand)",
+            boxShadow: "0 0 6px rgba(0,229,255,0.5)",
+          }}
+        />
+      )}
+    </button>
+  );
+}
+
 export function TopBar() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const title = usePageTitle();
@@ -30,7 +77,7 @@ export function TopBar() {
     <header
       className="flex flex-col"
       style={{
-        borderBottom: "1px solid rgba(255,255,255,0.04)",
+        borderBottom: "1px solid var(--color-border-subtle)",
         backgroundColor: "var(--color-surface)",
         flexShrink: 0,
         position: "relative",
@@ -39,11 +86,11 @@ export function TopBar() {
     >
       <div
         className="flex items-center justify-between px-6"
-        style={{ height: layout.headerHeight }}
+        style={{ height: layout.headerHeight + 32 }}
       >
-        {/* Left: page title */}
+        {/* Left: brand / page title */}
         <span
-          className="text-[13px] font-semibold uppercase tracking-[0.1em]"
+          className="text-[18px] font-semibold tracking-tight"
           style={{
             fontFamily: "var(--font-sans)",
             color: "var(--color-text-primary)",
@@ -52,79 +99,20 @@ export function TopBar() {
           {title}
         </span>
 
-        {/* Right: search + actions */}
-        <div className="flex items-center gap-3">
-          {/* Search bar — prominent, wider */}
-          <button
-            className="flex items-center gap-2.5 rounded-md border px-4 py-1.5 transition-all duration-200 hover:border-[var(--color-border-active)]"
-            style={{
-              width: 260,
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "var(--color-glass)",
-              color: "var(--color-text-muted)",
-              fontSize: 12,
-              fontWeight: 400,
-            }}
-            onClick={() => {
-              // TODO: wire up global command palette
-            }}
-          >
-            <Search size={13} strokeWidth={1.5} style={{ flexShrink: 0 }} />
-            <span className="flex-1 text-left">Search…</span>
-            <span
-              className="rounded px-1.5 text-[10px]"
-              style={{
-                backgroundColor: "rgba(0,229,255,0.08)",
-                border: "1px solid rgba(0,229,255,0.15)",
-                color: "var(--color-brand)",
-                fontFamily: "var(--font-mono)",
-                flexShrink: 0,
-              }}
-            >
-              Ctrl+K
-            </span>
-          </button>
-
-          {/* Notifications */}
-          <button
-            className="relative flex items-center justify-center rounded-md p-1.5 transition-colors duration-200 hover:bg-[var(--color-glass-hover)]"
-            style={{ color: "var(--color-text-muted)" }}
-            title="Notifications"
-          >
-            <Bell size={16} strokeWidth={1.5} />
-            {unreadCount > 0 && (
-              <span
-                className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
-                style={{
-                  backgroundColor: "var(--color-brand)",
-                  boxShadow: "0 0 6px rgba(0,229,255,0.5)",
-                }}
-              />
-            )}
-          </button>
-
-          {/* About */}
-          <button
-            className="flex items-center justify-center rounded-md p-1.5 transition-colors duration-200 hover:bg-[var(--color-glass-hover)]"
-            style={{ color: "var(--color-text-muted)" }}
-            title="About KodaQuant"
-            onClick={() => setAboutOpen(true)}
-          >
-            <Info size={16} strokeWidth={1.5} />
-          </button>
-
-          {/* User avatar */}
-          <button
-            className="flex items-center justify-center rounded-full border p-1 transition-all duration-200 hover:border-[var(--color-border-active)]"
-            style={{
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "var(--color-glass)",
-              color: "var(--color-text-muted)",
-            }}
-            title="User menu"
-          >
-            <User size={14} strokeWidth={1.5} />
-          </button>
+        {/* Right: action cluster */}
+        <div className="flex items-center gap-2.5">
+          <IconButton label="Search (Ctrl+K)">
+            <Search size={16} strokeWidth={1.75} />
+          </IconButton>
+          <IconButton label="Notifications" hasBadge={unreadCount > 0}>
+            <Bell size={16} strokeWidth={1.75} />
+          </IconButton>
+          <IconButton label="About KodaQuant" onClick={() => setAboutOpen(true)}>
+            <HelpCircle size={16} strokeWidth={1.75} />
+          </IconButton>
+          <IconButton label="User menu">
+            <User size={16} strokeWidth={1.75} />
+          </IconButton>
         </div>
       </div>
 

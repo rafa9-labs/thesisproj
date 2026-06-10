@@ -105,18 +105,17 @@ export function AssetSelector() {
         backdropFilter: "blur(12px)",
       }}
     >
-      <div className="flex items-center gap-2 mb-1">
-        <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
+      <div className="flex flex-col gap-1 mb-1">
         <h3
-          className="text-[11px] font-medium uppercase tracking-[0.12em]"
-          style={{ color: "var(--color-text-secondary)" }}
+          className="text-[20px] font-bold tracking-tight"
+          style={{ color: "var(--color-text-primary)" }}
         >
-          Asset Selection
+          Asset & Strategy Setup
         </h3>
+        <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+          Configure the currency pair, timeframe, and historical data range.
+        </p>
       </div>
-      <p className="mb-2 text-[11px] font-light leading-relaxed max-w-[720px]" style={{ color: "var(--color-text-muted)" }}>
-        Choose the currency pair, timeframe, and date range for the backtest. The model trains on historical OHLCV data from the selected period.
-      </p>
 
       {isLoading ? (
         <div className="h-8 animate-skeleton rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />

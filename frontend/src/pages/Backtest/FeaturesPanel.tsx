@@ -38,13 +38,13 @@ const ADVANCED_TOGGLES = [
   { key: "useIndicatorStates" as const, label: "Indicator States", param: "use_indicator_states", description: "Categorical buckets for each indicator's current regime." },
 ];
 
-const sectionClass = "rounded-sm border p-6";
+const sectionClass = "rounded-lg border p-5";
 const sectionStyle: React.CSSProperties = {
   borderColor: "var(--color-glass-border)",
   backgroundColor: "rgba(255,255,255,0.02)",
 };
-const sectionTitleClass = "mb-1 text-[11px] font-medium uppercase tracking-[0.12em]";
-const sectionTitleStyle: React.CSSProperties = { color: "var(--color-text-secondary)" };
+const sectionTitleClass = "mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]";
+const sectionTitleStyle: React.CSSProperties = { color: "var(--color-brand)" };
 const explainerClass = "mb-3 text-[11px] font-light leading-relaxed max-w-[720px]";
 const explainerStyle: React.CSSProperties = { color: "var(--color-text-muted)" };
 
@@ -64,12 +64,17 @@ export function FeaturesPanel() {
         backdropFilter: "blur(12px)",
       }}
     >
-      <h3
-        className="text-[11px] font-medium uppercase tracking-[0.12em]"
-        style={{ color: "var(--color-text-muted)" }}
-      >
-        Feature Engineering
-      </h3>
+      <div className="flex flex-col gap-1">
+        <h3
+          className="text-[20px] font-bold tracking-tight"
+          style={{ color: "var(--color-text-primary)" }}
+        >
+          Feature Engineering
+        </h3>
+        <p className="text-[12px]" style={{ color: "var(--color-text-muted)" }}>
+          Select and configure input signals.
+        </p>
+      </div>
 
       {/* Core Indicators */}
       <section className={sectionClass} style={sectionStyle}>
@@ -80,7 +85,7 @@ export function FeaturesPanel() {
         <p className={explainerClass} style={explainerStyle}>
           Standard technical indicators that form the base signal set. Toggle each to include it in the model input vector.
         </p>
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-2.5">
           {CORE_INDICATORS.map(({ key, label, description }) => (
             <ParamToggle
               key={key}
@@ -102,7 +107,7 @@ export function FeaturesPanel() {
         <p className={explainerClass} style={explainerStyle}>
           Derived features that preprocess raw price data into more informative representations.
         </p>
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-2.5">
           <ParamToggle
             label="FracDiff"
             checked={state.useFracdiff}
@@ -186,7 +191,7 @@ export function FeaturesPanel() {
           {ADVANCED_TOGGLES.length} features {advancedOpen ? "(collapse)" : "(expand)"}
         </button>
         {advancedOpen && (
-          <div className="flex flex-col">
+          <div className="flex flex-col gap-2.5">
             {ADVANCED_TOGGLES.map(({ key, label, param, description }) => (
               <ParamToggle
                 key={key}
@@ -210,7 +215,7 @@ export function FeaturesPanel() {
         <p className={explainerClass} style={explainerStyle}>
           External sentiment signals from RSS feeds and economic calendars. Adds a macro-awareness layer to the model.
         </p>
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-2.5">
           <ParamToggle
             label="News Features"
             checked={state.useNews}

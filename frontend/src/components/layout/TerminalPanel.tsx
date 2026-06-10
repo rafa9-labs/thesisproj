@@ -80,7 +80,7 @@ export function TerminalPanel({ apiOk = false, wsConnected = false }: Partial<Te
       className="flex flex-col"
       style={{
         backgroundColor: "var(--color-app)",
-        borderTop: "1px solid rgba(255,255,255,0.04)",
+        borderTop: "1px solid var(--color-border-subtle)",
         height: open ? 228 : 28,
         overflow: "hidden",
         transition: "height 200ms ease",

@@ -10,7 +10,6 @@ import {
   Zap,
   Box,
 } from "lucide-react";
-import { KodaLogo } from "@/components/shared/KodaLogo";
 import { layout } from "@/lib/tokens";
 
 interface NavItem {
@@ -19,27 +18,73 @@ interface NavItem {
   path: string;
 }
 
-const navItems: NavItem[] = [
+const primaryNav: NavItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: FlaskConical, label: "Backtest Setup", path: "/backtest" },
+  { icon: FlaskConical, label: "Backtest", path: "/backtest" },
   { icon: Eye, label: "Monitor", path: "/monitor" },
   { icon: BarChart3, label: "Results", path: "/results" },
   { icon: Layers, label: "Committee", path: "/committee" },
   { icon: Box, label: "Models", path: "/models" },
   { icon: Zap, label: "Trading", path: "/trading" },
   { icon: Newspaper, label: "News", path: "/news" },
-  { icon: Settings, label: "Settings", path: "/settings" },
 ];
+
+const settingsItem: NavItem = { icon: Settings, label: "Settings", path: "/settings" };
+
+function NavRow({
+  item,
+  isActive,
+  onClick,
+}: {
+  item: NavItem;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="group flex items-center gap-3 rounded-md px-3 transition-colors duration-150"
+      style={{
+        height: 42,
+        width: "100%",
+        borderLeft: isActive
+          ? "2px solid var(--color-brand)"
+          : "2px solid transparent",
+        backgroundColor: isActive ? "var(--color-brand-glow)" : "transparent",
+        color: isActive ? "var(--color-brand)" : "var(--color-text-secondary)",
+      }}
+      onMouseEnter={(e) => {
+        if (!isActive) e.currentTarget.style.backgroundColor = "var(--color-glass-hover)";
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) e.currentTarget.style.backgroundColor = "transparent";
+      }}
+    >
+      <item.icon size={18} strokeWidth={isActive ? 2 : 1.75} style={{ flexShrink: 0 }} />
+      <span
+        className="text-[13px]"
+        style={{ fontWeight: isActive ? 600 : 500, letterSpacing: "0.01em" }}
+      >
+        {item.label}
+      </span>
+    </button>
+  );
+}
 
 export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const isItemActive = (path: string) =>
+    path === "/"
+      ? location.pathname === "/"
+      : location.pathname === path || location.pathname.startsWith(path + "/");
+
   return (
     <aside
       className="flex flex-col border-r"
       style={{
-        width: layout.sidebarCollapsed,
+        width: layout.sidebarExpanded,
         borderColor: "var(--color-border-subtle)",
         backgroundColor: "var(--color-surface)",
         flexShrink: 0,
@@ -48,53 +93,55 @@ export function Sidebar() {
         zIndex: 10,
       }}
     >
-      {/* Logo */}
+      {/* Brand wordmark */}
       <div
-        className="flex items-center justify-center border-b"
+        className="flex flex-col justify-center border-b px-5"
         style={{
-          height: layout.headerHeight,
+          height: layout.headerHeight + 32,
           borderColor: "var(--color-border-subtle)",
         }}
       >
-        <KodaLogo size="sm" collapsed />
+        <span
+          className="font-bold leading-none"
+          style={{
+            fontFamily: "var(--font-sans)",
+            fontSize: 22,
+            letterSpacing: "0.02em",
+            color: "var(--color-brand)",
+          }}
+        >
+          KODAQUANT
+        </span>
+        <span
+          className="mt-1.5 text-[10px] font-medium uppercase tracking-[0.18em]"
+          style={{ color: "var(--color-text-muted)" }}
+        >
+          Institutional Terminal
+        </span>
       </div>
 
-      {/* Navigation — icons only, native tooltip via title */}
-      <div className="flex flex-1 flex-col items-center gap-0.5 py-3">
-        {navItems.map((item) => {
-          const isActive =
-            item.path === "/"
-              ? location.pathname === "/"
-              : location.pathname === item.path ||
-                location.pathname.startsWith(item.path + "/");
-          return (
-            <button
-              key={item.path}
-              onClick={() => navigate(item.path)}
-              title={item.label}
-              className="flex items-center justify-center transition-colors duration-150"
-              style={{
-                width: 40,
-                height: 38,
-                borderRadius: 6,
-                borderLeft: isActive
-                  ? "2px solid var(--color-brand)"
-                  : "2px solid transparent",
-                backgroundColor: isActive
-                  ? "var(--color-brand-glow)"
-                  : "transparent",
-                color: isActive
-                  ? "var(--color-brand)"
-                  : "var(--color-text-muted)",
-              }}
-            >
-              <item.icon
-                size={18}
-                strokeWidth={isActive ? 2 : 1.5}
-              />
-            </button>
-          );
-        })}
+      {/* Primary navigation */}
+      <nav className="flex flex-1 flex-col gap-1 px-3 py-4">
+        {primaryNav.map((item) => (
+          <NavRow
+            key={item.path}
+            item={item}
+            isActive={isItemActive(item.path)}
+            onClick={() => navigate(item.path)}
+          />
+        ))}
+      </nav>
+
+      {/* Settings pinned to bottom */}
+      <div
+        className="border-t px-3 py-3"
+        style={{ borderColor: "var(--color-border-subtle)" }}
+      >
+        <NavRow
+          item={settingsItem}
+          isActive={isItemActive(settingsItem.path)}
+          onClick={() => navigate(settingsItem.path)}
+        />
       </div>
     </aside>
   );
