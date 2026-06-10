@@ -1,57 +1,23 @@
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamSelect } from "@/components/shared/ParamSelect";
+import { Panel, PanelHeader, Section } from "@/components/shared/Panel";
 import { RANGES, SELECT_OPTIONS } from "@/lib/constants";
-import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
 
-const sectionClass = "rounded-sm border p-6";
-const sectionStyle: React.CSSProperties = {
-  borderColor: "var(--color-glass-border)",
-  backgroundColor: "rgba(255,255,255,0.02)",
-};
-const sectionTitleClass = "mb-1 text-[11px] font-medium uppercase tracking-[0.12em]";
-const sectionTitleStyle: React.CSSProperties = { color: "var(--color-text-secondary)" };
-const explainerClass = "mb-5 text-[11px] font-light leading-relaxed max-w-[720px]";
-const explainerStyle: React.CSSProperties = { color: "var(--color-text-muted)" };
-
-export function ExecutionPanel({ defaultOpen = false }: { defaultOpen?: boolean }) {
+export function ExecutionPanel() {
   const setField = useBacktestStore((s) => s.setField);
   const s = useBacktestStore.getState();
-  const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div
-      className="flex flex-col gap-6 rounded-sm border p-6"
-      style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
-      }}
-    >
-      {/* Header with collapse toggle */}
-      <button
-        className="flex w-full items-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] transition-colors duration-200 hover:text-[var(--color-text-primary)]"
-        style={{ color: "var(--color-text-muted)" }}
-        onClick={() => setOpen(!open)}
+    <Panel>
+      <PanelHeader title="Execution Models" subtitle="Define account, sizing, and risk-control rules." />
+
+      {/* ── General ── */}
+      <Section
+        title="General"
+        description="Base account and margin settings that apply to every execution model."
       >
-        {open ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
-        Execution Models (Advanced)
-      </button>
-
-      {open && (
-        <div className="flex flex-col gap-6">
-
-          {/* ── General ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>General</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Base account and margin settings that apply to every execution model.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
               <ParamSlider
                 label="Initial Equity"
                 value={s.initialEquity}
@@ -70,19 +36,16 @@ export function ExecutionPanel({ defaultOpen = false }: { defaultOpen?: boolean 
                 description="Highest leverage allowed per position. Affects margin requirements and drawdown magnitude."
                 onChange={(v) => setField("maxLeverage", v)}
               />
-            </div>
-          </section>
+        </div>
+      </Section>
 
-          {/* ── Position Sizing ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-classical)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>Position Sizing</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Determines how large each trade should be relative to account equity. Different methods balance growth vs. risk of ruin.
-            </p>
-            <div className="flex flex-col gap-6">
+      {/* ── Position Sizing ── */}
+      <Section
+        title="Position Sizing"
+        accent="var(--color-accent-classical)"
+        description="Determines how large each trade should be relative to account equity. Different methods balance growth vs. risk of ruin."
+      >
+        <div className="flex flex-col gap-6">
               <div className="max-w-sm">
                 <ParamSelect
                   label="Method"
@@ -153,17 +116,14 @@ export function ExecutionPanel({ defaultOpen = false }: { defaultOpen?: boolean 
                 </div>
               )}
             </div>
-          </section>
+          </Section>
 
           {/* ── Trailing Stops ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-deep)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>Trailing Stops</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Automatically moves the stop-loss in favor of the trade as price progresses, locking in profits while allowing runners.
-            </p>
+          <Section
+            title="Trailing Stops"
+            accent="var(--color-accent-deep)"
+            description="Automatically moves the stop-loss in favor of the trade as price progresses, locking in profits while allowing runners."
+          >
             <div className="flex flex-col gap-6">
               <div className="max-w-sm">
                 <ParamSelect
@@ -188,17 +148,14 @@ export function ExecutionPanel({ defaultOpen = false }: { defaultOpen?: boolean 
                 </div>
               )}
             </div>
-          </section>
+          </Section>
 
           {/* ── Risk Management ── */}
-          <section className={sectionClass} style={sectionStyle}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-danger)" }} />
-              <h4 className={sectionTitleClass} style={sectionTitleStyle}>Risk Management</h4>
-            </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Circuit breakers and drawdown controls that halt trading when conditions become unfavorable. Essential for live deployment.
-            </p>
+          <Section
+            title="Risk Management"
+            accent="var(--color-accent-danger)"
+            description="Circuit breakers and drawdown controls that halt trading when conditions become unfavorable. Essential for live deployment."
+          >
             <div className="flex flex-col gap-6">
               <div className="max-w-sm">
                 <ParamSlider
@@ -232,9 +189,7 @@ export function ExecutionPanel({ defaultOpen = false }: { defaultOpen?: boolean 
                 />
               </div>
             </div>
-          </section>
-        </div>
-      )}
-    </div>
+          </Section>
+    </Panel>
   );
 }

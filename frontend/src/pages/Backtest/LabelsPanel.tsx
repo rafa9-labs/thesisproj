@@ -51,7 +51,7 @@ export function LabelsPanel() {
 
           {useTB && (
             <div
-              className="flex flex-col gap-6 rounded-sm border p-6"
+              className="flex flex-col gap-6 rounded-lg border p-5"
               style={{
                 borderColor: "var(--color-glass-border)",
                 backgroundColor: "var(--color-glass)",
@@ -101,7 +101,7 @@ export function LabelsPanel() {
             </div>
           )}
         </div>
-      </section>
-    </div>
+      </Section>
+    </Panel>
   );
 }

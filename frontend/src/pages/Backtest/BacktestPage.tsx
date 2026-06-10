@@ -148,7 +148,7 @@ export function BacktestPage() {
             active={execSeg}
             onChange={setExecSeg}
           />
-          {execSeg === "execution" && <ExecutionPanel defaultOpen={true} />}
+          {execSeg === "execution" && <ExecutionPanel />}
           {execSeg === "forwardtest" && <ForwardTestTab />}
         </div>
       )}
