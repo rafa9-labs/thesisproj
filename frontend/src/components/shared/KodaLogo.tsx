@@ -21,26 +21,18 @@ export function KodaLogo({ size = "md", collapsed = false, className }: KodaLogo
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
-          <polygon
-            points="12,2 22,12 12,22 2,12"
-            fill="var(--color-brand)"
-          />
+          <polygon points="12,2 22,12 12,22 2,12" fill="var(--color-brand)" />
         </svg>
       </div>
     );
   }
 
   return (
-    <div className={cn("inline-flex items-center select-none", className)} style={{ height, gap: 1 }}>
-      <span
-        className="font-bold tracking-tight"
-        style={{
-          fontFamily: "var(--font-sans)",
-          fontSize,
-          color: "var(--color-text-primary)",
-          letterSpacing: "0.04em",
-        }}
-      >
+    <div
+      className={cn("inline-flex items-center gap-[1px] select-none", className)}
+      style={{ height }}
+    >
+      <span className="font-sans font-bold tracking-[0.04em] tracking-tight text-(--color-text-primary)">
         K
       </span>
       <svg
@@ -49,33 +41,16 @@ export function KodaLogo({ size = "md", collapsed = false, className }: KodaLogo
         viewBox="0 0 24 24"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        style={{ marginInline: 1 }}
+        className="mx-[1px]"
       >
-        <polygon
-          points="12,2 22,12 12,22 2,12"
-          fill="var(--color-brand)"
-        />
+        <polygon points="12,2 22,12 12,22 2,12" fill="var(--color-brand)" />
       </svg>
-      <span
-        className="font-bold tracking-tight"
-        style={{
-          fontFamily: "var(--font-sans)",
-          fontSize,
-          color: "var(--color-text-primary)",
-          letterSpacing: "0.04em",
-        }}
-      >
+      <span className="font-sans font-bold tracking-[0.04em] tracking-tight text-(--color-text-primary)">
         DA
       </span>
       <span
-        className="font-semibold tracking-wide"
-        style={{
-          fontFamily: "var(--font-sans)",
-          fontSize: Math.round(fontSize * 0.82),
-          color: "var(--color-text-secondary)",
-          letterSpacing: "0.12em",
-          marginLeft: 3,
-        }}
+        className="ml-[3px] font-sans font-semibold tracking-[0.12em] tracking-wide text-(--color-text-secondary)"
+        style={{ fontSize: Math.round(fontSize * 0.82) }}
       >
         QUANT
       </span>

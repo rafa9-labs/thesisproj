@@ -25,11 +25,7 @@ export function EquityThumbnail({ data, width = 120, height = 36 }: EquityThumbn
   }, [data, width, height]);
 
   if (!path) {
-    return (
-      <div
-        style={{ width, height, borderRadius: 4, backgroundColor: "var(--color-elevated)" }}
-      />
-    );
+    return <div className="bg-(--color-elevated)" style={{ borderRadius: 4 }} />;
   }
 
   const finalVal = data && data.length > 0 ? data[data.length - 1].value : 0;
@@ -37,8 +33,20 @@ export function EquityThumbnail({ data, width = 120, height = 36 }: EquityThumbn
   const color = finalVal >= startVal ? "var(--color-accent-success)" : "var(--color-accent-danger)";
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
-      <path d={path} fill="none" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      style={{ display: "block" }}
+    >
+      <path
+        d={path}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

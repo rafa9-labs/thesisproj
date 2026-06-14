@@ -82,7 +82,7 @@ export function UpdateNotification() {
       handleCheckForUpdates();
     };
     api.onTriggerUpdateCheck?.(handler);
-  }, []);  
+  }, []);
 
   const handleDownload = async () => {
     const api = getElectronAPI();
@@ -103,36 +103,28 @@ export function UpdateNotification() {
 
   if (updateReady && !dismissed) {
     return (
-      <div
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-sm border px-4 py-3 shadow-lg"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          borderColor: "var(--color-accent)",
-        }}
-      >
-        <RefreshCw size={18} style={{ color: "var(--color-accent)" }} />
+      <div className="fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-sm border border-(--color-accent) bg-(--color-surface) px-4 py-3 shadow-lg">
+        <RefreshCw size={18} className="text-(--color-accent)" />
         <div className="flex flex-col">
-          <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+          <span className="text-sm font-medium text-(--color-text-primary)">
             Update ready — v{updateAvailable?.version}
           </span>
-          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+          <span className="text-xs text-(--color-text-muted)">
             Restart to install the latest version
           </span>
         </div>
         <button
           onClick={handleInstall}
-          className="rounded-md px-3 py-1.5 text-xs font-semibold"
-          style={{
-            backgroundColor: "var(--color-accent)",
-            color: "#fff",
-            cursor: "pointer",
-          }}
+          className="rounded-md bg-(--color-accent) px-3 py-1.5 text-xs font-semibold"
+          style={{ color: "#fff" }}
+          className="cursor-pointer"
         >
           Restart & Update
         </button>
         <button
           onClick={() => setDismissed(true)}
-          style={{ color: "var(--color-text-muted)", cursor: "pointer" }}
+          className="text-(--color-text-muted)"
+          className="cursor-pointer"
         >
           <X size={14} />
         </button>
@@ -142,28 +134,19 @@ export function UpdateNotification() {
 
   if (downloading && downloadProgress) {
     return (
-      <div
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-sm border px-4 py-3 shadow-lg"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          borderColor: "var(--color-border)",
-        }}
-      >
-        <Download size={18} style={{ color: "var(--color-accent)" }} />
+      <div className="fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-sm border border-(--color-border) bg-(--color-surface) px-4 py-3 shadow-lg">
+        <Download size={18} className="text-(--color-accent)" />
         <div className="flex flex-col">
-          <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+          <span className="text-sm font-medium text-(--color-text-primary)">
             Downloading v{updateAvailable?.version}...
           </span>
-          <div className="mt-1 h-1.5 w-48 rounded-full" style={{ backgroundColor: "var(--color-elevated)" }}>
+          <div className="mt-1 h-1.5 w-48 rounded-full bg-(--color-elevated)">
             <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${downloadProgress.percent}%`,
-                backgroundColor: "var(--color-accent)",
-              }}
+              className="h-full rounded-full bg-(--color-accent) transition-all"
+              style={{ width: `${downloadProgress.percent}%` }}
             />
           </div>
-          <span className="mt-0.5 text-xs" style={{ color: "var(--color-text-muted)" }}>
+          <span className="mt-0.5 text-xs text-(--color-text-muted)">
             {(downloadProgress.bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s
           </span>
         </div>
@@ -173,36 +156,28 @@ export function UpdateNotification() {
 
   if (updateAvailable && !downloading && !dismissed) {
     return (
-      <div
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-sm border px-4 py-3 shadow-lg"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          borderColor: "var(--color-border)",
-        }}
-      >
-        <RefreshCw size={18} style={{ color: "var(--color-accent)" }} />
+      <div className="fixed right-4 bottom-4 z-50 flex items-center gap-3 rounded-sm border border-(--color-border) bg-(--color-surface) px-4 py-3 shadow-lg">
+        <RefreshCw size={18} className="text-(--color-accent)" />
         <div className="flex flex-col">
-          <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+          <span className="text-sm font-medium text-(--color-text-primary)">
             Update available — v{updateAvailable.version}
           </span>
-          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+          <span className="text-xs text-(--color-text-muted)">
             Download and install the latest version
           </span>
         </div>
         <button
           onClick={handleDownload}
-          className="rounded-md px-3 py-1.5 text-xs font-semibold"
-          style={{
-            backgroundColor: "var(--color-accent)",
-            color: "#fff",
-            cursor: "pointer",
-          }}
+          className="rounded-md bg-(--color-accent) px-3 py-1.5 text-xs font-semibold"
+          style={{ color: "#fff" }}
+          className="cursor-pointer"
         >
           Download
         </button>
         <button
           onClick={() => setDismissed(true)}
-          style={{ color: "var(--color-text-muted)", cursor: "pointer" }}
+          className="text-(--color-text-muted)"
+          className="cursor-pointer"
         >
           <X size={14} />
         </button>
@@ -212,17 +187,9 @@ export function UpdateNotification() {
 
   if (checking) {
     return (
-      <div
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-sm border px-3 py-2"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          borderColor: "var(--color-border)",
-        }}
-      >
-        <RefreshCw size={14} className="animate-spin" style={{ color: "var(--color-text-muted)" }} />
-        <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-          Checking for updates...
-        </span>
+      <div className="fixed right-4 bottom-4 z-50 flex items-center gap-2 rounded-sm border border-(--color-border) bg-(--color-surface) px-3 py-2">
+        <RefreshCw size={14} className="animate-spin text-(--color-text-muted)" />
+        <span className="text-xs text-(--color-text-muted)">Checking for updates...</span>
       </div>
     );
   }

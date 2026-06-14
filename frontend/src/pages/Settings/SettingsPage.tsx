@@ -11,13 +11,6 @@ import {
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useConfig, useSaveConfig, useStoreApiKey, useStoreKv } from "@/api/queries";
 
-/* ─────────────────────── shared primitives ─────────────────────── */
-
-const cardStyle: React.CSSProperties = {
-  borderColor: "var(--color-glass-border)",
-  backgroundColor: "rgba(255,255,255,0.02)",
-};
-
 function SectionCard({
   icon,
   title,
@@ -28,20 +21,10 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className="rounded-sm border flex flex-col gap-5 p-6"
-      style={cardStyle}
-    >
-      <div className="flex items-center gap-2.5">
-        <div
-          className="h-4 w-[2px] rounded-full flex-shrink-0"
-          style={{ backgroundColor: "var(--color-brand)" }}
-        />
-        <span style={{ color: "var(--color-brand)", display: "flex" }}>{icon}</span>
-        <h3
-          className="text-[11px] font-medium uppercase tracking-[0.12em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
+    <div className="flex flex-col rounded-lg border border-(--color-glass-border) bg-(--color-glass) p-6">
+      <div className="mb-6 flex items-center gap-2.5 border-b border-(--color-glass-border) pb-4">
+        <span className="flex text-(--color-brand)">{icon}</span>
+        <h3 className="text-[11px] font-semibold tracking-[0.1em] text-(--color-text-primary) uppercase">
           {title}
         </h3>
       </div>
@@ -60,24 +43,12 @@ function FieldRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-2 border-t" style={{ borderColor: "var(--color-glass-border)" }}>
-      <div className="flex flex-col gap-0.5 min-w-0">
-        <span
-          className="text-[12px] font-light"
-          style={{ color: "var(--color-text-primary)" }}
-        >
-          {label}
-        </span>
-        {hint && (
-          <span
-            className="text-[10px]"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            {hint}
-          </span>
-        )}
+    <div className="flex flex-col justify-between gap-2 border-t border-(--color-glass-border) py-3 sm:flex-row sm:items-center sm:gap-4">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[12px] font-medium text-(--color-text-primary)">{label}</span>
+        {hint && <span className="text-[10px] text-(--color-text-muted)">{hint}</span>}
       </div>
-      <div className="flex items-center gap-2 flex-shrink-0">{children}</div>
+      <div className="flex shrink-0 items-center gap-2">{children}</div>
     </div>
   );
 }
@@ -88,10 +59,9 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
       onClick={() => onChange(!value)}
       aria-checked={value}
       role="switch"
-      className="relative h-5 w-9 rounded-full transition-all duration-200 flex-shrink-0"
+      className="relative h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-all duration-200"
       style={{
         backgroundColor: value ? "var(--color-brand)" : "var(--color-glass-border)",
-        cursor: "pointer",
         boxShadow: value ? "0 0 8px rgba(0,229,255,0.25)" : "none",
       }}
     >
@@ -112,7 +82,6 @@ function TextInput({
   onBlur,
   placeholder,
   type = "text",
-  width = 220,
   mono = true,
 }: {
   value: string;
@@ -120,7 +89,6 @@ function TextInput({
   onBlur?: () => void;
   placeholder?: string;
   type?: string;
-  width?: number;
   mono?: boolean;
 }) {
   return (
@@ -130,29 +98,15 @@ function TextInput({
       onChange={(e) => onChange(e.target.value)}
       onBlur={onBlur}
       placeholder={placeholder}
-      className="rounded-md border px-3 py-1.5 text-xs transition-colors duration-200 focus:outline-none"
-      style={{
-        borderColor: "var(--color-glass-border)",
-        backgroundColor: "var(--color-elevated)",
-        color: "var(--color-text-primary)",
-        fontFamily: mono ? "var(--font-mono)" : "var(--font-sans)",
-        width,
-      }}
+      className="w-full rounded-md border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 text-xs text-(--color-text-primary) transition-colors duration-200 focus:outline-none sm:w-64"
+      style={{ fontFamily: mono ? "var(--font-mono)" : "var(--font-sans)" }}
     />
   );
 }
 
 function StaticPill({ children }: { children: React.ReactNode }) {
   return (
-    <span
-      className="rounded-md border px-3 py-1.5 text-xs"
-      style={{
-        borderColor: "var(--color-glass-border)",
-        backgroundColor: "var(--color-elevated)",
-        color: "var(--color-text-muted)",
-        fontFamily: "var(--font-mono)",
-      }}
-    >
+    <span className="rounded-md border border-(--color-glass-border) bg-(--color-glass-hover) px-3 py-1.5 font-mono text-xs text-(--color-text-secondary)">
       {children}
     </span>
   );
@@ -161,10 +115,7 @@ function StaticPill({ children }: { children: React.ReactNode }) {
 function SavedBadge({ show }: { show: boolean }) {
   if (!show) return null;
   return (
-    <span
-      className="flex items-center gap-1 text-[10px] font-medium"
-      style={{ color: "var(--color-accent-success)" }}
-    >
+    <span className="flex items-center gap-1 text-[10px] font-medium text-(--color-accent-success)">
       <Check size={10} strokeWidth={2.5} />
       Saved
     </span>
@@ -230,15 +181,13 @@ function LicenseSection() {
       await fetch(`${apiBase}/license/deactivate`, { method: "POST" });
       const statusRes = await fetch(`${apiBase}/license/status`);
       setLicense(await statusRes.json());
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   if (!license) {
-    return (
-      <p className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
-        Checking license status…
-      </p>
-    );
+    return <p className="text-[11px] text-(--color-text-muted)">Checking license status…</p>;
   }
 
   const planLabel: Record<string, string> = {
@@ -260,7 +209,7 @@ function LicenseSection() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span
-            className="rounded-md border px-3 py-1 text-[11px] font-semibold uppercase tracking-wider"
+            className="rounded-md border px-3 py-1 text-[11px] font-semibold tracking-wider uppercase"
             style={{
               borderColor: color,
               backgroundColor: `color-mix(in srgb, ${color} 9%, transparent)`,
@@ -270,7 +219,7 @@ function LicenseSection() {
             {planLabel[license.plan] || license.plan}
           </span>
           {license.trial_active && (
-            <span className="text-[11px]" style={{ color: "var(--color-accent-warning)" }}>
+            <span className="text-[11px] text-(--color-accent-warning)">
               {license.trial_days_left} days remaining
             </span>
           )}
@@ -278,12 +227,7 @@ function LicenseSection() {
         {license.licensed && (
           <button
             onClick={handleDeactivate}
-            className="rounded-md border px-2.5 py-1 text-[10px] uppercase tracking-wider transition-colors duration-150 hover:border-[var(--color-border-active)]"
-            style={{
-              borderColor: "var(--color-glass-border)",
-              color: "var(--color-text-muted)",
-              cursor: "pointer",
-            }}
+            className="cursor-pointer rounded-md border border-(--color-glass-border) px-2.5 py-1 text-[10px] tracking-wider text-(--color-text-muted) uppercase transition-colors duration-150 hover:border-[var(--color-border-active)]"
           >
             Deactivate
           </button>
@@ -293,44 +237,32 @@ function LicenseSection() {
       {license.needs_activation && !license.trial_active && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
-            <TextInput
-              value={inputKey}
-              onChange={setInputKey}
-              placeholder="XXXX-XXXX-XXXX-XXXX"
-              width={240}
-            />
+            <TextInput value={inputKey} onChange={setInputKey} placeholder="XXXX-XXXX-XXXX-XXXX" />
             <button
               onClick={handleActivate}
               disabled={activating}
-              className="rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all duration-200"
+              className="flex shrink-0 items-center rounded-md bg-(--color-brand) px-3 py-1.5 text-xs font-semibold tracking-wider text-(--color-text-inverse) uppercase shadow-[0_0_10px_rgba(0,229,255,0.2)] transition-all duration-200"
               style={{
-                backgroundColor: "var(--color-brand)",
-                color: "var(--color-text-inverse)",
                 cursor: activating ? "not-allowed" : "pointer",
                 opacity: activating ? 0.6 : 1,
-                boxShadow: "0 0 10px rgba(0,229,255,0.2)",
               }}
             >
               {activating ? "Activating…" : "Activate"}
             </button>
           </div>
-          {error && (
-            <p className="text-[10px]" style={{ color: "var(--color-accent-danger)" }}>
-              {error}
-            </p>
-          )}
+          {error && <p className="text-[10px] text-(--color-accent-danger)">{error}</p>}
         </div>
       )}
 
       {license.machine_id && (
         <FieldRow label="Machine ID">
-          <span style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)", fontSize: 11 }}>
+          <span className="font-mono text-[11px] text-(--color-text-muted)">
             {license.machine_id}
           </span>
         </FieldRow>
       )}
 
-      <p className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
+      <p className="text-[11px] text-(--color-text-muted)">
         {license.plan === "free"
           ? "Free tier: 3 models (Logistic, XGBoost, RF) + fixed lot sizing"
           : license.plan === "trial"
@@ -356,9 +288,12 @@ export function SettingsPage() {
   useEffect(() => {
     if (remoteConfig && !synced.current) {
       synced.current = true;
-      if (remoteConfig.threadBudget != null) store.setField("threadBudget", remoteConfig.threadBudget as number);
-      if (remoteConfig.mixedPrecision != null) store.setField("mixedPrecision", remoteConfig.mixedPrecision as boolean);
-      if (remoteConfig.verboseMode != null) store.setField("verboseMode", remoteConfig.verboseMode as boolean);
+      if (remoteConfig.threadBudget != null)
+        store.setField("threadBudget", remoteConfig.threadBudget as number);
+      if (remoteConfig.mixedPrecision != null)
+        store.setField("mixedPrecision", remoteConfig.mixedPrecision as boolean);
+      if (remoteConfig.verboseMode != null)
+        store.setField("verboseMode", remoteConfig.verboseMode as boolean);
       if (remoteConfig.apiUrl != null) store.setField("apiUrl", remoteConfig.apiUrl as string);
     }
   }, [remoteConfig]);
@@ -370,35 +305,39 @@ export function SettingsPage() {
   const handleOandaBlur = () => {
     const key = store.oandaApiKey;
     if (key) {
-      storeApiKey.mutate({ name: "oanda", value: key }, {
-        onSuccess: () => {
-          setApiKeySaved(true);
-          setTimeout(() => setApiKeySaved(false), 2000);
+      storeApiKey.mutate(
+        { name: "oanda", value: key },
+        {
+          onSuccess: () => {
+            setApiKeySaved(true);
+            setTimeout(() => setApiKeySaved(false), 2000);
+          },
         },
-      });
+      );
     }
   };
 
   const handleAccountIdBlur = () => {
     const acc = store.oandaAccountId;
     if (acc) {
-      storeKv.mutate({ key: "oanda_account_id", value: acc }, {
-        onSuccess: () => {
-          setAccountIdSaved(true);
-          setTimeout(() => setAccountIdSaved(false), 2000);
+      storeKv.mutate(
+        { key: "oanda_account_id", value: acc },
+        {
+          onSuccess: () => {
+            setAccountIdSaved(true);
+            setTimeout(() => setAccountIdSaved(false), 2000);
+          },
         },
-      });
+      );
     }
   };
 
   const threadPct = ((store.threadBudget - 1) / 15) * 100;
 
   return (
-    <div className="flex flex-col gap-5 max-w-4xl">
-
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
       {/* ── Row 1: General + GPU & Compute ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <SectionCard icon={<SettingsIcon size={14} strokeWidth={1.5} />} title="General">
           <FieldRow label="Verbose Mode" hint="Outputs detailed logs during pipeline runs">
             <Toggle
@@ -414,7 +353,6 @@ export function SettingsPage() {
               value={store.apiUrl}
               onChange={(v) => store.setField("apiUrl", v)}
               onBlur={() => syncToBackend("apiUrl", store.apiUrl)}
-              width={200}
             />
           </FieldRow>
           <FieldRow label="Theme">
@@ -438,13 +376,9 @@ export function SettingsPage() {
                 className="w-28"
                 style={{
                   accentColor: "var(--color-brand)",
-                  background: `linear-gradient(to right, var(--color-brand) 0%, var(--color-brand) ${threadPct}%, var(--color-glass-border) ${threadPct}%, var(--color-glass-border) 100%)`,
                 }}
               />
-              <span
-                className="text-xs font-semibold w-5 text-right"
-                style={{ color: "var(--color-brand)", fontFamily: "var(--font-mono)" }}
-              >
+              <span className="w-5 text-right font-mono text-xs font-semibold text-(--color-brand)">
                 {store.threadBudget}
               </span>
             </div>
@@ -473,7 +407,6 @@ export function SettingsPage() {
             onBlur={handleOandaBlur}
             placeholder="Enter API key…"
             type="password"
-            width={240}
           />
           <SavedBadge show={apiKeySaved} />
         </FieldRow>
@@ -483,7 +416,6 @@ export function SettingsPage() {
             onChange={(v) => store.setField("oandaAccountId", v || null)}
             onBlur={handleAccountIdBlur}
             placeholder="Enter account ID…"
-            width={240}
           />
           <SavedBadge show={accountIdSaved} />
         </FieldRow>
@@ -493,23 +425,19 @@ export function SettingsPage() {
       </SectionCard>
 
       {/* ── Row 3: License + Pipeline ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <SectionCard icon={<Key size={14} strokeWidth={1.5} />} title="License">
           <LicenseSection />
         </SectionCard>
 
-        <SectionCard icon={<SettingsIcon size={14} strokeWidth={1.5} />} title="Pipeline Configuration">
-          <p
-            className="text-[11px] leading-relaxed"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            Advanced pipeline parameters are configured per-backtest on the Backtest page.
-            Global defaults are defined in{" "}
-            <code style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-secondary)" }}>
-              config.py
-            </code>
-            .
+        <SectionCard
+          icon={<SettingsIcon size={14} strokeWidth={1.5} />}
+          title="Pipeline Configuration"
+        >
+          <p className="text-[11px] leading-relaxed text-(--color-text-muted)">
+            Advanced pipeline parameters are configured per-backtest on the Backtest page. Global
+            defaults are defined in{" "}
+            <code className="font-mono text-(--color-text-secondary)">config.py</code>.
           </p>
           <div className="pt-1">
             <button
@@ -520,13 +448,7 @@ export function SettingsPage() {
                 store.setField("apiUrl", "http://localhost:8000");
                 syncToBackend("reset", true);
               }}
-              className="rounded-md border px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.08em] transition-all duration-200 hover:border-[var(--color-border-active)]"
-              style={{
-                borderColor: "var(--color-glass-border)",
-                backgroundColor: "var(--color-elevated)",
-                color: "var(--color-text-secondary)",
-                cursor: "pointer",
-              }}
+              className="cursor-pointer rounded-md border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 text-[11px] font-medium tracking-[0.08em] text-(--color-text-secondary) uppercase transition-all duration-200 hover:border-[var(--color-border-active)]"
             >
               Reset to Defaults
             </button>
@@ -536,7 +458,7 @@ export function SettingsPage() {
 
       {/* ── Row 4: About ── */}
       <SectionCard icon={<Info size={14} strokeWidth={1.5} />} title="About">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
             { label: "Version", value: "v1.0.0-dev" },
             { label: "Pipeline", value: "Forex ML" },
@@ -545,41 +467,29 @@ export function SettingsPage() {
           ].map(({ label, value }) => (
             <div
               key={label}
-              className="rounded-sm border p-3 flex flex-col gap-1"
-              style={{
-                borderColor: "var(--color-glass-border)",
-                backgroundColor: "var(--color-elevated)",
-              }}
+              className="flex flex-col gap-1 rounded-lg border border-(--color-glass-border) bg-(--color-glass-hover) p-3"
             >
-              <span
-                className="text-[9px] uppercase tracking-[0.1em]"
-                style={{ color: "var(--color-text-muted)" }}
-              >
+              <span className="text-[9px] tracking-[0.1em] text-(--color-text-muted) uppercase">
                 {label}
               </span>
-              <span
-                className="text-[12px] font-medium"
-                style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}
-              >
+              <span className="font-mono text-[12px] font-medium text-(--color-text-primary)">
                 {value}
               </span>
             </div>
           ))}
         </div>
-        <div className="flex items-center gap-1.5 pt-1">
-          <ExternalLink size={11} style={{ color: "var(--color-text-muted)" }} />
+        <div className="flex items-center gap-1.5 pt-4">
+          <ExternalLink size={11} className="text-(--color-text-muted)" />
           <a
             href="https://github.com/rafa9-labs/thesisproj"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[11px] transition-colors duration-150 hover:underline"
-            style={{ color: "var(--color-brand)" }}
+            className="text-[11px] text-(--color-brand) transition-colors duration-150 hover:underline"
           >
             github.com/rafa9-labs/thesisproj
           </a>
         </div>
       </SectionCard>
-
     </div>
   );
 }

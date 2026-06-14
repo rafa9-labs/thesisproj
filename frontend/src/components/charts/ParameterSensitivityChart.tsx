@@ -42,13 +42,12 @@ function NumericParamSelector({
         <button
           key={p}
           onClick={() => onSelect(p)}
-          className="rounded-md border px-2 py-0.5 text-[10px] transition-colors"
+          className="rounded-md border px-2 py-0.5 font-mono text-[10px] transition-colors"
           style={{
             borderColor: p === selected ? "var(--color-accent)" : "var(--color-border)",
             backgroundColor: p === selected ? "rgba(41,98,255,0.1)" : "var(--color-surface)",
             color: p === selected ? "var(--color-accent)" : "var(--color-text-secondary)",
             cursor: "pointer",
-            fontFamily: "var(--font-mono)",
           }}
         >
           {p}
@@ -90,10 +89,7 @@ export function ParameterSensitivityChart({ trials }: ParameterSensitivityChartP
   if (trialData.length < 3) {
     return (
       <ChartCard title="Parameter Sensitivity" subtitle={`${trialData.length} trials`}>
-        <div
-          className="flex items-center justify-center py-8"
-          style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
-        >
+        <div className="flex items-center justify-center py-8 font-mono text-(--color-text-muted)">
           <span className="text-xs">
             Requires at least 3 HPO trials (current: {trialData.length})
           </span>
@@ -105,10 +101,7 @@ export function ParameterSensitivityChart({ trials }: ParameterSensitivityChartP
   if (numericParams.length === 0) {
     return (
       <ChartCard title="Parameter Sensitivity" subtitle={`${trialData.length} trials`}>
-        <div
-          className="flex items-center justify-center py-8"
-          style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
-        >
+        <div className="flex items-center justify-center py-8 font-mono text-(--color-text-muted)">
           <span className="text-xs">No numeric hyperparameters found in trial data</span>
         </div>
       </ChartCard>
@@ -130,42 +123,50 @@ export function ParameterSensitivityChart({ trials }: ParameterSensitivityChartP
         />
         <ResponsiveContainer width="100%" height={260}>
           <ScatterChart margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2A2E39" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-elevated)" />
             <XAxis
               type="number"
               dataKey="paramValue"
               name={effectiveParam}
-              tick={{ fill: "#787B86", fontSize: 10, fontFamily: "JetBrains Mono" }}
+              tick={{
+                fill: "var(--color-text-muted)",
+                fontSize: 10,
+                fontFamily: "var(--font-mono)",
+              }}
               label={{
                 value: effectiveParam,
                 position: "insideBottomRight",
                 offset: -5,
-                style: { fill: "#787B86", fontSize: 10 },
+                style: { fill: "var(--color-text-muted)", fontSize: 10 },
               }}
             />
             <YAxis
               type="number"
               dataKey="objective"
               name="Objective"
-              tick={{ fill: "#787B86", fontSize: 10, fontFamily: "JetBrains Mono" }}
+              tick={{
+                fill: "var(--color-text-muted)",
+                fontSize: 10,
+                fontFamily: "var(--font-mono)",
+              }}
               label={{
                 value: "Objective (Sharpe)",
                 angle: -90,
                 position: "insideLeft",
                 offset: 10,
-                style: { fill: "#787B86", fontSize: 10 },
+                style: { fill: "var(--color-text-muted)", fontSize: 10 },
               }}
             />
             <ZAxis range={[36, 36]} />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#2A2E39",
-                border: "1px solid #363A45",
+                backgroundColor: "var(--color-elevated)",
+                border: "1px solid var(--color-glass-border)",
                 borderRadius: 6,
                 fontSize: 12,
-                fontFamily: "JetBrains Mono",
+                fontFamily: "var(--font-mono)",
               }}
-              labelStyle={{ color: "#80899F" }}
+              labelStyle={{ color: "var(--color-text-muted)" }}
               formatter={(value: number, name: string) => [
                 typeof value === "number" ? value.toFixed(4) : value,
                 name === "paramValue" ? effectiveParam : "Objective",

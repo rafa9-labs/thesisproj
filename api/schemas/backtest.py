@@ -357,6 +357,8 @@ class BacktestSummaryItem(BaseModel):
     max_drawdown_pct: Optional[float] = None
     total_trades: Optional[int] = None
     status: str = "completed"
+    error: Optional[str] = None
+    study_meta: Optional[StudyMetaResponse] = None
 
 
 class BacktestSummaryResponse(BaseModel):
@@ -403,3 +405,42 @@ class CrossPairCurvesResponse(BaseModel):
 
 class ModelListResponse(BaseModel):
     models: List[ModelInfo]
+
+
+# ── Study Metadata (Save/Load) ─────────────────────────────────────────
+
+class StudyMetaRequest(BaseModel):
+    display_name: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+    is_favorite: bool = False
+
+
+class StudyMetaResponse(BaseModel):
+    display_name: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+    is_favorite: bool = False
+    saved_at: Optional[str] = None
+
+
+class StudySummaryItem(BaseModel):
+    job_id: str
+    created_at: str
+    pair: str
+    timeframe: str = ""
+    models: List[str]
+    sharpe: Optional[float] = None
+    total_return_pct: Optional[float] = None
+    win_rate: Optional[float] = None
+    max_drawdown_pct: Optional[float] = None
+    total_trades: Optional[int] = None
+    status: str = "completed"
+    study_meta: Optional[StudyMetaResponse] = None
+
+
+class StudyListResponse(BaseModel):
+    results: List[StudySummaryItem]
+    total: int = 0
+    offset: int = 0
+    limit: int = 50

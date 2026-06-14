@@ -1,4 +1,5 @@
 """Model registry and hyperparameter endpoints."""
+import json
 import os
 from fastapi import APIRouter, HTTPException, Query
 
@@ -114,6 +115,13 @@ class DeployedModelOut(BaseModel):
     tags: PyList[str] = Field(default_factory=list)
     parent_job_id: Optional[str] = None
     missing_on_disk: bool = False
+    win_rate: Optional[float] = None
+    max_drawdown: Optional[float] = None
+    total_trades: Optional[int] = None
+    sortino: Optional[float] = None
+    train_start: Optional[str] = None
+    train_end: Optional[str] = None
+    feature_count: Optional[int] = None
 
 
 class DeployedModelListResponse(BaseModel):
@@ -144,7 +152,25 @@ def list_deployed_models(
             continue
         if status and r.get("status") != status:
             continue
-        models.append(DeployedModelOut(**r))
+        out = DeployedModelOut(**r)
+        sp = r.get("snapshot_path", "")
+        if sp and os.path.isdir(sp):
+            meta_path = os.path.join(sp, "metadata.json")
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path) as fh:
+                        meta = json.load(fh)
+                    m = meta.get("metrics", {})
+                    out.win_rate = m.get("win_rate")
+                    out.max_drawdown = m.get("max_drawdown")
+                    out.total_trades = m.get("total_trades")
+                    out.sortino = m.get("sortino")
+                    out.train_start = meta.get("train_start")
+                    out.train_end = meta.get("train_end")
+                    out.feature_count = len(meta.get("feature_names") or []) or None
+                except (json.JSONDecodeError, OSError, KeyError, TypeError):
+                    pass
+        models.append(out)
     return DeployedModelListResponse(models=models)
 
 
@@ -190,6 +216,39 @@ def update_model_tags(model_id: str, req: TagUpdateRequest):
     if tags is None:
         raise HTTPException(404, f"Model {model_id} not found")
     return {"tags": tags}
+
+
+# ── Bulk operations ─────────────────────────────────────────────────
+
+class BulkRequest(BaseModel):
+    model_ids: PyList[str] = Field(..., min_length=1, max_length=50)
+
+
+
+
+
+@router.post("/deployed/bulk/delete")
+def bulk_delete_models(req: BulkRequest):
+    from api.config import settings
+    from pipeline.model_registry_disk import delete_model, get_all_deployed
+
+    rows = get_all_deployed(settings.db_full_path)
+    existing_ids = {r["id"] for r in rows}
+    missing = [mid for mid in req.model_ids if mid not in existing_ids]
+    if missing:
+        raise HTTPException(400, f"Model IDs not found: {missing}")
+
+    deleted = []
+    failures = []
+    for mid in req.model_ids:
+        ok, reason = delete_model(mid, settings.db_full_path)
+        if ok:
+            deleted.append(mid)
+        else:
+            failures.append({"model_id": mid, "reason": reason})
+    return {"status": "ok", "deleted": len(deleted), "failures": failures}
+
+
 
 
 # ────────────────────────────────────────────────────────────
@@ -467,6 +526,28 @@ def save_model_from_job(job_id: str, model_name: str = Query("", description="Mo
             "Run a new backtest to capture the trained model."
         )
 
+    # Validate the target model's own metrics — not just parent job status
+    import numpy as np
+    target_model_name = target.get("model", "?")
+    target_sharpe = target.get("sharpe")
+    target_trades = target.get("total_trades", 0)
+    if target_sharpe is None or not isinstance(target_sharpe, (int, float)) or not np.isfinite(float(target_sharpe)):
+        raise HTTPException(400,
+            f"Model '{target_model_name}' has invalid Sharpe ({target_sharpe}). "
+            "This model did not train/test correctly and cannot be saved.")
+    if target_trades is None or (isinstance(target_trades, (int, float)) and target_trades <= 0):
+        raise HTTPException(400,
+            f"Model '{target_model_name}' produced zero trades. "
+            "Only models that generated actionable signals can be saved.")
+
+    # Optional: reject models with crashed/timed-out HPO
+    hpo_status = result.get("hpo_status", {})
+    model_hpo = hpo_status.get(target_model_name)
+    if model_hpo in ("crashed", "timed_out", "no_folds"):
+        raise HTTPException(400,
+            f"Model '{target_model_name}' HPO status is '{model_hpo}'. "
+            "Models with training failures cannot be saved.")
+
     from pipeline.model_persistence import validate_snapshot
     ok, reason = validate_snapshot(snapshot_path)
     if not ok:
@@ -474,6 +555,6 @@ def save_model_from_job(job_id: str, model_name: str = Query("", description="Mo
 
     from pipeline.model_registry_disk import register_snapshot
     from api.config import settings
-    model_id = register_snapshot(snapshot_path, settings.db_full_path)
+    model_id = register_snapshot(snapshot_path, settings.db_full_path, parent_job_status=job["status"])
 
     return SaveFromJobResponse(status="ok", model_id=model_id, snapshot_path=snapshot_path)

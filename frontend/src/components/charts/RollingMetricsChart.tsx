@@ -47,49 +47,54 @@ export function RollingMetricsChart({ equityCurve, windowSize = 30 }: RollingMet
   if (data.length === 0) return null;
 
   return (
-    <ChartCard title={`Rolling Metrics (${windowSize}-bar window)`} subtitle={`${data.length} points`}>
+    <ChartCard
+      title={`Rolling Metrics (${windowSize}-bar window)`}
+      subtitle={`${data.length} points`}
+    >
       <ResponsiveContainer width="100%" height={260}>
         <LineChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#2A2E39" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-elevated)" />
           <XAxis
             dataKey="date"
-            tick={{ fill: "#787B86", fontSize: 10, fontFamily: "JetBrains Mono" }}
+            tick={{ fill: "var(--color-text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" }}
             interval="preserveStartEnd"
             minTickGap={40}
           />
           <YAxis
             yAxisId="sharpe"
-            tick={{ fill: "#089981", fontSize: 10, fontFamily: "JetBrains Mono" }}
+            tick={{
+              fill: "var(--color-accent-success)",
+              fontSize: 10,
+              fontFamily: "var(--font-mono)",
+            }}
           />
           <YAxis
             yAxisId="return"
             orientation="right"
-            tick={{ fill: "#2962FF", fontSize: 10, fontFamily: "JetBrains Mono" }}
+            tick={{ fill: "var(--color-accent)", fontSize: 10, fontFamily: "var(--font-mono)" }}
             tickFormatter={(v: number) => `${v}%`}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "#2A2E39",
-              border: "1px solid #363A45",
+              backgroundColor: "var(--color-elevated)",
+              border: "1px solid var(--color-glass-border)",
               borderRadius: 6,
               fontSize: 12,
-              fontFamily: "JetBrains Mono",
+              fontFamily: "var(--font-mono)",
             }}
-            labelStyle={{ color: "#80899F" }}
+            labelStyle={{ color: "var(--color-text-muted)" }}
             formatter={(value: number, name: string) => {
               if (value == null) return ["—", name === "sharpe" ? "Sharpe" : "Return"];
               if (name === "sharpe") return [value.toFixed(3), "Sharpe"];
               return [`${value.toFixed(2)}%`, "Return"];
             }}
           />
-          <Legend
-            wrapperStyle={{ fontSize: 11, fontFamily: "JetBrains Mono" }}
-          />
+          <Legend wrapperStyle={{ fontSize: 11, fontFamily: "var(--font-mono)" }} />
           <Line
             yAxisId="sharpe"
             type="monotone"
             dataKey="sharpe"
-            stroke="#089981"
+            stroke="var(--color-accent-success)"
             strokeWidth={1.5}
             dot={false}
             name="Sharpe"
@@ -98,7 +103,7 @@ export function RollingMetricsChart({ equityCurve, windowSize = 30 }: RollingMet
             yAxisId="return"
             type="monotone"
             dataKey="rollingReturn"
-            stroke="#2962FF"
+            stroke="var(--color-accent)"
             strokeWidth={1.5}
             dot={false}
             name="Return"

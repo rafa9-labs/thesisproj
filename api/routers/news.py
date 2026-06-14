@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 
 from api.schemas.news import NewsArticleFull, NewsArticlesResponse, NewsEventItem, NewsEventsResponse
-from news.scraper import NewsScraper, NewsArticle, _strip_html
+from news.scraper import NewsScraper, NewsArticle, _strip_html, _highlight_sentiment_phrases
 
 logger = logging.getLogger(__name__)
 
@@ -30,16 +30,23 @@ def news_status():
             except Exception:
                 pass
 
+    finbert_available = False
+    try:
+        from transformers import pipeline
+        finbert_available = True
+    except ImportError:
+        pass
+
     return {
         "sentiment_backend": sentiment_backend,
         "cached_articles": articles,
-        "event_types": ["NFP", "FOMC", "CPI", "GDP", "Retail_Sales", "PMI", "ECB_Rate", "BOE_Rate"],
+        "event_types": ["NFP", "FOMC", "CPI", "GDP", "Retail_Sales", "PMI", "ECB_Rate", "BOE_Rate", "BOJ_Rate"],
         "features": {
             "vader_compound": True,
             "event_flags": True,
             "news_volume_windows": [6, 24],
         },
-        "finbert_available": False,
+        "finbert_available": finbert_available,
     }
 
 
@@ -87,7 +94,7 @@ def get_news_events(
                 NewsEventItem(
                     time=ev_time,
                     event=ev["event"],
-                    currency="USD",
+                    currency=ev.get("currency", "USD"),
                     impact=impact_val,
                 )
             )
@@ -133,11 +140,18 @@ def get_news_articles(
         scored = vader_analyzer.score_articles(articles)
 
         result = []
+        seen_urls: set = set()
         for article, s in sorted(scored, key=lambda x: abs(x[1].score), reverse=True):
+            url_key = (article.url or "").strip().rstrip("/")
+            if url_key and url_key in seen_urls:
+                continue
+            if url_key:
+                seen_urls.add(url_key)
+
             score = round(s.score, 4)
             result.append(NewsArticleFull(
                 title=article.title[:200],
-                body=_strip_html(article.body)[:500],
+                body=_strip_html(article.body)[:1200],
                 source=article.source,
                 url=article.url or "",
                 timestamp=article.timestamp.isoformat() if hasattr(article.timestamp, "isoformat") else str(article.timestamp),
@@ -145,6 +159,7 @@ def get_news_articles(
                 sentiment_score=score,
                 summary=article.summary,
                 bias=NewsArticle.bias_label(score),
+                highlighted_body=article.highlighted_body if hasattr(article, "highlighted_body") else None,
             ))
 
         total = len(result)
@@ -209,10 +224,17 @@ def _build_pair_data(pair: str, score: float, mag: float, count: int, cache_stat
     }
 
 
-def _format_article(article, score: float, tier: int | None = None) -> dict:
+def _format_article(
+    article,
+    score: float,
+    tier: int | None = None,
+    llm_sentiment: float | None = None,
+    llm_confidence: float | None = None,
+) -> dict:
+    hl_body = article.highlighted_body if hasattr(article, "highlighted_body") else None
     d = {
         "title": article.title[:120],
-        "body": _strip_html(article.body)[:250],
+        "body": _strip_html(article.body)[:1200],
         "source": article.source,
         "url": article.url or "",
         "pair_tags": article.pair_tags or [],
@@ -220,14 +242,20 @@ def _format_article(article, score: float, tier: int | None = None) -> dict:
         "summary": article.summary,
         "bias": NewsArticle.bias_label(score),
         "timestamp": article.timestamp.isoformat() if hasattr(article.timestamp, "isoformat") else str(article.timestamp)[:26],
+        "highlighted_body": hl_body,
     }
     if tier is not None:
         d["relevance_tier"] = tier
+    if llm_sentiment is not None:
+        d["llm_sentiment"] = llm_sentiment
+    if llm_confidence is not None:
+        d["llm_confidence"] = llm_confidence
     return d
 
 
 @router.get("/sentiment/live")
 def get_live_sentiment(
+    response: Response,
     pair: str = Query("EURUSD", description="Currency pair for sentiment analysis"),
 ):
     """Get live sentiment data for all major currency pairs.
@@ -244,7 +272,7 @@ def get_live_sentiment(
     within each tier. Limited to 20 articles.
     """
     pair_clean = pair.upper().replace("/", "").replace("-", "")
-    cache_max_age = 6.0
+    cache_max_age = 12.0  # hours — increased from 6h for better UX
 
     try:
         from news.sentiment import SentimentAnalyzer
@@ -297,7 +325,91 @@ def get_live_sentiment(
         else:
             pairs_data["OTHER"] = _build_pair_data("OTHER", 0.0, 0.0, 0, {})
 
-        # ―― Top articles: tier + impact sorted, limit 20 ──
+        # ―― LLM scoring (requested pair only, expensive) ――
+        # Score ONCE and build per-article LLM lookup map for use in top_articles
+        llm_available = False
+        llm_score_map: dict = {}
+        llm_dir = 0.0
+        llm_conf = 0.0
+        llm_vol = 0.3
+        llm_currencies: list = []
+        llm_scored_any = False
+        llm_backend_name = "vader"
+        llm_model_name = "vader"
+
+        if selected_filtered is not None:
+            try:
+                from pipeline.llm.sentiment import LLMSentimentEngine
+                from config import PIPELINE_CONSTANTS
+                llm_config = {
+                    "llm_sentiment_enabled": True,
+                    "llm_backend": PIPELINE_CONSTANTS.get("llm_backend", "ollama"),
+                    "llm_model": PIPELINE_CONSTANTS.get("llm_model", "llama3"),
+                    "llm_api_key": PIPELINE_CONSTANTS.get("llm_api_key", ""),
+                    "llm_weight": 0.55,
+                    "llm_ollama_url": PIPELINE_CONSTANTS.get("llm_ollama_url", "http://localhost:11434"),
+                }
+                llm_backend_name = llm_config["llm_backend"]
+                llm_model_name = llm_config["llm_model"]
+                engine = LLMSentimentEngine(config=llm_config)
+                try:
+                    llm_articles = selected_filtered[:10] if len(selected_filtered) >= 10 else selected_filtered
+                    scored_llm = engine.score_articles(llm_articles, pair=pair_clean)
+
+                    dirs = []
+                    confs = []
+                    vols = []
+                    for article, scores in scored_llm:
+                        ahash = article.dedup_hash
+                        llm_score_map[ahash] = scores
+                        d = scores.get("direction", 0.0)
+                        c = scores.get("confidence", 0.0)
+                        v = scores.get("volatility", 0.3)
+                        dirs.append(d)
+                        confs.append(c)
+                        vols.append(v)
+                        if not scores.get("fallback", False):
+                            llm_scored_any = True
+
+                    if dirs:
+                        llm_dir = float(sum(dirs) / len(dirs))
+                        llm_conf = float(sum(confs) / len(confs))
+                        llm_vol = float(sum(vols) / len(vols))
+                        llm_currencies = sorted(set(
+                            c for _, s in scored_llm
+                            for c in s.get("currencies_affected", [])
+                        ))
+                        llm_available = llm_scored_any
+                finally:
+                    engine.close()
+            except Exception:
+                logger.exception("LLM scoring failed")
+                pairs_data[pair_clean]["llm_sentiment"] = None
+
+        # ―― Build pair-level LLM stats ――
+        if llm_score_map:
+            llm_w = 0.55
+            vader_avg = pairs_data[pair_clean]["vader_sentiment"]
+            vader_contrib = round((1 - llm_w) * vader_avg, 4)
+            llm_contrib = round(llm_w * llm_dir, 4)
+            blended_llm = round(vader_contrib + llm_contrib, 4)
+            recommended_position_llm = max(-1.0, min(1.0, blended_llm))
+
+            pairs_data[pair_clean].update({
+                "llm_sentiment": round(llm_dir, 4),
+                "llm_confidence": round(llm_conf, 4),
+                "llm_volatility": round(llm_vol, 4),
+                "blended_sentiment": blended_llm,
+                "llm_weight": llm_w,
+                "vader_contribution": vader_contrib,
+                "llm_contribution": llm_contrib,
+                "currencies_affected": llm_currencies,
+                "recommended_position": round(recommended_position_llm, 4),
+                "position_confidence": round(abs(recommended_position_llm), 4),
+            })
+
+        # ―― Top articles: tier + impact sorted, limit 20 ――
+        # LLM scores are attached per-article from the lookup map
         top_articles = []
         tier_counts = {"exact": 0, "partial": 0, "other": 0}
         if selected_filtered:
@@ -314,7 +426,18 @@ def get_live_sentiment(
                 half_life = 5.0 if abs(result.score) >= 0.4 else 3.0
                 rw = SentimentAnalyzer.recency_weight(article.timestamp, half_life)
                 impact = abs(result.score) * result.magnitude * rw
-                ranked.append((tier, -impact, _format_article(article, round(result.score, 4), tier)))
+                llm_scores = llm_score_map.get(article.dedup_hash)
+                ranked.append((
+                    tier,
+                    -impact,
+                    _format_article(
+                        article,
+                        round(result.score, 4),
+                        tier,
+                        llm_sentiment=round(llm_scores.get("direction", 0.0), 4) if llm_scores else None,
+                        llm_confidence=round(llm_scores.get("confidence", 0.0), 4) if llm_scores else None,
+                    ),
+                ))
             ranked.sort(key=lambda x: (x[0], x[1]))
             top_articles = [item[2] for item in ranked[:20]]
 
@@ -325,58 +448,14 @@ def get_live_sentiment(
             "pairs": pairs_data,
             "top_articles": top_articles,
             "article_count_by_tier": article_count_by_tier,
-            "backend": "vader",
-            "model": "vader",
+            "backend": llm_backend_name if llm_score_map else "vader",
+            "model": llm_model_name if llm_score_map else "vader",
             "from_cache": False,
             "status": status,
+            "llm_available": llm_available,
         }
 
-        # ―― LLM scoring (requested pair only, expensive) ――
-        if selected_filtered is not None:
-            try:
-                from pipeline.llm.sentiment import LLMSentimentEngine
-                from config import PIPELINE_CONSTANTS
-                llm_config = {
-                    "llm_sentiment_enabled": True,
-                    "llm_backend": PIPELINE_CONSTANTS.get("llm_backend", "ollama"),
-                    "llm_model": PIPELINE_CONSTANTS.get("llm_model", "llama3"),
-                    "llm_api_key": PIPELINE_CONSTANTS.get("llm_api_key", ""),
-                    "llm_weight": 0.55,
-                    "llm_ollama_url": PIPELINE_CONSTANTS.get("llm_ollama_url", "http://localhost:11434"),
-                }
-                engine = LLMSentimentEngine(config=llm_config)
-                try:
-                    llm_articles = selected_filtered[:10] if len(selected_filtered) >= 10 else selected_filtered
-                    scored_llm = engine.score_articles(llm_articles, pair=pair_clean)
-                    live = engine.get_live_sentiment(pair_clean, llm_articles)
-                finally:
-                    engine.close()
-
-                llm_w = 0.55
-                llm_dir = live.get("direction", 0.0)
-                vader_avg = pairs_data[pair_clean]["vader_sentiment"]
-                vader_contrib = round((1 - llm_w) * vader_avg, 4)
-                llm_contrib = round(llm_w * llm_dir, 4)
-                blended_llm = round(vader_contrib + llm_contrib, 4)
-                recommended_position_llm = max(-1.0, min(1.0, blended_llm))
-
-                pairs_data[pair_clean].update({
-                    "llm_sentiment": round(llm_dir, 4),
-                    "llm_confidence": round(live.get("confidence", 0.0), 4),
-                    "llm_volatility": round(live.get("volatility", 0.3), 4),
-                    "blended_sentiment": blended_llm,
-                    "llm_weight": llm_w,
-                    "vader_contribution": vader_contrib,
-                    "llm_contribution": llm_contrib,
-                    "currencies_affected": live.get("currencies_affected", []),
-                    "recommended_position": round(recommended_position_llm, 4),
-                    "position_confidence": round(abs(recommended_position_llm), 4),
-                })
-                result["backend"] = llm_config["llm_backend"]
-                result["model"] = llm_config["llm_model"]
-            except Exception:
-                pairs_data[pair_clean]["llm_sentiment"] = None
-
+        response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=3600"
         return result
     except Exception as e:
         logger.exception("Failed to compute live sentiment")

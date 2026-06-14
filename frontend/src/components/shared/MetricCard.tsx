@@ -29,7 +29,14 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
 
   return (
     <svg width={64} height={20} viewBox={`0 0 64 20`} style={{ display: "block" }}>
-      <path d={path} fill="none" stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={path}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -57,27 +64,21 @@ export function MetricCard({
         : "var(--color-text-secondary)";
 
   return (
-    <div
-      className="flex flex-col gap-2 rounded-sm border p-5 transition-all duration-300 hover:border-[var(--color-border-active)]"
-      style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
-      }}
-    >
+    <div className="flex flex-col gap-2 rounded-sm border border-(--color-glass-border) bg-(--color-glass) p-5 backdrop-blur-[12px] transition-all duration-300 hover:border-[var(--color-border-active)]">
       <div className="flex items-center justify-between">
-        <span
-          className="text-[11px] font-medium uppercase tracking-[0.12em]"
-          style={{ color: "var(--color-text-muted)" }}
-        >
+        <span className="text-[11px] font-medium tracking-[0.12em] text-(--color-text-muted) uppercase">
           {label}
         </span>
-        {icon && <span style={{ color: "var(--color-text-muted)", opacity: 0.6 }}>{icon}</span>}
+        {icon && (
+          <span className="text-(--color-text-muted)" style={{ opacity: 0.6 }}>
+            {icon}
+          </span>
+        )}
       </div>
       <div className="flex items-end justify-between gap-2">
         <span
-          className="text-2xl font-semibold"
-          style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)", letterSpacing: "-0.02em" }}
+          className="font-mono text-2xl font-semibold text-(--color-text-primary)"
+          style={{ letterSpacing: "-0.02em" }}
         >
           {value ?? "—"}
         </span>

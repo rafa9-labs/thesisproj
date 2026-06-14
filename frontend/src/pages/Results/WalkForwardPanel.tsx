@@ -81,21 +81,23 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
     }
   }, [data, viewMode]);
 
-  const viewLabel = viewMode === "sharpe" ? "Test Sharpe" : viewMode === "return" ? "Return %" : "Signal Gate %";
-  const viewLabel2 = viewMode === "sharpe" ? "Train Sharpe" : viewMode === "return" ? "B&H Return %" : null;
+  const viewLabel =
+    viewMode === "sharpe" ? "Test Sharpe" : viewMode === "return" ? "Return %" : "Signal Gate %";
+  const viewLabel2 =
+    viewMode === "sharpe" ? "Train Sharpe" : viewMode === "return" ? "B&H Return %" : null;
 
   const hovered = hoveredIdx !== null ? data[hoveredIdx] : null;
 
   if (!data.length) {
     return (
-      <div className="rounded-sm border p-5" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
-        <div className="flex items-center gap-2 mb-4">
-          <Eye size={16} style={{ color: "var(--color-text-muted)" }} />
-          <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--color-text-secondary)" }}>
+      <div className="rounded-sm border border-(--color-glass-border) bg-(--color-glass) p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <Eye size={16} className="text-(--color-text-muted)" />
+          <h3 className="text-xs font-semibold tracking-[0.1em] text-(--color-text-secondary) uppercase">
             Walk-Forward Transparency
           </h3>
         </div>
-        <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+        <p className="text-xs text-(--color-text-muted)">
           No walk-forward period data available for {modelName}.
         </p>
       </div>
@@ -103,14 +105,14 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
   }
 
   return (
-    <div className="rounded-sm border p-5" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}>
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-sm border border-(--color-glass-border) bg-(--color-glass) p-5">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Eye size={16} style={{ color: "var(--color-brand)" }} />
-          <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--color-text-secondary)" }}>
+          <Eye size={16} className="text-(--color-brand)" />
+          <h3 className="text-xs font-semibold tracking-[0.1em] text-(--color-text-secondary) uppercase">
             Walk-Forward Transparency
           </h3>
-          <span className="text-[10px] font-mono" style={{ color: "var(--color-text-muted)" }}>
+          <span className="font-mono text-[10px] text-(--color-text-muted)">
             {data.length} periods
           </span>
         </div>
@@ -119,12 +121,11 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
             <button
               key={m}
               onClick={() => setViewMode(m)}
-              className="rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wider transition-all"
+              className="cursor-pointer rounded px-2 py-1 text-[10px] font-medium tracking-wider uppercase transition-all"
               style={{
                 backgroundColor: viewMode === m ? "var(--color-brand-glow)" : "transparent",
                 color: viewMode === m ? "var(--color-brand)" : "var(--color-text-muted)",
                 border: viewMode === m ? "1px solid var(--color-brand)" : "1px solid transparent",
-                cursor: "pointer",
               }}
             >
               {m === "sharpe" ? "Sharpe" : m === "return" ? "Return" : "Signals"}
@@ -135,29 +136,41 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
 
       <ChartCard title="" subtitle="" height={240}>
         <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={barData} margin={{ top: 5, right: 10, left: -10, bottom: 30 }} onMouseLeave={() => setHoveredIdx(null)}>
+          <BarChart
+            data={barData}
+            margin={{ top: 5, right: 10, left: -10, bottom: 30 }}
+            onMouseLeave={() => setHoveredIdx(null)}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-glass-border)" />
             <XAxis
               dataKey="label"
-              tick={{ fill: "var(--color-text-muted)", fontSize: 9, fontFamily: "JetBrains Mono" }}
+              tick={{
+                fill: "var(--color-text-muted)",
+                fontSize: 9,
+                fontFamily: "var(--font-mono)",
+              }}
               angle={-45}
               textAnchor="end"
               height={50}
             />
             <YAxis
-              tick={{ fill: "var(--color-text-muted)", fontSize: 10, fontFamily: "JetBrains Mono" }}
-              tickFormatter={(v: number) => viewMode === "signals" ? `${v}%` : `${v}`}
+              tick={{
+                fill: "var(--color-text-muted)",
+                fontSize: 10,
+                fontFamily: "var(--font-mono)",
+              }}
+              tickFormatter={(v: number) => (viewMode === "signals" ? `${v}%` : `${v}`)}
             />
             <ReferenceLine y={0} stroke="var(--color-text-muted)" strokeDasharray="3 3" />
             <Tooltip
               contentStyle={{
                 backgroundColor: "var(--color-surface)",
-                border: "1px solid #363A45",
+                border: "1px solid var(--color-glass-border)",
                 borderRadius: 6,
                 fontSize: 11,
-                fontFamily: "JetBrains Mono",
+                fontFamily: "var(--font-mono)",
               }}
-              labelStyle={{ color: "#80899F" }}
+              labelStyle={{ color: "var(--color-text-muted)" }}
               formatter={(value: number | null, name: string) => {
                 if (value === null || value === undefined) return ["—", name];
                 if (viewMode === "signals") return [`${value.toFixed(1)}%`, name];
@@ -203,35 +216,49 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
       {/* Regime strip */}
       {data.some((d) => d.pctSideways != null || d.pctTrend != null || d.pctVolatile != null) && (
         <div className="mt-3">
-          <span className="text-[10px] uppercase tracking-[0.06em] block mb-1.5" style={{ color: "var(--color-text-muted)" }}>
+          <span className="mb-1.5 block text-[10px] tracking-[0.06em] text-(--color-text-muted) uppercase">
             Regime Distribution
           </span>
-          <div className="flex gap-0.5" style={{ height: 10 }}>
+          <div className="flex h-2.5 gap-0.5">
             {data.map((d, i) => (
               <div
                 key={i}
-                className="flex-1 rounded-sm overflow-hidden flex"
-                style={{ minWidth: 4 }}
+                className="flex min-w-1 flex-1 overflow-hidden rounded-sm"
                 title={`${d.label}: sideways=${formatPercent(d.pctSideways)} trend=${formatPercent(d.pctTrend)} volatile=${formatPercent(d.pctVolatile)}`}
               >
-                <div style={{ width: `${(d.pctSideways ?? 0) * 100}%`, backgroundColor: REGIME_COLORS.sideways }} />
-                <div style={{ width: `${(d.pctTrend ?? 0) * 100}%`, backgroundColor: REGIME_COLORS.trend }} />
-                <div style={{ width: `${(d.pctVolatile ?? 0) * 100}%`, backgroundColor: REGIME_COLORS.volatile }} />
+                <div
+                  style={{
+                    width: `${(d.pctSideways ?? 0) * 100}%`,
+                    backgroundColor: REGIME_COLORS.sideways,
+                  }}
+                />
+                <div
+                  style={{
+                    width: `${(d.pctTrend ?? 0) * 100}%`,
+                    backgroundColor: REGIME_COLORS.trend,
+                  }}
+                />
+                <div
+                  style={{
+                    width: `${(d.pctVolatile ?? 0) * 100}%`,
+                    backgroundColor: REGIME_COLORS.volatile,
+                  }}
+                />
               </div>
             ))}
           </div>
-          <div className="flex items-center gap-4 mt-1.5">
+          <div className="mt-1.5 flex items-center gap-4">
             <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: REGIME_COLORS.sideways }} />
-              <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Sideways</span>
+              <div className="h-2 w-2 rounded-full bg-(--color-accent-classical)" />
+              <span className="text-[10px] text-(--color-text-muted)">Sideways</span>
             </div>
             <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: REGIME_COLORS.trend }} />
-              <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Trending</span>
+              <div className="h-2 w-2 rounded-full bg-[#22c55e]" />
+              <span className="text-[10px] text-(--color-text-muted)">Trending</span>
             </div>
             <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: REGIME_COLORS.volatile }} />
-              <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Volatile</span>
+              <div className="h-2 w-2 rounded-full bg-[#f97316]" />
+              <span className="text-[10px] text-(--color-text-muted)">Volatile</span>
             </div>
           </div>
         </div>
@@ -240,57 +267,72 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
       {/* Hovered period detail */}
       {hovered && (
         <div
-          className="mt-3 rounded-sm p-3 text-xs"
-          style={{ backgroundColor: "var(--color-elevated)", fontFamily: "var(--font-mono)" }}
+          className="mt-3 rounded-sm bg-(--color-elevated) p-3 font-mono text-xs"
           onMouseLeave={() => setHoveredIdx(null)}
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[10px] tracking-[0.06em] text-(--color-text-muted) uppercase">
               {hovered.periodStart?.slice(0, 10)} → {hovered.periodEnd?.slice(0, 10)}
             </span>
             {hovered.hasTrain && (
-              <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+              <span className="text-[10px] text-(--color-text-muted)">
                 Train: {hovered.trainStart?.slice(0, 10)} → {hovered.trainEnd?.slice(0, 10)}
               </span>
             )}
           </div>
           <div className="grid grid-cols-4 gap-3">
             <div>
-              <span className="text-[10px] block" style={{ color: "var(--color-text-muted)" }}>Test Sharpe</span>
-              <span className="font-semibold" style={{ color: (hovered.testSharpe ?? 0) >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)" }}>
+              <span className="block text-[10px] text-(--color-text-muted)">Test Sharpe</span>
+              <span
+                className="font-semibold"
+                style={{
+                  color:
+                    (hovered.testSharpe ?? 0) >= 0
+                      ? "var(--color-accent-success)"
+                      : "var(--color-accent-danger)",
+                }}
+              >
                 {formatMetric(hovered.testSharpe)}
               </span>
             </div>
             <div>
-              <span className="text-[10px] block" style={{ color: "var(--color-text-muted)" }}>Train Sharpe</span>
-              <span className="font-semibold" style={{ color: "var(--color-text-primary)" }}>
+              <span className="block text-[10px] text-(--color-text-muted)">Train Sharpe</span>
+              <span className="font-semibold text-(--color-text-primary)">
                 {formatMetric(hovered.trainSharpe)}
               </span>
             </div>
             <div>
-              <span className="text-[10px] block" style={{ color: "var(--color-text-muted)" }}>Trades</span>
-              <span className="font-semibold" style={{ color: "var(--color-text-primary)" }}>{hovered.trades}</span>
+              <span className="block text-[10px] text-(--color-text-muted)">Trades</span>
+              <span className="font-semibold text-(--color-text-primary)">{hovered.trades}</span>
             </div>
             <div>
-              <span className="text-[10px] block" style={{ color: "var(--color-text-muted)" }}>Signals</span>
-              <span className="font-semibold" style={{ color: "var(--color-text-primary)" }}>
+              <span className="block text-[10px] text-(--color-text-muted)">Signals</span>
+              <span className="font-semibold text-(--color-text-primary)">
                 {hovered.signalsGated}/{hovered.signalsRaw}
               </span>
             </div>
           </div>
-          {(hovered.pctSideways != null || hovered.pctTrend != null || hovered.pctVolatile != null) && (
-            <div className="grid grid-cols-3 gap-3 mt-2 pt-2" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
+          {(hovered.pctSideways != null ||
+            hovered.pctTrend != null ||
+            hovered.pctVolatile != null) && (
+            <div className="mt-2 grid grid-cols-3 gap-3 border-t border-(--color-glass-border) pt-2">
               <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: REGIME_COLORS.sideways }} />
-                <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Sideways {formatPercent(hovered.pctSideways)}</span>
+                <div className="h-1.5 w-1.5 rounded-full bg-(--color-accent-classical)" />
+                <span className="text-[10px] text-(--color-text-muted)">
+                  Sideways {formatPercent(hovered.pctSideways)}
+                </span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: REGIME_COLORS.trend }} />
-                <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Trend {formatPercent(hovered.pctTrend)}</span>
+                <div className="h-1.5 w-1.5 rounded-full bg-[#22c55e]" />
+                <span className="text-[10px] text-(--color-text-muted)">
+                  Trend {formatPercent(hovered.pctTrend)}
+                </span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: REGIME_COLORS.volatile }} />
-                <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>Volatile {formatPercent(hovered.pctVolatile)}</span>
+                <div className="h-1.5 w-1.5 rounded-full bg-[#f97316]" />
+                <span className="text-[10px] text-(--color-text-muted)">
+                  Volatile {formatPercent(hovered.pctVolatile)}
+                </span>
               </div>
             </div>
           )}
@@ -300,35 +342,35 @@ export function WalkForwardPanel({ periods, modelName }: Props) {
       {/* Summary stats */}
       {!hovered && data.length > 0 && (
         <div className="mt-3 grid grid-cols-4 gap-2">
-          <div className="rounded-sm p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
-            <span className="text-[10px] uppercase tracking-[0.06em] block" style={{ color: "var(--color-text-muted)" }}>
+          <div className="rounded-sm bg-(--color-elevated) p-2">
+            <span className="block text-[10px] tracking-[0.06em] text-(--color-text-muted) uppercase">
               Avg Sharpe
             </span>
-            <span className="text-sm font-semibold" style={{ fontFamily: "var(--font-mono)" }}>
+            <span className="font-mono text-sm font-semibold">
               {formatMetric(data.reduce((s, d) => s + (d.testSharpe ?? 0), 0) / data.length)}
             </span>
           </div>
-          <div className="rounded-sm p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
-            <span className="text-[10px] uppercase tracking-[0.06em] block" style={{ color: "var(--color-text-muted)" }}>
+          <div className="rounded-sm bg-(--color-elevated) p-2">
+            <span className="block text-[10px] tracking-[0.06em] text-(--color-text-muted) uppercase">
               Total Trades
             </span>
-            <span className="text-sm font-semibold" style={{ fontFamily: "var(--font-mono)" }}>
+            <span className="font-mono text-sm font-semibold">
               {data.reduce((s, d) => s + d.trades, 0)}
             </span>
           </div>
-          <div className="rounded-sm p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
-            <span className="text-[10px] uppercase tracking-[0.06em] block" style={{ color: "var(--color-text-muted)" }}>
+          <div className="rounded-sm bg-(--color-elevated) p-2">
+            <span className="block text-[10px] tracking-[0.06em] text-(--color-text-muted) uppercase">
               Gate Rate
             </span>
-            <span className="text-sm font-semibold" style={{ fontFamily: "var(--font-mono)" }}>
+            <span className="font-mono text-sm font-semibold">
               {formatPercent(data.reduce((s, d) => s + d.signalRatio, 0) / data.length)}
             </span>
           </div>
-          <div className="rounded-sm p-2" style={{ backgroundColor: "var(--color-elevated)" }}>
-            <span className="text-[10px] uppercase tracking-[0.06em] block" style={{ color: "var(--color-text-muted)" }}>
+          <div className="rounded-sm bg-(--color-elevated) p-2">
+            <span className="block text-[10px] tracking-[0.06em] text-(--color-text-muted) uppercase">
               Pos Periods
             </span>
-            <span className="text-sm font-semibold" style={{ fontFamily: "var(--font-mono)" }}>
+            <span className="font-mono text-sm font-semibold">
               {data.filter((d) => (d.testSharpe ?? 0) > 0).length}/{data.length}
             </span>
           </div>

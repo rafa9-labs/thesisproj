@@ -1,134 +1,116 @@
-import { Search, Bell, User, Info } from "lucide-react";
-import { useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Search, Bell, HelpCircle, BookOpen, ChevronDown } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import { AboutDialog } from "@/components/shared/AboutDialog";
-import { layout } from "@/lib/tokens";
-
-const routeTitles: Record<string, string> = {
-  "": "Dashboard",
-  "backtest": "Backtest Setup",
-  "monitor": "Monitor",
-  "results": "Results",
-  "models": "Models",
-  "trading": "Trading",
-  "news": "News",
-  "settings": "Settings",
-};
-
-function usePageTitle(): string {
-  const location = useLocation();
-  const segment = location.pathname.split("/").filter(Boolean)[0] ?? "";
-  return routeTitles[segment] ?? segment;
-}
+import { CommandPalette } from "./CommandPalette";
 
 export function TopBar() {
   const [aboutOpen, setAboutOpen] = useState(false);
-  const title = usePageTitle();
-  const unreadCount = 0;
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const unreadCount = 3;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        setPaletteOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
-    <header
-      className="flex flex-col"
-      style={{
-        borderBottom: "1px solid rgba(255,255,255,0.04)",
-        backgroundColor: "var(--color-surface)",
-        flexShrink: 0,
-        position: "relative",
-        zIndex: 20,
-      }}
-    >
-      <div
-        className="flex items-center justify-between px-6"
-        style={{ height: layout.headerHeight }}
-      >
-        {/* Left: page title */}
-        <span
-          className="text-[13px] font-semibold uppercase tracking-[0.1em]"
-          style={{
-            fontFamily: "var(--font-sans)",
-            color: "var(--color-text-primary)",
-          }}
-        >
-          {title}
-        </span>
+    <>
+      <header className="sticky top-0 z-50 flex h-16 shrink-0 items-center border-b border-(--color-glass-border) bg-(--color-app)/80 px-6 backdrop-blur-md">
+        {/* Left: Search bar */}
+        <div className="relative w-48 sm:w-56 lg:w-96">
+          <Search
+            size={14}
+            className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-(--color-text-muted)"
+          />
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              if (!paletteOpen) setPaletteOpen(true);
+            }}
+            onFocus={() => setPaletteOpen(true)}
+            onBlur={() => setTimeout(() => setPaletteOpen(false), 200)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                searchRef.current?.blur();
+                setPaletteOpen(false);
+              }
+            }}
+            placeholder="Search assets, models, or settings..."
+            aria-label="Global search"
+            className="w-full rounded-md border border-(--color-glass-border) bg-(--color-input-bg) py-1.5 pr-16 pl-9 text-xs text-(--color-text-primary) transition outline-none placeholder:text-(--color-text-dim) focus:border-(--color-border-active)"
+          />
+          <kbd className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-(--color-glass-border) px-1.5 py-0.5 text-[9px] font-medium text-(--color-text-muted)">
+            Ctrl+K
+          </kbd>
+          <CommandPalette
+            open={paletteOpen}
+            onClose={() => {
+              setPaletteOpen(false);
+              setQuery("");
+            }}
+            query={query}
+          />
+        </div>
 
-        {/* Right: search + actions */}
-        <div className="flex items-center gap-3">
-          {/* Search bar — prominent, wider */}
+        <div className="flex-1" />
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2 sm:gap-4">
           <button
-            className="flex items-center gap-2.5 rounded-md border px-4 py-1.5 transition-all duration-200 hover:border-[var(--color-border-active)]"
-            style={{
-              width: 260,
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "var(--color-glass)",
-              color: "var(--color-text-muted)",
-              fontSize: 12,
-              fontWeight: 400,
-            }}
-            onClick={() => {
-              // TODO: wire up global command palette
-            }}
+            onClick={() => setAboutOpen(true)}
+            aria-label="Library"
+            className="rounded-full border border-(--color-glass-border) p-1.5 text-(--color-text-secondary) transition hover:border-(--color-border-active) hover:text-(--color-text-primary)"
           >
-            <Search size={13} strokeWidth={1.5} style={{ flexShrink: 0 }} />
-            <span className="flex-1 text-left">Search…</span>
-            <span
-              className="rounded px-1.5 text-[10px]"
-              style={{
-                backgroundColor: "rgba(0,229,255,0.08)",
-                border: "1px solid rgba(0,229,255,0.15)",
-                color: "var(--color-brand)",
-                fontFamily: "var(--font-mono)",
-                flexShrink: 0,
-              }}
-            >
-              Ctrl+K
-            </span>
+            <BookOpen size={16} strokeWidth={1.75} />
           </button>
 
-          {/* Notifications */}
           <button
-            className="relative flex items-center justify-center rounded-md p-1.5 transition-colors duration-200 hover:bg-[var(--color-glass-hover)]"
-            style={{ color: "var(--color-text-muted)" }}
-            title="Notifications"
+            aria-label="Notifications"
+            className="relative rounded-full border border-(--color-glass-border) p-1.5 text-(--color-text-secondary) transition hover:border-(--color-border-active) hover:text-(--color-text-primary)"
           >
-            <Bell size={16} strokeWidth={1.5} />
+            <Bell size={16} strokeWidth={1.75} />
             {unreadCount > 0 && (
               <span
-                className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
-                style={{
-                  backgroundColor: "var(--color-brand)",
-                  boxShadow: "0 0 6px rgba(0,229,255,0.5)",
-                }}
+                className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-(--color-brand)"
+                style={{ boxShadow: "0 0 8px rgba(0,229,255,0.6)" }}
               />
             )}
           </button>
 
-          {/* About */}
           <button
-            className="flex items-center justify-center rounded-md p-1.5 transition-colors duration-200 hover:bg-[var(--color-glass-hover)]"
-            style={{ color: "var(--color-text-muted)" }}
-            title="About KodaQuant"
             onClick={() => setAboutOpen(true)}
+            aria-label="Help"
+            className="rounded-full border border-(--color-glass-border) p-1.5 text-(--color-text-secondary) transition hover:border-(--color-border-active) hover:text-(--color-text-primary)"
           >
-            <Info size={16} strokeWidth={1.5} />
+            <HelpCircle size={16} strokeWidth={1.75} />
           </button>
 
-          {/* User avatar */}
-          <button
-            className="flex items-center justify-center rounded-full border p-1 transition-all duration-200 hover:border-[var(--color-border-active)]"
-            style={{
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "var(--color-glass)",
-              color: "var(--color-text-muted)",
-            }}
-            title="User menu"
-          >
-            <User size={14} strokeWidth={1.5} />
+          <button className="hidden items-center gap-1.5 rounded-full border border-(--color-glass-border) py-1 pr-2 pl-1 transition hover:border-(--color-border-active) sm:flex">
+            <span
+              className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-(--color-text-inverse)"
+              style={{
+                background: "linear-gradient(135deg, var(--color-brand), #a78bfa)",
+              }}
+            >
+              KQ
+            </span>
+            <ChevronDown size={12} className="text-(--color-text-muted)" />
           </button>
         </div>
-      </div>
+      </header>
 
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
-    </header>
+    </>
   );
 }

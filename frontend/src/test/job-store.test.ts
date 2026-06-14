@@ -30,7 +30,13 @@ describe("useJobStore", () => {
 
   it("handles job_started event with total_work", () => {
     useJobStore.getState().startJob("job-1", "EURUSD", ["xgboost"]);
-    const event: WsEvent = { event: "job_started", job_id: "job-1", pair: "EURUSD", models: ["xgboost"], total_work: 66 };
+    const event: WsEvent = {
+      event: "job_started",
+      job_id: "job-1",
+      pair: "EURUSD",
+      models: ["xgboost"],
+      total_work: 66,
+    };
     useJobStore.getState().handleWsEvent(event);
     const job = useJobStore.getState().getJob("job-1");
     expect(job!.status).toBe("running");
@@ -39,8 +45,19 @@ describe("useJobStore", () => {
 
   it("handles model_training starting event", () => {
     useJobStore.getState().startJob("job-1", "EURUSD", ["xgboost", "lstm"]);
-    useJobStore.getState().handleWsEvent({ event: "job_started", job_id: "job-1", pair: "EURUSD", models: ["xgboost", "lstm"], total_work: 0 });
-    useJobStore.getState().handleWsEvent({ event: "model_training", job_id: "job-1", model: "xgboost", status: "starting" });
+    useJobStore.getState().handleWsEvent({
+      event: "job_started",
+      job_id: "job-1",
+      pair: "EURUSD",
+      models: ["xgboost", "lstm"],
+      total_work: 0,
+    });
+    useJobStore.getState().handleWsEvent({
+      event: "model_training",
+      job_id: "job-1",
+      model: "xgboost",
+      status: "starting",
+    });
     const job = useJobStore.getState().getJob("job-1");
     expect(job!.currentModel).toBe("xgboost");
     expect(job!.progressText).toContain("xgboost");
@@ -48,9 +65,22 @@ describe("useJobStore", () => {
 
   it("handles model_phase event", () => {
     useJobStore.getState().startJob("job-1", "EURUSD", ["xgboost"]);
-    useJobStore.getState().handleWsEvent({ event: "job_started", job_id: "job-1", pair: "EURUSD", models: ["xgboost"], total_work: 33 });
-    useJobStore.getState().handleWsEvent({ event: "model_training", job_id: "job-1", model: "xgboost", status: "starting" });
-    useJobStore.getState().handleWsEvent({ event: "model_phase", job_id: "job-1", model: "xgboost", phase: "hpo" });
+    useJobStore.getState().handleWsEvent({
+      event: "job_started",
+      job_id: "job-1",
+      pair: "EURUSD",
+      models: ["xgboost"],
+      total_work: 33,
+    });
+    useJobStore.getState().handleWsEvent({
+      event: "model_training",
+      job_id: "job-1",
+      model: "xgboost",
+      status: "starting",
+    });
+    useJobStore
+      .getState()
+      .handleWsEvent({ event: "model_phase", job_id: "job-1", model: "xgboost", phase: "hpo" });
     const job = useJobStore.getState().getJob("job-1");
     const mp = job!.modelPhases.get("xgboost");
     expect(mp).toBeDefined();
@@ -59,13 +89,32 @@ describe("useJobStore", () => {
 
   it("handles hpo_progress event", () => {
     useJobStore.getState().startJob("job-1", "EURUSD", ["xgboost"]);
-    useJobStore.getState().handleWsEvent({ event: "job_started", job_id: "job-1", pair: "EURUSD", models: ["xgboost"], total_work: 33 });
-    useJobStore.getState().handleWsEvent({ event: "model_training", job_id: "job-1", model: "xgboost", status: "starting" });
-    useJobStore.getState().handleWsEvent({ event: "model_phase", job_id: "job-1", model: "xgboost", phase: "hpo" });
     useJobStore.getState().handleWsEvent({
-      event: "hpo_progress", job_id: "job-1", model: "xgboost",
-      trial: 3, total_trials: 6, cv_blocks: 5,
-      completed_work: 15, total_work: 33, progress_pct: 45.5,
+      event: "job_started",
+      job_id: "job-1",
+      pair: "EURUSD",
+      models: ["xgboost"],
+      total_work: 33,
+    });
+    useJobStore.getState().handleWsEvent({
+      event: "model_training",
+      job_id: "job-1",
+      model: "xgboost",
+      status: "starting",
+    });
+    useJobStore
+      .getState()
+      .handleWsEvent({ event: "model_phase", job_id: "job-1", model: "xgboost", phase: "hpo" });
+    useJobStore.getState().handleWsEvent({
+      event: "hpo_progress",
+      job_id: "job-1",
+      model: "xgboost",
+      trial: 3,
+      total_trials: 6,
+      cv_blocks: 5,
+      completed_work: 15,
+      total_work: 33,
+      progress_pct: 45.5,
     });
     const job = useJobStore.getState().getJob("job-1");
     const mp = job!.modelPhases.get("xgboost");
@@ -78,13 +127,36 @@ describe("useJobStore", () => {
 
   it("handles month_progress event", () => {
     useJobStore.getState().startJob("job-1", "EURUSD", ["xgboost"]);
-    useJobStore.getState().handleWsEvent({ event: "job_started", job_id: "job-1", pair: "EURUSD", models: ["xgboost"], total_work: 33 });
-    useJobStore.getState().handleWsEvent({ event: "model_training", job_id: "job-1", model: "xgboost", status: "starting" });
-    useJobStore.getState().handleWsEvent({ event: "model_phase", job_id: "job-1", model: "xgboost", phase: "simulation" });
     useJobStore.getState().handleWsEvent({
-      event: "month_progress", job_id: "job-1", model: "xgboost",
-      month: 2, total_months: 3, sharpe: 0.8, trades: 15,
-      completed_work: 32, total_work: 33, progress_pct: 97.0,
+      event: "job_started",
+      job_id: "job-1",
+      pair: "EURUSD",
+      models: ["xgboost"],
+      total_work: 33,
+    });
+    useJobStore.getState().handleWsEvent({
+      event: "model_training",
+      job_id: "job-1",
+      model: "xgboost",
+      status: "starting",
+    });
+    useJobStore.getState().handleWsEvent({
+      event: "model_phase",
+      job_id: "job-1",
+      model: "xgboost",
+      phase: "simulation",
+    });
+    useJobStore.getState().handleWsEvent({
+      event: "month_progress",
+      job_id: "job-1",
+      model: "xgboost",
+      month: 2,
+      total_months: 3,
+      sharpe: 0.8,
+      trades: 15,
+      completed_work: 32,
+      total_work: 33,
+      progress_pct: 97.0,
     });
     const job = useJobStore.getState().getJob("job-1");
     const mp = job!.modelPhases.get("xgboost");
@@ -96,8 +168,20 @@ describe("useJobStore", () => {
 
   it("handles model_training complete event", () => {
     useJobStore.getState().startJob("job-1", "EURUSD", ["xgboost", "lstm"]);
-    useJobStore.getState().handleWsEvent({ event: "job_started", job_id: "job-1", pair: "EURUSD", models: ["xgboost", "lstm"], total_work: 66 });
-    useJobStore.getState().handleWsEvent({ event: "model_training", job_id: "job-1", model: "xgboost", status: "complete", metrics: { sharpe: 1.2 } });
+    useJobStore.getState().handleWsEvent({
+      event: "job_started",
+      job_id: "job-1",
+      pair: "EURUSD",
+      models: ["xgboost", "lstm"],
+      total_work: 66,
+    });
+    useJobStore.getState().handleWsEvent({
+      event: "model_training",
+      job_id: "job-1",
+      model: "xgboost",
+      status: "complete",
+      metrics: { sharpe: 1.2 },
+    });
     const job = useJobStore.getState().getJob("job-1");
     expect(job!.completedModels).toEqual(["xgboost"]);
     expect(job!.metrics.get("xgboost")).toEqual({ sharpe: 1.2 });
@@ -105,9 +189,25 @@ describe("useJobStore", () => {
 
   it("handles job_complete event", () => {
     useJobStore.getState().startJob("job-1", "EURUSD", ["xgboost"]);
-    useJobStore.getState().handleWsEvent({ event: "job_started", job_id: "job-1", pair: "EURUSD", models: ["xgboost"], total_work: 33 });
-    useJobStore.getState().handleWsEvent({ event: "model_training", job_id: "job-1", model: "xgboost", status: "complete", metrics: { sharpe: 1.2 } });
-    useJobStore.getState().handleWsEvent({ event: "job_complete", job_id: "job-1", metrics: [{ model: "xgboost", sharpe: 1.2 }] });
+    useJobStore.getState().handleWsEvent({
+      event: "job_started",
+      job_id: "job-1",
+      pair: "EURUSD",
+      models: ["xgboost"],
+      total_work: 33,
+    });
+    useJobStore.getState().handleWsEvent({
+      event: "model_training",
+      job_id: "job-1",
+      model: "xgboost",
+      status: "complete",
+      metrics: { sharpe: 1.2 },
+    });
+    useJobStore.getState().handleWsEvent({
+      event: "job_complete",
+      job_id: "job-1",
+      metrics: [{ model: "xgboost", sharpe: 1.2 }],
+    });
     const job = useJobStore.getState().getJob("job-1");
     expect(job!.status).toBe("completed");
     expect(job!.progress).toBe(100);
@@ -124,7 +224,13 @@ describe("useJobStore", () => {
 
   it("ignores events for unknown jobs", () => {
     useJobStore.getState().startJob("job-1", "EURUSD", ["xgboost"]);
-    useJobStore.getState().handleWsEvent({ event: "job_started", job_id: "unknown-job", pair: "EURUSD", models: ["xgboost"], total_work: 0 });
+    useJobStore.getState().handleWsEvent({
+      event: "job_started",
+      job_id: "unknown-job",
+      pair: "EURUSD",
+      models: ["xgboost"],
+      total_work: 0,
+    });
     expect(useJobStore.getState().getJob("unknown-job")).toBeUndefined();
   });
 
@@ -137,10 +243,36 @@ describe("useJobStore", () => {
 
   it("computes proportional progress from work units", () => {
     useJobStore.getState().startJob("job-1", "EURUSD", ["a", "b"]);
-    useJobStore.getState().handleWsEvent({ event: "job_started", job_id: "job-1", pair: "EURUSD", models: ["a", "b"], total_work: 66 });
-    useJobStore.getState().handleWsEvent({ event: "hpo_progress", job_id: "job-1", model: "a", trial: 3, total_trials: 6, cv_blocks: 5, completed_work: 15, total_work: 66, progress_pct: 22.7 });
+    useJobStore.getState().handleWsEvent({
+      event: "job_started",
+      job_id: "job-1",
+      pair: "EURUSD",
+      models: ["a", "b"],
+      total_work: 66,
+    });
+    useJobStore.getState().handleWsEvent({
+      event: "hpo_progress",
+      job_id: "job-1",
+      model: "a",
+      trial: 3,
+      total_trials: 6,
+      cv_blocks: 5,
+      completed_work: 15,
+      total_work: 66,
+      progress_pct: 22.7,
+    });
     expect(useJobStore.getState().getJob("job-1")!.progress).toBe(22.7);
-    useJobStore.getState().handleWsEvent({ event: "hpo_progress", job_id: "job-1", model: "a", trial: 6, total_trials: 6, cv_blocks: 5, completed_work: 30, total_work: 66, progress_pct: 45.5 });
+    useJobStore.getState().handleWsEvent({
+      event: "hpo_progress",
+      job_id: "job-1",
+      model: "a",
+      trial: 6,
+      total_trials: 6,
+      cv_blocks: 5,
+      completed_work: 30,
+      total_work: 66,
+      progress_pct: 45.5,
+    });
     expect(useJobStore.getState().getJob("job-1")!.progress).toBe(45.5);
   });
 });

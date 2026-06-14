@@ -28,6 +28,9 @@ class NewsArticleFull(BaseModel):
     sentiment_score: float = 0.0
     summary: str = ""
     bias: str = "neutral"  # "long", "short", "neutral"
+    llm_sentiment: Optional[float] = None
+    llm_confidence: Optional[float] = None
+    highlighted_body: Optional[str] = None
 
 
 class NewsArticlesResponse(BaseModel):

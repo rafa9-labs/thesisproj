@@ -22,6 +22,7 @@ from pipeline.llm.sentiment import (
     AnthropicBackend,
     VADERFallback,
     _parse_llm_json,
+    _parse_llm_batch_json,
     _default_scores,
     _article_hash,
 )
@@ -61,6 +62,42 @@ class TestParseLLMJson:
         raw = '{"direction": -3.0, "confidence": 0.5, "volatility": 0.3}'
         result = _parse_llm_json(raw)
         assert result["direction"] == -1.0
+
+
+# ── _parse_llm_batch_json ──────────────────────────────────────────────
+
+class TestParseLLMBatchJson:
+    def test_valid_batch_array(self):
+        raw = '[{"direction": 0.5, "confidence": 0.8, "volatility": 0.3, "currencies_affected": ["USD"]}, {"direction": -0.2, "confidence": 0.6, "volatility": 0.5, "currencies_affected": ["EUR"]}]'
+        results = _parse_llm_batch_json(raw, 2)
+        assert len(results) == 2
+        assert results[0]["direction"] == pytest.approx(0.5)
+        assert results[0]["confidence"] == pytest.approx(0.8)
+        assert results[1]["direction"] == pytest.approx(-0.2)
+        assert results[1]["currencies_affected"] == ["EUR"]
+
+    def test_batch_with_markdown_fence(self):
+        raw = '```json\n[{"direction": 0.3, "confidence": 0.7, "volatility": 0.4, "currencies_affected": []}]\n```'
+        results = _parse_llm_batch_json(raw, 1)
+        assert len(results) == 1
+        assert results[0]["direction"] == pytest.approx(0.3)
+
+    def test_batch_invalid_returns_defaults(self):
+        results = _parse_llm_batch_json("not json at all", 3)
+        assert len(results) == 3
+        assert all(r == _default_scores() for r in results)
+
+    def test_batch_fewer_items_padded(self):
+        raw = '[{"direction": 0.1, "confidence": 0.5, "volatility": 0.3}]'
+        results = _parse_llm_batch_json(raw, 3)
+        assert len(results) == 3
+        assert results[0]["direction"] == pytest.approx(0.1)
+        assert results[1] == _default_scores()
+
+    def test_batch_direction_clipped(self):
+        raw = '[{"direction": 5.0, "confidence": 0.5, "volatility": 0.3}]'
+        results = _parse_llm_batch_json(raw, 1)
+        assert results[0]["direction"] == 1.0
 
 
 # ── _article_hash ─────────────────────────────────────────────────────
@@ -350,3 +387,64 @@ class TestNewsPipelineIntegration:
         })
         for col in ["sentiment_score", "news_volume_6bars"]:
             assert col in result.columns, f"Missing column: {col}"
+
+
+# ── score_articles with batch and caching ──────────────────────────────
+
+class TestScoreArticles:
+    def test_score_articles_returns_per_article_scores(self):
+        from news.scraper import NewsArticle
+        engine = LLMSentimentEngine(config={"llm_sentiment_enabled": False})
+        articles = [
+            NewsArticle(title="EUR rises", body="strong data", timestamp=datetime.now(timezone.utc), source="test"),
+            NewsArticle(title="GBP falls", body="weak retail", timestamp=datetime.now(timezone.utc), source="test"),
+        ]
+        results = engine.score_articles(articles, pair="EURUSD")
+        assert len(results) == 2
+        assert results[0][0] is articles[0]
+        assert results[1][0] is articles[1]
+        assert "direction" in results[0][1]
+        assert "confidence" in results[0][1]
+        engine.close()
+
+    def test_score_articles_uses_cache(self):
+        from news.scraper import NewsArticle
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "test_cache.db")
+            engine = LLMSentimentEngine(config={"llm_sentiment_enabled": False})
+            engine._init_cache_db(db_path)
+
+            title = "EURUSD test article"
+            body = "Some body text"
+            ahash = _article_hash(title, body, "EURUSD")
+            scores = {"direction": 0.7, "confidence": 0.9, "volatility": 0.3, "currencies_affected": ["EUR", "USD"]}
+            engine._cache_score(ahash, scores, "EURUSD")
+
+            article = NewsArticle(title=title, body=body, timestamp=datetime.now(timezone.utc), source="test")
+            results = engine.score_articles([article], pair="EURUSD")
+            assert len(results) == 1
+            assert results[0][1]["direction"] == pytest.approx(0.7)
+            assert results[0][1]["confidence"] == pytest.approx(0.9)
+            engine.close()
+
+    def test_score_articles_mixed_cache_and_new(self):
+        from news.scraper import NewsArticle
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "test_cache.db")
+            engine = LLMSentimentEngine(config={"llm_sentiment_enabled": False})
+            engine._init_cache_db(db_path)
+
+            cached_title = "Cached article"
+            cached_body = "Cached body"
+            ahash = _article_hash(cached_title, cached_body, "EURUSD")
+            engine._cache_score(ahash, {"direction": 0.5, "confidence": 0.8, "volatility": 0.4, "currencies_affected": []}, "EURUSD")
+
+            articles = [
+                NewsArticle(title=cached_title, body=cached_body, timestamp=datetime.now(timezone.utc), source="test"),
+                NewsArticle(title="New article", body="Fresh content", timestamp=datetime.now(timezone.utc), source="test"),
+            ]
+            results = engine.score_articles(articles, pair="EURUSD")
+            assert len(results) == 2
+            assert results[0][1]["direction"] == pytest.approx(0.5)
+            assert results[1][0] is articles[1]
+            engine.close()

@@ -26,6 +26,7 @@ from utilsNoWFO import (
     target_coverage_policy,
 )
 from pipeline.tuning.helpers import DISABLE_OPTUNA_PRUNING
+from pipeline.tuning.adaptive_pruner import AdaptivePruner
 
 TRAIN_TEST_DEBUG_MODE = False
 
@@ -134,6 +135,14 @@ def run_optuna_tuning(
     _is_deep_family = (
         _model_name in {"cnn", "lstm", "transformer", "gru", "gru_lstm", "dqn"} or _model_name.startswith("ensemble_")
     )
+    
+    # ── Adaptive per-model pruner initialisation ──
+    _adaptive_enabled = bool(cv_config.get("adaptive_pruning", True))
+    if _adaptive_enabled:
+        _grace = int(cv_config.get("adaptive_grace_trials", 10))
+        AdaptivePruner.reset(_model_name, grace_trials=_grace)
+        print(f"[AdaptivePruner] reset for {_model_name} (grace={_grace})")
+    # ──────────────────────────────────────────────────
     
     # Ensure CV parallelism is wired even if caller omitted it
     cv_config = dict(cv_config or {})
@@ -331,10 +340,18 @@ def run_optuna_tuning(
         except optuna.TrialPruned as _e:
             pruned = "PRUNED"
             _prune_reason = str(_e)[:120]
+            try:
+                trial.set_user_attr("prune_reason", _prune_reason)
+            except Exception:
+                pass
             _exc = _e
         except Exception as _e:
             pruned = "FAIL"
             _prune_reason = str(_e)[:120]
+            try:
+                trial.set_user_attr("error", _prune_reason)
+            except Exception:
+                pass
             _exc = _e
 
         if _progress_cb:
@@ -362,6 +379,17 @@ def run_optuna_tuning(
 
         if _exc is not None:
             raise _exc
+
+        # ── Adaptive pruner: record completed trial ──
+        if _adaptive_enabled and pruned is None:
+            try:
+                _fold_scores = list(trial.user_attrs.get("_adaptive_fold_scores", []))
+                if _fold_scores and result is not None and np.isfinite(float(result)):
+                    AdaptivePruner.record_trial(trial.number, _fold_scores, float(result))
+            except Exception:
+                pass
+        # ──────────────────────────────────────────────
+
         return result
 
 
@@ -624,13 +652,20 @@ def run_optuna_tuning(
                 _err = t.user_attrs.get("error", t.user_attrs.get("exception", "unknown"))
             except Exception:
                 pass
-            _msgs.append(f"  Trial {t.number}: {_err}")
+            _msgs.append(f"  Trial {t.number} FAIL: {_err}")
+        for t in pruned[:3]:
+            _reason = "reason not stored"
+            try:
+                _reason = t.user_attrs.get("prune_reason", _reason)
+            except Exception:
+                pass
+            _msgs.append(f"  Trial {t.number} PRUNED: {_reason}")
         _summary = (
             f"No completed Optuna trials "
             f"(completed=0, failed={len(failed)}, pruned={len(pruned)}, total={len(study.trials)}). "
         )
         if _msgs:
-            _summary += "Last failures:\n" + "\n".join(_msgs)
+            _summary += "Diagnostics (last fail / first prune reasons):\n" + "\n".join(_msgs)
         else:
             _summary += "No failure info available (all pruned?)."
         raise RuntimeError(_summary)

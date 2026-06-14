@@ -27,11 +27,16 @@ function DirectionCellRenderer({ value }: { value: string }) {
 }
 
 function ReturnCellRenderer({ value }: { value: number }) {
-  if (value == null) return <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>—</span>;
+  if (value == null)
+    return (
+      <span className="font-mono" style={{ fontSize: 12 }}>
+        —
+      </span>
+    );
   const color = value >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)";
   const sign = value >= 0 ? "+" : "";
   return (
-    <span style={{ color, fontFamily: "var(--font-mono)", fontSize: 12 }}>
+    <span className="font-mono" style={{ fontSize: 12 }}>
       {sign}
       {value.toFixed(2)}%
     </span>
@@ -39,11 +44,16 @@ function ReturnCellRenderer({ value }: { value: number }) {
 }
 
 function PipsCellRenderer({ value }: { value: number }) {
-  if (value == null) return <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>—</span>;
+  if (value == null)
+    return (
+      <span className="font-mono" style={{ fontSize: 12 }}>
+        —
+      </span>
+    );
   const color = value >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)";
   const sign = value >= 0 ? "+" : "";
   return (
-    <span style={{ color, fontFamily: "var(--font-mono)", fontSize: 12 }}>
+    <span className="font-mono" style={{ fontSize: 12 }}>
       {sign}
       {value.toFixed(1)}
     </span>
@@ -166,17 +176,8 @@ export function TradeLogTable({ trades, onTradeSelect }: TradeLogTableProps) {
 
   if (data.length === 0) {
     return (
-      <div
-        className="flex items-center justify-center rounded-sm border p-8"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          borderColor: "var(--color-border)",
-          color: "var(--color-text-muted)",
-        }}
-      >
-        <span className="text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-          No trade data available
-        </span>
+      <div className="flex items-center justify-center rounded-sm border border-(--color-border) bg-(--color-surface) p-8 text-(--color-text-muted)">
+        <span className="font-mono text-sm">No trade data available</span>
       </div>
     );
   }
@@ -184,41 +185,37 @@ export function TradeLogTable({ trades, onTradeSelect }: TradeLogTableProps) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <h3
-          className="text-xs font-semibold uppercase tracking-[0.08em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
+        <h3 className="text-xs font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
           Trade Log
         </h3>
-        <span
-          className="text-xs"
-          style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
-        >
+        <span className="font-mono text-xs text-(--color-text-muted)">
           {data.length.toLocaleString()} trades
         </span>
       </div>
       <div
-        className="ag-theme-alpine-dark rounded-sm border overflow-hidden"
-        style={{
-          height: 360,
-          borderColor: "var(--color-border)",
-          backgroundColor: "var(--color-surface)",
-          "--ag-background-color": "#1E222D",
-          "--ag-header-background-color": "#2A2E39",
-          "--ag-odd-row-background-color": "#1a1e29",
-          "--ag-row-hover-color": "rgba(41,98,255,0.08)",
-          "--ag-selected-row-background-color": "rgba(41,98,255,0.15)",
-          "--ag-range-selection-border-color": "#2962FF",
-          "--ag-border-color": "#363A45",
-          "--ag-header-foreground-color": "#80899F",
-          "--ag-foreground-color": "#EDEFF5",
-          "--ag-row-border-color": "#2A2E39",
-          "--ag-font-size": "12px",
-          "--ag-font-family": "Inter, sans-serif",
-          "--ag-grid-size": "4px",
-          "--ag-header-height": "40px",
-          "--ag-row-height": "36px",
-        } as React.CSSProperties}
+        className="ag-theme-alpine-dark overflow-hidden rounded-sm border"
+        style={
+          {
+            height: 360,
+            borderColor: "var(--color-border)",
+            backgroundColor: "var(--color-surface)",
+            "--ag-background-color": "#1E222D",
+            "--ag-header-background-color": "#2A2E39",
+            "--ag-odd-row-background-color": "#1a1e29",
+            "--ag-row-hover-color": "rgba(41,98,255,0.08)",
+            "--ag-selected-row-background-color": "rgba(41,98,255,0.15)",
+            "--ag-range-selection-border-color": "#2962FF",
+            "--ag-border-color": "#363A45",
+            "--ag-header-foreground-color": "#80899F",
+            "--ag-foreground-color": "#EDEFF5",
+            "--ag-row-border-color": "#2A2E39",
+            "--ag-font-size": "12px",
+            "--ag-font-family": "Inter, sans-serif",
+            "--ag-grid-size": "4px",
+            "--ag-header-height": "40px",
+            "--ag-row-height": "36px",
+          } as React.CSSProperties
+        }
       >
         <AgGridReact<TradeRecord>
           rowData={data}

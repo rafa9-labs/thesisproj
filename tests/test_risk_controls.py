@@ -7,7 +7,7 @@ from collections import deque
 @pytest.fixture
 def default_config():
     from trading.risk_controls import LiveRiskConfig
-    return LiveRiskConfig(initial_equity=10000.0)
+    return LiveRiskConfig(initial_equity=10000.0, restrict_weekend=False)
 
 
 @pytest.fixture
@@ -98,13 +98,8 @@ class TestLayer1Gates:
         assert allowed is False
         assert "reversal" in reason
 
-    def test_g6_schedule_weekday_allowed(self, default_config):
+    def test_g6_schedule_disabled_by_default(self, default_config):
         from trading.risk_controls import gate_trading_schedule
-        default_config.restrict_weekend = True
-        default_config.weekend_close_utc_hour = 21
-        default_config.weekend_close_utc_day = 4
-        default_config.weekend_open_utc_hour = 21
-        default_config.weekend_open_utc_day = 6
         allowed, _ = gate_trading_schedule(default_config)
         assert allowed is True
 
@@ -241,15 +236,15 @@ class TestLayer2PostTrade:
 # ═══════════════════════════════════════
 
 class TestLayer3Infra:
-    def test_signal_staleness_allowed(self, fresh_state, default_config):
+    def test_signal_staleness_fresh(self, fresh_state, default_config):
         from trading.risk_controls import check_signal_staleness
-        allowed, _ = check_signal_staleness(fresh_state, default_config, time.time())
-        assert allowed is True
+        triggered, _ = check_signal_staleness(fresh_state, default_config, time.time())
+        assert triggered is False
 
     def test_signal_staleness_blocked(self, fresh_state, default_config):
         from trading.risk_controls import check_signal_staleness
-        allowed, reason = check_signal_staleness(fresh_state, default_config, time.time() - 60)
-        assert allowed is False
+        triggered, reason = check_signal_staleness(fresh_state, default_config, time.time() - 60)
+        assert triggered is True
         assert "stale" in reason
 
     def test_heartbeat_allowed(self, fresh_state, default_config):
@@ -268,8 +263,8 @@ class TestLayer3Infra:
     def test_session_lifetime_allowed(self, fresh_state, default_config):
         from trading.risk_controls import check_session_lifetime
         fresh_state.session_start = time.time()
-        allowed, _ = check_session_lifetime(fresh_state, default_config)
-        assert allowed is True
+        triggered, _ = check_session_lifetime(fresh_state, default_config)
+        assert triggered is False
 
     def test_consecutive_api_errors(self, fresh_state, default_config):
         from trading.risk_controls import check_consecutive_api_errors

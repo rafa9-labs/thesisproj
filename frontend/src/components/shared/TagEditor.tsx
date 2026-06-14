@@ -27,12 +27,8 @@ export function TagEditor({ tags, onAdd, onRemove }: Props) {
       {tags.map((tag) => (
         <span
           key={tag}
-          className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium cursor-pointer hover:brightness-110"
-          style={{
-            backgroundColor: "var(--color-glass-hover)",
-            color: "var(--color-text-secondary)",
-            border: "1px solid var(--color-glass-border)",
-          }}
+          className="inline-flex cursor-pointer items-center gap-0.5 rounded bg-(--color-glass-hover) px-1.5 py-0.5 text-[9px] font-medium text-(--color-text-secondary) hover:brightness-110"
+          style={{ border: "1px solid var(--color-glass-border)" }}
           onClick={() => onRemove(tag)}
           title="Click to remove"
         >
@@ -47,46 +43,44 @@ export function TagEditor({ tags, onAdd, onRemove }: Props) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") handleAdd();
-            if (e.key === "Escape") { setShowInput(false); setInput(""); }
+            if (e.key === "Escape") {
+              setShowInput(false);
+              setInput("");
+            }
           }}
-          onBlur={() => { if (input.trim()) handleAdd(); else setShowInput(false); }}
-          className="rounded px-1.5 py-0.5 text-[9px] outline-none"
-          style={{
-            width: 70,
-            backgroundColor: "var(--color-elevated)",
-            color: "var(--color-text-primary)",
-            border: "1px solid var(--color-brand)",
+          onBlur={() => {
+            if (input.trim()) handleAdd();
+            else setShowInput(false);
           }}
+          className="rounded bg-(--color-elevated) px-1.5 py-0.5 text-[9px] text-(--color-text-primary) outline-none"
+          style={{ width: 70, border: "1px solid var(--color-brand)" }}
           placeholder="tag..."
         />
       ) : (
         <button
           onClick={() => setShowInput(true)}
-          className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] transition hover:brightness-110"
-          style={{
-            backgroundColor: "transparent",
-            color: "var(--color-text-muted)",
-            border: "1px dashed var(--color-glass-border)",
-          }}
+          className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] text-(--color-text-muted) transition hover:brightness-110"
+          style={{ backgroundColor: "transparent", border: "1px dashed var(--color-glass-border)" }}
         >
           <Plus size={8} />
           tag
         </button>
       )}
       {showInput && (
-        <div className="flex flex-wrap gap-1 mt-1 w-full">
+        <div className="mt-1 flex w-full flex-wrap gap-1">
           {SUGGESTIONS.filter((s) => !tags.includes(s) && s.startsWith(input))
             .slice(0, 4)
             .map((s) => (
               <button
                 key={s}
-                onClick={() => { onAdd(s); setInput(""); setShowInput(false); }}
-                className="rounded px-1.5 py-0.5 text-[8px] font-medium transition hover:brightness-110"
-                style={{
-                  backgroundColor: "var(--color-glass-hover)",
-                  color: "var(--color-text-muted)",
-                  border: "1px solid var(--color-glass-border)",
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onAdd(s);
+                  setInput("");
+                  setShowInput(false);
                 }}
+                className="rounded bg-(--color-glass-hover) px-1.5 py-0.5 text-[8px] font-medium text-(--color-text-muted) transition hover:brightness-110"
+                style={{ border: "1px solid var(--color-glass-border)" }}
               >
                 {s}
               </button>

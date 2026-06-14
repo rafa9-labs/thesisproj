@@ -1,5 +1,6 @@
 """KodaQuant — FastAPI application."""
 from contextlib import asynccontextmanager
+import asyncio
 import os
 
 from fastapi import FastAPI
@@ -19,10 +20,10 @@ async def lifespan(app: FastAPI):
     from api.dependencies import get_data_store
     get_data_store()
     from api.config import settings
-    from api.shutdown import startup_cleanup
+    from api.shutdown import startup_cleanup, wal_checkpoint
     start = startup_cleanup(settings.db_full_path)
     if start:
-        print(f"[Shutdown] Startup: marked {start} stale job(s) as failed")
+        print(f"[Shutdown] Startup: reset {start} stale running job(s) to pending")
     try:
         from pipeline.model_registry_disk import scan_and_repair
         result = scan_and_repair(settings.db_full_path)
@@ -30,9 +31,22 @@ async def lifespan(app: FastAPI):
             print(f"[Registry] scan_and_repair: registered={result['registered']} cleaned={result['cleaned']} skipped={result['skipped']}")
     except Exception:
         pass
+
+    _stop_wal_timer = None
+    async def _periodic_wal_checkpoint():
+        while True:
+            await asyncio.sleep(60)
+            wal_checkpoint(settings.db_full_path)
+    try:
+        _stop_wal_timer = asyncio.create_task(_periodic_wal_checkpoint())
+    except Exception:
+        pass
+
     yield
     from api.shutdown import shutdown_cleanup
     shutdown_cleanup(settings.db_full_path)
+    if _stop_wal_timer and not _stop_wal_timer.done():
+        _stop_wal_timer.cancel()
     print("[Shutdown] Graceful shutdown complete")
 
 

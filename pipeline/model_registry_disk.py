@@ -22,11 +22,17 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def register_snapshot(snapshot_path: str, db_path: str) -> str:
+def register_snapshot(snapshot_path: str, db_path: str, parent_job_status: str | None = None) -> str:
     """Validate and register a snapshot in the deployed_models table.
 
     Returns the model ID (basename of snapshot directory).
     """
+    if parent_job_status is not None and parent_job_status != "completed":
+        raise ValueError(
+            f"Cannot register snapshot: parent job status is '{parent_job_status}', not 'completed'. "
+            "Only models from successfully completed backtests can be saved."
+        )
+
     from pipeline.data_sqlite import DataStore
 
     ok, reason = validate_snapshot(snapshot_path)
@@ -80,7 +86,7 @@ def get_all_deployed(db_path: str) -> List[Dict[str, Any]]:
 
 
 def activate_model(model_id: str, db_path: str) -> bool:
-    """Activate a model and deactivate all others of the same model_type."""
+    """Activate a model as the single global active model. Deactivates all others."""
     from pipeline.data_sqlite import DataStore
 
     store = DataStore(db_path)
@@ -92,8 +98,7 @@ def activate_model(model_id: str, db_path: str) -> bool:
         model_type = row[1]
 
         cur.execute(
-            "UPDATE deployed_models SET status = 'inactive' WHERE model_type = ? AND status = 'active'",
-            (model_type,),
+            "UPDATE deployed_models SET status = 'inactive' WHERE status = 'active'",
         )
         cur.execute(
             "UPDATE deployed_models SET status = 'active' WHERE id = ?",
@@ -110,13 +115,12 @@ def deactivate_model(model_id: str, db_path: str) -> bool:
 
     store = DataStore(db_path)
     with store._cursor() as (conn, cur):
-        cur.execute("SELECT model_type FROM deployed_models WHERE id = ?", (model_id,))
+        cur.execute("SELECT id FROM deployed_models WHERE id = ?", (model_id,))
         row = cur.fetchone()
         if not row:
             return False
         cur.execute("UPDATE deployed_models SET status = 'inactive' WHERE id = ?", (model_id,))
-        model_type = row[0]
-    clear_active_model_id(model_type)
+    clear_active_model_id()
     return True
 
 
@@ -126,11 +130,10 @@ def delete_model(model_id: str, db_path: str) -> Tuple[bool, str]:
 
     store = DataStore(db_path)
     with store._cursor() as (conn, cur):
-        cur.execute("SELECT id, snapshot_path, model_type FROM deployed_models WHERE id = ?", (model_id,))
+        cur.execute("SELECT id, snapshot_path FROM deployed_models WHERE id = ?", (model_id,))
         row = cur.fetchone()
         if not row:
             return False, "Model not found"
-        model_type = row[2]
         path = row[1]
 
         cur.execute("DELETE FROM deployed_models WHERE id = ?", (model_id,))
@@ -138,7 +141,7 @@ def delete_model(model_id: str, db_path: str) -> Tuple[bool, str]:
     if path and os.path.isdir(path):
         shutil.rmtree(path, ignore_errors=True)
 
-    clear_active_model_id(model_type)
+    clear_active_model_id()
     return True, "ok"
 
 

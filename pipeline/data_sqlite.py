@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     result      TEXT,
     error       TEXT,
     parent_job_id TEXT,
+    study_meta  TEXT,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 );
@@ -105,6 +106,21 @@ CREATE TABLE IF NOT EXISTS live_predictions (
     predicted_class INTEGER NOT NULL,
     confidence      REAL    NOT NULL,
     signal_used     INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS saved_committees (
+    id                TEXT PRIMARY KEY,
+    name              TEXT    NOT NULL,
+    full_cycle_job_id TEXT,
+    pair              TEXT    DEFAULT 'EURUSD',
+    timeframe         TEXT    DEFAULT 'H1',
+    config_json       TEXT    NOT NULL,
+    trust_score       REAL,
+    avg_sharpe        REAL,
+    is_active         INTEGER NOT NULL DEFAULT 0,
+    tags              TEXT    DEFAULT '[]',
+    created_at        TEXT    NOT NULL,
+    updated_at        TEXT    NOT NULL
 );
 """
 
@@ -156,6 +172,10 @@ class DataStore:
                 except sqlite3.OperationalError:
                     pass
                 try:
+                    cur.execute("ALTER TABLE jobs ADD COLUMN study_meta TEXT")
+                except sqlite3.OperationalError:
+                    pass
+                try:
                     cur.executescript("""
                         CREATE TABLE IF NOT EXISTS deployed_models (
                             id              TEXT PRIMARY KEY,
@@ -177,6 +197,25 @@ class DataStore:
                             predicted_class INTEGER NOT NULL,
                             confidence      REAL    NOT NULL,
                             signal_used     INTEGER NOT NULL DEFAULT 0
+                        );
+                    """)
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    cur.executescript("""
+                        CREATE TABLE IF NOT EXISTS saved_committees (
+                            id                TEXT PRIMARY KEY,
+                            name              TEXT    NOT NULL,
+                            full_cycle_job_id TEXT,
+                            pair              TEXT    DEFAULT 'EURUSD',
+                            timeframe         TEXT    DEFAULT 'H1',
+                            config_json       TEXT    NOT NULL,
+                            trust_score       REAL,
+                            avg_sharpe        REAL,
+                            is_active         INTEGER NOT NULL DEFAULT 0,
+                            tags              TEXT    DEFAULT '[]',
+                            created_at        TEXT    NOT NULL,
+                            updated_at        TEXT    NOT NULL
                         );
                     """)
                 except sqlite3.OperationalError:

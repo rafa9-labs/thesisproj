@@ -35,34 +35,37 @@ export function DrawdownChart({ drawdownCurve }: DrawdownChartProps) {
     <ChartCard title="Drawdown" subtitle={`${data.length} points`}>
       <ResponsiveContainer width="100%" height={220}>
         <AreaChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#2A2E39" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-elevated)" />
           <XAxis
             dataKey="date"
-            tick={{ fill: "#787B86", fontSize: 10, fontFamily: "JetBrains Mono" }}
+            tick={{ fill: "var(--color-text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" }}
             interval="preserveStartEnd"
             minTickGap={40}
           />
           <YAxis
-            tick={{ fill: "#787B86", fontSize: 10, fontFamily: "JetBrains Mono" }}
+            tick={{ fill: "var(--color-text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" }}
             tickFormatter={(v: number) => `${v}%`}
             domain={["dataMin", 0]}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "#2A2E39",
-              border: "1px solid #363A45",
+              backgroundColor: "var(--color-elevated)",
+              border: "1px solid var(--color-glass-border)",
               borderRadius: 6,
               fontSize: 12,
-              fontFamily: "JetBrains Mono",
+              fontFamily: "var(--font-mono)",
             }}
-            labelStyle={{ color: "#80899F" }}
-            itemStyle={{ color: "#F23645" }}
-            formatter={(value: number) => [value == null ? "—" : `${value.toFixed(2)}%`, "Drawdown"]}
+            labelStyle={{ color: "var(--color-text-muted)" }}
+            itemStyle={{ color: "var(--color-accent-danger)" }}
+            formatter={(value: number) => [
+              value == null ? "—" : `${value.toFixed(2)}%`,
+              "Drawdown",
+            ]}
           />
           <Area
             type="monotone"
             dataKey="drawdown"
-            stroke="#F23645"
+            stroke="var(--color-accent-danger)"
             fill="rgba(242, 54, 69, 0.25)"
             strokeWidth={1.5}
           />

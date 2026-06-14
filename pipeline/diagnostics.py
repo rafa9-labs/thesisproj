@@ -70,7 +70,7 @@ class TrainingDiagnosticsData:
 def compute_prediction_histogram(
     max_conf_arrays: List[np.ndarray],
     n_bins: int = 15,
-    range_min: float = 0.5,
+    range_min: float = 0.0,
     range_max: float = 1.0,
 ) -> List[PredictionHistogramBin]:
     """

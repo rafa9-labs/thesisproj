@@ -26,11 +26,21 @@ interface SessionControlsProps {
   onEmergency: () => void;
 }
 
-function ModeToggle({ mode, disabled, onChange }: { mode: TradingMode; disabled: boolean; onChange: (m: TradingMode) => void }) {
+function ModeToggle({
+  mode,
+  disabled,
+  onChange,
+}: {
+  mode: TradingMode;
+  disabled: boolean;
+  onChange: (m: TradingMode) => void;
+}) {
   return (
-    <div className="flex items-center rounded-sm border p-0.5" style={{ borderColor: "var(--color-glass-border)" }}>
+    <div className="flex items-center rounded-sm border border-(--color-glass-border) p-0.5">
       <button
-        onClick={() => { if (!disabled) onChange("paper"); }}
+        onClick={() => {
+          if (!disabled) onChange("paper");
+        }}
         disabled={disabled}
         className="rounded-md px-3 py-1 text-[10px] font-semibold uppercase transition-all disabled:opacity-50"
         style={{
@@ -41,7 +51,9 @@ function ModeToggle({ mode, disabled, onChange }: { mode: TradingMode; disabled:
         Paper
       </button>
       <button
-        onClick={() => { if (!disabled) onChange("live"); }}
+        onClick={() => {
+          if (!disabled) onChange("live");
+        }}
         disabled={disabled}
         className="rounded-md px-3 py-1 text-[10px] font-semibold uppercase transition-all disabled:opacity-50"
         style={{
@@ -73,21 +85,28 @@ export function SessionControls({
   const disabled = isRunning || isDeploying;
 
   return (
-    <div className="flex items-center gap-3 flex-wrap">
+    <div className="flex flex-wrap items-center gap-3">
       <ModeToggle mode={mode} disabled={isRunning} onChange={onModeChange} />
 
-      <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>Sizing</span>
+      <span className="text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
+        Sizing
+      </span>
       <select
         value={positionSizing}
         onChange={(e) => onSizingChange(e.target.value)}
         disabled={disabled}
-        className="rounded-md border px-2.5 py-1 text-xs transition focus:outline-none disabled:opacity-50"
-        style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}
+        className="rounded-md border border-(--color-glass-border) bg-(--color-glass) px-2.5 py-1 font-mono text-xs text-(--color-text-primary) transition focus:outline-none disabled:opacity-50"
       >
-        {SIZING_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+        {SIZING_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
       </select>
 
-      <span className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>Equity</span>
+      <span className="text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
+        Equity
+      </span>
       <input
         type="number"
         value={initialEquity}
@@ -95,8 +114,7 @@ export function SessionControls({
         disabled={disabled}
         min={100}
         max={1000000}
-        className="rounded-md border px-2.5 py-1 text-xs w-20 transition focus:outline-none disabled:opacity-50"
-        style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}
+        className="w-20 rounded-md border border-(--color-glass-border) bg-(--color-glass) px-2.5 py-1 font-mono text-xs text-(--color-text-primary) transition focus:outline-none disabled:opacity-50"
       />
 
       <div className="flex-1" />
@@ -104,8 +122,8 @@ export function SessionControls({
       {mode === "live" && isRunning && (
         <button
           onClick={onEmergency}
-          className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[11px] font-bold uppercase animate-pulse"
-          style={{ borderColor: "var(--color-accent-danger)", backgroundColor: "rgba(239,68,68,0.15)", color: "var(--color-accent-danger)" }}
+          className="flex animate-pulse items-center gap-1.5 rounded-md border border-(--color-accent-danger) px-3 py-1.5 text-[11px] font-bold text-(--color-accent-danger) uppercase"
+          style={{ backgroundColor: "rgba(239,68,68,0.15)" }}
         >
           <ShieldOff size={14} />
           Emergency Kill
@@ -123,11 +141,20 @@ export function SessionControls({
         }}
       >
         {isDeploying ? (
-          <><Loader2 size={12} className="animate-spin" />Deploying</>
+          <>
+            <Loader2 size={12} className="animate-spin" />
+            Deploying
+          </>
         ) : isRunning ? (
-          <><Square size={12} />Stop</>
+          <>
+            <Square size={12} />
+            Stop
+          </>
         ) : (
-          <><Play size={12} />Deploy</>
+          <>
+            <Play size={12} />
+            Deploy
+          </>
         )}
       </button>
     </div>

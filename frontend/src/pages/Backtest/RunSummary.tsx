@@ -11,7 +11,14 @@ interface RunSummaryProps {
   isSubmitting?: boolean;
 }
 
-export function RunSummary({ open, onClose, onDeploy, warnings, errors, isSubmitting }: RunSummaryProps) {
+export function RunSummary({
+  open,
+  onClose,
+  onDeploy,
+  warnings,
+  errors,
+  isSubmitting,
+}: RunSummaryProps) {
   const store = useBacktestStore.getState();
 
   if (!open) return null;
@@ -23,19 +30,14 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors, isSubmit
       onClick={onClose}
     >
       <div
-        className="flex w-[640px] max-h-[80vh] flex-col gap-4 overflow-y-auto rounded-sm border p-6"
-        style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
+        className="flex max-h-[80vh] w-[640px] flex-col gap-4 overflow-y-auto rounded-sm border border-(--color-border) bg-(--color-surface) p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>
+          <h2 className="text-base font-semibold text-(--color-text-primary)">
             Pre-Flight Summary
           </h2>
-          <button
-            onClick={onClose}
-            className="text-xs"
-            style={{ color: "var(--color-text-muted)" }}
-          >
+          <button onClick={onClose} className="text-xs text-(--color-text-muted)">
             ESC
           </button>
         </div>
@@ -45,7 +47,10 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors, isSubmit
           <Row label="Pair" value={store.pair} />
           <Row label="Timeframe" value={store.timeframe} />
           {(store.startDate || store.endDate) && (
-            <Row label="Date Range" value={`${store.startDate || "..."} → ${store.endDate || "..."}`} />
+            <Row
+              label="Date Range"
+              value={`${store.startDate || "..."} → ${store.endDate || "..."}`}
+            />
           )}
         </Section>
 
@@ -55,12 +60,7 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors, isSubmit
             {store.selectedModels.map((m) => (
               <span
                 key={m}
-                className="rounded-md border px-2 py-1 text-xs"
-                style={{
-                  borderColor: "var(--color-border)",
-                  color: "var(--color-text-primary)",
-                  fontFamily: "var(--font-mono)",
-                }}
+                className="rounded-md border border-(--color-border) px-2 py-1 font-mono text-xs text-(--color-text-primary)"
               >
                 {modelDescriptions[m]?.name ?? m}
               </span>
@@ -90,7 +90,14 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors, isSubmit
         <Section title="Features">
           <Row label="Lags" value={`${store.lags} × ${store.lagDepth}`} />
           <Row label="FracDiff" value={store.useFracdiff ? `d=${store.fracdiffD}` : "Off"} />
-          <Row label="News" value={store.useNews ? `${store.newsSentimentBackend}${store.newsEventFlags ? " + events" : ""}` : "Off"} />
+          <Row
+            label="News"
+            value={
+              store.useNews
+                ? `${store.newsSentimentBackend}${store.newsEventFlags ? " + events" : ""}`
+                : "Off"
+            }
+          />
         </Section>
 
         {/* Validation summary */}
@@ -98,22 +105,29 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors, isSubmit
           <div
             className="rounded-md border p-3"
             style={{
-              borderColor: errors > 0 ? "var(--color-accent-danger)" : "var(--color-accent-warning)",
+              borderColor:
+                errors > 0 ? "var(--color-accent-danger)" : "var(--color-accent-warning)",
               backgroundColor: errors > 0 ? "rgba(239,68,68,0.05)" : "rgba(245,158,11,0.05)",
             }}
           >
-            <span className="text-xs font-semibold" style={{ color: errors > 0 ? "var(--color-accent-danger)" : "var(--color-accent-warning)" }}>
-              {errors > 0 ? `${errors} error${errors > 1 ? "s" : ""}` : `${warnings} warning${warnings > 1 ? "s" : ""}`}
+            <span
+              className="text-xs font-semibold"
+              style={{
+                color: errors > 0 ? "var(--color-accent-danger)" : "var(--color-accent-warning)",
+              }}
+            >
+              {errors > 0
+                ? `${errors} error${errors > 1 ? "s" : ""}`
+                : `${warnings} warning${warnings > 1 ? "s" : ""}`}
             </span>
           </div>
         )}
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 border-t pt-4" style={{ borderColor: "var(--color-border)" }}>
+        <div className="flex justify-end gap-3 border-t border-(--color-border) pt-4">
           <button
             onClick={onClose}
-            className="rounded-md border px-4 py-2 text-xs font-semibold uppercase"
-            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}
+            className="rounded-md border border-(--color-border) px-4 py-2 text-xs font-semibold text-(--color-text-secondary) uppercase"
           >
             Cancel
           </button>
@@ -122,8 +136,12 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors, isSubmit
             disabled={errors > 0 || isSubmitting}
             className="rounded-md px-6 py-2 text-xs font-bold uppercase transition-colors"
             style={{
-              backgroundColor: errors > 0 || isSubmitting ? "var(--color-border)" : "var(--color-brand)",
-              color: errors > 0 || isSubmitting ? "var(--color-text-muted)" : "var(--color-text-inverse)",
+              backgroundColor:
+                errors > 0 || isSubmitting ? "var(--color-border)" : "var(--color-brand)",
+              color:
+                errors > 0 || isSubmitting
+                  ? "var(--color-text-muted)"
+                  : "var(--color-text-inverse)",
               letterSpacing: "0.05em",
               cursor: errors > 0 || isSubmitting ? "not-allowed" : "pointer",
               opacity: isSubmitting ? 0.7 : 1,
@@ -140,7 +158,7 @@ export function RunSummary({ open, onClose, onDeploy, warnings, errors, isSubmit
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-[0.08em]" style={{ color: "var(--color-text-secondary)" }}>
+      <h3 className="mb-1.5 text-xs font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
         {title}
       </h3>
       <div className="flex flex-col gap-1">{children}</div>
@@ -151,8 +169,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between text-xs">
-      <span style={{ color: "var(--color-text-muted)" }}>{label}</span>
-      <span style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>{value}</span>
+      <span className="text-(--color-text-muted)">{label}</span>
+      <span className="font-mono text-(--color-text-primary)">{value}</span>
     </div>
   );
 }

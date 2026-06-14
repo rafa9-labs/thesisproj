@@ -37,23 +37,23 @@ function StatusPip({ active, label }: { active: boolean; label: string }) {
       <div className="relative">
         <div
           className="h-[5px] w-[5px] rounded-full"
-          style={{ backgroundColor: active ? "var(--color-accent-success)" : "var(--color-text-muted)" }}
+          style={{
+            backgroundColor: active ? "var(--color-accent-success)" : "var(--color-text-muted)",
+          }}
         />
         {active && (
-          <div
-            className="absolute inset-0 animate-ping-brand rounded-full"
-            style={{ backgroundColor: "var(--color-accent-success)", opacity: 0.35 }}
-          />
+          <div className="absolute inset-0 animate-ping-brand rounded-full bg-(--color-accent-success) opacity-35" />
         )}
       </div>
-      <span style={{ color: "var(--color-text-muted)", fontSize: 9, fontFamily: "var(--font-mono)" }}>
-        {label}
-      </span>
+      <span className="font-mono text-[9px] text-(--color-text-muted)">{label}</span>
     </div>
   );
 }
 
-export function TerminalPanel({ apiOk = false, wsConnected = false }: Partial<TerminalPanelStatusProps>) {
+export function TerminalPanel({
+  apiOk = false,
+  wsConnected = false,
+}: Partial<TerminalPanelStatusProps>) {
   const [open, setOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>(logBuffer);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -61,7 +61,9 @@ export function TerminalPanel({ apiOk = false, wsConnected = false }: Partial<Te
   useEffect(() => {
     const update = () => setLogs([...logBuffer]);
     listeners.add(update);
-    return () => { listeners.delete(update); };
+    return () => {
+      listeners.delete(update);
+    };
   }, []);
 
   useEffect(() => {
@@ -77,52 +79,32 @@ export function TerminalPanel({ apiOk = false, wsConnected = false }: Partial<Te
 
   return (
     <div
-      className="flex flex-col"
+      className="flex shrink-0 flex-col overflow-hidden border-t border-(--color-border-subtle) bg-(--color-app) transition-[height] duration-200"
       style={{
-        backgroundColor: "var(--color-app)",
-        borderTop: "1px solid rgba(255,255,255,0.04)",
         height: open ? 228 : 28,
-        overflow: "hidden",
-        transition: "height 200ms ease",
-        flexShrink: 0,
       }}
     >
       {/* ── Status bar / toggle row — always 28px ───────────────── */}
       <div
-        className="flex items-center justify-between px-6 cursor-pointer select-none"
-        style={{ height: 28, flexShrink: 0 }}
+        className="flex h-7 shrink-0 cursor-pointer items-center justify-between px-6 select-none"
         onClick={() => setOpen(!open)}
       >
         {/* Left: terminal toggle + status pips */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <span
-              style={{
-                color: "var(--color-text-muted)",
-                fontFamily: "var(--font-mono)",
-                fontSize: 10,
-                letterSpacing: "0.03em",
-              }}
-            >
+            <span className="font-mono text-[10px] tracking-[0.03em] text-(--color-text-muted)">
               {">_"}
             </span>
             <span
+              className="font-mono text-[10px]"
               style={{
                 color: open ? "var(--color-text-secondary)" : "var(--color-text-muted)",
-                fontFamily: "var(--font-mono)",
-                fontSize: 10,
               }}
             >
               Terminal
             </span>
             {logs.length > 0 && (
-              <span
-                style={{
-                  color: "var(--color-text-muted)",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 9,
-                }}
-              >
+              <span className="font-mono text-[9px] text-(--color-text-muted)">
                 [{logs.length}]
               </span>
             )}
@@ -133,31 +115,26 @@ export function TerminalPanel({ apiOk = false, wsConnected = false }: Partial<Te
 
         {/* Right: version + clear + chevron */}
         <div className="flex items-center gap-2">
-          <span
-            style={{
-              color: "var(--color-text-muted)",
-              fontFamily: "var(--font-mono)",
-              fontSize: 9,
-              letterSpacing: "0.04em",
-              opacity: 0.6,
-            }}
-          >
+          <span className="font-mono text-[9px] tracking-[0.04em] text-(--color-text-muted) opacity-60">
             v1.0.0 — KodaQuant
           </span>
           {open && (
             <span
-              onClick={(e) => { e.stopPropagation(); clear(); }}
-              className="rounded p-0.5 hover:text-[var(--color-text-secondary)]"
-              style={{ color: "var(--color-text-muted)", cursor: "pointer" }}
+              onClick={(e) => {
+                e.stopPropagation();
+                clear();
+              }}
+              className="rounded p-0.5 text-(--color-text-muted) hover:text-[var(--color-text-secondary)]"
+              className="cursor-pointer"
               title="Clear logs"
             >
               <Trash2 size={10} />
             </span>
           )}
           {open ? (
-            <ChevronDown size={10} style={{ color: "var(--color-text-muted)" }} />
+            <ChevronDown size={10} className="text-(--color-text-muted)" />
           ) : (
-            <ChevronUp size={10} style={{ color: "var(--color-text-muted)" }} />
+            <ChevronUp size={10} className="text-(--color-text-muted)" />
           )}
         </div>
       </div>
@@ -166,27 +143,26 @@ export function TerminalPanel({ apiOk = false, wsConnected = false }: Partial<Te
       {open && (
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto px-6 py-1"
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: 11,
-            lineHeight: 1.5,
-          }}
+          className="flex-1 overflow-y-auto px-6 py-1 font-mono text-[11px]"
+          style={{ lineHeight: 1.5 }}
         >
           {logs.length === 0 ? (
-            <span style={{ color: "var(--color-text-muted)" }}>
+            <span className="text-(--color-text-muted)">
               No logs yet. Logs will appear here during backtest execution.
             </span>
           ) : (
             logs.map((log, i) => (
               <div key={i} className="flex gap-2">
-                <span style={{ color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                <span className="whitespace-nowrap text-(--color-text-muted)">
                   {log.ts.toLocaleTimeString()}
                 </span>
-                <span style={{ color: LEVEL_COLORS[log.level], fontWeight: 600, minWidth: 36 }}>
+                <span
+                  className="min-w-[36px] font-semibold"
+                  style={{ color: LEVEL_COLORS[log.level] }}
+                >
                   [{log.level.toUpperCase()}]
                 </span>
-                <span style={{ color: "var(--color-text-primary)" }}>{log.message}</span>
+                <span className="text-(--color-text-primary)">{log.message}</span>
               </div>
             ))
           )}

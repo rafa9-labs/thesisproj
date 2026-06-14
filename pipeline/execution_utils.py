@@ -144,21 +144,22 @@ def find_hit_rate_switch_idx(df, window_bars: int, thr: float = 0.45, start_ts=N
     return None if bad.empty else bad.index[0]
 
 
-def build_trade_log_from_df(df, bar_minutes=None):
+def build_trade_log_from_df(df, bar_minutes=None, price_col="close", pip_multiplier=10000):
     """
     Build a per-trade log from a per-bar results DataFrame.
 
     Expects df to contain:
       - index: datetime-like (bar timestamps),
       - 'position': net position (sign gives direction),
-      - 'strategy': per-bar log-return (or simple return) of the strategy.
+      - 'strategy': per-bar log-return (or simple return) of the strategy,
+      - optionally a price column (default 'close') for entry/exit prices.
 
     Returns
     -------
     DataFrame with one row per trade:
       trade_id, entry_time, exit_time, side, side_sign,
       entry_bar, exit_bar, bars_held, holding_minutes,
-      gross_log_return, pnl_pct
+      gross_log_return, pnl_pct, entry_price, exit_price, pips
     """
     import numpy as np
     import pandas as pd
@@ -175,7 +176,16 @@ def build_trade_log_from_df(df, bar_minutes=None):
         "holding_minutes",
         "gross_log_return",
         "pnl_pct",
+        "entry_price",
+        "exit_price",
+        "pips",
     ]
+
+    _price_available = price_col is not None and price_col in df.columns
+    if _price_available:
+        prices = pd.to_numeric(df[price_col]).values.astype(float)
+    else:
+        prices = None
 
     if df is None or len(df) == 0:
         return pd.DataFrame(columns=cols)
@@ -224,6 +234,20 @@ def build_trade_log_from_df(df, bar_minutes=None):
         pnl_pct = float(np.exp(log_ret) - 1.0)
         bars_held = int(exit_i - entry_i + 1)
 
+        entry_price = None
+        exit_price = None
+        pips = None
+        if prices is not None:
+            try:
+                entry_price = float(prices[entry_i])
+                exit_price = float(prices[exit_i])
+                raw_pips = (exit_price - entry_price) * pip_multiplier
+                pips = raw_pips if current_side > 0 else -raw_pips
+            except Exception:
+                entry_price = None
+                exit_price = None
+                pips = None
+
         trades.append(
             {
                 "trade_id": len(trades),
@@ -237,6 +261,9 @@ def build_trade_log_from_df(df, bar_minutes=None):
                 "holding_minutes": int(bars_held * bar_minutes),
                 "gross_log_return": log_ret,
                 "pnl_pct": pnl_pct,
+                "entry_price": entry_price,
+                "exit_price": exit_price,
+                "pips": pips,
             }
         )
         current_side = 0.0

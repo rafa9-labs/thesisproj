@@ -2,18 +2,9 @@ import { useBacktestStore } from "@/stores/useBacktestStore";
 import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamToggle } from "@/components/shared/ParamToggle";
 import { ParamSelect } from "@/components/shared/ParamSelect";
+import { Panel, PanelHeader, Section } from "@/components/shared/Panel";
 import { RANGES, SELECT_OPTIONS } from "@/lib/constants";
 import { ModelHyperparamsPanel } from "./ModelHyperparamsPanel";
-
-const sectionClass = "rounded-sm border p-6";
-const sectionStyle: React.CSSProperties = {
-  borderColor: "var(--color-glass-border)",
-  backgroundColor: "rgba(255,255,255,0.02)",
-};
-const sectionTitleClass = "mb-1 text-[11px] font-medium uppercase tracking-[0.12em]";
-const sectionTitleStyle: React.CSSProperties = { color: "var(--color-text-secondary)" };
-const explainerClass = "mb-5 text-[11px] font-light leading-relaxed max-w-[720px]";
-const explainerStyle: React.CSSProperties = { color: "var(--color-text-muted)" };
 
 export function HpoPanel() {
   const setField = useBacktestStore((s) => s.setField);
@@ -23,34 +14,17 @@ export function HpoPanel() {
   const hpoManualOverride = useBacktestStore((s) => s.hpoManualOverride);
 
   return (
-    <div
-      className="flex flex-col gap-6 rounded-sm border p-6"
-      style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
-      }}
-    >
-      {/* Header */}
-      <div className="flex items-center pb-2">
-        <h3
-          className="text-[11px] font-medium uppercase tracking-[0.12em]"
-          style={{ color: "var(--color-text-muted)" }}
-        >
-          Walk-Forward &amp; HPO
-        </h3>
-      </div>
+    <Panel>
+      <PanelHeader
+        title="Walk-Forward & HPO"
+        subtitle="Configure the hyperparameter search and rolling validation windows."
+      />
 
       {/* ── Optimization Strategy ── */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Optimization Strategy</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          Controls how aggressively the engine searches hyperparameters. Deeper searches find better configs but take longer.
-        </p>
-
+      <Section
+        title="Optimization Strategy"
+        description="Controls how aggressively the engine searches hyperparameters. Deeper searches find better configs but take longer."
+      >
         <div className="flex flex-col gap-6">
           <div className="max-w-sm">
             <ParamSlider
@@ -67,27 +41,29 @@ export function HpoPanel() {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-6">
-            <div className="flex flex-col gap-1 rounded-sm p-3"
-              style={{ backgroundColor: "var(--color-elevated)" }}>
-              <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="flex flex-col gap-1 rounded-sm bg-(--color-elevated) p-3">
+              <span className="text-[10px] tracking-[0.06em] text-(--color-text-muted) uppercase">
                 HPO Trials
               </span>
-              <div className="mt-2 text-[11px]" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>
-                <span style={{ color: "var(--color-brand)" }}>
+              <div className="mt-2 font-mono text-[11px] text-(--color-text-secondary)">
+                <span className="text-(--color-brand)">
                   {hpoManualOverride ? nTrials : _trialRangeByIntensity(hpoIntensity)}
                 </span>
-                <span style={{ color: "var(--color-text-muted)" }}> trials per model</span>
+                <span className="text-(--color-text-muted)"> trials per model</span>
                 {hpoManualOverride && nTrials === 0 && (
-                  <span style={{ color: "var(--color-accent-warning)", marginLeft: 8 }}>no HPO — defaults only</span>
+                  <span className="text-(--color-accent-warning)" style={{ marginLeft: 8 }}>
+                    no HPO — defaults only
+                  </span>
                 )}
               </div>
-              <div className="mt-0.5 text-[9px]" style={{ color: "var(--color-text-muted)" }}>
-                logistic={_trialForModel(hpoIntensity, "logistic")} · xgboost={_trialForModel(hpoIntensity, "xgboost")} ·
-                lstm={_trialForModel(hpoIntensity, "lstm")}
+              <div className="mt-0.5 text-[9px] text-(--color-text-muted)">
+                logistic={_trialForModel(hpoIntensity, "logistic")} · xgboost=
+                {_trialForModel(hpoIntensity, "xgboost")} · lstm=
+                {_trialForModel(hpoIntensity, "lstm")}
               </div>
               {hpoManualOverride && (
-                <div className="mt-1 text-[9px]" style={{ color: "var(--color-accent)" }}>
+                <div className="mt-1 text-[9px] text-(--color-accent)">
                   Manual override — {nTrials} trial{nTrials !== 1 ? "s" : ""} for all models
                 </div>
               )}
@@ -119,7 +95,7 @@ export function HpoPanel() {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
             <ParamSlider
               label="Max HPO Duration (min)"
               value={s.maxHpoDurationMinutes ?? 0}
@@ -146,7 +122,7 @@ export function HpoPanel() {
               onChange={(v) => setField("hpoTwoPhase", v)}
             />
             {s.hpoTwoPhase && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-6 ml-6 pl-4 border-l" style={{ borderColor: "var(--color-glass-border)" }}>
+              <div className="ml-6 grid grid-cols-1 gap-x-6 gap-y-6 border-l border-(--color-glass-border) pl-4 sm:grid-cols-2 lg:grid-cols-4">
                 <ParamSelect
                   label="Phase 1 Sampler"
                   value={s.phase1Sampler}
@@ -185,99 +161,89 @@ export function HpoPanel() {
             )}
           </div>
         </div>
-      </section>
+      </Section>
 
       {/* ── Walk-Forward Windows ── */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Walk-Forward Windows</h4>
+      <Section
+        title="Walk-Forward Windows"
+        description="Splits data into rolling train/test chunks. The model retrains on each window and tests on the next, preventing look-ahead bias."
+      >
+        <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+          <ParamSlider
+            label="Train Window"
+            value={s.trainMonths}
+            min={RANGES.trainMonths.min}
+            max={RANGES.trainMonths.max}
+            step={RANGES.trainMonths.step}
+            description="Months of historical data used to train each fold."
+            onChange={(v) => setField("trainMonths", v)}
+          />
+          <ParamSlider
+            label="Test Window"
+            value={s.testMonths}
+            min={RANGES.testMonths.min}
+            max={RANGES.testMonths.max}
+            step={RANGES.testMonths.step}
+            description="Months held out for validation after training."
+            onChange={(v) => setField("testMonths", v)}
+          />
+          <ParamSelect
+            label="Period Unit"
+            value={s.periodUnit ?? "months"}
+            options={[...SELECT_OPTIONS.periodUnit]}
+            description="Granularity of each train/test window."
+            onChange={(v) => setField("periodUnit", v as "months" | "weeks" | "days")}
+          />
         </div>
-            <p className={explainerClass} style={explainerStyle}>
-              Splits data into rolling train/test chunks. The model retrains on each window and tests on the next, preventing look-ahead bias.
-            </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-6">
-              <ParamSlider
-                label="Train Window"
-                value={s.trainMonths}
-                min={RANGES.trainMonths.min}
-                max={RANGES.trainMonths.max}
-                step={RANGES.trainMonths.step}
-                description="Months of historical data used to train each fold."
-                onChange={(v) => setField("trainMonths", v)}
-              />
-              <ParamSlider
-                label="Test Window"
-                value={s.testMonths}
-                min={RANGES.testMonths.min}
-                max={RANGES.testMonths.max}
-                step={RANGES.testMonths.step}
-                description="Months held out for validation after training."
-                onChange={(v) => setField("testMonths", v)}
-              />
-              <ParamSelect
-                label="Period Unit"
-                value={s.periodUnit ?? "months"}
-                options={[...SELECT_OPTIONS.periodUnit]}
-                description="Granularity of each train/test window."
-                onChange={(v) => setField("periodUnit", v as "months" | "weeks" | "days")}
-              />
-            </div>
-
-            <div className="flex flex-col gap-4 mt-2">
-              <ParamSelect
-                label="HPO Mode"
-                value={s.hpoMode ?? "static"}
-                options={[...SELECT_OPTIONS.hpoMode]}
-                description="Static runs HPO once on fold 1 and reuses params. Dynamic re-optimizes at each walk-forward step."
-                onChange={(v) => setField("hpoMode", v as string)}
-              />
-              {s.hpoMode === "dynamic" && (
-                <ParamSlider
-                  label="Dynamic HPO Trials"
-                  value={s.dynamicHpoTrials}
-                  min={RANGES.dynamicHpoTrials.min}
-                  max={RANGES.dynamicHpoTrials.max}
-                  step={RANGES.dynamicHpoTrials.step}
-                  description="Trials per walk-forward step in dynamic mode."
-                  onChange={(v) => setField("dynamicHpoTrials", v)}
-                />
-              )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
-                <ParamSlider
-                  label="WFO Train Periods"
-                  value={s.wfoTrainPeriods}
-                  min={RANGES.wfoTrainPeriods.min}
-                  max={RANGES.wfoTrainPeriods.max}
-                  step={RANGES.wfoTrainPeriods.step}
-                  description="Override train window in period units. 0 = use default from train months."
-                  onChange={(v) => setField("wfoTrainPeriods", v)}
-                />
-                <ParamSlider
-                  label="WFO Test Periods"
-                  value={s.wfoTestPeriods}
-                  min={RANGES.wfoTestPeriods.min}
-                  max={RANGES.wfoTestPeriods.max}
-                  step={RANGES.wfoTestPeriods.step}
-                  description="Override test window in period units. 0 = use default from test months."
-                  onChange={(v) => setField("wfoTestPeriods", v)}
-                />
-              </div>
-            </div>
-          </section>
+        <div className="mt-2 flex flex-col gap-4">
+          <ParamSelect
+            label="HPO Mode"
+            value={s.hpoMode ?? "static"}
+            options={[...SELECT_OPTIONS.hpoMode]}
+            description="Static runs HPO once on fold 1 and reuses params. Dynamic re-optimizes at each walk-forward step."
+            onChange={(v) => setField("hpoMode", v as string)}
+          />
+          {s.hpoMode === "dynamic" && (
+            <ParamSlider
+              label="Dynamic HPO Trials"
+              value={s.dynamicHpoTrials}
+              min={RANGES.dynamicHpoTrials.min}
+              max={RANGES.dynamicHpoTrials.max}
+              step={RANGES.dynamicHpoTrials.step}
+              description="Trials per walk-forward step in dynamic mode."
+              onChange={(v) => setField("dynamicHpoTrials", v)}
+            />
+          )}
+          <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+            <ParamSlider
+              label="WFO Train Periods"
+              value={s.wfoTrainPeriods}
+              min={RANGES.wfoTrainPeriods.min}
+              max={RANGES.wfoTrainPeriods.max}
+              step={RANGES.wfoTrainPeriods.step}
+              description="Override train window in period units. 0 = use default from train months."
+              onChange={(v) => setField("wfoTrainPeriods", v)}
+            />
+            <ParamSlider
+              label="WFO Test Periods"
+              value={s.wfoTestPeriods}
+              min={RANGES.wfoTestPeriods.min}
+              max={RANGES.wfoTestPeriods.max}
+              step={RANGES.wfoTestPeriods.step}
+              description="Override test window in period units. 0 = use default from test months."
+              onChange={(v) => setField("wfoTestPeriods", v)}
+            />
+          </div>
+        </div>
+      </Section>
 
       {/* ── Quality Gates ── */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Quality Gates</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          Minimum thresholds a model must pass to be considered viable. Configs below any gate are discarded automatically.
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-6">
+      <Section
+        title="Quality Gates"
+        description="Minimum thresholds a model must pass to be considered viable. Configs below any gate are discarded automatically."
+      >
+        <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
           <ParamSlider
             label="Active Rate"
             value={s.targetActiveRate}
@@ -306,18 +272,13 @@ export function HpoPanel() {
             onChange={(v) => setField("confidenceThreshold", v)}
           />
         </div>
-      </section>
+      </Section>
 
       {/* ── Execution Reality ── */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Execution Reality</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          Simulates real-world trading friction. Sharper backtests include slippage and spread to avoid overestimating returns.
-        </p>
-
+      <Section
+        title="Execution Reality"
+        description="Simulates real-world trading friction. Sharper backtests include slippage and spread to avoid overestimating returns."
+      >
         <div className="flex flex-col gap-6">
           <div className="max-w-xs">
             <ParamToggle
@@ -329,7 +290,7 @@ export function HpoPanel() {
           </div>
 
           {s.evalUseTradingCosts && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
+            <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
               <ParamSlider
                 label="Slippage (bps)"
                 value={s.slipNormBps}
@@ -342,44 +303,92 @@ export function HpoPanel() {
             </div>
           )}
         </div>
-      </section>
+      </Section>
 
       {/* ── Per-Model Hyperparameters ── */}
       <ModelHyperparamsPanel />
-    </div>
+    </Panel>
   );
 }
 
 // Per-model trial counts mirroring backend HPO_TRIAL_MAPS (api/schemas/backtest.py)
 const _HPO_TRIALS: Record<string, Record<string, { r: number; b: number }>> = {
-  light: { logistic: { r: 1, b: 1 }, svm: { r: 1, b: 1 }, decision_tree: { r: 1, b: 1 },
-           random_forest: { r: 1, b: 1 }, xgboost: { r: 1, b: 1 },
-           lightgbm: { r: 1, b: 1 }, catboost: { r: 1, b: 1 },
-           lstm: { r: 1, b: 1 }, cnn: { r: 1, b: 1 }, transformer: { r: 1, b: 1 },
-           gru: { r: 1, b: 1 }, gru_lstm: { r: 1, b: 1 },
-           ensemble_adaptive_regime: { r: 1, b: 1 }, ensemble_cnn_lstm_xgboost: { r: 1, b: 1 },
-           meta_ensemble: { r: 1, b: 1 }, stacking_ensemble: { r: 1, b: 1 }, dqn: { r: 1, b: 1 } },
-  quick: { logistic: { r: 2, b: 2 }, svm: { r: 2, b: 2 }, decision_tree: { r: 2, b: 2 },
-           random_forest: { r: 2, b: 2 }, xgboost: { r: 2, b: 2 },
-           lightgbm: { r: 2, b: 2 }, catboost: { r: 2, b: 2 },
-           lstm: { r: 2, b: 2 }, cnn: { r: 2, b: 2 }, transformer: { r: 2, b: 2 },
-           gru: { r: 2, b: 2 }, gru_lstm: { r: 2, b: 2 },
-           ensemble_adaptive_regime: { r: 2, b: 2 }, ensemble_cnn_lstm_xgboost: { r: 2, b: 2 },
-           meta_ensemble: { r: 2, b: 2 }, stacking_ensemble: { r: 2, b: 2 }, dqn: { r: 1, b: 1 } },
-  standard: { logistic: { r: 5, b: 5 }, svm: { r: 5, b: 5 }, decision_tree: { r: 5, b: 5 },
-              random_forest: { r: 5, b: 10 }, xgboost: { r: 5, b: 15 },
-              lightgbm: { r: 5, b: 15 }, catboost: { r: 5, b: 15 },
-              lstm: { r: 3, b: 7 }, cnn: { r: 3, b: 7 }, transformer: { r: 3, b: 7 },
-              gru: { r: 3, b: 7 }, gru_lstm: { r: 3, b: 7 },
-              ensemble_adaptive_regime: { r: 2, b: 3 }, ensemble_cnn_lstm_xgboost: { r: 2, b: 3 },
-              meta_ensemble: { r: 2, b: 3 }, stacking_ensemble: { r: 2, b: 3 }, dqn: { r: 2, b: 3 } },
-  deep: { logistic: { r: 10, b: 10 }, svm: { r: 10, b: 10 }, decision_tree: { r: 5, b: 10 },
-          random_forest: { r: 10, b: 20 }, xgboost: { r: 10, b: 30 },
-          lightgbm: { r: 10, b: 30 }, catboost: { r: 10, b: 30 },
-          lstm: { r: 5, b: 15 }, cnn: { r: 5, b: 15 }, transformer: { r: 5, b: 15 },
-          gru: { r: 5, b: 15 }, gru_lstm: { r: 5, b: 15 },
-          ensemble_adaptive_regime: { r: 3, b: 7 }, ensemble_cnn_lstm_xgboost: { r: 3, b: 7 },
-          meta_ensemble: { r: 3, b: 7 }, stacking_ensemble: { r: 3, b: 7 }, dqn: { r: 3, b: 5 } },
+  light: {
+    logistic: { r: 1, b: 1 },
+    svm: { r: 1, b: 1 },
+    decision_tree: { r: 1, b: 1 },
+    random_forest: { r: 1, b: 1 },
+    xgboost: { r: 1, b: 1 },
+    lightgbm: { r: 1, b: 1 },
+    catboost: { r: 1, b: 1 },
+    lstm: { r: 1, b: 1 },
+    cnn: { r: 1, b: 1 },
+    transformer: { r: 1, b: 1 },
+    gru: { r: 1, b: 1 },
+    gru_lstm: { r: 1, b: 1 },
+    ensemble_adaptive_regime: { r: 1, b: 1 },
+    ensemble_cnn_lstm_xgboost: { r: 1, b: 1 },
+    meta_ensemble: { r: 1, b: 1 },
+    stacking_ensemble: { r: 1, b: 1 },
+    dqn: { r: 1, b: 1 },
+  },
+  quick: {
+    logistic: { r: 2, b: 2 },
+    svm: { r: 2, b: 2 },
+    decision_tree: { r: 2, b: 2 },
+    random_forest: { r: 2, b: 2 },
+    xgboost: { r: 2, b: 2 },
+    lightgbm: { r: 2, b: 2 },
+    catboost: { r: 2, b: 2 },
+    lstm: { r: 2, b: 2 },
+    cnn: { r: 2, b: 2 },
+    transformer: { r: 2, b: 2 },
+    gru: { r: 2, b: 2 },
+    gru_lstm: { r: 2, b: 2 },
+    ensemble_adaptive_regime: { r: 2, b: 2 },
+    ensemble_cnn_lstm_xgboost: { r: 2, b: 2 },
+    meta_ensemble: { r: 2, b: 2 },
+    stacking_ensemble: { r: 2, b: 2 },
+    dqn: { r: 1, b: 1 },
+  },
+  standard: {
+    logistic: { r: 5, b: 5 },
+    svm: { r: 5, b: 5 },
+    decision_tree: { r: 5, b: 5 },
+    random_forest: { r: 5, b: 10 },
+    xgboost: { r: 5, b: 15 },
+    lightgbm: { r: 5, b: 15 },
+    catboost: { r: 5, b: 15 },
+    lstm: { r: 3, b: 7 },
+    cnn: { r: 3, b: 7 },
+    transformer: { r: 3, b: 7 },
+    gru: { r: 3, b: 7 },
+    gru_lstm: { r: 3, b: 7 },
+    ensemble_adaptive_regime: { r: 2, b: 3 },
+    ensemble_cnn_lstm_xgboost: { r: 2, b: 3 },
+    meta_ensemble: { r: 2, b: 3 },
+    stacking_ensemble: { r: 2, b: 3 },
+    dqn: { r: 2, b: 3 },
+  },
+  deep: {
+    logistic: { r: 10, b: 10 },
+    svm: { r: 10, b: 10 },
+    decision_tree: { r: 5, b: 10 },
+    random_forest: { r: 10, b: 20 },
+    xgboost: { r: 10, b: 30 },
+    lightgbm: { r: 10, b: 30 },
+    catboost: { r: 10, b: 30 },
+    lstm: { r: 5, b: 15 },
+    cnn: { r: 5, b: 15 },
+    transformer: { r: 5, b: 15 },
+    gru: { r: 5, b: 15 },
+    gru_lstm: { r: 5, b: 15 },
+    ensemble_adaptive_regime: { r: 3, b: 7 },
+    ensemble_cnn_lstm_xgboost: { r: 3, b: 7 },
+    meta_ensemble: { r: 3, b: 7 },
+    stacking_ensemble: { r: 3, b: 7 },
+    dqn: { r: 3, b: 5 },
+  },
 };
 
 function _trialForModel(intensity: string, model: string): number {

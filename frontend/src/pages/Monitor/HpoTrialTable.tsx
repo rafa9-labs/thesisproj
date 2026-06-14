@@ -10,12 +10,30 @@ interface Props {
 }
 
 const IMPORTANT_PARAMS = new Set([
-  "lags", "lags_range", "confidence_threshold", "target_active_rate",
-  "calibrate_method", "gating_mode", "label_threshold", "roll_windows_key",
-  "alpha_vol_z", "beta_spread_norm", "gamma_slip_norm",
-  "max_depth", "learning_rate", "n_estimators", "subsample", "C", "gamma",
-  "units", "num_layers", "dropout_rate", "filters", "kernel_size",
-  "d_model", "num_heads",
+  "lags",
+  "lags_range",
+  "confidence_threshold",
+  "target_active_rate",
+  "calibrate_method",
+  "gating_mode",
+  "label_threshold",
+  "roll_windows_key",
+  "alpha_vol_z",
+  "beta_spread_norm",
+  "gamma_slip_norm",
+  "max_depth",
+  "learning_rate",
+  "n_estimators",
+  "subsample",
+  "C",
+  "gamma",
+  "units",
+  "num_layers",
+  "dropout_rate",
+  "filters",
+  "kernel_size",
+  "d_model",
+  "num_heads",
 ]);
 
 function parseTrialState(state: string): { label: string; color: string; reason: string } {
@@ -25,9 +43,12 @@ function parseTrialState(state: string): { label: string; color: string; reason:
   if (state.startsWith("FAIL:")) {
     return { label: "fail", color: "var(--color-accent-danger)", reason: state.slice(5) };
   }
-  if (state === "PRUNED") return { label: "prune", color: "var(--color-accent-warning)", reason: "No reason given" };
-  if (state === "FAIL") return { label: "fail", color: "var(--color-accent-danger)", reason: "No reason given" };
-  if (state === "COMPLETE") return { label: "done", color: "var(--color-accent-success)", reason: "" };
+  if (state === "PRUNED")
+    return { label: "prune", color: "var(--color-accent-warning)", reason: "No reason given" };
+  if (state === "FAIL")
+    return { label: "fail", color: "var(--color-accent-danger)", reason: "No reason given" };
+  if (state === "COMPLETE")
+    return { label: "done", color: "var(--color-accent-success)", reason: "" };
   return { label: state.toLowerCase(), color: "var(--color-text-muted)", reason: "" };
 }
 
@@ -59,27 +80,22 @@ export function HpoTrialTable({ trials, bestTrial, totalTrials }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <span
-          className="text-[11px] font-semibold uppercase tracking-[0.08em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
+        <span className="text-[11px] font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
           HPO Trials
         </span>
-        <span className="text-[10px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-          {trials.length}{totalTrials > 0 ? `/${totalTrials}` : ""}
+        <span className="font-mono text-[10px] text-(--color-text-muted)">
+          {trials.length}
+          {totalTrials > 0 ? `/${totalTrials}` : ""}
         </span>
         {bestTrial && (
-          <span className="text-[9px] ml-1" style={{ color: "var(--color-accent-warning)", fontFamily: "var(--font-mono)" }}>
+          <span className="ml-1 font-mono text-[9px] text-(--color-accent-warning)">
             best: #{bestTrial.trial_number} — {bestTrial.score?.toFixed(4) ?? "-"}
           </span>
         )}
       </div>
 
       {visible.length === 0 && (
-        <div
-          className="flex items-center justify-center rounded-sm border px-3 py-4"
-          style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
-        >
+        <div className="flex items-center justify-center rounded-sm border border-(--color-border) px-3 py-4 text-(--color-text-muted)">
           <span className="text-xs">Waiting for trials...</span>
         </div>
       )}
@@ -87,34 +103,21 @@ export function HpoTrialTable({ trials, bestTrial, totalTrials }: Props) {
       {visible.length > 0 && (
         <div
           ref={scrollRef}
-          className="overflow-y-auto rounded-sm border"
-          style={{ maxHeight: 340, borderColor: "var(--color-border)" }}
+          className="max-h-[340px] overflow-y-auto rounded-sm border border-(--color-border)"
         >
           <table className="w-full border-collapse">
-            <thead className="sticky top-0" style={{ backgroundColor: "var(--color-surface)" }}>
+            <thead className="sticky top-0 bg-(--color-surface)">
               <tr>
-                <th
-                  className="px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-[0.06em]"
-                  style={{ color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)", width: 28 }}
-                >
+                <th className="w-[28px] border-b border-(--color-border) px-2 py-1.5 text-left text-[10px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
                   #
                 </th>
-                <th
-                  className="px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-[0.06em]"
-                  style={{ color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)", width: 60 }}
-                >
+                <th className="w-[60px] border-b border-(--color-border) px-2 py-1.5 text-left text-[10px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
                   Score
                 </th>
-                <th
-                  className="px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-[0.06em]"
-                  style={{ color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)" }}
-                >
+                <th className="border-b border-(--color-border) px-2 py-1.5 text-left text-[10px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
                   Params
                 </th>
-                <th
-                  className="px-2 py-1.5 text-center text-[10px] font-medium uppercase tracking-[0.06em]"
-                  style={{ color: "var(--color-text-muted)", borderBottom: "1px solid var(--color-border)", width: 70 }}
-                >
+                <th className="w-[70px] border-b border-(--color-border) px-2 py-1.5 text-center text-[10px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
                   State
                 </th>
               </tr>
@@ -135,39 +138,36 @@ export function HpoTrialTable({ trials, bestTrial, totalTrials }: Props) {
                         setExpanded(isExpanded ? null : t.trial_number);
                       }
                     }}
+                    className="border-b border-(--color-border-subtle)"
                     style={{
                       backgroundColor: best ? "rgba(234,179,8,0.04)" : "transparent",
-                      borderBottom: "1px solid var(--color-border-subtle)",
-                      cursor: (all.length > 0 || st.reason) ? "pointer" : "default",
+                      cursor: all.length > 0 || st.reason ? "pointer" : "default",
                     }}
                   >
-                    <td
-                      className="px-2 py-1 text-[10px] align-top"
-                      style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-secondary)" }}
-                    >
+                    <td className="px-2 py-1 align-top font-mono text-[10px] text-(--color-text-secondary)">
                       {t.trial_number}
-                      {isExpanded ? <ChevronUp size={8} style={{ marginLeft: 2 }} /> : <ChevronDown size={8} style={{ marginLeft: 2 }} />}
+                      {isExpanded ? (
+                        <ChevronUp size={8} className="ml-[2px]" />
+                      ) : (
+                        <ChevronDown size={8} className="ml-[2px]" />
+                      )}
                     </td>
-                    <td
-                      className="px-2 py-1 text-[10px] align-top"
-                      style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}
-                    >
+                    <td className="px-2 py-1 align-top font-mono text-[10px] text-(--color-text-primary)">
                       {t.score != null ? t.score.toFixed(4) : "-"}
                     </td>
                     <td className="px-2 py-1 align-top">
-                      <div className="flex gap-1 flex-wrap">
+                      <div className="flex flex-wrap gap-1">
                         {top.length > 0 ? (
                           top.map(([k, v]) => (
                             <span
                               key={k}
-                              className="inline-flex items-center px-1 rounded text-[9px]"
-                              style={{ backgroundColor: "rgba(59,130,246,0.08)", color: "var(--color-brand)", fontFamily: "var(--font-mono)" }}
+                              className="inline-flex items-center rounded bg-[rgba(59,130,246,0.08)] px-1 font-mono text-[9px] text-(--color-brand)"
                             >
                               {k}: {typeof v === "number" ? v.toFixed(3) : String(v)}
                             </span>
                           ))
                         ) : (
-                          <span className="text-[9px]" style={{ color: "var(--color-text-muted)" }}>—</span>
+                          <span className="text-[9px] text-(--color-text-muted)">—</span>
                         )}
                       </div>
 
@@ -175,8 +175,10 @@ export function HpoTrialTable({ trials, bestTrial, totalTrials }: Props) {
                       {isExpanded && (
                         <div className="mt-1.5 flex flex-col gap-1">
                           {st.reason && (
-                            <div className="rounded px-1.5 py-1 text-[9px] leading-tight" style={{ backgroundColor: "rgba(242,54,69,0.05)", color: "var(--color-accent-danger)" }}>
-                              <span className="font-medium uppercase tracking-[0.06em]">Reason: </span>
+                            <div className="rounded bg-[rgba(242,54,69,0.05)] px-1.5 py-1 text-[9px] leading-tight text-(--color-accent-danger)">
+                              <span className="font-medium tracking-[0.06em] uppercase">
+                                Reason:{" "}
+                              </span>
                               {st.reason}
                             </div>
                           )}
@@ -185,8 +187,7 @@ export function HpoTrialTable({ trials, bestTrial, totalTrials }: Props) {
                               {all.map(([k, v]) => (
                                 <span
                                   key={k}
-                                  className="inline-flex items-center px-1 rounded text-[8px]"
-                                  style={{ backgroundColor: "var(--color-elevated)", color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
+                                  className="inline-flex items-center rounded bg-(--color-elevated) px-1 font-mono text-[8px] text-(--color-text-muted)"
                                 >
                                   {k}: {typeof v === "number" ? v.toFixed(4) : String(v)}
                                 </span>
@@ -200,15 +201,15 @@ export function HpoTrialTable({ trials, bestTrial, totalTrials }: Props) {
                       <div className="flex flex-col items-center gap-0.5">
                         <span
                           className="inline-block rounded px-1.5 py-0.5 text-[9px] font-medium uppercase"
-                          style={{ backgroundColor: st.reason ? "rgba(242,54,69,0.08)" : undefined, color: st.color }}
+                          style={{
+                            backgroundColor: st.reason ? "rgba(242,54,69,0.08)" : undefined,
+                            color: st.color,
+                          }}
                         >
                           {st.label}
                         </span>
                         {st.reason && (
-                          <span
-                            className="text-[7px] leading-tight max-w-[64px] text-center"
-                            style={{ color: "var(--color-text-muted)", wordBreak: "break-word" }}
-                          >
+                          <span className="max-w-[64px] text-center text-[7px] leading-tight break-words text-(--color-text-muted)">
                             {st.reason.length > 40 ? st.reason.slice(0, 38) + ".." : st.reason}
                           </span>
                         )}

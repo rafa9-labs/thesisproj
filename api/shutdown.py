@@ -29,35 +29,45 @@ def wal_checkpoint_periodic(db_path: str) -> None:
 
 
 def mark_stale_jobs_failed(db_path: str) -> int:
-    """Mark all pending/running jobs as failed on server restart.
+    """On server restart, transition stale jobs.
+
+    - 'running' jobs → set back to 'pending' so they can be re-queued.
+      A running job at restart means the worker was killed mid-execution;
+      marking it pending preserves the job for manual or auto retry.
+    - 'pending' jobs stay 'pending' — they were never picked up.
 
     Returns number of jobs updated.
     """
     now = datetime.now(timezone.utc).isoformat()
+    total = 0
     try:
         conn = sqlite3.connect(db_path, timeout=10)
         cur = conn.execute(
-            "UPDATE jobs SET status = 'failed', error = 'Server restarted before completion', updated_at = ? WHERE status IN ('pending', 'running')",
+            "UPDATE jobs SET status = 'pending', "
+            "error = 'Server restarted while running — reset to pending', "
+            "updated_at = ? "
+            "WHERE status = 'running'",
             (now,),
         )
-        count = cur.rowcount
+        total += cur.rowcount
         conn.commit()
         conn.close()
-        return count
+        return total
     except Exception:
-        return 0
+        return total
 
 
 def mark_running_jobs_interrupted(db_path: str) -> int:
-    """Mark running jobs as failed because the server is shutting down.
+    """On shutdown, mark running jobs as interrupted.
 
-    Returns number of jobs updated.
+    These will be reset to 'pending' on next startup so Celery can re-pick
+    them up. Returns number of jobs updated.
     """
     now = datetime.now(timezone.utc).isoformat()
     try:
         conn = sqlite3.connect(db_path, timeout=10)
         cur = conn.execute(
-            "UPDATE jobs SET status = 'failed', error = 'Server shutdown interrupted backtest', updated_at = ? WHERE status = 'running'",
+            "UPDATE jobs SET error = 'Server shutdown interrupted backtest', updated_at = ? WHERE status = 'running'",
             (now,),
         )
         count = cur.rowcount

@@ -52,7 +52,12 @@ export interface OverfittingReportData {
   is_mean_sharpe: number | null;
   oos_mean_sharpe: number | null;
   dsr_min_sharpe: number | null;
-  interaction_effects: Array<{ param: string; main_pct: number; interaction_pct: number; total_pct: number }> | null;
+  interaction_effects: Array<{
+    param: string;
+    main_pct: number;
+    interaction_pct: number;
+    total_pct: number;
+  }> | null;
 }
 
 export interface WalkForwardPeriod {
@@ -169,6 +174,13 @@ export interface Metrics {
   snapshot_path?: string | null;
 }
 
+export interface AnalysisSection {
+  title: string;
+  severity: "green" | "amber" | "red" | "info";
+  detail: string;
+  recommendation: string;
+}
+
 export interface LlmAnalysis {
   insight?: string;
   recommended_preset?: string;
@@ -178,6 +190,9 @@ export interface LlmAnalysis {
   warning?: string | null;
   error?: string;
   raw_text?: string;
+  dsr_analysis?: AnalysisSection;
+  friction_analysis?: AnalysisSection;
+  regime_analysis?: AnalysisSection;
 }
 
 export interface LlmAnalysisResponse {
@@ -266,6 +281,7 @@ export interface BacktestSummaryItem {
   max_drawdown_pct: number | null;
   total_trades: number | null;
   status: string;
+  error: string | null;
 }
 
 export interface JobStatus {
@@ -341,19 +357,98 @@ export interface JobResults {
 export type WsEvent =
   | { event: "job_started"; job_id: string; pair: string; models: string[]; total_work: number }
   | { event: "model_training"; job_id: string; model: string; status: "starting" }
-  | { event: "model_training"; job_id: string; model: string; status: "complete"; metrics: Partial<Metrics> }
-  | { event: "model_phase"; job_id: string; model: string; phase: "hpo" | "simulation"; total_work?: number }
-  | { event: "hpo_progress"; job_id: string; model: string; trial?: number; total_trials?: number; n_trials?: number; cv_blocks: number; completed_work: number; total_work: number; progress_pct: number }
-  | { event: "hpo_trial_result"; job_id: string; model: string; trial_number: number; score: number | null; params: Record<string, unknown>; best_score_so_far: number | null; trial_state: string }
-  | { event: "month_progress"; job_id: string; model: string; month?: number; total_months?: number; period?: number; total_periods?: number; sharpe?: number; trades?: number; completed_work: number; total_work: number; progress_pct: number }
-  | { event: "oos_result"; job_id: string; model: string; period: number; total_periods: number; equity: number | null; equity_bh: number | null; sharpe: number | null; return_pct: number | null; trades: number | null; drawdown: number | null; win_rate: number | null; precision: number | null; f1: number | null; directional_accuracy: number | null; active_rate: number | null; flat?: boolean; train_sharpe?: number | null; sharpe_gap_pct?: number | null; signals_raw?: number; signals_passed_gate?: number }
+  | {
+      event: "model_training";
+      job_id: string;
+      model: string;
+      status: "complete";
+      metrics: Partial<Metrics>;
+    }
+  | {
+      event: "model_phase";
+      job_id: string;
+      model: string;
+      phase: "hpo" | "simulation";
+      total_work?: number;
+    }
+  | {
+      event: "hpo_progress";
+      job_id: string;
+      model: string;
+      trial?: number;
+      total_trials?: number;
+      n_trials?: number;
+      cv_blocks: number;
+      completed_work: number;
+      total_work: number;
+      progress_pct: number;
+    }
+  | {
+      event: "hpo_trial_result";
+      job_id: string;
+      model: string;
+      trial_number: number;
+      score: number | null;
+      params: Record<string, unknown>;
+      best_score_so_far: number | null;
+      trial_state: string;
+    }
+  | {
+      event: "month_progress";
+      job_id: string;
+      model: string;
+      month?: number;
+      total_months?: number;
+      period?: number;
+      total_periods?: number;
+      sharpe?: number;
+      trades?: number;
+      completed_work: number;
+      total_work: number;
+      progress_pct: number;
+    }
+  | {
+      event: "oos_result";
+      job_id: string;
+      model: string;
+      period: number;
+      total_periods: number;
+      equity: number | null;
+      equity_bh: number | null;
+      sharpe: number | null;
+      return_pct: number | null;
+      trades: number | null;
+      drawdown: number | null;
+      win_rate: number | null;
+      precision: number | null;
+      f1: number | null;
+      directional_accuracy: number | null;
+      active_rate: number | null;
+      flat?: boolean;
+      train_sharpe?: number | null;
+      sharpe_gap_pct?: number | null;
+      signals_raw?: number;
+      signals_passed_gate?: number;
+    }
   | { event: "job_complete"; job_id: string; metrics: Partial<Metrics>[] }
   | { event: "job_failed"; job_id: string; error: string }
-  | { event: "cycle_started"; job_id: string; model: string; cycle_number: number; total_cycles: number }
+  | {
+      event: "cycle_started";
+      job_id: string;
+      model: string;
+      cycle_number: number;
+      total_cycles: number;
+    }
   | { event: "download_started"; job_id: string; pair: string }
   | { event: "download_complete"; job_id: string; pair: string }
   | { event: "download_failed"; job_id: string; error: string }
-  | { event: "simulation_started"; job_id: string; model: string; n_periods: number; bh_curve: { period: number; bh: number }[] };
+  | {
+      event: "simulation_started";
+      job_id: string;
+      model: string;
+      n_periods: number;
+      bh_curve: { period: number; bh: number }[];
+    };
 
 export interface HpoTrialRow {
   trial_number: number;
@@ -575,6 +670,9 @@ export interface LiveSentimentArticle {
   bias: string;
   timestamp: string;
   relevance_tier?: number;
+  llm_sentiment?: number | null;
+  llm_confidence?: number | null;
+  highlighted_body?: string | null;
 }
 
 export interface LiveSentimentResponse {
@@ -586,6 +684,7 @@ export interface LiveSentimentResponse {
   error?: string;
   from_cache?: boolean;
   status?: string;
+  llm_available?: boolean;
 }
 
 export interface NewsArticleFull {
@@ -598,6 +697,7 @@ export interface NewsArticleFull {
   sentiment_score: number;
   summary: string;
   bias: string;
+  highlighted_body?: string | null;
 }
 
 export interface NewsArticlesResponse {
@@ -782,7 +882,16 @@ export interface DeployLiveRequest {
 }
 
 export interface LiveSignalEvent {
-  event: "signal" | "hold" | "order_placed" | "risk_blocked" | "trade_closed" | "kill" | "heartbeat" | "stopped" | "error";
+  event:
+    | "signal"
+    | "hold"
+    | "order_placed"
+    | "risk_blocked"
+    | "trade_closed"
+    | "kill"
+    | "heartbeat"
+    | "stopped"
+    | "error";
   direction?: string;
   confidence?: number;
   mid_price?: number;
@@ -834,6 +943,7 @@ export interface CommitteeConfigSchema {
   fallback: RegimeAssignmentSchema;
   constraints?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  model_params?: Record<string, Record<string, unknown>>;
 }
 
 export interface RegimeMatrixEntry {
@@ -872,6 +982,26 @@ export interface CommitteeSnapshotInfo {
 
 export interface CommitteeSnapshotListResponse {
   snapshots: CommitteeSnapshotInfo[];
+}
+
+export interface SavedCommitteeOut {
+  id: string;
+  name: string;
+  full_cycle_job_id: string | null;
+  pair: string;
+  timeframe: string;
+  config_json: Record<string, unknown>;
+  trust_score: number | null;
+  avg_sharpe: number | null;
+  is_active: boolean;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedCommitteeListResponse {
+  committees: SavedCommitteeOut[];
+  total: number;
 }
 
 // ════════════════════════════════════════════════════════════════════

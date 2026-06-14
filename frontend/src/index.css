@@ -1,177 +1,218 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────────
+   KodaQuant Design Tokens
+   ───────────────────────────────────────────────────────────────────── */
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* ── KodaQuant Brand Palette */
-  --color-brand: #00E5FF;
+  /* Brand */
+  --color-brand: #00e5ff;
 
-  /* Base canvas — institutional dark mode */
+  /* Canvas — institutional dark mode */
   --color-app: #131722;
-  --color-surface: #1E222D;
+  --color-surface: #1e222d;
   --color-elevated: #252934;
 
-  /* Glass surfaces */
-  --color-glass: #1E222D;
-  --color-glass-border: #2A2E39;
+  /* Glass */
+  --color-glass: #1e222d;
+  --color-glass-border: #2a2e39;
   --color-glass-hover: rgba(255, 255, 255, 0.04);
 
-  /* Input backgrounds */
-  --color-input-bg: #0F1825;
+  /* Input */
+  --color-input-bg: #0f1825;
 
   /* Borders */
-  --color-border: #2A2E39;
-  --color-border-subtle: #1E222D;
+  --color-border: #2a2e39;
+  --color-border-subtle: #1e222d;
   --color-border-active: rgba(0, 229, 255, 0.25);
-  --color-card-border: #1E2A3A;
+  --color-card-border: #1e2a3a;
 
   /* Typography */
-  --color-text-primary: #E8ECF1;
-  --color-text-secondary: #7A8494;
-  --color-text-muted: #787B86;
+  --color-text-primary: #e8ecf1;
+  --color-text-secondary: #7a8494;
+  --color-text-muted: #787b86;
   --color-text-inverse: #050608;
-  --color-text-dim: #4A5568;
+  --color-text-dim: #4a5568;
 
-  /* Primary action — cyan (energy, precision) */
-  --color-primary: #00E5FF;
+  /* Actions */
+  --color-primary: #00e5ff;
   --color-primary-glow: rgba(0, 229, 255, 0.15);
-
-  /* Brand accent — cyan */
-  --color-brand: #00E5FF;
   --color-brand-glow: rgba(0, 229, 255, 0.15);
 
-  /* Semantic accents — tuned for dark backgrounds */
-  --color-accent: #00E5FF;
+  /* Semantic */
+  --color-accent: #00e5ff;
   --color-accent-success: #089981;
-  --color-accent-danger: #F23645;
-  --color-accent-warning: #F59E0B;
-  --color-accent-info: #00E5FF;
-  --color-accent-classical: #22D3EE;
-  --color-accent-deep: #A78BFA;
-  --color-accent-rl: #F59E0B;
-  --color-accent-ensemble: #EC4899;
+  --color-accent-danger: #f23645;
+  --color-accent-warning: #f59e0b;
+  --color-accent-info: #00e5ff;
+  --color-accent-classical: #22d3ee;
+  --color-accent-deep: #a78bfa;
+  --color-accent-rl: #f59e0b;
+  --color-accent-ensemble: #ec4899;
 
-  /* Event severity */
-  --color-event-high: #EF4444;
-  --color-event-medium: #F59E0B;
-  --color-event-low: #00E5FF;
+  /* Events */
+  --color-event-high: #ef4444;
+  --color-event-medium: #f59e0b;
+  --color-event-low: #00e5ff;
+
+  /* Animations — Tailwind v4 auto-generates animate-* classes */
+  --animate-skeleton: pulse-skeleton 1.5s ease-in-out infinite;
+  --animate-ping-brand: ping-brand 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-fade-in: fade-in 150ms ease-out forwards;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-}
-
-body {
-  font-family: var(--font-sans);
-  background-color: var(--color-app);
-  color: var(--color-text-primary);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--color-app);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-active);
-}
-
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  opacity: 1;
-}
-
-/* Ensure native select dropdown options are readable on all OS themes */
-select option {
-  background-color: var(--color-surface);
-  color: var(--color-text-primary);
-}
-
-/* Skeleton shimmer */
-@keyframes pulse-skeleton {
-  0%,
-  100% {
-    opacity: 0.35;
+/* ─────────────────────────────────────────────────────────────────────
+   Base Layer — reset, defaults, keyframes
+   ───────────────────────────────────────────────────────────────────── */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
   }
-  50% {
-    opacity: 0.7;
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
   }
-}
 
-.animate-skeleton {
-  animation: pulse-skeleton 1.5s ease-in-out infinite;
-}
-
-/* Cyan ping for active / running states */
-@keyframes ping-brand {
-  75%, 100% {
-    transform: scale(2.2);
-    opacity: 0;
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--color-app);
+    color: var(--color-text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-}
 
-.animate-ping-brand {
-  animation: ping-brand 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-
-/* Subtle glow pulse for active cards */
-@keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(0, 229, 255, 0.06); }
-  50% { box-shadow: 0 0 16px rgba(0, 229, 255, 0.12); }
-}
-
-.animate-glow-pulse {
-  animation: glow-pulse 3s ease-in-out infinite;
-}
-
-/* Subtle slide-in for drawers / panels */
-@keyframes slide-in-right {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
   }
-  to {
-    transform: translateX(0);
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-app);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-active);
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
     opacity: 1;
   }
-}
 
-.animate-slide-in-right {
-  animation: slide-in-right 250ms ease-out forwards;
-}
-
-/* Fade for page transitions */
-@keyframes fade-in {
-  from {
-    opacity: 0;
+  select option {
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
   }
-  to {
-    opacity: 1;
+
+  /* ── Keyframes (referenced by @theme --animate-*) ── */
+
+  @keyframes pulse-skeleton {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+
+  @keyframes ping-brand {
+    75%,
+    100% {
+      transform: scale(2.2);
+      opacity: 0;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }
 
-.animate-fade-in {
-  animation: fade-in 150ms ease-out forwards;
+/* ─────────────────────────────────────────────────────────────────────
+   Utilities — high-frequency patterns extracted from the codebase
+   ───────────────────────────────────────────────────────────────────── */
+
+/* Default glass card: uses design-token background + border + radius.
+   Usage: <div className="glass-card p-4 backdrop-blur-[12px]"> */
+@utility glass-card {
+  background-color: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+}
+
+/* Glass card with standard backdrop blur.
+   Usage: <div className="glass-blur p-4"> */
+@utility glass-blur {
+  background-color: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(12px);
+}
+
+/* Section heading — table headers, card titles.
+   Usage: <span className="section-title"> */
+@utility section-title {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+/* Sub-section heading — softer variant.
+   Usage: <span className="subsection-title"> */
+@utility subsection-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+/* Micro label — the smallest annotation text.
+   Usage: <span className="micro-label"> */
+@utility micro-label {
+  font-size: 9px;
+  color: var(--color-text-muted);
+}
+
+/* Hover border glow — adds cyan border on hover.
+   Usage: <button className="hover-border-glow"> */
+@utility hover-border-glow {
+  transition-property: border-color;
+  transition-duration: 150ms;
+  &:hover {
+    border-color: var(--color-border-active);
+  }
+}
+
+/* Hover glass lift — adds background highlight on hover.
+   Usage: <tr className="hover-glass-lift"> */
+@utility hover-glass-lift {
+  transition-property: background-color;
+  transition-duration: 150ms;
+  &:hover {
+    background-color: var(--color-glass-hover);
+  }
 }

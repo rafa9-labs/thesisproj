@@ -6,49 +6,44 @@ interface ParamToggleProps {
   onChange: (checked: boolean) => void;
 }
 
-export function ParamToggle({
-  label,
-  checked,
-  description,
-  onChange,
-}: ParamToggleProps) {
+export function ParamToggle({ label, checked, description, onChange }: ParamToggleProps) {
   return (
-    <div className="flex flex-col gap-1.5 py-3 border-b" style={{ borderColor: "var(--color-glass-border)" }}>
-      <div className="flex items-center justify-between">
-        <span
-          className="text-[11px] font-medium uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-text-muted)" }}
-        >
-          {label}
-        </span>
-        <button
-          role="switch"
-          aria-checked={checked}
-          onClick={() => onChange(!checked)}
-          className="relative h-5 w-9 rounded-full transition-all duration-200"
-          style={{
-            backgroundColor: checked
-              ? "var(--color-brand)"
-              : "var(--color-glass-border)",
-            boxShadow: checked ? "0 0 8px rgba(0,229,255,0.25)" : "none",
-          }}
-        >
-          <span
-            className="absolute top-0.5 h-4 w-4 rounded-full transition-transform duration-200"
-            style={{
-              left: checked ? "18px" : "2px",
-              backgroundColor: checked
-                ? "var(--color-text-inverse)"
-                : "var(--color-text-muted)",
-            }}
-          />
-        </button>
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="flex w-full items-start justify-between gap-3 rounded-lg border px-4 py-3.5 text-left transition-all duration-200"
+      style={{
+        borderColor: checked ? "var(--color-border-active)" : "var(--color-glass-border)",
+        backgroundColor: checked ? "rgba(0,229,255,0.04)" : "var(--color-input-bg)",
+      }}
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-[13px] font-medium text-(--color-text-primary)">{label}</span>
+        {description && (
+          <p className="text-[11px] leading-relaxed font-light text-(--color-text-muted)">
+            {description}
+          </p>
+        )}
       </div>
-      {description && (
-        <p className="text-[11px] font-light leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
-          {description}
-        </p>
-      )}
-    </div>
+
+      <span
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        className="relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-all duration-200"
+        style={{
+          backgroundColor: checked ? "var(--color-brand)" : "var(--color-glass-border)",
+          boxShadow: checked ? "0 0 10px rgba(0,229,255,0.35)" : "none",
+        }}
+      >
+        <span
+          className="absolute top-0.5 h-4 w-4 rounded-full transition-all duration-200"
+          style={{
+            left: checked ? "18px" : "2px",
+            backgroundColor: checked ? "#0B1220" : "var(--color-text-muted)",
+          }}
+        />
+      </span>
+    </button>
   );
 }

@@ -75,9 +75,8 @@ export function ParallelCoordinates({ trials }: Props) {
     });
 
     // If too many trials, sample
-    const sampled = rows.length > 50
-      ? rows.filter((_, i) => i % Math.ceil(rows.length / 50) === 0)
-      : rows;
+    const sampled =
+      rows.length > 50 ? rows.filter((_, i) => i % Math.ceil(rows.length / 50) === 0) : rows;
 
     return { data: sampled, paramKeys: keys.slice(0, 10) };
   }, [trials]);
@@ -101,7 +100,7 @@ export function ParallelCoordinates({ trials }: Props) {
 
   if (paramKeys.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-sm p-8" style={{ color: "var(--color-text-muted)" }}>
+      <div className="flex items-center justify-center rounded-sm p-8 text-(--color-text-muted)">
         <span className="text-xs">No numeric parameter data available for visualization.</span>
       </div>
     );
@@ -132,22 +131,20 @@ export function ParallelCoordinates({ trials }: Props) {
               fontFamily: "var(--font-mono)",
             }}
           />
-          {[...new Set(chartData.map((d) => d.trial))]
-            .slice(0, 30)
-            .map((trial) => (
-              <Line
-                key={trial}
-                type="linear"
-                dataKey="value"
-                data={chartData.filter((d) => d.trial === trial)}
-                stroke="var(--color-brand)"
-                strokeWidth={0.5}
-                dot={false}
-                opacity={0.3}
-                isAnimationActive={false}
-                connectNulls
-              />
-            ))}
+          {[...new Set(chartData.map((d) => d.trial))].slice(0, 30).map((trial) => (
+            <Line
+              key={trial}
+              type="linear"
+              dataKey="value"
+              data={chartData.filter((d) => d.trial === trial)}
+              stroke="var(--color-brand)"
+              strokeWidth={0.5}
+              dot={false}
+              opacity={0.3}
+              isAnimationActive={false}
+              connectNulls
+            />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     </div>

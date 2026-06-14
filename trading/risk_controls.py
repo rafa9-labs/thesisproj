@@ -470,11 +470,11 @@ def check_all_post_trade_gates(
 
 def check_signal_staleness(
     state: LiveRiskState, config: LiveRiskConfig, signal_timestamp: float
-) -> _GateResult:
+) -> tuple[bool, str]:
     age = time.time() - signal_timestamp
     if age > config.max_signal_age_sec:
-        return False, f"signal_stale_{age:.1f}s_exceeds_max_{config.max_signal_age_sec:.0f}s"
-    return True, ""
+        return True, f"signal_stale_{age:.1f}s_exceeds_max_{config.max_signal_age_sec:.0f}s"
+    return False, ""
 
 
 def check_order_timeout(
@@ -497,13 +497,13 @@ def check_heartbeat(
     return False, ""
 
 
-def check_session_lifetime(state: LiveRiskState, config: LiveRiskConfig) -> _GateResult:
+def check_session_lifetime(state: LiveRiskState, config: LiveRiskConfig) -> tuple[bool, str]:
     if state.session_start <= 0:
-        return True, ""
+        return False, ""
     elapsed_h = (time.time() - state.session_start) / 3600.0
     if elapsed_h > config.max_session_hours:
-        return False, f"session_{elapsed_h:.1f}h_exceeds_max_{config.max_session_hours}h"
-    return True, ""
+        return True, f"session_{elapsed_h:.1f}h_exceeds_max_{config.max_session_hours}h"
+    return False, ""
 
 
 def check_consecutive_api_errors(

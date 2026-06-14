@@ -202,37 +202,47 @@ class TestExportImport:
 
 
 class TestActivePointer:
-    """File-based active model pointer."""
+    """File-based active model pointer — one global active model."""
 
     def test_active_pointer_crud(self, snapshot_dir):
         from pipeline.model_persistence import (
             get_active_model_id, set_active_model_id, clear_active_model_id,
         )
 
-        assert get_active_model_id("logistic") is None
+        assert get_active_model_id() is None
 
         set_active_model_id("logistic", "snap-001")
+        assert get_active_model_id() == "snap-001"
         assert get_active_model_id("logistic") == "snap-001"
 
         set_active_model_id("logistic", "snap-002")
+        assert get_active_model_id() == "snap-002"
         assert get_active_model_id("logistic") == "snap-002"
 
-        clear_active_model_id("logistic")
+        clear_active_model_id()
+        assert get_active_model_id() is None
         assert get_active_model_id("logistic") is None
 
-    def test_active_pointer_multi_model(self, snapshot_dir):
+    def test_active_pointer_global_singleton(self, snapshot_dir):
+        """Setting a new active model replaces the previous one globally."""
         from pipeline.model_persistence import (
             get_active_model_id, set_active_model_id,
         )
 
         set_active_model_id("logistic", "snap-L")
-        set_active_model_id("xgboost", "snap-X")
+        assert get_active_model_id() == "snap-L"
         assert get_active_model_id("logistic") == "snap-L"
+
+        # Setting a different type replaces the previous global active
+        set_active_model_id("xgboost", "snap-X")
+        assert get_active_model_id() == "snap-X"
         assert get_active_model_id("xgboost") == "snap-X"
+        assert get_active_model_id("logistic") is None
 
         set_active_model_id("logistic", "snap-L2")
+        assert get_active_model_id() == "snap-L2"
         assert get_active_model_id("logistic") == "snap-L2"
-        assert get_active_model_id("xgboost") == "snap-X"
+        assert get_active_model_id("xgboost") is None
 
 
 class TestPipFreeze:

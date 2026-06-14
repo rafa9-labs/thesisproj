@@ -3,6 +3,7 @@ import { useModelHyperparams } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamSelect } from "@/components/shared/ParamSelect";
+import { Section } from "@/components/shared/Panel";
 import type { HyperparamSpec, HyperparamRange, HyperparamFixed } from "@/api/schemas";
 
 const MODEL_COLORS: Record<string, string> = {
@@ -13,9 +14,7 @@ const MODEL_COLORS: Record<string, string> = {
 };
 
 function formatParamLabel(key: string): string {
-  return key
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function getStoreKey(model: string, param: string): string {
@@ -38,10 +37,10 @@ function HyperparamField({
   if (spec.type === "fixed") {
     return (
       <div className="flex flex-col gap-1.5">
-        <span className="text-[11px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>
+        <span className="text-[11px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
           {formatParamLabel(param)}
         </span>
-        <span className="text-xs font-mono" style={{ color: "var(--color-text-muted)" }}>
+        <span className="font-mono text-xs text-(--color-text-muted)">
           {String(spec.value)} <span className="text-[9px]">(fixed)</span>
         </span>
       </div>
@@ -69,9 +68,13 @@ function HyperparamField({
 
   const range = spec as HyperparamRange;
   const numVal = typeof value === "number" ? value : (range.default ?? range.low);
-  const step = range.step ?? (range.log_scale
-    ? Math.max(1e-6, (range.high - range.low) / 200)
-    : range.type === "int_range" ? 1 : Math.max(0.001, (range.high - range.low) / 200));
+  const step =
+    range.step ??
+    (range.log_scale
+      ? Math.max(1e-6, (range.high - range.low) / 200)
+      : range.type === "int_range"
+        ? 1
+        : Math.max(0.001, (range.high - range.low) / 200));
 
   return (
     <ParamSlider
@@ -99,7 +102,7 @@ export function ModelHyperparamsPanel() {
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 py-4">
-        <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>Loading hyperparameters...</span>
+        <span className="text-xs text-(--color-text-muted)">Loading hyperparameters...</span>
       </div>
     );
   }
@@ -120,29 +123,14 @@ export function ModelHyperparamsPanel() {
         const fixedParams = Object.entries(m.params).filter(([, s]) => s.type === "fixed");
 
         return (
-          <div
+          <Section
             key={m.model}
-            className="rounded-sm border p-6"
-            style={{ borderColor: "var(--color-glass-border)", backgroundColor: "rgba(255,255,255,0.02)" }}
+            title={`${m.display_name} — Hyperparameters`}
+            accent={accent}
+            description={`Fine-tune ${m.display_name}. Overrides take priority over HPO search — set a value to fix it, or leave default to let the optimizer explore.`}
           >
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: accent }} />
-              <h4
-                className="text-[11px] font-medium uppercase tracking-[0.12em]"
-                style={{ color: accent }}
-              >
-                {m.display_name} — Hyperparameters
-              </h4>
-            </div>
-            <p
-              className="text-[11px] font-light leading-relaxed max-w-[720px] mb-5"
-              style={{ color: "var(--color-text-muted)" }}
-            >
-              Fine-tune {m.display_name}. Overrides take priority over HPO search — set a value to fix it, or leave default to let the optimizer explore.
-            </p>
-
             {tunableParams.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-6 mb-4">
+              <div className="mb-4 grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
                 {tunableParams.map(([param, spec]) => {
                   const storeKey = getStoreKey(m.model, param);
                   const currentValue = (store as Record<string, unknown>)[storeKey];
@@ -161,7 +149,7 @@ export function ModelHyperparamsPanel() {
             )}
 
             {fixedParams.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+              <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                 {fixedParams.map(([param, spec]) => (
                   <HyperparamField
                     key={param}
@@ -174,14 +162,14 @@ export function ModelHyperparamsPanel() {
                 ))}
               </div>
             )}
-          </div>
+          </Section>
         );
       })}
 
       {nonTunableModels.length > 0 && (
         <div className="flex flex-col gap-1.5">
           {nonTunableModels.map((m) => (
-            <span key={m.model} className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+            <span key={m.model} className="text-[10px] text-(--color-text-muted)">
               {m.display_name}: no tunable hyperparameters (uses built-in defaults)
             </span>
           ))}

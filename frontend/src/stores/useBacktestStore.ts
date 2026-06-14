@@ -7,13 +7,27 @@ const _CUSTOM_PRESETS_KEY = "kodaquant-custom-presets";
 function _loadCustomPresets(): Record<string, { name: string; subtitle: string; date: string }> {
   try {
     return JSON.parse(localStorage.getItem(_CUSTOM_PRESETS_KEY) || "{}");
-  } catch { /* ignore */ return {}; }
+  } catch {
+    /* ignore */ return {};
+  }
 }
-function _saveCustomPresets(data: Record<string, { name: string; subtitle: string; date: string }>) {
-  try { localStorage.setItem(_CUSTOM_PRESETS_KEY, JSON.stringify(data)); } catch { /* ignore */ }
+function _saveCustomPresets(
+  data: Record<string, { name: string; subtitle: string; date: string }>,
+) {
+  try {
+    localStorage.setItem(_CUSTOM_PRESETS_KEY, JSON.stringify(data));
+  } catch {
+    /* ignore */
+  }
 }
 
-type Widen<T> = T extends boolean ? boolean : T extends string ? string : T extends number ? number : T;
+type Widen<T> = T extends boolean
+  ? boolean
+  : T extends string
+    ? string
+    : T extends number
+      ? number
+      : T;
 type BacktestState = { -readonly [K in keyof typeof DEFAULTS]: Widen<(typeof DEFAULTS)[K]> } & {
   hpoIntensity: HpoIntensity;
   hpoManualOverride: boolean;
@@ -25,7 +39,16 @@ type BacktestActions = {
   setField: <K extends keyof BacktestState>(key: K, value: BacktestState[K]) => void;
   toggleModel: (model: string) => void;
   resetToDefaults: () => void;
-  applyPreset: (preset: { pair?: string; timeframe?: string; models?: string[]; months?: number; hpo_intensity?: HpoIntensity; seed?: number; start_date?: string; end_date?: string }) => void;
+  applyPreset: (preset: {
+    pair?: string;
+    timeframe?: string;
+    models?: string[];
+    months?: number;
+    hpo_intensity?: HpoIntensity;
+    seed?: number;
+    start_date?: string;
+    end_date?: string;
+  }) => void;
   applyStudyPreset: (presetKey: string) => void;
   applyQuickPreset: (presetKey: string) => void;
   saveCustomPreset: (name: string, subtitle: string) => void;
@@ -36,7 +59,7 @@ type BacktestActions = {
 const DEFAULT_HPO_INTENSITY: HpoIntensity = "quick";
 
 export const useBacktestStore = create<BacktestState & BacktestActions>()((set, get) => ({
-  ...structuredClone(DEFAULTS) as BacktestState,
+  ...(structuredClone(DEFAULTS) as BacktestState),
   hpoIntensity: DEFAULT_HPO_INTENSITY,
   hpoManualOverride: false,
   parentJobId: null,
@@ -56,7 +79,13 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       return { selectedModels: next };
     }),
 
-  resetToDefaults: () => set({ ...structuredClone(DEFAULTS), hpoIntensity: DEFAULT_HPO_INTENSITY, hpoManualOverride: false, parentJobId: null } as Partial<BacktestState>),
+  resetToDefaults: () =>
+    set({
+      ...structuredClone(DEFAULTS),
+      hpoIntensity: DEFAULT_HPO_INTENSITY,
+      hpoManualOverride: false,
+      parentJobId: null,
+    } as Partial<BacktestState>),
 
   applyPreset: (preset) =>
     set(() => {
@@ -114,7 +143,10 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
   saveCustomPreset: (name, subtitle) =>
     set((state) => {
       const key = `custom-${Date.now()}`;
-      const next = { ...state.customPresets, [key]: { name, subtitle, date: new Date().toISOString().slice(0, 10) } };
+      const next = {
+        ...state.customPresets,
+        [key]: { name, subtitle, date: new Date().toISOString().slice(0, 10) },
+      };
       _saveCustomPresets(next);
       return { customPresets: next };
     }),

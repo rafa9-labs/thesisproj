@@ -11,9 +11,7 @@ const ResultsPage = lazy(() =>
 const ResultsHistoryPage = lazy(() =>
   import("./pages/Results/ResultsHistoryPage").then((m) => ({ default: m.ResultsHistoryPage })),
 );
-const NewsPage = lazy(() =>
-  import("./pages/News/NewsPage").then((m) => ({ default: m.NewsPage })),
-);
+const NewsPage = lazy(() => import("./pages/News/NewsPage").then((m) => ({ default: m.NewsPage })));
 const SettingsPage = lazy(() =>
   import("./pages/Settings/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
@@ -23,24 +21,22 @@ const LiveTradingPage = lazy(() =>
 const DeployedModelsPage = lazy(() =>
   import("./pages/Models/DeployedModelsPage").then((m) => ({ default: m.DeployedModelsPage })),
 );
+const ModelDetailPage = lazy(() =>
+  import("./pages/Models/ModelDetailPage").then((m) => ({ default: m.ModelDetailPage })),
+);
 const CommitteePage = lazy(() =>
   import("./pages/Committee/CommitteePage").then((m) => ({ default: m.CommitteePage })),
 );
 
 function PageSpinner() {
   return (
-    <div
-      className="flex h-full items-center justify-center"
-      style={{ backgroundColor: "var(--color-app)" }}
-    >
+    <div className="flex h-full items-center justify-center bg-(--color-app)">
       <div className="flex flex-col items-center gap-3">
         <div
-          className="h-6 w-6 animate-spin rounded-full border-2"
-          style={{ borderColor: "var(--color-border)", borderTopColor: "var(--color-accent)" }}
+          className="h-6 w-6 animate-spin rounded-full border-2 border-(--color-border)"
+          style={{ borderTopColor: "var(--color-accent)" }}
         />
-        <span className="text-xs" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-          Loading…
-        </span>
+        <span className="font-mono text-xs text-(--color-text-muted)">Loading…</span>
       </div>
     </div>
   );
@@ -55,31 +51,67 @@ export default function App() {
         <Route path="monitor" element={<MonitorPage />} />
         <Route
           path="results"
-          element={<Suspense fallback={<PageSpinner />}><ResultsHistoryPage /></Suspense>}
+          element={
+            <Suspense fallback={<PageSpinner />}>
+              <ResultsHistoryPage />
+            </Suspense>
+          }
         />
         <Route
           path="results/:jobId"
-          element={<Suspense fallback={<PageSpinner />}><ResultsPage /></Suspense>}
+          element={
+            <Suspense fallback={<PageSpinner />}>
+              <ResultsPage />
+            </Suspense>
+          }
         />
         <Route
           path="news"
-          element={<Suspense fallback={<PageSpinner />}><NewsPage /></Suspense>}
+          element={
+            <Suspense fallback={<PageSpinner />}>
+              <NewsPage />
+            </Suspense>
+          }
         />
         <Route
           path="settings"
-          element={<Suspense fallback={<PageSpinner />}><SettingsPage /></Suspense>}
+          element={
+            <Suspense fallback={<PageSpinner />}>
+              <SettingsPage />
+            </Suspense>
+          }
         />
         <Route
           path="trading"
-          element={<Suspense fallback={<PageSpinner />}><LiveTradingPage /></Suspense>}
+          element={
+            <Suspense fallback={<PageSpinner />}>
+              <LiveTradingPage />
+            </Suspense>
+          }
         />
         <Route
           path="models"
-          element={<Suspense fallback={<PageSpinner />}><DeployedModelsPage /></Suspense>}
+          element={
+            <Suspense fallback={<PageSpinner />}>
+              <DeployedModelsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="models/:modelId"
+          element={
+            <Suspense fallback={<PageSpinner />}>
+              <ModelDetailPage />
+            </Suspense>
+          }
         />
         <Route
           path="committee"
-          element={<Suspense fallback={<PageSpinner />}><CommitteePage /></Suspense>}
+          element={
+            <Suspense fallback={<PageSpinner />}>
+              <CommitteePage />
+            </Suspense>
+          }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

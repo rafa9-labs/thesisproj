@@ -10,11 +10,11 @@ import { CrossPairSection } from "./CrossPairSection";
 
 function CompareSkeleton() {
   return (
-    <div className="flex flex-col gap-6 animate-pulse">
-      <div className="h-10 w-64 rounded" style={{ backgroundColor: "var(--color-elevated)" }} />
-      <div className="h-[280px] rounded-sm" style={{ backgroundColor: "var(--color-surface)" }} />
-      <div className="h-[400px] rounded-sm" style={{ backgroundColor: "var(--color-surface)" }} />
-      <div className="h-[300px] rounded-sm" style={{ backgroundColor: "var(--color-surface)" }} />
+    <div className="flex animate-pulse flex-col gap-6">
+      <div className="h-10 w-64 rounded bg-(--color-elevated)" />
+      <div className="h-[280px] rounded-sm bg-(--color-surface)" />
+      <div className="h-[400px] rounded-sm bg-(--color-surface)" />
+      <div className="h-[300px] rounded-sm bg-(--color-surface)" />
     </div>
   );
 }
@@ -71,16 +71,9 @@ export function ComparePage() {
         <select
           value={selectedJobId ?? ""}
           onChange={(e) => setSelectedJobId(e.target.value || null)}
-          className="rounded-md border px-3 py-2 text-xs transition-all duration-200 focus:outline-none"
-          style={{
-            borderColor: "var(--color-glass-border)",
-            backgroundColor: "var(--color-glass)",
-            color: "var(--color-text-primary)",
-            fontFamily: "var(--font-mono)",
-            cursor: "pointer",
-            minWidth: 280,
-            backdropFilter: "blur(8px)",
-          }}
+          className="rounded-md border border-(--color-glass-border) bg-(--color-glass) px-3 py-2 font-mono text-xs text-(--color-text-primary) backdrop-blur-[8px] transition-all duration-200 focus:outline-none"
+          className="cursor-pointer"
+          style={{ minWidth: 280 }}
         >
           <option value="">Select a multi-model job…</option>
           {multiModelJobs.map((job) => (
@@ -107,10 +100,7 @@ export function ComparePage() {
 
           <EquityOverlayChart curves={modelCurves} />
 
-          <SignificanceMatrix
-            models={metrics.map((m) => m.model)}
-            pValues={null}
-          />
+          <SignificanceMatrix models={metrics.map((m) => m.model)} pValues={null} />
 
           {metrics.length > 0 && metrics[0].hpo_trials && (
             <ParameterSensitivityChart trials={metrics[0].hpo_trials} />
@@ -121,18 +111,8 @@ export function ComparePage() {
       <CrossPairSection />
 
       {selectedJobId && !resultsLoading && !results && (
-        <div
-          className="flex items-center justify-center rounded-sm border p-8"
-          style={{
-            backgroundColor: "var(--color-glass)",
-            borderColor: "var(--color-glass-border)",
-            color: "var(--color-text-muted)",
-            backdropFilter: "blur(12px)",
-          }}
-        >
-          <span className="text-sm font-light" style={{ fontFamily: "var(--font-mono)" }}>
-            Could not load results for this job.
-          </span>
+        <div className="flex items-center justify-center rounded-sm border border-(--color-glass-border) bg-(--color-glass) p-8 text-(--color-text-muted) backdrop-blur-[12px]">
+          <span className="font-mono text-sm font-light">Could not load results for this job.</span>
         </div>
       )}
     </div>

@@ -23,7 +23,10 @@ export function JobPillStrip({ jobs, selectedJobId, onSelect }: Props) {
   if (jobs.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
+    <div
+      className="flex items-center gap-2 overflow-x-auto pb-2"
+      style={{ scrollbarWidth: "none" }}
+    >
       {jobs.map((j) => {
         const isSelected = j.job_id === selectedJobId;
         const local = jobStore.get(j.job_id);
@@ -34,33 +37,27 @@ export function JobPillStrip({ jobs, selectedJobId, onSelect }: Props) {
           <button
             key={j.job_id}
             onClick={() => onSelect(j.job_id)}
-            className="flex items-center gap-2 rounded-sm border px-3 py-2 transition-all shrink-0"
+            className="flex shrink-0 items-center gap-2 rounded-sm border px-3 py-2 transition-all"
             style={{
               borderColor: isSelected ? "var(--color-brand)" : "var(--color-glass-border)",
-              backgroundColor: isSelected
-                ? "rgba(0,229,255,0.08)"
-                : "var(--color-glass-hover)",
+              backgroundColor: isSelected ? "rgba(0,229,255,0.08)" : "var(--color-glass-hover)",
             }}
           >
             <div
-              className="h-1.5 w-1.5 rounded-full shrink-0"
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
               style={{ backgroundColor: STATUS_COLORS[j.status] ?? "var(--color-text-muted)" }}
             />
             <span
-              className="text-[11px] font-medium uppercase tracking-[0.04em] max-w-[120px] truncate"
+              className="max-w-[120px] truncate font-mono text-[11px] font-medium tracking-[0.04em] uppercase"
               style={{
                 color: isSelected ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-                fontFamily: "var(--font-mono)",
               }}
             >
               {(j.models ?? []).slice(0, 2).join("+")}
               {(j.models?.length ?? 0) > 2 ? "..." : ""}
             </span>
             {!isDone && (
-              <span
-                className="text-[10px] min-w-[28px] text-right"
-                style={{ color: "var(--color-brand)", fontFamily: "var(--font-mono)" }}
-              >
+              <span className="min-w-[28px] text-right font-mono text-[10px] text-(--color-brand)">
                 {Math.round(progress)}%
               </span>
             )}
@@ -72,8 +69,12 @@ export function JobPillStrip({ jobs, selectedJobId, onSelect }: Props) {
                 }}
                 className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors hover:brightness-110"
                 style={{
-                  backgroundColor: j.status === "completed" ? "rgba(34,197,94,0.12)" : "rgba(242,54,69,0.12)",
-                  color: j.status === "completed" ? "var(--color-accent-success)" : "var(--color-accent-danger)",
+                  backgroundColor:
+                    j.status === "completed" ? "rgba(34,197,94,0.12)" : "rgba(242,54,69,0.12)",
+                  color:
+                    j.status === "completed"
+                      ? "var(--color-accent-success)"
+                      : "var(--color-accent-danger)",
                 }}
               >
                 Results

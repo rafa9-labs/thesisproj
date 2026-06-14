@@ -22,7 +22,8 @@ export function FullCycleConfigSummaryBar() {
         ? modelNames[0]
         : `${modelNames[0]} +${models.length - 1}`;
 
-  const proposerLabel = proposer === "deterministic" ? "Greedy" : proposer === "hybrid_llm_ucb1" ? "LLM+UCB1" : "LLM";
+  const proposerLabel =
+    proposer === "deterministic" ? "Greedy" : proposer === "hybrid_llm_ucb1" ? "LLM+UCB1" : "LLM";
 
   const hasModels = models.length > 0;
 
@@ -35,28 +36,23 @@ export function FullCycleConfigSummaryBar() {
   ];
 
   return (
-    <div
-      className="flex items-center px-6 pb-4"
-      style={{
-        borderBottom: "1px solid var(--color-glass-border)",
-      }}
-    >
+    <div className="flex items-center border-b border-(--color-glass-border) px-6 pb-4">
       {readouts.map(({ label, value, active }, i) => (
         <div
           key={label}
-          className="flex flex-col flex-1"
+          className="flex flex-1 flex-col"
           style={{
             paddingLeft: i === 0 ? 0 : 24,
             paddingRight: 24,
           }}
         >
           <span
+            className="text-(--color-text-muted)"
             style={{
               fontSize: 9,
               fontWeight: 600,
               letterSpacing: "0.1em",
               textTransform: "uppercase",
-              color: "var(--color-text-muted)",
               opacity: 0.7,
               marginBottom: 4,
             }}
@@ -64,13 +60,11 @@ export function FullCycleConfigSummaryBar() {
             {label}
           </span>
           <span
+            className="font-mono"
             style={{
               fontSize: 12,
-              fontFamily: "var(--font-mono)",
               fontWeight: 500,
-              color: active
-                ? "var(--color-brand)"
-                : "var(--color-text-primary)",
+              color: active ? "var(--color-brand)" : "var(--color-text-primary)",
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",

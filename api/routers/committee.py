@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from api.log_buffer import (log_info, log_warn, log_error, get_job_logs,
                                log_phase_start, log_phase_complete, log_progress,
                                log_metric, PHASE_LABELS)
+from api.schemas.backtest import StudyMetaRequest, StudyMetaResponse
 from concurrent.futures.process import BrokenProcessPool
 
 router = APIRouter(prefix="/committee", tags=["committee"])
@@ -34,6 +35,7 @@ class CommitteeConfigSchema(BaseModel):
     fallback: RegimeAssignmentSchema
     constraints: Dict[str, Any] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    model_params: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 
 
 class RegimeMatrixEntry(BaseModel):
@@ -127,6 +129,124 @@ def save_committee_config(config: CommitteeConfigSchema):
     with open(_CONFIG_PATH, "w") as f:
         json.dump(config.model_dump(), f, indent=2, default=str)
     return {"status": "ok", "path": str(_CONFIG_PATH)}
+
+
+# ── Saved Committees CRUD ───────────────────────────────────────────
+
+class SavedCommitteeOut(BaseModel):
+    id: str
+    name: str
+    full_cycle_job_id: Optional[str] = None
+    pair: str = "EURUSD"
+    timeframe: str = "H1"
+    config_json: dict = Field(default_factory=dict)
+    trust_score: Optional[float] = None
+    avg_sharpe: Optional[float] = None
+    is_active: bool = False
+    tags: List[str] = Field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class SavedCommitteeListResponse(BaseModel):
+    committees: List[SavedCommitteeOut] = Field(default_factory=list)
+    total: int = 0
+
+
+class SaveCommitteeRequest(BaseModel):
+    name: str
+    full_cycle_job_id: Optional[str] = None
+    pair: str = "EURUSD"
+    timeframe: str = "H1"
+    config_json: dict = Field(default_factory=dict)
+    trust_score: Optional[float] = None
+    avg_sharpe: Optional[float] = None
+    tags: List[str] = Field(default_factory=list)
+
+
+@router.get("/saved", response_model=SavedCommitteeListResponse)
+def list_saved_committees():
+    from api.config import settings
+    from pipeline.data_sqlite import DataStore
+    store = DataStore(settings.db_full_path)
+    with store._cursor() as (conn, cur):
+        cur.execute(
+            "SELECT id, name, full_cycle_job_id, pair, timeframe, config_json, trust_score, avg_sharpe, is_active, tags, created_at, updated_at FROM saved_committees ORDER BY created_at DESC"
+        )
+        rows = cur.fetchall()
+    committees = []
+    for r in rows:
+        try:
+            config_json = json.loads(r[5]) if r[5] else {}
+        except (json.JSONDecodeError, TypeError):
+            config_json = {}
+        try:
+            tags = json.loads(r[9]) if r[9] else []
+        except (json.JSONDecodeError, TypeError):
+            tags = []
+        committees.append(SavedCommitteeOut(
+            id=r[0], name=r[1], full_cycle_job_id=r[2],
+            pair=r[3] or "EURUSD", timeframe=r[4] or "H1",
+            config_json=config_json, trust_score=r[6], avg_sharpe=r[7],
+            is_active=bool(r[8]), tags=tags, created_at=r[10], updated_at=r[11],
+        ))
+    return SavedCommitteeListResponse(committees=committees, total=len(committees))
+
+
+@router.post("/saved")
+def save_committee(req: SaveCommitteeRequest):
+    from api.config import settings
+    from pipeline.data_sqlite import DataStore
+    import uuid as _uuid
+    from datetime import datetime as _dt, timezone as _tz
+
+    store = DataStore(settings.db_full_path)
+    committee_id = str(_uuid.uuid4())[:12]
+    now = _dt.now(_tz.utc).isoformat()
+
+    with store._cursor() as (conn, cur):
+        cur.execute(
+            "INSERT INTO saved_committees (id, name, full_cycle_job_id, pair, timeframe, config_json, trust_score, avg_sharpe, is_active, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+            (committee_id, req.name, req.full_cycle_job_id, req.pair, req.timeframe,
+             json.dumps(req.config_json, default=str), req.trust_score, req.avg_sharpe,
+             json.dumps(req.tags), now, now),
+        )
+    return {"status": "ok", "id": committee_id}
+
+
+@router.delete("/saved/{committee_id}")
+def delete_saved_committee(committee_id: str):
+    from api.config import settings
+    from pipeline.data_sqlite import DataStore
+    store = DataStore(settings.db_full_path)
+    with store._cursor() as (conn, cur):
+        cur.execute("SELECT id FROM saved_committees WHERE id = ?", (committee_id,))
+        if not cur.fetchone():
+            raise HTTPException(404, f"Saved committee {committee_id} not found")
+        cur.execute("DELETE FROM saved_committees WHERE id = ?", (committee_id,))
+    return {"status": "ok"}
+
+
+@router.post("/saved/{committee_id}/activate")
+def activate_saved_committee(committee_id: str):
+    from api.config import settings
+    from pipeline.data_sqlite import DataStore
+    store = DataStore(settings.db_full_path)
+    with store._cursor() as (conn, cur):
+        cur.execute("SELECT id, config_json FROM saved_committees WHERE id = ?", (committee_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, f"Saved committee {committee_id} not found")
+        cur.execute("UPDATE saved_committees SET is_active = 0")
+        cur.execute("UPDATE saved_committees SET is_active = 1 WHERE id = ?", (committee_id,))
+        try:
+            config = json.loads(row[1])
+        except (json.JSONDecodeError, TypeError):
+            config = {}
+        _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(_CONFIG_PATH, "w") as f:
+            json.dump(config, f, indent=2, default=str)
+    return {"status": "ok", "committee_id": committee_id}
 
 
 # ── Regime matrix endpoint ─────────────────────────────────────────
@@ -388,6 +508,7 @@ class FullCycleHistoryEntry(BaseModel):
     avg_sharpe: float = 0.0
     trust_score: float = 0.0
     factory_best_sharpe: float = 0.0
+    study_meta: Optional[StudyMetaResponse] = None
 
 
 class FullCycleHistoryResponse(BaseModel):
@@ -412,6 +533,7 @@ def start_full_cycle(req: FullCycleRequest):
         started_at=started_at,
     )
     _write_json(job_dir / "status.json", status.model_dump())
+    _write_json(job_dir / "request.json", req.model_dump())
 
     thread = threading.Thread(
         target=_run_full_cycle,
@@ -446,8 +568,13 @@ def get_full_cycle_history():
         try:
             status_data = _read_json(status_path)
             results_data = _read_json(results_path) if results_path.exists() else {}
+            meta_data = _read_json(job_dir / "study_meta.json")
         except Exception:
             continue
+
+        _study_meta = None
+        if meta_data:
+            _study_meta = StudyMetaResponse(**meta_data)
 
         raw_status = status_data.get("phase", "unknown")
 
@@ -470,6 +597,7 @@ def get_full_cycle_history():
             avg_sharpe=float(results_data.get("phase3_seed_robustness_sharpe") or 0.0),
             trust_score=float((results_data.get("trust_score") or {}).get("trust_score", 0.0)),
             factory_best_sharpe=float(results_data.get("factory_best_sharpe") or 0.0),
+            study_meta=_study_meta,
         ))
 
     return FullCycleHistoryResponse(entries=entries, total_runs=len(entries))
@@ -576,6 +704,99 @@ def cancel_full_cycle(job_id: str):
     with open(job_dir / "results.json", "w") as f:
         json.dump(results, f, indent=2, default=str)
     return CancelResponse(status="cancelled")
+
+
+# ── Study Metadata (Save/Load) ────────────────────────────────────────────
+
+@router.patch("/full-cycle/{job_id}/study-meta", response_model=StudyMetaResponse)
+def update_committee_study_meta(job_id: str, meta: StudyMetaRequest):
+    job_dir = _FULL_CYCLE_DIR / job_id
+    if not job_dir.exists():
+        raise HTTPException(404, f"Job {job_id} not found")
+    meta_path = job_dir / "study_meta.json"
+    payload = meta.model_dump(exclude_none=True)
+    payload["saved_at"] = datetime.utcnow().isoformat()
+    _write_json(meta_path, payload)
+    return StudyMetaResponse(**payload)
+
+
+@router.get("/full-cycle/{job_id}/config")
+def get_full_cycle_config(job_id: str):
+    job_dir = _FULL_CYCLE_DIR / job_id
+    if not job_dir.exists():
+        raise HTTPException(404, f"Job {job_id} not found")
+    req_path = job_dir / "request.json"
+    if req_path.exists():
+        return _read_json(req_path)
+    return {"job_id": job_id, "error": "Config not found"}
+
+
+@router.get("/full-cycle/studies", response_model=FullCycleHistoryResponse)
+def get_full_cycle_studies(
+    favorite_only: bool = Query(False, description="Only show favorites"),
+    tag: str = Query("", description="Filter by tag"),
+    search: str = Query("", description="Search display_name"),
+):
+    entries: List[FullCycleHistoryEntry] = []
+    if not _FULL_CYCLE_DIR.exists():
+        return FullCycleHistoryResponse(entries=[], total_runs=0)
+
+    now = datetime.utcnow().timestamp()
+
+    for job_dir in sorted(_FULL_CYCLE_DIR.iterdir(), reverse=True):
+        if not job_dir.is_dir():
+            continue
+        status_path = job_dir / "status.json"
+        results_path = job_dir / "results.json"
+        meta_path = job_dir / "study_meta.json"
+        if not status_path.exists():
+            continue
+
+        try:
+            status_data = _read_json(status_path)
+            results_data = _read_json(results_path) if results_path.exists() else {}
+            meta_data = _read_json(meta_path)
+        except Exception:
+            continue
+
+        raw_status = status_data.get("phase", "unknown")
+        if raw_status not in _TERMINAL_PHASES and raw_status != "unknown":
+            try:
+                mtime = status_path.stat().st_mtime
+                if now - mtime > _STALE_THRESHOLD_S:
+                    raw_status = "orphaned"
+            except OSError:
+                pass
+
+        _study_meta = None
+        if meta_data:
+            _study_meta = StudyMetaResponse(**meta_data)
+
+        if favorite_only and (not _study_meta or not _study_meta.is_favorite):
+            continue
+        if tag and _study_meta and tag not in _study_meta.tags:
+            continue
+        if search and _study_meta:
+            _dn = (_study_meta.display_name or "").lower()
+            if search.lower() not in _dn:
+                continue
+
+        entries.append(FullCycleHistoryEntry(
+            job_id=job_dir.name,
+            started_at=status_data.get("started_at", ""),
+            status=raw_status,
+            total_time_s=float(results_data.get("total_time_s") or 0.0),
+            locked_features_count=int(results_data.get("locked_features_count") or 0),
+            survivors_count=len(results_data.get("phase0_survivors") or []),
+            survivors=results_data.get("phase0_survivors") or [],
+            avg_sharpe=float(results_data.get("phase3_seed_robustness_sharpe") or 0.0),
+            trust_score=float((results_data.get("trust_score") or {}).get("trust_score", 0.0)),
+            factory_best_sharpe=float(results_data.get("factory_best_sharpe") or 0.0),
+            study_meta=_study_meta,
+        ))
+
+    return FullCycleHistoryResponse(entries=entries, total_runs=len(entries))
+
 
 
 class FullCycleCancelled(Exception):

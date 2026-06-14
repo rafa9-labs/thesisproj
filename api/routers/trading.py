@@ -18,7 +18,8 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Dict
+from pathlib import Path
+from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -90,6 +91,22 @@ class LiveSessionInfo(BaseModel):
     signal_count: int
     killed: bool
     kill_reason: str
+
+
+class DeployCommitteeRequest(BaseModel):
+    pair: str
+    timeframe: str = "H1"
+    initial_equity: float = 10000.0
+    full_cycle_job_id: str | None = None
+    committee_config_path: str | None = None
+    confidence_threshold: float = 0.55
+    lookback_bars: int = 100
+    position_sizing: str = "fixed"
+    sizing_config: dict = {}
+    risk_config: dict = {}
+    mode: str = "paper"
+    live_news_blend_enabled: bool = False
+    live_news_blend_weight: float = 0.10
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -436,6 +453,8 @@ async def paper_ws(websocket: WebSocket, session_id: str):
                 await websocket.send_text(json.dumps(msg, default=str))
             except asyncio.TimeoutError:
                 await websocket.send_text(json.dumps({"event": "heartbeat", "time": int(time.time())}))
+            except asyncio.CancelledError:
+                break
     except WebSocketDisconnect:
         pass
     except Exception:
@@ -624,6 +643,8 @@ async def live_ws(websocket: WebSocket, session_id: str):
                 await websocket.send_text(json.dumps(msg, default=str))
             except asyncio.TimeoutError:
                 await websocket.send_text(json.dumps({"event": "heartbeat", "time": int(time.time())}))
+            except asyncio.CancelledError:
+                break
     except WebSocketDisconnect:
         pass
     except Exception:
@@ -752,3 +773,362 @@ async def list_live_sessions():
         }
         for s in live_sessions.values()
     ]
+
+
+# ═════════════════════════════════════════════════════════════════════
+#  Committee Trading — Signal Loop + Endpoint
+# ═════════════════════════════════════════════════════════════════════
+
+async def _committee_trading_signal_loop(session_id: str):
+    """Poll prices → build bar → runner.process_bar() → engine.process_signal() → WS."""
+    session = live_sessions.get(session_id)
+    if not session:
+        return
+
+    pair = session["pair"]
+    timeframe = session["timeframe"]
+    runner = session["runner"]
+    engine = session["engine"]
+    store = get_data_store()
+    lock: asyncio.Lock = session["_lock"]
+
+    tf_seconds = {"M15": 900, "M30": 1800, "H1": 3600, "H2": 7200, "H4": 14400}
+    poll_interval = min(tf_seconds.get(timeframe, 1800) // 4, 60)
+
+    import numpy as np
+
+    while not session["_kill_event"].is_set():
+        try:
+            raw_prices, source = await _fetch_prices_async(pair)
+            mid_price = _extract_mid(raw_prices, source, pair, timeframe, store)
+            if mid_price <= 0:
+                await asyncio.sleep(poll_interval)
+                continue
+
+            candles_df = store.get_latest_candles(pair, timeframe, 100)
+            if candles_df is None or candles_df.empty:
+                await asyncio.sleep(poll_interval)
+                continue
+
+            bar = {
+                "mid_c": float(candles_df.iloc[-1]["mid_close"])
+                if "mid_close" in candles_df.columns
+                else float(candles_df.iloc[-1].get("mid_c", mid_price)),
+                "mid_h": float(candles_df.iloc[-1].get("mid_high",
+                    candles_df.iloc[-1].get("mid_h", candles_df.iloc[-1].get("mid_c", mid_price)))),
+                "mid_l": float(candles_df.iloc[-1].get("mid_low",
+                    candles_df.iloc[-1].get("mid_l", candles_df.iloc[-1].get("mid_c", mid_price)))),
+                "mid_o": float(candles_df.iloc[-1].get("mid_open",
+                    candles_df.iloc[-1].get("mid_o", candles_df.iloc[-1].get("mid_c", mid_price)))),
+                "spread": float(candles_df.iloc[-1].get("spread", 0.0001)),
+                "returns": float(np.log(mid_price / session.get("last_mid", mid_price)))
+                if session.get("last_mid") and mid_price else 0.0,
+                "timestamp": int(time.time()),
+            }
+
+            live_signal = runner.process_bar(bar)
+
+            bid, ask = _resolve_bid_ask(raw_prices, source, mid_price)
+
+            async with lock:
+                if session["_kill_event"].is_set():
+                    break
+
+                signal_dict = live_signal if live_signal is not None else None
+
+                result = engine.process_signal(
+                    signal_dict or None,
+                    bid=bid, ask=ask, mid=mid_price,
+                )
+                engine.heartbeat()
+                _broadcast_ws(session, result)
+
+                if result.get("event") == "kill":
+                    session["_kill_event"].set()
+
+        except Exception:
+            logger.exception("Committee signal loop error for session %s", session_id)
+
+        await asyncio.sleep(poll_interval)
+
+    async with lock:
+        session["status"] = "stopped"
+    _broadcast_ws_stop(session, session_id)
+
+
+@live_router.post("/committee/start")
+async def start_committee_session(req: DeployCommitteeRequest):
+    pair = req.pair.upper().strip()
+    timeframe = req.timeframe
+
+    # 1. Load committee config
+    config_json = None
+    parent_job_dir = None
+    if req.full_cycle_job_id:
+        parent_job_dir = Path("results/full_cycle") / req.full_cycle_job_id
+        config_path = parent_job_dir / "committee_config_final.json"
+        if not config_path.exists():
+            config_path = parent_job_dir / "committee_config.json"
+        if not config_path.exists():
+            raise HTTPException(404, f"Full Cycle job {req.full_cycle_job_id} not found or has no config")
+    elif req.committee_config_path:
+        config_path = Path(req.committee_config_path)
+    else:
+        config_path = Path("results/full_cycle")
+        candidates = sorted(config_path.glob("fullcycle_*"), reverse=True)
+        found = False
+        for c in candidates:
+            final_cfg = c / "committee_config_final.json"
+            if final_cfg.exists():
+                config_path = final_cfg
+                parent_job_dir = c
+                found = True
+                break
+            base_cfg = c / "committee_config.json"
+            if base_cfg.exists():
+                config_path = base_cfg
+                parent_job_dir = c
+                found = True
+                break
+        if not found:
+            raise HTTPException(404, "No committee config found. Run the Full Cycle first.")
+
+    if not config_path or not config_path.exists():
+        raise HTTPException(404, "No committee config found. Run the Full Cycle first.")
+
+    with open(config_path) as f:
+        config_json = json.load(f)
+
+    from pipeline.committee_builder import CommitteeConfig
+    committee_config = CommitteeConfig.from_dict(config_json)
+    model_params = committee_config.model_params or config_json.get("model_params", {})
+
+    if parent_job_dir is None:
+        parent_job_dir = config_path.parent if config_path.parent.name.startswith("fullcycle_") else None
+    if parent_job_dir is None:
+        parent_job_dir = config_path.parent.parent if "full_cycle" in str(config_path) else None
+
+    # 2. Load trust score
+    trust_multiplier = 1.0
+    if parent_job_dir:
+        trust_path = parent_job_dir / "trust_score.json"
+        if trust_path.exists():
+            try:
+                with open(trust_path) as f:
+                    trust_data = json.load(f)
+                ts = trust_data.get("trust_score", 1.0)
+                action = trust_data.get("action", "deploy")
+                if action == "reject":
+                    raise HTTPException(400,
+                        f"Committee trust_score={ts:.2f} — deployment rejected.")
+                trust_multiplier = max(0.0, min(1.0, ts))
+            except HTTPException:
+                raise
+            except Exception:
+                pass
+
+    # 3. Load locked features
+    locked_features = None
+    locked_features_path = Path("results/locked_features.json")
+    if locked_features_path.exists():
+        try:
+            from pipeline.feature_sweep import load_locked_features
+            locked_features = load_locked_features(str(locked_features_path))
+        except Exception:
+            pass
+
+    # 4. Get unique model types
+    unique_models = list(set(committee_config.all_models()))
+    if not unique_models:
+        raise HTTPException(400, "Committee config has no models")
+
+    trained_models: dict[str, Any] = {}
+    feature_names = locked_features if locked_features else None
+
+    # 5. Try loading saved snapshot (fast path)
+    snapshot_loaded = False
+    if parent_job_dir:
+        snapshot_dir = parent_job_dir / "committee_snapshot"
+        if snapshot_dir.exists() and (snapshot_dir / "manifest.json").exists():
+            try:
+                import joblib
+                with open(snapshot_dir / "manifest.json") as f:
+                    manifest = json.load(f)
+                snapshot_feature_names = manifest.get("feature_names",
+                    list(feature_names) if feature_names else [])
+                for mtype in unique_models:
+                    jl_path = snapshot_dir / f"{mtype}.joblib"
+                    tf_path = snapshot_dir / f"{mtype}_tf"
+                    if jl_path.exists():
+                        trained_models[mtype] = joblib.load(str(jl_path))
+                    elif tf_path.exists():
+                        import tensorflow as tf
+                        trained_models[mtype] = tf.keras.models.load_model(str(tf_path))
+                if trained_models:
+                    feature_names = snapshot_feature_names
+                    snapshot_loaded = True
+            except Exception:
+                logger.exception("Snapshot load failed, falling back to fresh training")
+
+    # 6. Train models (slow path)
+    if not snapshot_loaded:
+        trained_models, feature_names = _train_committee_models(
+            pair, timeframe, unique_models,
+            feature_names=locked_features,
+            model_params=model_params,
+        )
+
+    if not trained_models:
+        raise HTTPException(500, "Failed to obtain committee models")
+
+    # 7. Load meta-learner
+    meta_learner = None
+    if parent_job_dir:
+        meta_path = parent_job_dir / "committee_snapshot" / "meta" / "meta_model.joblib"
+        if meta_path.exists():
+            try:
+                from pipeline.committee_meta import CommitteeMetaLearner
+                meta_learner = CommitteeMetaLearner.load(str(meta_path))
+                if not meta_learner.is_trained:
+                    meta_learner = None
+            except Exception:
+                pass
+
+    # 8. Create runner
+    from trading.live_committee_runner import LiveCommitteeRunner
+    from pipeline.regime_utils import RegimeConfig
+
+    runner = LiveCommitteeRunner(
+        config=committee_config,
+        models=trained_models,
+        feature_names=list(feature_names) if feature_names else [],
+        regime_cfg=RegimeConfig(),
+        confidence_threshold=req.confidence_threshold,
+        lookback_bars=req.lookback_bars,
+        meta_learner=meta_learner,
+    )
+    runner.start()
+
+    # 9. Create engine
+    from trading.committee_engine import CommitteeTradingEngine
+
+    engine = CommitteeTradingEngine()
+    oanda_client = None
+    if req.mode == "live":
+        from trading.async_oanda import AsyncOandaClient
+        token, account_id = _get_oanda_credentials()
+        if token and account_id:
+            oanda = AsyncOandaClient(access_token=token, account_id=account_id)
+            oanda_client = oanda._get_client()
+        else:
+            raise HTTPException(403, "OANDA API key not configured")
+
+    engine.start({
+        "pair": pair,
+        "initial_equity": req.initial_equity,
+        "mode": req.mode,
+        "position_sizing": req.position_sizing,
+        "sizing_config": req.sizing_config,
+        "risk_config": req.risk_config,
+        "trust_multiplier": trust_multiplier,
+    }, oanda_client=oanda_client)
+
+    # 10. Register session
+    session_id = str(uuid.uuid4())[:8]
+    session = {
+        "session_id": session_id,
+        "pair": pair,
+        "model_type": "committee",
+        "timeframe": timeframe,
+        "mode": req.mode,
+        "status": "running",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "runner": runner,
+        "engine": engine,
+        "ws_queues": [],
+        "_lock": asyncio.Lock(),
+        "_kill_event": asyncio.Event(),
+        "_task": None,
+        "last_mid": None,
+        "kill_reason": "",
+        "trained_models": trained_models,
+        "committee_config": committee_config,
+        "trust_multiplier": trust_multiplier,
+        "live_news_blend_enabled": req.live_news_blend_enabled,
+        "live_news_blend_weight": req.live_news_blend_weight,
+    }
+
+    live_sessions[session_id] = session
+    task = asyncio.create_task(_committee_trading_signal_loop(session_id))
+    session["_task"] = task
+
+    state = engine.get_portfolio_state()
+    return {
+        "session_id": session_id,
+        "pair": pair,
+        "model": "committee",
+        "models": unique_models,
+        "timeframe": timeframe,
+        "mode": req.mode,
+        "status": "running",
+        "equity": state["equity"],
+        "position": state["position"],
+        "signal_count": 0,
+        "feature_count": len(feature_names) if feature_names else 0,
+        "lookback_bars": req.lookback_bars,
+        "snapshot_loaded": snapshot_loaded,
+        "model_params_count": len(model_params),
+    }
+
+
+# ── Committee model training helper ───────────────────────────
+
+def _train_committee_models(
+    pair: str,
+    timeframe: str,
+    model_types: list[str],
+    feature_names: list[str] | None = None,
+    model_params: dict | None = None,
+):
+    """Train committee models on recent data (3 months)."""
+    from pipeline.backtester.composed import MLBacktester
+    from config import PIPELINE_CONSTANTS as _PC
+
+    if model_params is None:
+        model_params = {}
+
+    cfg = {
+        "pair": pair,
+        "timeframe": timeframe,
+        "model_type": model_types[0],
+        "n_months": 3,
+        "use_WFO": False,
+        "use_proba": True,
+        "features_config": _PC.get("features_config", {}),
+        "search_space": _PC.get("search_space", {}),
+    }
+
+    trained: dict[str, Any] = {}
+    final_features: list[str] = list(feature_names) if feature_names else []
+
+    try:
+        bt = MLBacktester(config=cfg)
+        bt.load_data()
+
+        for mtype in model_types:
+            result = bt.run_strategy(
+                config=cfg, models_to_test=[mtype],
+                n_trials=1, n_startup_trials=1,
+            )
+            if result is not None and result[0] is not None and not result[0].empty:
+                model_obj = getattr(bt, "model", None)
+                if model_obj is not None:
+                    trained[mtype] = model_obj
+                if not final_features:
+                    from pipeline.backtester.composed import MLBacktester as MBC
+                    final_features = list(getattr(bt, "feature_names", []))
+
+    except Exception:
+        logger.exception("Failed to train committee models for %s/%s", pair, timeframe)
+
+    return trained, final_features

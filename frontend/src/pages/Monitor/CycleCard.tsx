@@ -32,8 +32,8 @@ function PhaseBadge({ phase }: { phase: string }) {
   const c = config[phase] ?? config.pending;
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.06em]"
-      style={{ backgroundColor: "var(--color-glass-hover)", color: c.color }}
+      className="inline-flex items-center gap-1 rounded-full bg-(--color-glass-hover) px-2 py-0.5 text-[9px] font-medium tracking-[0.06em] uppercase"
+      style={{ color: c.color }}
     >
       {c.icon}
       {c.label}
@@ -48,7 +48,7 @@ export function CycleCard({ cycle }: Props) {
 
   return (
     <div
-      className="flex flex-col rounded-sm border"
+      className="flex flex-col rounded-sm border bg-(--color-surface)"
       style={{
         borderColor: isDone
           ? "var(--color-accent-success)"
@@ -57,19 +57,15 @@ export function CycleCard({ cycle }: Props) {
             : isSim
               ? "var(--color-accent-success)"
               : "var(--color-border)",
-        backgroundColor: "var(--color-surface)",
         overflow: "hidden",
       }}
     >
       {/* Header */}
-      <div
-        className="flex items-center gap-2 px-3 py-2 border-b"
-        style={{ borderColor: "var(--color-border-subtle)", backgroundColor: "var(--color-elevated)" }}
-      >
-        <span className="text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
+      <div className="flex items-center gap-2 border-b border-(--color-border-subtle) bg-(--color-elevated) px-3 py-2">
+        <span className="text-[10px] font-semibold tracking-[0.06em] text-(--color-text-muted) uppercase">
           Cycle {cycle.cycleNumber}
         </span>
-        <span className="text-[11px] font-medium" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+        <span className="font-mono text-[11px] font-medium text-(--color-text-primary)">
           {cycle.model}
         </span>
         <div className="flex-1" />
@@ -80,14 +76,12 @@ export function CycleCard({ cycle }: Props) {
       <div style={{ maxHeight: 320, overflowY: "auto" }}>
         {cycle.phase === "pending" && (
           <div className="flex items-center justify-center py-6">
-            <span className="text-xs animate-pulse" style={{ color: "var(--color-text-muted)" }}>
-              Waiting...
-            </span>
+            <span className="animate-pulse text-xs text-(--color-text-muted)">Waiting...</span>
           </div>
         )}
 
         {cycle.phase !== "pending" && (
-          <div className="p-3 flex flex-col gap-3">
+          <div className="flex flex-col gap-3 p-3">
             {/* Best Trial banner — always visible once we have trials */}
             {cycle.bestTrial && (
               <div
@@ -97,11 +91,11 @@ export function CycleCard({ cycle }: Props) {
                   backgroundColor: "rgba(234,179,8,0.06)",
                 }}
               >
-                <Trophy size={14} style={{ color: "var(--color-accent-warning)" }} />
-                <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
+                <Trophy size={14} className="text-(--color-accent-warning)" />
+                <span className="text-[10px] tracking-[0.06em] text-(--color-text-muted) uppercase">
                   Best Trial
                 </span>
-                <span className="text-[11px] font-semibold" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+                <span className="font-mono text-[11px] font-semibold text-(--color-text-primary)">
                   #{cycle.bestTrial.trial_number}: {cycle.bestTrial.score?.toFixed(4) ?? "-"}
                 </span>
               </div>
@@ -123,23 +117,22 @@ export function CycleCard({ cycle }: Props) {
                 {cycle.testMonths.map((tm) => (
                   <div
                     key={tm.period}
-                    className="flex items-center gap-2 rounded border px-2 py-1"
-                    style={{ borderColor: "var(--color-border-subtle)", backgroundColor: "var(--color-glass-hover)" }}
+                    className="flex items-center gap-2 rounded border border-(--color-border-subtle) bg-(--color-glass-hover) px-2 py-1"
                   >
-                    <span className="text-[10px] font-medium" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>
+                    <span className="font-mono text-[10px] font-medium text-(--color-text-secondary)">
                       M{tm.period}
                       {tm.flat ? " (flat)" : ""}
                     </span>
-                    <span className="text-[10px]" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+                    <span className="font-mono text-[10px] text-(--color-text-primary)">
                       Sharpe: {tm.sharpe?.toFixed(2) ?? "-"}
                     </span>
-                    <span className="text-[10px]" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+                    <span className="font-mono text-[10px] text-(--color-text-primary)">
                       Ret: {tm.return_pct != null ? `${tm.return_pct.toFixed(2)}%` : "-"}
                     </span>
-                    <span className="text-[10px]" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+                    <span className="font-mono text-[10px] text-(--color-text-primary)">
                       DD: {tm.drawdown?.toFixed(2) ?? "-"}
                     </span>
-                    <span className="text-[10px]" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+                    <span className="font-mono text-[10px] text-(--color-text-primary)">
                       Tr: {tm.trades ?? "-"}
                     </span>
                   </div>

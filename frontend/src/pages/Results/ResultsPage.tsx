@@ -1,6 +1,15 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useRef, useMemo } from "react";
-import { BarChart3, ArrowLeft, Play, Save, GitCompare, ChevronDown, ChevronUp, X } from "lucide-react";
+import {
+  BarChart3,
+  ArrowLeft,
+  Play,
+  Save,
+  GitCompare,
+  ChevronDown,
+  ChevronUp,
+  X,
+} from "lucide-react";
 import { useJobResults, useTradeChartData, useSaveModelFromJob } from "@/api/queries";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ExportBar } from "@/components/shared/ExportBar";
@@ -11,7 +20,7 @@ import { TradeLogTable } from "./TradeLogTable";
 import { MonthlySection } from "./MonthlySection";
 import { HpoDiagnostics } from "./HpoDiagnostics";
 import { OverfittingPanel } from "./OverfittingPanel";
-import { BacktestSummary } from "./BacktestSummary";
+import { ValidationScorecard } from "./ValidationScorecard";
 import { WalkForwardPanel } from "./WalkForwardPanel";
 import { ParameterExplorer } from "./ParameterExplorer";
 import { LLMAdvisor } from "./LLMAdvisor";
@@ -34,13 +43,13 @@ import type { EquityCurveChartHandle } from "@/components/charts/EquityCurveChar
 
 function Skeleton() {
   return (
-    <div className="flex flex-col gap-3 animate-pulse">
-      <div className="h-5 w-48 rounded" style={{ backgroundColor: "var(--color-elevated)" }} />
-      <div className="h-12 rounded" style={{ backgroundColor: "var(--color-surface)" }} />
-      <div className="h-[320px] rounded" style={{ backgroundColor: "var(--color-surface)" }} />
+    <div className="flex animate-pulse flex-col gap-3">
+      <div className="h-5 w-48 rounded bg-(--color-elevated)" />
+      <div className="h-12 rounded bg-(--color-surface)" />
+      <div className="h-[320px] rounded bg-(--color-surface)" />
       <div className="grid grid-cols-3 gap-3">
         {Array.from({ length: 3 }, (_, i) => (
-          <div key={i} className="h-[220px] rounded" style={{ backgroundColor: "var(--color-surface)" }} />
+          <div key={i} className="h-[220px] rounded bg-(--color-surface)" />
         ))}
       </div>
     </div>
@@ -60,30 +69,16 @@ function Accordion({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-sm overflow-hidden" style={{ border: "1px solid var(--color-glass-border)" }}>
+    <div className="overflow-hidden rounded-sm border border-(--color-glass-border)">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-2 text-left transition-all hover:opacity-80"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          color: "var(--color-text-muted)",
-          fontFamily: "var(--font-sans)",
-          fontSize: 11,
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.1em",
-          cursor: "pointer",
-          border: "none",
-        }}
+        className="flex w-full cursor-pointer items-center justify-between bg-(--color-surface) px-4 py-2 text-left font-sans text-[11px] font-semibold tracking-[0.1em] text-(--color-text-muted) uppercase transition-all hover:opacity-80"
+        style={{ border: "none" }}
       >
         {label}
         {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
       </button>
-      {open && (
-        <div style={{ backgroundColor: "var(--color-app)" }}>
-          {children}
-        </div>
-      )}
+      {open && <div className="bg-(--color-app)">{children}</div>}
     </div>
   );
 }
@@ -98,10 +93,8 @@ export function ResultsPage() {
   const [tab, setTab] = useState<"results" | "compare">("results");
 
   // Progressive disclosure accordion states
-  const [showSummary, setShowSummary] = useState(false);
-  const [showOverfitting, setShowOverfitting] = useState(false);
-  const [showWalkForward, setShowWalkForward] = useState(false);
-  const [showMonthly, setShowMonthly] = useState(false);
+  const [showWalkForward, setShowWalkForward] = useState(true);
+  const [showMonthly, setShowMonthly] = useState(true);
   const [showDiagnostics, setShowDiagnostics] = useState(true);
   const [showTradeLog, setShowTradeLog] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -110,7 +103,15 @@ export function ResultsPage() {
   const saveModelMutation = useSaveModelFromJob();
   const equityChartRef = useRef<EquityCurveChartHandle>(null);
 
-  const activeMetric = results?.metrics?.length ? results.metrics[Math.min(activeModelIdx, results.metrics.length - 1)] : null;
+  const activeMetric = results?.metrics?.length
+    ? results.metrics[Math.min(activeModelIdx, results.metrics.length - 1)]
+    : null;
+  const canSaveModel =
+    activeMetric?.snapshot_path &&
+    activeMetric.total_trades != null &&
+    activeMetric.total_trades > 0 &&
+    activeMetric.sharpe != null &&
+    isFinite(activeMetric.sharpe);
   const metrics = results?.metrics ?? [];
   const modelCurves = useMemo(() => {
     if (!metrics.length) return [];
@@ -147,12 +148,7 @@ export function ResultsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate("/backtest")}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-all duration-200 hover:border-[var(--color-border-active)]"
-            style={{
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "transparent",
-              color: "var(--color-text-muted)",
-            }}
+            className="flex items-center gap-1 rounded-md border border-(--color-glass-border) bg-transparent px-2 py-1 text-xs text-(--color-text-muted) transition-all duration-200 hover:border-[var(--color-border-active)]"
           >
             <ArrowLeft size={12} strokeWidth={1.5} /> Back
           </button>
@@ -168,12 +164,7 @@ export function ResultsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate("/backtest")}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-all duration-200 hover:border-[var(--color-border-active)]"
-            style={{
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "transparent",
-              color: "var(--color-text-muted)",
-            }}
+            className="flex items-center gap-1 rounded-md border border-(--color-glass-border) bg-transparent px-2 py-1 text-xs text-(--color-text-muted) transition-all duration-200 hover:border-[var(--color-border-active)]"
           >
             <ArrowLeft size={12} strokeWidth={1.5} /> Back
           </button>
@@ -194,7 +185,9 @@ export function ResultsPage() {
     const trades = activeMetric.trades;
     const header = Object.keys(trades[0]).join(",");
     const rows = trades.map((t: Record<string, unknown>) =>
-      Object.values(t).map((v) => String(v ?? "")).join(",")
+      Object.values(t)
+        .map((v) => String(v ?? ""))
+        .join(","),
     );
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -217,45 +210,31 @@ export function ResultsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-5 animate-fade-in" style={{ height: "100%" }}>
-
+    <div className="flex h-full animate-fade-in flex-col gap-5">
       {/* ── Top ribbon ─────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between" style={{ minHeight: 32 }}>
-        <div className="flex items-center gap-3">
+      <div className="flex min-h-[36px] items-center justify-between">
+        <div className="flex items-center gap-3 leading-none">
           <button
             onClick={() => navigate("/backtest")}
-            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-all duration-200 hover:border-[var(--color-brand)]"
-            style={{
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "transparent",
-              color: "var(--color-text-muted)",
-              cursor: "pointer",
-            }}
+            className="flex cursor-pointer items-center gap-1 rounded-md border border-(--color-glass-border) bg-transparent px-2 py-1.5 text-[11px] leading-none text-(--color-text-muted) transition-all duration-200 hover:border-[var(--color-brand)]"
           >
             <ArrowLeft size={12} strokeWidth={1.5} /> Back
           </button>
-          <h2
-            className="text-[11px] font-semibold uppercase tracking-[0.12em]"
-            style={{ color: "var(--color-text-muted)" }}
-          >
+          <h2 className="text-[11px] font-semibold leading-none tracking-[0.12em] text-(--color-text-muted) uppercase">
             Results
           </h2>
-          <span
-            className="text-[11px]"
-            style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}
-          >
+          <span className="font-mono text-[11px] leading-none text-(--color-text-secondary)">
             {results.pair}
           </span>
           <StatusDot color="var(--color-brand)" />
         </div>
-        <div className="flex items-center gap-1.5">
-          {activeMetric?.snapshot_path && (
+        <div className="flex items-center gap-1.5 leading-none">
+          {canSaveModel && (
             <>
               {saveMsg ? (
                 <button
                   onClick={() => navigate("/models")}
-                  className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase transition-all hover:brightness-110"
-                  style={{ borderColor: "var(--color-accent-success)", backgroundColor: "rgba(8,153,129,0.1)", color: "var(--color-accent-success)", cursor: "pointer" }}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-md border border-(--color-accent-success) bg-[rgba(8,153,129,0.1)] px-2.5 py-1 text-[11px] font-semibold text-(--color-accent-success) uppercase transition-all hover:brightness-110"
                 >
                   <Save size={11} /> View in Models
                 </button>
@@ -268,28 +247,30 @@ export function ResultsPage() {
                       {
                         onSuccess: () => setSaveMsg("Saved"),
                         onError: (e: unknown) => setSaveMsg(`Error: ${(e as Error).message}`),
-                      }
+                      },
                     );
                   }}
                   disabled={saveModelMutation.isPending}
-                  className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase transition-all hover:brightness-110"
-                  style={{ borderColor: "var(--color-accent-warning)", backgroundColor: "rgba(245,158,11,0.1)", color: "var(--color-accent-warning)", cursor: saveModelMutation.isPending ? "not-allowed" : "pointer", opacity: saveModelMutation.isPending ? 0.6 : 1 }}
+                  className="flex items-center gap-1.5 rounded-md border border-(--color-accent-warning) bg-[rgba(245,158,11,0.1)] px-2.5 py-1 text-[11px] font-semibold text-(--color-accent-warning) uppercase transition-all hover:brightness-110"
+                  style={{
+                    cursor: saveModelMutation.isPending ? "not-allowed" : "pointer",
+                    opacity: saveModelMutation.isPending ? 0.6 : 1,
+                  }}
                 >
                   <Save size={11} /> {saveModelMutation.isPending ? "Saving..." : "Save Model"}
                 </button>
               )}
             </>
           )}
-          <ExportBar onExportCsv={handleExportCsv} onExportPng={handleExportPng} onExportJson={handleExportJson} />
+          <ExportBar
+            onExportCsv={handleExportCsv}
+            onExportPng={handleExportPng}
+            onExportJson={handleExportJson}
+          />
           {jobId && activeMetric?.model && (
             <button
               onClick={() => setShowPlayback(true)}
-              className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase transition-all"
-              style={{
-                borderColor: "var(--color-accent-success)",
-                backgroundColor: "rgba(8,153,129,0.1)",
-                color: "var(--color-accent-success)",
-              }}
+              className="flex items-center gap-1.5 rounded-md border border-(--color-accent-success) bg-[rgba(8,153,129,0.1)] px-2.5 py-1 text-[11px] font-semibold text-(--color-accent-success) uppercase transition-all"
             >
               <Play size={11} /> Replay
             </button>
@@ -299,12 +280,10 @@ export function ResultsPage() {
 
       {/* ── No-trades warning ───────────────────────────────────────── */}
       {activeMetric && (activeMetric.total_trades ?? 0) === 0 && (
-        <div
-          className="rounded-md border px-3 py-2"
-          style={{ borderColor: "var(--color-accent-warning)", backgroundColor: "rgba(245,158,11,0.05)" }}
-        >
-          <p className="text-[11px]" style={{ color: "var(--color-accent-warning)" }}>
-            This backtest produced no trades. All walk-forward months were flat. Try increasing HPO trials, tightening bounds, or selecting a different model.
+        <div className="rounded-md border border-(--color-accent-warning) bg-[rgba(245,158,11,0.05)] px-3 py-2">
+          <p className="text-[11px] text-(--color-accent-warning)">
+            This backtest produced no trades. All walk-forward months were flat. Try increasing HPO
+            trials, tightening bounds, or selecting a different model.
           </p>
         </div>
       )}
@@ -314,27 +293,25 @@ export function ResultsPage() {
         <MetricsGrid
           metrics={activeMetric}
           modelName={activeMetric.model}
-          warnings={activeMetric.diagnostics?.vif_warnings?.map((w) => `${w.feature} VIF=${w.vif}`) ?? []}
-          overfittingScore={activeMetric.overfitting?.cv_sharpe_std ?? null}
-          overfittingColor={activeMetric.overfitting?.risk_color ?? null}
-          onShowSummary={() => setShowSummary((v) => !v)}
-          onShowOverfitting={() => setShowOverfitting((v) => !v)}
+          warnings={
+            activeMetric.diagnostics?.vif_warnings?.map((w) => `${w.feature} VIF=${w.vif}`) ?? []
+          }
         />
       )}
 
       {/* ── Model selector (multi-model runs) ───────────────────────── */}
       {metrics.length > 1 && (
-        <div className="flex items-center gap-1 flex-wrap">
+        <div className="flex flex-wrap items-center gap-1">
           {metrics.map((m, i) => (
             <button
               key={m.model}
               onClick={() => setActiveModelIdx(i)}
-              className="rounded-md border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.06em] transition-all duration-200"
+              className="cursor-pointer rounded-md border px-3 py-1 text-[11px] font-medium tracking-[0.06em] uppercase transition-all duration-200"
               style={{
-                borderColor: i === activeModelIdx ? "var(--color-brand)" : "var(--color-glass-border)",
+                borderColor:
+                  i === activeModelIdx ? "var(--color-brand)" : "var(--color-glass-border)",
                 backgroundColor: i === activeModelIdx ? "rgba(0,229,255,0.07)" : "transparent",
                 color: i === activeModelIdx ? "var(--color-brand)" : "var(--color-text-muted)",
-                cursor: "pointer",
               }}
             >
               {m.model} — Sharpe {m.sharpe?.toFixed(2) ?? "—"}
@@ -345,37 +322,35 @@ export function ResultsPage() {
 
       {/* ── Results / Compare tab bar (multi-model) ─────────────────── */}
       {metrics.length > 1 && (
-        <div className="flex items-center gap-1 border-b" style={{ borderColor: "var(--color-surface)" }}>
+        <div className="flex items-center gap-1 border-b border-(--color-surface)">
           <button
             onClick={() => setTab("results")}
-            className="relative px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all duration-200"
+            className="relative cursor-pointer bg-transparent px-4 py-1.5 text-[11px] font-semibold tracking-[0.08em] uppercase transition-all duration-200"
             role="tab"
             aria-selected={tab === "results"}
             style={{
               color: tab === "results" ? "var(--color-brand)" : "var(--color-text-muted)",
-              cursor: "pointer",
-              background: "transparent",
               border: "none",
-              borderBottom: tab === "results" ? "2px solid var(--color-brand)" : "2px solid transparent",
+              borderBottom:
+                tab === "results" ? "2px solid var(--color-brand)" : "2px solid transparent",
             }}
           >
-            <BarChart3 size={11} className="inline mr-1.5" />
+            <BarChart3 size={11} className="mr-1.5 inline" />
             Results
           </button>
           <button
             onClick={() => setTab("compare")}
-            className="relative px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all duration-200"
+            className="relative cursor-pointer bg-transparent px-4 py-1.5 text-[11px] font-semibold tracking-[0.08em] uppercase transition-all duration-200"
             role="tab"
             aria-selected={tab === "compare"}
             style={{
               color: tab === "compare" ? "var(--color-brand)" : "var(--color-text-muted)",
-              cursor: "pointer",
-              background: "transparent",
               border: "none",
-              borderBottom: tab === "compare" ? "2px solid var(--color-brand)" : "2px solid transparent",
+              borderBottom:
+                tab === "compare" ? "2px solid var(--color-brand)" : "2px solid transparent",
             }}
           >
-            <GitCompare size={11} className="inline mr-1.5" />
+            <GitCompare size={11} className="mr-1.5 inline" />
             Compare
           </button>
         </div>
@@ -383,51 +358,24 @@ export function ResultsPage() {
 
       {tab === "results" && (
         <div className="flex flex-col gap-3 pb-4">
-
-          {/* Progressive disclosure: Summary + Overfitting as accordions */}
-          {(activeMetric?.summary_text || activeMetric?.overfitting) && (
-            <div className="flex flex-col gap-2">
-              {activeMetric?.summary_text && (
-                <Accordion
-                  label="Backtest Summary"
-                  open={showSummary}
-                  onToggle={() => setShowSummary((v) => !v)}
-                >
-                  <div className="px-4 py-3">
-                    <BacktestSummary text={activeMetric.summary_text} />
-                  </div>
-                </Accordion>
-              )}
-              {activeMetric?.overfitting && (
-                <Accordion
-                  label={`Overfitting Assessment — Score ${activeMetric.overfitting.overfit_score.toFixed(0)}`}
-                  open={showOverfitting}
-                  onToggle={() => setShowOverfitting((v) => !v)}
-                >
-                  <div className="p-3">
-                    <OverfittingPanel
-                      overfitting={activeMetric.overfitting ?? null}
-                      walkforwardPeriods={activeMetric.walkforward_periods ?? null}
-                    />
-                  </div>
-                </Accordion>
-              )}
-            </div>
+          {/* ── Validation Scorecard ─────────────────────────────── */}
+          {(activeMetric?.summary_text || activeMetric?.overfitting || activeMetric?.walkforward_periods) && (
+            <ValidationScorecard
+              overfitting={activeMetric.overfitting ?? null}
+              walkforwardPeriods={activeMetric.walkforward_periods ?? null}
+            />
           )}
 
           {/* ── HERO: main chart area ───────────────────────────────── */}
-          <div
-            className="rounded-sm overflow-hidden"
-            style={{ border: "1px solid var(--color-glass-border)" }}
-          >
+          <div className="overflow-hidden rounded-sm border border-(--color-glass-border)">
             {/* Trade visualization */}
             {jobId && activeMetric?.model && (
-              <div style={{ borderBottom: "1px solid var(--color-glass-border)" }}>
+              <div className="border-b border-(--color-glass-border)">
                 <BacktestChart jobId={jobId} model={activeMetric.model} />
               </div>
             )}
             {/* Equity + Drawdown stacked below */}
-            <div className="px-3 pt-2 pb-3" style={{ backgroundColor: "var(--color-app)" }}>
+            <div className="bg-(--color-app) px-3 pt-2 pb-3">
               <EquitySection
                 ref={equityChartRef}
                 equityCurve={normalizeEquityCurve(activeMetric?.equity_curve ?? null)}
@@ -441,7 +389,7 @@ export function ResultsPage() {
           <LLMAdvisor jobId={jobId ?? null} modelName={activeMetric?.model ?? null} />
 
           {/* ── 3-column diagnostics grid ───────────────────────────── */}
-          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+          <div className="grid grid-cols-3 gap-3">
             {/* Col 1: Walk-Forward */}
             <Accordion
               label={`Walk-Forward ${activeMetric?.walkforward_periods ? `— ${activeMetric.walkforward_periods.length} periods` : ""}`}
@@ -488,15 +436,29 @@ export function ResultsPage() {
             open={showAdvanced}
             onToggle={() => setShowAdvanced((v) => !v)}
           >
-            <div className="flex flex-col gap-3 p-3">
-              <DrawdownChart drawdownCurve={normalizeEquityCurve(activeMetric?.drawdown_curve ?? null)} />
-              <CumulativePnlChart trades={activeMetric?.trades ? (activeMetric.trades as TradeRecord[]) : null} />
-              <RollingMetricsChart equityCurve={normalizeEquityCurve(activeMetric?.equity_curve ?? null)} />
-              <TradeDistributionChart trades={activeMetric?.trades ? (activeMetric.trades as TradeRecord[]) : null} />
+            <div className="flex flex-col gap-8 p-6">
+              <DrawdownChart
+                drawdownCurve={normalizeEquityCurve(activeMetric?.drawdown_curve ?? null)}
+              />
+              <CumulativePnlChart
+                trades={activeMetric?.trades ? (activeMetric.trades as TradeRecord[]) : null}
+              />
+              <RollingMetricsChart
+                equityCurve={normalizeEquityCurve(activeMetric?.equity_curve ?? null)}
+              />
+              <TradeDistributionChart
+                trades={activeMetric?.trades ? (activeMetric.trades as TradeRecord[]) : null}
+              />
               <HpoDiagnostics
                 paramImportance={activeMetric?.hpo_param_importance ?? null}
                 trials={activeMetric?.hpo_trials ?? null}
               />
+              {activeMetric?.overfitting && (
+                <OverfittingPanel
+                  overfitting={activeMetric.overfitting}
+                  walkforwardPeriods={activeMetric.walkforward_periods ?? null}
+                />
+              )}
               <ParameterSensitivityChart trials={activeMetric?.hpo_trials ?? null} />
               {activeMetric && <ParameterExplorer metrics={activeMetric} />}
               <ConfigViewer config={results.config ?? null} />
@@ -511,7 +473,11 @@ export function ResultsPage() {
           >
             <div className="p-2">
               <TradeLogTable
-                trades={activeMetric?.trades ? (activeMetric.trades as import("@/api/schemas").TradeRecord[]) : null}
+                trades={
+                  activeMetric?.trades
+                    ? (activeMetric.trades as import("@/api/schemas").TradeRecord[])
+                    : null
+                }
                 onTradeSelect={setSelectedTrade}
               />
             </div>
@@ -523,10 +489,7 @@ export function ResultsPage() {
         <div className="flex flex-col gap-3 pb-4">
           <LeaderboardTable metrics={metrics} sortMetric="sharpe" />
           <EquityOverlayChart curves={modelCurves} />
-          <SignificanceMatrix
-            models={metrics.map((m) => m.model)}
-            pValues={null}
-          />
+          <SignificanceMatrix models={metrics.map((m) => m.model)} pValues={null} />
           {metrics.length > 0 && metrics[0].hpo_trials && (
             <ParameterSensitivityChart trials={metrics[0].hpo_trials} />
           )}
@@ -536,28 +499,34 @@ export function ResultsPage() {
 
       {/* ── Selected trade tooltip ───────────────────────────────────── */}
       {selectedTrade && (
-        <div
-          className="fixed bottom-12 right-6 rounded-sm border p-3 text-xs"
-          style={{
-            backgroundColor: "var(--color-surface)",
-            borderColor: "var(--color-glass-border)",
-            fontFamily: "var(--font-mono)",
-            zIndex: 50,
-            backdropFilter: "blur(12px)",
-          }}
-        >
+        <div className="fixed right-6 bottom-12 z-50 rounded-sm border border-(--color-glass-border) bg-(--color-surface) p-3 font-mono text-xs backdrop-blur-[12px]">
           <div className="flex items-center justify-between gap-4">
-            <span style={{ color: "var(--color-text-muted)" }}>Trade #{selectedTrade.trade_id}</span>
-            <span style={{ color: selectedTrade.direction === "BUY" ? "var(--color-accent-success)" : "var(--color-accent-danger)" }}>
+            <span className="text-(--color-text-muted)">Trade #{selectedTrade.trade_id}</span>
+            <span
+              style={{
+                color:
+                  selectedTrade.direction === "BUY"
+                    ? "var(--color-accent-success)"
+                    : "var(--color-accent-danger)",
+              }}
+            >
               {selectedTrade.direction}
             </span>
-            <span style={{ color: (selectedTrade.return_pct ?? 0) >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)" }}>
+            <span
+              style={{
+                color:
+                  (selectedTrade.return_pct ?? 0) >= 0
+                    ? "var(--color-accent-success)"
+                    : "var(--color-accent-danger)",
+              }}
+            >
               {(selectedTrade.return_pct ?? 0) >= 0 ? "+" : ""}
               {(selectedTrade.return_pct ?? 0).toFixed(2)}%
             </span>
             <button
               onClick={() => setSelectedTrade(null)}
-              style={{ color: "var(--color-text-muted)", cursor: "pointer", background: "none", border: "none" }}
+              className="cursor-pointer bg-none text-(--color-text-muted)"
+              style={{ border: "none" }}
               aria-label="Close trade tooltip"
             >
               <X size={12} />

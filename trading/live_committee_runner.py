@@ -46,6 +46,7 @@ class LiveSignal:
     is_healthy: bool = True           # False if models are underperforming
     meta_override: bool = False       # True if meta-learner overrode committee
     throttle_level: str = "full"      # "full", "half", "observe"
+    conviction_multiplier: float = 1.0  # 0.5 explorer / 1.0 standard / 1.5 conviction
 
     def to_dict(self) -> dict:
         return {
@@ -60,6 +61,7 @@ class LiveSignal:
             "is_healthy": self.is_healthy,
             "meta_override": self.meta_override,
             "throttle_level": self.throttle_level,
+            "conviction_multiplier": round(self.conviction_multiplier, 2),
         }
 
 
@@ -206,7 +208,7 @@ class LiveCommitteeRunner:
         features = self._build_features()
 
         # 2. Classify regime
-        regime_id, regime_probs = self._classify_regime()
+        regime_id, regime_probs, _named_probs = self._classify_regime()
         regime_name = _REGIME_NAMES.get(int(regime_id), "sideways")
         self._regime_history.append(regime_name)
 
@@ -233,10 +235,21 @@ class LiveCommitteeRunner:
             elif max_class == 0:
                 signal = -1
 
+        # 5b. Compute conviction multiplier (consensus-scaled sizing)
+        conviction_multiplier = 1.0
+        if signal != 0:
+            if max_prob >= 0.80:
+                conviction_multiplier = 1.5
+            elif max_prob >= 0.65:
+                conviction_multiplier = 1.0
+            elif max_prob >= 0.55:
+                conviction_multiplier = 0.5
+
         # 6. Check health
         is_healthy = self._check_health()
         if not is_healthy and signal != 0:
             signal = 0  # suppress trades when unhealthy
+            conviction_multiplier = 1.0  # no sizing effect for suppressed signal
 
         # 7. Apply meta-learner gate (learns when to override committee)
         meta_override = False
@@ -256,6 +269,9 @@ class LiveCommitteeRunner:
                 )
                 if meta_override:
                     signal = meta_signal
+                    # Downgrade conviction if meta-learner disagrees
+                    if signal != 0 and max_prob < 0.80:
+                        conviction_multiplier = max(0.5, conviction_multiplier * 0.5)
             except Exception:
                 pass
 
@@ -264,7 +280,7 @@ class LiveCommitteeRunner:
             signal=signal,
             confidence=max_prob,
             regime=regime_name,
-            regime_prob=float(regime_probs.get(regime_id, 0.0)),
+            regime_prob=float(regime_probs.get(int(regime_id), 0.0)),
             blended_probs={
                 "short": float(blended[0]),
                 "flat": float(blended[1]),
@@ -274,6 +290,7 @@ class LiveCommitteeRunner:
             model_weights=used_weights,
             is_healthy=is_healthy,
             meta_override=meta_override,
+            conviction_multiplier=conviction_multiplier,
         )
         self._signal_history.append(live_signal)
         return live_signal
@@ -313,11 +330,13 @@ class LiveCommitteeRunner:
 
     # ── Regime classification ────────────────────────────────────────
 
-    def _classify_regime(self) -> Tuple[int, Dict[int, float]]:
+    def _classify_regime(self) -> Tuple[int, Dict[int, float], Dict[str, float]]:
         """Classify current bar into a 7-class regime.
 
         Uses rule-based logic (fast, no ML model needed).
-        Returns (regime_id, {regime_id: probability}).
+        Returns (regime_id, {regime_id: probability}, {regime_name: probability}).
+
+        Named dict (3rd element) enables fuzzy multi-regime blending in Phase 4.
         """
         df = pd.DataFrame(list(self._bar_buffer)[-50:])
         cfg = self.regime_cfg
@@ -329,7 +348,8 @@ class LiveCommitteeRunner:
 
         price = df["mid_c"].astype(np.float64)
         if len(price) < 20:
-            return regime, probs
+            named = {_REGIME_NAMES.get(i, f"regime_{i}"): probs[i] for i in range(7)}
+            return regime, probs, named
 
         ema = price.ewm(span=20, adjust=False).mean().iloc[-1]
         atr_val = (df["mid_h"] - df["mid_l"]).rolling(14).mean().iloc[-1]
@@ -357,11 +377,12 @@ class LiveCommitteeRunner:
         elif atr_high and not is_trend:
             regime = 5  # high_volatile
 
-        # Assign probabilities
+        # Assign probabilities (soft distribution for fuzzy blending in Phase 4)
         probs = {i: 0.05 for i in range(7)}
         probs[regime] = 0.70
 
-        return regime, probs
+        named = {_REGIME_NAMES.get(i, f"regime_{i}"): probs[i] for i in range(7)}
+        return regime, probs, named
 
     # ── Prediction blending ─────────────────────────────────────────
 
@@ -372,7 +393,9 @@ class LiveCommitteeRunner:
     ) -> Tuple[Optional[np.ndarray], List[str], List[float]]:
         """Get predictions from assigned models and blend by weights.
 
-        Returns (blended_proba_3class, active_models, used_weights).
+        Applies dynamic decay to model weights based on rolling hit rate.
+        A model below 50% hit rate smoothly loses up to 50% voting power
+        before the hard health gate (-0.5 Sharpe) triggers full rotation.
         """
         prob_sum = np.zeros(3, dtype=np.float64)
         weight_sum = 0.0
@@ -386,20 +409,28 @@ class LiveCommitteeRunner:
             try:
                 proba = model.predict_proba(features)
                 if proba is not None:
+                    decay = 1.0
+                    health = self._health.get(model_name)
+                    if health is not None and health.total_signals >= 5:
+                        hit_rate = health.last_hit_rate
+                        if not np.isnan(hit_rate) and hit_rate < 0.50:
+                            decay = max(0.5, 1.0 - (0.50 - hit_rate) / 0.15)
+
+                    effective_weight = weight * decay
                     n_cols = proba.shape[1]
                     if n_cols >= 3:
-                        prob_sum += weight * proba[0, :3]
-                        weight_sum += weight
+                        prob_sum += effective_weight * proba[0, :3]
+                        weight_sum += effective_weight
                         active.append(model_name)
-                        used_w.append(weight)
+                        used_w.append(round(effective_weight, 4))
                     elif n_cols == 2:
                         # Binary classifier: class 0 = short, class 1 = long
                         p_short = proba[0, 0]
                         p_long = proba[0, 1]
-                        prob_sum += weight * np.array([p_short, 0.0, p_long])
-                        weight_sum += weight
+                        prob_sum += effective_weight * np.array([p_short, 0.0, p_long])
+                        weight_sum += effective_weight
                         active.append(model_name)
-                        used_w.append(weight)
+                        used_w.append(round(effective_weight, 4))
             except Exception:
                 continue
 

@@ -23,34 +23,27 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/[0.6] backdrop-blur-[4px]"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="About KodaQuant"
     >
       <div
-        className="rounded-sm border p-8 w-[420px] shadow-2xl animate-fade-in"
-        style={{
-          backgroundColor: "var(--color-elevated)",
-          borderColor: "var(--color-glass-border)",
-          boxShadow: "0 0 40px rgba(0,229,255,0.08)",
-        }}
+        className="w-[420px] animate-fade-in rounded-sm border border-(--color-glass-border) bg-(--color-elevated) p-8 shadow-2xl"
+        style={{ boxShadow: "0 0 40px rgba(0,229,255,0.08)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <svg width="36" height="36" viewBox="0 0 32 32" fill="none">
-              <rect width="32" height="32" rx="6" fill="var(--color-app, #050608)"/>
-              <polygon points="16,4 28,16 16,28 4,16" fill="var(--color-brand)"/>
-              <polygon points="16,8 24,16 16,24 8,16" fill="var(--color-app, #050608)"/>
+              <rect width="32" height="32" rx="6" fill="var(--color-app, #050608)" />
+              <polygon points="16,4 28,16 16,28 4,16" fill="var(--color-brand)" />
+              <polygon points="16,8 24,16 16,24 8,16" fill="var(--color-app, #050608)" />
             </svg>
             <div className="flex flex-col">
-              <span className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>
-                KodaQuant
-              </span>
-              <span className="text-[10px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+              <span className="text-base font-semibold text-(--color-text-primary)">KodaQuant</span>
+              <span className="font-mono text-[10px] text-(--color-text-muted)">
                 v{electronVersion || VERSION}
               </span>
             </div>
@@ -58,29 +51,28 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
           <button
             onClick={onClose}
             aria-label="Close dialog"
-            className="rounded-full p-1.5 transition hover:brightness-125"
-            style={{ backgroundColor: "var(--color-glass)" }}
+            className="rounded-full bg-(--color-glass) p-1.5 transition hover:brightness-125"
           >
-            <X size={14} style={{ color: "var(--color-text-muted)" }} />
+            <X size={14} className="text-(--color-text-muted)" />
           </button>
         </div>
 
-        <div className="flex flex-col gap-3 mb-6">
-          <p className="text-xs leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
-            Professional walk-forward backtesting platform for forex traders. ML models, news sentiment, live monitoring, and institutional-grade execution simulation.
+        <div className="mb-6 flex flex-col gap-3">
+          <p className="text-xs leading-relaxed text-(--color-text-secondary)">
+            Professional walk-forward backtesting platform for forex traders. ML models, news
+            sentiment, live monitoring, and institutional-grade execution simulation.
           </p>
-          <p className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+          <p className="text-[10px] text-(--color-text-muted)">
             Copyright &copy; 2026 rafa9-labs. All rights reserved.
           </p>
         </div>
 
-        <div className="flex flex-col gap-2 pt-4" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
+        <div className="flex flex-col gap-2 border-t border-(--color-glass-border) pt-4">
           <a
-             href="https://github.com/rafa9-labs/kodaquant"
+            href="https://github.com/rafa9-labs/kodaquant"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-xs transition hover:opacity-80"
-            style={{ color: "var(--color-brand)" }}
+            className="flex items-center gap-2 text-xs text-(--color-brand) transition hover:opacity-80"
           >
             <ExternalLink size={12} />
             GitHub Repository

@@ -3,11 +3,22 @@ import { useCommitteeConfig, useSaveCommitteeConfig } from "@/api/queries";
 import type { CommitteeConfigSchema, RegimeAssignmentSchema } from "@/api/schemas";
 
 const AVAILABLE_MODELS = [
-  "logistic", "svm", "random_forest", "decision_tree",
-  "xgboost", "lightgbm", "catboost",
-  "cnn", "lstm", "transformer", "gru", "gru_lstm",
-  "dqn", "ensemble_adaptive_regime",
-  "meta_ensemble", "stacking_ensemble",
+  "logistic",
+  "svm",
+  "random_forest",
+  "decision_tree",
+  "xgboost",
+  "lightgbm",
+  "catboost",
+  "cnn",
+  "lstm",
+  "transformer",
+  "gru",
+  "gru_lstm",
+  "dqn",
+  "ensemble_adaptive_regime",
+  "meta_ensemble",
+  "stacking_ensemble",
 ];
 
 export function CommitteeConfigPanel() {
@@ -20,11 +31,7 @@ export function CommitteeConfigPanel() {
   }, [config]);
 
   if (isLoading || !editing) {
-    return (
-      <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>
-        Loading config...
-      </div>
-    );
+    return <div className="text-xs text-(--color-text-muted)">Loading config...</div>;
   }
 
   const regimeNames = Object.keys(editing.regimes);
@@ -63,46 +70,25 @@ export function CommitteeConfigPanel() {
   }
 
   function handleSave() {
-    if (editing) saveMutation.mutate(editing);
+    if (editing) {
+      const payload = structuredClone(editing);
+      if (config?.model_params) payload.model_params = config.model_params;
+      saveMutation.mutate(payload);
+    }
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div className="flex flex-col gap-6">
       {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "var(--color-text-primary)",
-          }}
-        >
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-semibold tracking-[0.08em] text-(--color-text-primary) uppercase">
           Committee Configuration
         </span>
         <button
           onClick={handleSave}
           disabled={saveMutation.isPending}
-          style={{
-            background: "var(--color-brand)",
-            color: "var(--color-text-inverse)",
-            border: "none",
-            borderRadius: 4,
-            padding: "6px 16px",
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            cursor: "pointer",
-            opacity: saveMutation.isPending ? 0.5 : 1,
-          }}
+          className="cursor-pointer rounded border-none bg-(--color-brand) px-[16px] py-[6px] text-[11px] font-semibold tracking-[0.06em] text-(--color-text-inverse) uppercase"
+          style={{ opacity: saveMutation.isPending ? 0.5 : 1 }}
         >
           {saveMutation.isPending ? "Saving..." : "Save Config"}
         </button>
@@ -110,10 +96,9 @@ export function CommitteeConfigPanel() {
 
       {/* Regime Cards */}
       <div
+        className="grid gap-4"
         style={{
-          display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
-          gap: 16,
         }}
       >
         {regimeNames.map((regimeName) => {
@@ -121,43 +106,15 @@ export function CommitteeConfigPanel() {
           return (
             <div
               key={regimeName}
-              style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-glass-border)",
-                borderRadius: 4,
-                padding: 16,
-              }}
+              className="rounded border border-(--color-glass-border) bg-(--color-surface) p-4"
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 12,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    letterSpacing: "0.06em",
-                    textTransform: "uppercase",
-                    color: "var(--color-brand)",
-                  }}
-                >
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-xs font-semibold tracking-[0.06em] text-(--color-brand) uppercase">
                   {regimeName.replace(/_/g, " ")}
                 </span>
                 <button
                   onClick={() => addModel(regimeName)}
-                  style={{
-                    background: "transparent",
-                    border: "1px solid var(--color-glass-border)",
-                    borderRadius: 4,
-                    color: "var(--color-text-secondary)",
-                    padding: "2px 8px",
-                    fontSize: 10,
-                    cursor: "pointer",
-                  }}
+                  className="cursor-pointer rounded border border-(--color-glass-border) bg-transparent px-2 py-0.5 text-[10px] text-(--color-text-secondary)"
                 >
                   + Add Model
                 </button>
@@ -166,26 +123,15 @@ export function CommitteeConfigPanel() {
               {assignment.models.map((model, idx) => (
                 <div
                   key={`${model}-${idx}`}
+                  className="flex items-center gap-2 py-[6px]"
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 0",
                     borderBottom:
                       idx < assignment.models.length - 1
                         ? "1px solid var(--color-glass-border)"
                         : "none",
                   }}
                 >
-                  <span
-                    style={{
-                      width: 120,
-                      fontSize: 11,
-                      fontFamily: "var(--font-mono)",
-                      color: "var(--color-text-primary)",
-                      flexShrink: 0,
-                    }}
-                  >
+                  <span className="w-[120px] shrink-0 font-mono text-[11px] text-(--color-text-primary)">
                     {model}
                   </span>
                   <input
@@ -193,38 +139,18 @@ export function CommitteeConfigPanel() {
                     min={0}
                     max={100}
                     value={Math.round(assignment.weights[idx] * 100)}
-                    onChange={(e) =>
-                      changeWeight(
-                        regimeName,
-                        idx,
-                        Number(e.target.value) / 100,
-                      )
-                    }
-                    style={{ flex: 1, height: 4, accentColor: "var(--color-brand)" }}
+                    onChange={(e) => changeWeight(regimeName, idx, Number(e.target.value) / 100)}
+                    className="h-1 flex-1"
+                    style={{ accentColor: "var(--color-brand)" }}
                   />
-                  <span
-                    style={{
-                      width: 40,
-                      fontSize: 11,
-                      fontFamily: "var(--font-mono)",
-                      color: "var(--color-text-secondary)",
-                      textAlign: "right",
-                    }}
-                  >
+                  <span className="w-10 text-right font-mono text-[11px] text-(--color-text-secondary)">
                     {(assignment.weights[idx] * 100).toFixed(0)}%
                   </span>
                   <button
                     onClick={() => removeModel(regimeName, idx)}
                     disabled={assignment.models.length <= 1}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: "var(--color-accent-danger)",
-                      fontSize: 14,
-                      cursor: "pointer",
-                      opacity: assignment.models.length <= 1 ? 0.3 : 1,
-                      padding: "0 4px",
-                    }}
+                    className="cursor-pointer border-none bg-transparent px-1 text-sm text-(--color-accent-danger)"
+                    style={{ opacity: assignment.models.length <= 1 ? 0.3 : 1 }}
                   >
                     ×
                   </button>
@@ -232,9 +158,7 @@ export function CommitteeConfigPanel() {
               ))}
 
               {assignment.models.length === 0 && (
-                <div
-                  style={{ color: "var(--color-text-dim)", fontSize: 11, padding: "8px 0" }}
-                >
+                <div className="py-2 text-[11px] text-(--color-text-dim)">
                   No models assigned. Click "+ Add Model".
                 </div>
               )}
@@ -244,34 +168,15 @@ export function CommitteeConfigPanel() {
       </div>
 
       {/* Fallback Card */}
-      <div
-        style={{
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-glass-border)",
-          borderRadius: 4,
-          padding: 16,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            color: "var(--color-accent-warning)",
-          }}
-        >
+      <div className="rounded border border-(--color-glass-border) bg-(--color-surface) p-4">
+        <span className="text-xs font-semibold tracking-[0.06em] text-(--color-accent-warning) uppercase">
           Fallback
         </span>
-        <div style={{ marginTop: 8 }}>
+        <div className="mt-2">
           {editing.fallback.models.map((model, idx) => (
             <span
               key={`fb-${model}-${idx}`}
-              style={{
-                fontSize: 11,
-                fontFamily: "var(--font-mono)",
-                color: "var(--color-text-secondary)",
-              }}
+              className="font-mono text-[11px] text-(--color-text-secondary)"
             >
               {model}
               {idx < editing.fallback.models.length - 1 ? ", " : ""}
@@ -281,13 +186,7 @@ export function CommitteeConfigPanel() {
       </div>
 
       {saveMutation.isSuccess && (
-        <div
-          style={{
-            fontSize: 11,
-            color: "var(--color-accent-success)",
-            letterSpacing: "0.06em",
-          }}
-        >
+        <div className="text-[11px] tracking-[0.06em] text-(--color-accent-success)">
           Config saved successfully.
         </div>
       )}

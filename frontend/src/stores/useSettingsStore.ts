@@ -35,7 +35,7 @@ const DEFAULTS: SettingsState = {
   sidebarCollapsed: false,
   terminalCollapsed: true,
   liveNewsBlendEnabled: false,
-  liveNewsBlendWeight: 0.10,
+  liveNewsBlendWeight: 0.1,
 };
 
 function loadSaved(): Partial<SettingsState> {
@@ -64,10 +64,36 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()((set, 
 
   saveToStorage: () => {
     try {
-      const { verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, oandaAccountId, dataDir, liveNewsBlendEnabled, liveNewsBlendWeight } = get();
+      const {
+        verboseMode,
+        theme,
+        apiUrl,
+        threadBudget,
+        mixedPrecision,
+        sidebarCollapsed,
+        terminalCollapsed,
+        oandaApiKey,
+        oandaAccountId,
+        dataDir,
+        liveNewsBlendEnabled,
+        liveNewsBlendWeight,
+      } = get();
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ verboseMode, theme, apiUrl, threadBudget, mixedPrecision, sidebarCollapsed, terminalCollapsed, oandaApiKey, oandaAccountId, dataDir, liveNewsBlendEnabled, liveNewsBlendWeight }),
+        JSON.stringify({
+          verboseMode,
+          theme,
+          apiUrl,
+          threadBudget,
+          mixedPrecision,
+          sidebarCollapsed,
+          terminalCollapsed,
+          oandaApiKey,
+          oandaAccountId,
+          dataDir,
+          liveNewsBlendEnabled,
+          liveNewsBlendWeight,
+        }),
       );
     } catch {
       /* ignore */

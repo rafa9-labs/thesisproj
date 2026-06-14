@@ -1,92 +1,33 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import {
-  Play,
-  TriangleAlert,
-  ChevronDown,
-  Brain,
-  TrendingUp,
-  Calendar,
-  SlidersHorizontal,
-  ShieldCheck,
-} from "lucide-react";
+import { Play, TriangleAlert, ChevronDown } from "lucide-react";
 import apiClient from "@/api/client";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { useJobStore } from "@/stores/useJobStore";
+import { Panel, PanelHeader, Section } from "@/components/shared/Panel";
 
 /* ─────────────────────── shared style tokens ─────────────────────── */
-const card: React.CSSProperties = {
-  borderRadius: 12,
-  border: "1px solid var(--color-glass-border)",
-  backgroundColor: "rgba(255,255,255,0.02)",
-  padding: "20px 24px",
-};
-
-const outerCard: React.CSSProperties = {
-  borderRadius: 12,
-  border: "1px solid var(--color-glass-border)",
-  backgroundColor: "var(--color-glass)",
-  backdropFilter: "blur(12px)",
-  padding: 24,
-};
-
-const sectionLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 500,
-  textTransform: "uppercase",
-  letterSpacing: "0.12em",
-  color: "var(--color-text-secondary)",
-};
-
-const fieldLabel: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 500,
-  textTransform: "uppercase",
-  letterSpacing: "0.1em",
-  color: "var(--color-text-muted)",
-  marginBottom: 6,
-};
-
-const inputBase: React.CSSProperties = {
-  borderRadius: 8,
-  border: "1px solid var(--color-glass-border)",
-  backgroundColor: "var(--color-elevated)",
-  color: "var(--color-text-primary)",
-  fontFamily: "var(--font-mono)",
-  fontSize: 12,
-  padding: "7px 12px",
-  outline: "none",
-  transition: "border-color 0.15s",
-};
 
 /* ─────────────────────── sizing options ─────────────────────── */
 const SIZING_OPTIONS = [
-  { value: "fixed",            label: "Fixed Lot",          hint: "Constant 1-lot size every trade" },
-  { value: "fixed_fractional", label: "Fractional %",       hint: "Risk a fixed % of equity" },
-  { value: "kelly",            label: "Kelly Criterion",    hint: "Optimal growth fraction" },
-  { value: "atr",              label: "ATR Volatility",     hint: "Size adjusted to current volatility" },
-  { value: "vol_target",       label: "Vol Target",         hint: "Target a fixed realised-vol level" },
+  { value: "fixed", label: "Fixed Lot", hint: "Constant 1-lot size every trade" },
+  { value: "fixed_fractional", label: "Fractional %", hint: "Risk a fixed % of equity" },
+  { value: "kelly", label: "Kelly Criterion", hint: "Optimal growth fraction" },
+  { value: "atr", label: "ATR Volatility", hint: "Size adjusted to current volatility" },
+  { value: "vol_target", label: "Vol Target", hint: "Target a fixed realised-vol level" },
 ];
 
 const TIMEFRAMES = ["M30", "H1", "H4"] as const;
 
 /* ─────────────────────── sub-components ─────────────────────── */
 
-function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-5">
-      <div className="h-3.5 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-      <div style={{ color: "var(--color-brand)", display: "flex", alignItems: "center" }}>{icon}</div>
-      <span style={sectionLabel}>{title}</span>
-    </div>
-  );
-}
-
 function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col">
-      <div style={fieldLabel}>{label}</div>
+      <div className="mb-1.5 text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
+        {label}
+      </div>
       {children}
     </div>
   );
@@ -97,62 +38,56 @@ interface ModelBadgeProps {
 }
 function ModelTypeBadge({ type }: ModelBadgeProps) {
   const palette: Record<string, { bg: string; color: string }> = {
-    logistic:       { bg: "rgba(0,229,255,0.10)",   color: "var(--color-brand)" },
-    xgboost:        { bg: "rgba(91,192,235,0.12)",  color: "var(--color-accent-classical)" },
-    random_forest:  { bg: "rgba(72,213,151,0.10)",  color: "var(--color-accent-success)" },
-    decision_tree:  { bg: "rgba(72,213,151,0.08)",  color: "var(--color-accent-success)" },
-    lightgbm:       { bg: "rgba(72,213,151,0.12)",  color: "var(--color-accent-success)" },
-    catboost:       { bg: "rgba(72,213,151,0.10)",  color: "var(--color-accent-success)" },
-    lstm:           { bg: "rgba(180,120,255,0.10)", color: "var(--color-accent-deep)" },
-    cnn:            { bg: "rgba(255,165,0,0.10)",   color: "var(--color-accent-warning)" },
-    transformer:    { bg: "rgba(180,120,255,0.12)", color: "var(--color-accent-deep)" },
-    gru:            { bg: "rgba(50,200,255,0.10)",  color: "var(--color-brand)" },
-    gru_lstm:       { bg: "rgba(50,200,255,0.12)",  color: "var(--color-brand)" },
-    svm:            { bg: "rgba(255,82,82,0.10)",   color: "var(--color-accent-danger)" },
-    dqn:            { bg: "rgba(255,82,82,0.12)",   color: "var(--color-accent-danger)" },
-    ensemble:       { bg: "rgba(72,213,151,0.10)",  color: "var(--color-accent-success)" },
+    logistic: { bg: "rgba(0,229,255,0.10)", color: "var(--color-brand)" },
+    xgboost: { bg: "rgba(91,192,235,0.12)", color: "var(--color-accent-classical)" },
+    random_forest: { bg: "rgba(72,213,151,0.10)", color: "var(--color-accent-success)" },
+    decision_tree: { bg: "rgba(72,213,151,0.08)", color: "var(--color-accent-success)" },
+    lightgbm: { bg: "rgba(72,213,151,0.12)", color: "var(--color-accent-success)" },
+    catboost: { bg: "rgba(72,213,151,0.10)", color: "var(--color-accent-success)" },
+    lstm: { bg: "rgba(180,120,255,0.10)", color: "var(--color-accent-deep)" },
+    cnn: { bg: "rgba(255,165,0,0.10)", color: "var(--color-accent-warning)" },
+    transformer: { bg: "rgba(180,120,255,0.12)", color: "var(--color-accent-deep)" },
+    gru: { bg: "rgba(50,200,255,0.10)", color: "var(--color-brand)" },
+    gru_lstm: { bg: "rgba(50,200,255,0.12)", color: "var(--color-brand)" },
+    svm: { bg: "rgba(255,82,82,0.10)", color: "var(--color-accent-danger)" },
+    dqn: { bg: "rgba(255,82,82,0.12)", color: "var(--color-accent-danger)" },
+    ensemble: { bg: "rgba(72,213,151,0.10)", color: "var(--color-accent-success)" },
   };
   const key = Object.keys(palette).find((k) => type?.toLowerCase().includes(k)) ?? "logistic";
   const { bg, color } = palette[key];
   return (
     <span
-      style={{
-        backgroundColor: bg,
-        color,
-        fontFamily: "var(--font-mono)",
-        fontSize: 10,
-        fontWeight: 600,
-        letterSpacing: "0.06em",
-        padding: "2px 8px",
-        borderRadius: 4,
-        textTransform: "uppercase",
-      }}
+      className="rounded px-2 py-0.5 font-mono text-[10px] font-semibold tracking-[0.06em] uppercase"
+      style={{ backgroundColor: bg }}
     >
       {type}
     </span>
   );
 }
 
-function StatChip({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
+function StatChip({
+  label,
+  value,
+  positive,
+}: {
+  label: string;
+  value: string;
+  positive?: boolean;
+}) {
   return (
-    <div
-      className="flex flex-col gap-0.5 rounded-sm px-3 py-2"
-      style={{ backgroundColor: "var(--color-elevated)", minWidth: 80 }}
-    >
-      <span style={{ fontSize: 9, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+    <div className="flex min-w-[80px] flex-col gap-0.5 rounded-sm bg-(--color-elevated) px-3 py-2">
+      <span className="text-[9px] tracking-[0.08em] text-(--color-text-muted) uppercase">
         {label}
       </span>
       <span
+        className="font-mono text-xs font-semibold"
         style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: 12,
-          fontWeight: 600,
           color:
             positive === true
               ? "var(--color-accent-success)"
               : positive === false
-              ? "var(--color-accent-danger)"
-              : "var(--color-text-primary)",
+                ? "var(--color-accent-danger)"
+                : "var(--color-text-primary)",
         }}
       >
         {value}
@@ -164,19 +99,19 @@ function StatChip({ label, value, positive }: { label: string; value: string; po
 /* ─────────────────────── main component ─────────────────────── */
 export function ForwardTestTab() {
   const navigate = useNavigate();
-  const pair       = useBacktestStore((s) => s.pair);
-  const timeframe  = useBacktestStore((s) => s.timeframe);
-  const startDate  = useBacktestStore((s) => s.startDate);
-  const endDate    = useBacktestStore((s) => s.endDate);
-  const setField   = useBacktestStore((s) => s.setField);
-  const startJob   = useJobStore((s) => s.startJob);
+  const pair = useBacktestStore((s) => s.pair);
+  const timeframe = useBacktestStore((s) => s.timeframe);
+  const startDate = useBacktestStore((s) => s.startDate);
+  const endDate = useBacktestStore((s) => s.endDate);
+  const setField = useBacktestStore((s) => s.setField);
+  const startJob = useJobStore((s) => s.startJob);
 
   const [selectedModel, setSelectedModel] = useState<string>("");
-  const [posSizing,     setPosSizing]     = useState("fixed");
-  const [useCosts,      setUseCosts]      = useState(true);
-  const [isSubmitting,  setIsSubmitting]  = useState(false);
-  const [error,         setError]         = useState<string | null>(null);
-  const [modelOpen,     setModelOpen]     = useState(false);
+  const [posSizing, setPosSizing] = useState("fixed");
+  const [useCosts, setUseCosts] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [modelOpen, setModelOpen] = useState(false);
 
   const { data: models, isLoading: loadingModels } = useQuery<
     Array<{
@@ -228,17 +163,16 @@ export function ForwardTestTab() {
           model_id: selectedModel,
           pair,
           timeframe,
-          start_date:       startDate || undefined,
-          end_date:         endDate   || undefined,
-          position_sizing:  posSizing,
-          trading_costs:    useCosts,
-        }
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+          position_sizing: posSizing,
+          trading_costs: useCosts,
+        },
       );
       startJob(data.job_id, pair, [selectedModel]);
       navigate("/monitor");
     } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data
-        ?.detail;
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(detail ?? "Failed to start forward test");
     } finally {
       setIsSubmitting(false);
@@ -249,43 +183,29 @@ export function ForwardTestTab() {
     n != null ? `${n >= 0 ? "+" : ""}${n.toFixed(places)}${suffix}` : "—";
 
   return (
-    <div style={{ ...outerCard, display: "flex", flexDirection: "column", gap: 20 }}>
-
-      {/* ── page header ── */}
-      <div className="flex items-center gap-2 pb-2">
-        <h3 style={{ fontSize: 11, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--color-text-muted)" }}>
-          Forward Test
-        </h3>
-      </div>
+    <Panel>
+      <PanelHeader title="Forward Test" subtitle="Validate a saved model on out-of-sample data." />
 
       {/* ── error banner ── */}
       {error && (
-        <div
-          className="flex items-center gap-2 rounded-sm border px-4 py-2.5"
-          style={{ borderColor: "var(--color-accent-danger)", backgroundColor: "rgba(239,68,68,0.06)" }}
-        >
-          <TriangleAlert size={14} style={{ color: "var(--color-accent-danger)", flexShrink: 0 }} />
-          <span style={{ fontSize: 12, color: "var(--color-accent-danger)" }}>{error}</span>
+        <div className="flex items-center gap-2 rounded-sm border border-(--color-accent-danger) bg-[rgba(239,68,68,0.06)] px-4 py-2.5">
+          <TriangleAlert size={14} className="shrink-0 text-(--color-accent-danger)" />
+          <span className="text-xs text-(--color-accent-danger)">{error}</span>
         </div>
       )}
 
       {/* ── section 1: model selection ── */}
-      <section style={card}>
-        <SectionHeader icon={<Brain size={13} />} title="Model" />
-
+      <Section title="Model" description="Choose a previously saved model to forward test.">
         {loadingModels ? (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div className="flex items-center gap-2">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-9 rounded-sm animate-pulse flex-1" style={{ backgroundColor: "var(--color-elevated)" }} />
+              <div key={i} className="h-9 flex-1 animate-pulse rounded-sm bg-(--color-elevated)" />
             ))}
           </div>
         ) : activeModels.length === 0 ? (
-          <div
-            className="flex items-center gap-3 rounded-sm px-4 py-3"
-            style={{ backgroundColor: "var(--color-elevated)", border: "1px dashed var(--color-glass-border)" }}
-          >
-            <TriangleAlert size={14} style={{ color: "var(--color-accent-warning)" }} />
-            <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+          <div className="flex items-center gap-3 rounded-sm border border-dashed border-(--color-glass-border) bg-(--color-elevated) px-4 py-3">
+            <TriangleAlert size={14} className="text-(--color-accent-warning)" />
+            <span className="text-xs text-(--color-text-muted)">
               No deployed models found. Run a backtest first to save a model.
             </span>
           </div>
@@ -295,15 +215,18 @@ export function ForwardTestTab() {
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setModelOpen((o) => !o)}
-                className="flex w-full items-center justify-between rounded-sm border px-3 py-2.5 transition-all duration-150"
+                className="flex w-full cursor-pointer items-center justify-between rounded-sm border bg-(--color-elevated) px-3 py-2.5 transition-all duration-150"
                 style={{
-                  backgroundColor: "var(--color-elevated)",
                   borderColor: modelOpen ? "var(--color-brand)" : "var(--color-glass-border)",
                   boxShadow: modelOpen ? "0 0 0 1px var(--color-brand)" : "none",
-                  cursor: "pointer",
                 }}
               >
-                <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: selected ? "var(--color-text-primary)" : "var(--color-text-muted)" }}>
+                <span
+                  className="font-mono text-xs"
+                  style={{
+                    color: selected ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                  }}
+                >
                   {selected ? (
                     <span className="flex items-center gap-2">
                       <ModelTypeBadge type={selected.model_type} />
@@ -315,8 +238,8 @@ export function ForwardTestTab() {
                 </span>
                 <ChevronDown
                   size={14}
+                  className="text-(--color-text-muted)"
                   style={{
-                    color: "var(--color-text-muted)",
                     transform: modelOpen ? "rotate(180deg)" : "rotate(0deg)",
                     transition: "transform 0.15s",
                   }}
@@ -324,49 +247,40 @@ export function ForwardTestTab() {
               </button>
 
               {modelOpen && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "calc(100% + 4px)",
-                    left: 0,
-                    right: 0,
-                    zIndex: 50,
-                    backgroundColor: "var(--color-glass)",
-                    border: "1px solid var(--color-glass-border)",
-                    borderRadius: 10,
-                    backdropFilter: "blur(16px)",
-                    maxHeight: 280,
-                    overflowY: "auto",
-                    boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-                  }}
-                >
+                <div className="absolute top-[calc(100%+4px)] right-0 left-0 z-50 max-h-[280px] overflow-y-auto rounded-[10px] border border-(--color-glass-border) bg-(--color-glass) shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-[16px]">
                   {activeModels.map((m) => (
                     <button
                       key={m.id}
                       onClick={() => handleSelect(m.id)}
-                      className="flex w-full items-center gap-3 px-4 py-3 transition-colors duration-100"
+                      className="flex w-full cursor-pointer items-center gap-3 border-b border-(--color-glass-border) px-4 py-3 text-left transition-colors duration-100"
                       style={{
-                        borderBottom: "1px solid var(--color-glass-border)",
-                        backgroundColor: m.id === selectedModel ? "var(--color-brand-glow)" : "transparent",
-                        cursor: "pointer",
-                        textAlign: "left",
+                        backgroundColor:
+                          m.id === selectedModel ? "var(--color-brand-glow)" : "transparent",
                       }}
                     >
                       <ModelTypeBadge type={m.model_type} />
-                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="font-mono text-[11px] text-(--color-text-primary)">
                           {m.id}
                         </span>
-                        <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+                        <span className="text-[10px] text-(--color-text-muted)">
                           {m.created_at?.slice(0, 10)}
                           {m.tags.length > 0 && ` · ${m.tags.join(", ")}`}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: m.best_sharpe != null && m.best_sharpe >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)" }}>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span
+                          className="font-mono text-[11px]"
+                          style={{
+                            color:
+                              m.best_sharpe != null && m.best_sharpe >= 0
+                                ? "var(--color-accent-success)"
+                                : "var(--color-accent-danger)",
+                          }}
+                        >
                           SR {fmt(m.best_sharpe)}
                         </span>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>
+                        <span className="font-mono text-[11px] text-(--color-text-secondary)">
                           {fmt(m.best_return, "%", 1)}
                         </span>
                       </div>
@@ -379,30 +293,38 @@ export function ForwardTestTab() {
             {/* selected model stats */}
             {selected && (
               <div className="flex flex-wrap gap-2 pt-1">
-                <StatChip label="Sharpe" value={fmt(selected.best_sharpe)} positive={selected.best_sharpe != null && selected.best_sharpe >= 0} />
-                <StatChip label="Return" value={fmt(selected.best_return, "%", 1)} positive={selected.best_return != null && selected.best_return >= 0} />
+                <StatChip
+                  label="Sharpe"
+                  value={fmt(selected.best_sharpe)}
+                  positive={selected.best_sharpe != null && selected.best_sharpe >= 0}
+                />
+                <StatChip
+                  label="Return"
+                  value={fmt(selected.best_return, "%", 1)}
+                  positive={selected.best_return != null && selected.best_return >= 0}
+                />
                 <StatChip label="Status" value={selected.status?.toUpperCase() ?? "—"} />
                 <StatChip label="Saved" value={selected.created_at?.slice(0, 10) ?? "—"} />
               </div>
             )}
           </div>
         )}
-      </section>
+      </Section>
 
       {/* ── section 2: market ── */}
-      <section style={card}>
-        <SectionHeader icon={<TrendingUp size={13} />} title="Market" />
-
-        <div className="grid grid-cols-2 gap-x-8 gap-y-4" style={{ maxWidth: 480 }}>
+      <Section
+        title="Market"
+        accent="var(--color-accent-classical)"
+        description="Instrument and timeframe for the test window."
+      >
+        <div className="grid max-w-[480px] grid-cols-2 gap-x-8 gap-y-4">
           {/* pair */}
           <FieldGroup label="Pair">
             <input
               value={pair}
               onChange={(e) => setField("pair", e.target.value.toUpperCase())}
-              style={{ ...inputBase, width: "100%" }}
+              className="w-full rounded-lg border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 font-mono text-xs text-(--color-text-primary) transition-colors duration-150 outline-none focus:border-(--color-brand)"
               placeholder="EURUSD"
-              onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-brand)")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "var(--color-glass-border)")}
             />
           </FieldGroup>
 
@@ -415,17 +337,12 @@ export function ForwardTestTab() {
                   <button
                     key={tf}
                     onClick={() => setField("timeframe", tf)}
+                    className="flex-1 cursor-pointer rounded-[6px] py-[6px] font-mono text-[11px]"
                     style={{
-                      flex: 1,
-                      padding: "6px 0",
-                      borderRadius: 6,
                       border: `1px solid ${active ? "var(--color-brand)" : "var(--color-glass-border)"}`,
                       backgroundColor: active ? "var(--color-brand-glow)" : "var(--color-elevated)",
                       color: active ? "var(--color-brand)" : "var(--color-text-muted)",
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 11,
                       fontWeight: active ? 600 : 400,
-                      cursor: "pointer",
                       transition: "all 0.12s",
                       boxShadow: active ? "0 0 8px rgba(0,229,255,0.15)" : "none",
                     }}
@@ -437,21 +354,22 @@ export function ForwardTestTab() {
             </div>
           </FieldGroup>
         </div>
-      </section>
+      </Section>
 
       {/* ── section 3: date range ── */}
-      <section style={card}>
-        <SectionHeader icon={<Calendar size={13} />} title="Date Range" />
-
-        <div className="grid grid-cols-2 gap-x-8" style={{ maxWidth: 480 }}>
+      <Section
+        title="Date Range"
+        accent="var(--color-accent-deep)"
+        description="Leave blank to use the full available range."
+      >
+        <div className="grid max-w-[480px] grid-cols-2 gap-x-8">
           <FieldGroup label="Start Date">
             <input
               type="date"
               value={startDate ?? ""}
               onChange={(e) => setField("startDate", e.target.value)}
-              style={{ ...inputBase, width: "100%", colorScheme: "dark" }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-brand)")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "var(--color-glass-border)")}
+              className="w-full rounded-lg border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 font-mono text-xs text-(--color-text-primary) transition-colors duration-150 outline-none focus:border-(--color-brand)"
+              style={{ colorScheme: "dark" }}
             />
           </FieldGroup>
           <FieldGroup label="End Date">
@@ -459,22 +377,23 @@ export function ForwardTestTab() {
               type="date"
               value={endDate ?? ""}
               onChange={(e) => setField("endDate", e.target.value)}
-              style={{ ...inputBase, width: "100%", colorScheme: "dark" }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-brand)")}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "var(--color-glass-border)")}
+              className="w-full rounded-lg border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 font-mono text-xs text-(--color-text-primary) transition-colors duration-150 outline-none focus:border-(--color-brand)"
+              style={{ colorScheme: "dark" }}
             />
           </FieldGroup>
         </div>
 
-        <p style={{ fontSize: 10, color: "var(--color-text-muted)", marginTop: 10 }}>
+        <p className="mt-2.5 text-[10px] text-(--color-text-muted)">
           Leave blank to use the full available data range for the selected pair.
         </p>
-      </section>
+      </Section>
 
       {/* ── section 4: position sizing ── */}
-      <section style={card}>
-        <SectionHeader icon={<SlidersHorizontal size={13} />} title="Position Sizing" />
-
+      <Section
+        title="Position Sizing"
+        accent="var(--color-accent-warning)"
+        description="How trade size is determined during the test."
+      >
         <div className="flex flex-wrap gap-2">
           {SIZING_OPTIONS.map((opt) => {
             const active = posSizing === opt.value;
@@ -482,98 +401,84 @@ export function ForwardTestTab() {
               <button
                 key={opt.value}
                 onClick={() => setPosSizing(opt.value)}
-                className="flex flex-col gap-0.5 rounded-sm border px-3 py-2 text-left transition-all duration-150"
+                className="flex min-w-[130px] cursor-pointer flex-col gap-0.5 rounded-sm border px-3 py-2 text-left transition-all duration-150"
                 style={{
                   borderColor: active ? "var(--color-brand)" : "var(--color-glass-border)",
                   backgroundColor: active ? "var(--color-brand-glow)" : "var(--color-elevated)",
                   boxShadow: active ? "0 0 8px rgba(0,229,255,0.12)" : "none",
-                  cursor: "pointer",
-                  minWidth: 130,
                 }}
               >
                 <span
+                  className="text-[11px] font-semibold tracking-[0.02em]"
                   style={{
-                    fontSize: 11,
-                    fontWeight: 600,
                     color: active ? "var(--color-brand)" : "var(--color-text-secondary)",
-                    letterSpacing: "0.02em",
                   }}
                 >
                   {opt.label}
                 </span>
-                <span style={{ fontSize: 9, color: "var(--color-text-muted)", lineHeight: 1.4 }}>
+                <span className="text-[9px] leading-[1.4] text-(--color-text-muted)">
                   {opt.hint}
                 </span>
               </button>
             );
           })}
         </div>
-      </section>
+      </Section>
 
       {/* ── section 5: execution ── */}
-      <section style={card}>
-        <SectionHeader icon={<ShieldCheck size={13} />} title="Execution" />
-
+      <Section
+        title="Execution"
+        accent="var(--color-accent-success)"
+        description="Cost-simulation settings for realistic results."
+      >
         <button
           onClick={() => setUseCosts((v) => !v)}
-          className="flex items-center gap-3 rounded-sm border px-4 py-3 transition-all duration-150"
+          className="flex w-fit cursor-pointer items-center gap-3 rounded-sm border px-4 py-3 text-left transition-all duration-150"
           style={{
             borderColor: useCosts ? "var(--color-brand)" : "var(--color-glass-border)",
             backgroundColor: useCosts ? "var(--color-brand-glow)" : "var(--color-elevated)",
-            cursor: "pointer",
-            textAlign: "left",
-            width: "fit-content",
           }}
         >
           {/* toggle pill */}
           <div
+            className="relative h-[18px] w-8 shrink-0 rounded-[9px]"
             style={{
-              width: 32,
-              height: 18,
-              borderRadius: 9,
               backgroundColor: useCosts ? "var(--color-brand)" : "var(--color-glass-border)",
-              position: "relative",
               transition: "background-color 0.15s",
-              flexShrink: 0,
             }}
           >
             <div
+              className="absolute top-[3px] h-3 w-3 rounded-full"
               style={{
-                position: "absolute",
-                top: 3,
                 left: useCosts ? 17 : 3,
-                width: 12,
-                height: 12,
-                borderRadius: "50%",
                 backgroundColor: useCosts ? "var(--color-text-inverse)" : "var(--color-text-muted)",
                 transition: "left 0.15s",
               }}
             />
           </div>
           <div className="flex flex-col gap-0.5">
-            <span style={{ fontSize: 12, fontWeight: 500, color: useCosts ? "var(--color-text-primary)" : "var(--color-text-muted)" }}>
+            <span
+              className="text-xs font-medium"
+              style={{
+                color: useCosts ? "var(--color-text-primary)" : "var(--color-text-muted)",
+              }}
+            >
               Apply Trading Costs
             </span>
-            <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+            <span className="text-[10px] text-(--color-text-muted)">
               Spread + slippage simulation — recommended for realistic results
             </span>
           </div>
         </button>
-      </section>
+      </Section>
 
       {/* ── run button ── */}
       <div className="flex items-center gap-4 pt-1">
         <button
           onClick={handleRun}
           disabled={!selectedModel || isSubmitting}
-          className="flex items-center gap-2.5 rounded-sm px-6 py-2.5 transition-all duration-150 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex items-center gap-2.5 rounded-sm bg-(--color-brand) px-6 py-2.5 text-[11px] font-bold tracking-[0.08em] text-(--color-text-inverse) uppercase transition-all duration-150 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
           style={{
-            backgroundColor: "var(--color-brand)",
-            color: "var(--color-text-inverse)",
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
             boxShadow: !selectedModel || isSubmitting ? "none" : "0 0 16px rgba(0,229,255,0.3)",
           }}
         >
@@ -582,11 +487,9 @@ export function ForwardTestTab() {
         </button>
 
         {!selectedModel && (
-          <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
-            Select a model to continue
-          </span>
+          <span className="text-[11px] text-(--color-text-muted)">Select a model to continue</span>
         )}
       </div>
-    </div>
+    </Panel>
   );
 }

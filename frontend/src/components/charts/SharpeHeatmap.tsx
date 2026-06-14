@@ -76,15 +76,8 @@ export function SharpeHeatmap({
 
   if (models.length === 0 || pairs.length === 0) {
     return (
-      <div
-        className="flex items-center justify-center rounded-sm border p-8"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          borderColor: "var(--color-border)",
-          color: "var(--color-text-muted)",
-        }}
-      >
-        <span className="text-sm" style={{ fontFamily: "var(--font-mono)" }}>
+      <div className="flex items-center justify-center rounded-sm border border-(--color-border) bg-(--color-surface) p-8 text-(--color-text-muted)">
+        <span className="font-mono text-sm">
           Run backtests across multiple pairs and models to populate the heatmap
         </span>
       </div>
@@ -92,13 +85,7 @@ export function SharpeHeatmap({
   }
 
   return (
-    <div
-      className="rounded-sm border overflow-auto p-3"
-      style={{
-        borderColor: "var(--color-border)",
-        backgroundColor: "var(--color-surface)",
-      }}
-    >
+    <div className="overflow-auto rounded-sm border border-(--color-border) bg-(--color-surface) p-3">
       <svg width={totalW} height={totalH} viewBox={`0 0 ${totalW} ${totalH}`}>
         {pairs.map((pair, ci) => (
           <g key={`h-${pair}`}>
@@ -132,7 +119,7 @@ export function SharpeHeatmap({
         {models.map((model, ri) =>
           pairs.map((pair, ci) => {
             const cell = cellMap.get(`${model}::${pair}`);
-            const val = cell ? cell[metric as keyof HeatmapCellData] as number | null : null;
+            const val = cell ? (cell[metric as keyof HeatmapCellData] as number | null) : null;
             const fill = cellColor(val, metric);
             return (
               <g
@@ -166,7 +153,7 @@ export function SharpeHeatmap({
           }),
         )}
       </svg>
-      <div className="flex items-center gap-4 mt-2 text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+      <div className="mt-2 flex items-center gap-4 text-[10px] text-(--color-text-muted)">
         <span>Metric: {METRIC_LABELS[metric]}</span>
         <span>Click cell to view results</span>
       </div>

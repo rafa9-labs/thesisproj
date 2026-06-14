@@ -30,15 +30,11 @@ export function PlaybackController({
   const pct = (currentIndex / Math.max(totalBars - 1, 1)) * 100;
 
   return (
-    <div
-      className="flex items-center gap-3 rounded-sm border px-3 py-2"
-      style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
-    >
+    <div className="flex items-center gap-3 rounded-sm border border-(--color-glass-border) bg-(--color-glass) px-3 py-2">
       <button
         onClick={onStepBack}
         disabled={currentIndex <= 0}
-        className="rounded p-1 transition hover:bg-[var(--color-glass-hover)] disabled:opacity-30"
-        style={{ color: "var(--color-text-secondary)" }}
+        className="rounded p-1 text-(--color-text-secondary) transition hover:bg-[var(--color-glass-hover)] disabled:opacity-30"
         title="Step back"
       >
         <SkipBack size={14} />
@@ -59,42 +55,46 @@ export function PlaybackController({
       <button
         onClick={onStepForward}
         disabled={currentIndex >= totalBars - 1}
-        className="rounded p-1 transition hover:bg-[var(--color-glass-hover)] disabled:opacity-30"
-        style={{ color: "var(--color-text-secondary)" }}
+        className="rounded p-1 text-(--color-text-secondary) transition hover:bg-[var(--color-glass-hover)] disabled:opacity-30"
         title="Step forward"
       >
         <SkipForward size={14} />
       </button>
 
-      <div className="flex-1 mx-2">
+      <div className="mx-2 flex-1">
         <input
           type="range"
           min={0}
           max={Math.max(totalBars - 1, 0)}
           value={currentIndex}
           onChange={(e) => onSeek(Number(e.target.value))}
-          className="w-full h-1 appearance-none rounded-full cursor-pointer"
+          className="h-1 w-full cursor-pointer appearance-none rounded-full"
           style={{
             background: `linear-gradient(to right, var(--color-brand) ${pct}%, var(--color-glass-hover) ${pct}%)`,
           }}
         />
       </div>
 
-      <span className="text-[10px] tabular-nums" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)", minWidth: 70 }}>
+      <span
+        className="font-mono text-[10px] text-(--color-text-muted) tabular-nums"
+        style={{ minWidth: 70 }}
+      >
         {currentIndex + 1} / {totalBars}
       </span>
 
-      <div className="flex items-center gap-1 ml-2">
+      <div className="ml-2 flex items-center gap-1">
         {SPEEDS.map((s) => (
           <button
             key={s}
             onClick={() => onSpeedChange(s)}
-            className="rounded px-1.5 py-0.5 text-[9px] font-medium transition"
+            className="rounded px-1.5 py-0.5 font-mono text-[9px] font-medium transition"
             style={{
               backgroundColor: speed === s ? "var(--color-brand-glow)" : "transparent",
               color: speed === s ? "var(--color-brand)" : "var(--color-text-muted)",
-              border: speed === s ? "1px solid var(--color-brand)" : "1px solid var(--color-glass-border)",
-              fontFamily: "var(--font-mono)",
+              border:
+                speed === s
+                  ? "1px solid var(--color-brand)"
+                  : "1px solid var(--color-glass-border)",
             }}
           >
             {s}x

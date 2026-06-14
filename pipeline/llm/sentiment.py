@@ -30,9 +30,17 @@ logger = logging.getLogger(__name__)
 
 CACHE_DB_NAME = "llm_sentiment_cache.db"
 
+import re as _re
+_HTML_TAG = _re.compile(r"<[^>]*>")
+_MULTI_SPACE = _re.compile(r"\s+")
+
+def _strip_html(text: str) -> str:
+    return _MULTI_SPACE.sub(" ", _HTML_TAG.sub(" ", text or "")).strip()
+
 
 class LLMSentimentBackend(Protocol):
     def analyze(self, text: str, pair: str) -> Dict[str, Any]: ...
+    def analyze_batch(self, articles_text: str, pair: str, count: int) -> List[Dict[str, Any]]: ...
 
 
 class OllamaBackend:
@@ -61,6 +69,27 @@ class OllamaBackend:
             return _parse_llm_json(raw)
         except Exception as e:
             logger.warning("Ollama backend failed: %s", e)
+            raise
+
+    def analyze_batch(self, articles_text: str, pair: str, count: int) -> List[Dict[str, Any]]:
+        from pipeline.llm.prompts import BATCH_SENTIMENT_PROMPT
+        prompt = BATCH_SENTIMENT_PROMPT.format(
+            pair=pair,
+            count=count,
+            articles_text=articles_text,
+        )
+        try:
+            import requests
+            resp = requests.post(
+                f"{self.base_url}/api/generate",
+                json={"model": self.model, "prompt": prompt, "stream": False},
+                timeout=90,
+            )
+            resp.raise_for_status()
+            raw = resp.json().get("response", "")
+            return _parse_llm_batch_json(raw, count)
+        except Exception as e:
+            logger.warning("Ollama batch analyze failed: %s", e)
             raise
 
 
@@ -101,6 +130,36 @@ class OpenAIBackend:
             logger.warning("OpenAI backend failed: %s", e)
             raise
 
+    def analyze_batch(self, articles_text: str, pair: str, count: int) -> List[Dict[str, Any]]:
+        from pipeline.llm.prompts import BATCH_SENTIMENT_PROMPT
+        prompt = BATCH_SENTIMENT_PROMPT.format(
+            pair=pair,
+            count=count,
+            articles_text=articles_text,
+        )
+        try:
+            import requests
+            resp = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1,
+                    "max_tokens": 200 * count,
+                },
+                timeout=60,
+            )
+            resp.raise_for_status()
+            raw = resp.json()["choices"][0]["message"]["content"]
+            return _parse_llm_batch_json(raw, count)
+        except Exception as e:
+            logger.warning("OpenAI batch analyze failed: %s", e)
+            raise
+
 
 class AnthropicBackend:
     """Anthropic API backend. Paid, cloud. Requires ANTHROPIC_API_KEY."""
@@ -139,6 +198,36 @@ class AnthropicBackend:
             logger.warning("Anthropic backend failed: %s", e)
             raise
 
+    def analyze_batch(self, articles_text: str, pair: str, count: int) -> List[Dict[str, Any]]:
+        from pipeline.llm.prompts import BATCH_SENTIMENT_PROMPT
+        prompt = BATCH_SENTIMENT_PROMPT.format(
+            pair=pair,
+            count=count,
+            articles_text=articles_text,
+        )
+        try:
+            import requests
+            resp = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": self.api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "max_tokens": 200 * count,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                timeout=60,
+            )
+            resp.raise_for_status()
+            raw = resp.json()["content"][0]["text"]
+            return _parse_llm_batch_json(raw, count)
+        except Exception as e:
+            logger.warning("Anthropic batch analyze failed: %s", e)
+            raise
+
 
 class VADERFallback:
     """Fallback using VADER when LLM backends are unavailable."""
@@ -155,6 +244,9 @@ class VADERFallback:
             "currencies_affected": [],
             "fallback": True,
         }
+
+    def analyze_batch(self, articles_text: str, pair: str, count: int) -> List[Dict[str, Any]]:
+        return [self.analyze(articles_text, pair) for _ in range(count)]
 
 
 def _parse_llm_json(raw: str) -> Dict[str, Any]:
@@ -197,6 +289,43 @@ def _default_scores() -> Dict[str, Any]:
         "currencies_affected": [],
         "fallback": True,
     }
+
+
+def _parse_llm_batch_json(raw: str, expected_count: int) -> List[Dict[str, Any]]:
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        text = "\n".join(l for l in lines if not l.strip().startswith("```")).strip()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("[")
+        end = text.rfind("]") + 1
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(text[start:end])
+            except json.JSONDecodeError:
+                return [_default_scores() for _ in range(expected_count)]
+        else:
+            return [_default_scores() for _ in range(expected_count)]
+
+    if not isinstance(parsed, list):
+        return [_default_scores() for _ in range(expected_count)]
+
+    results = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            results.append(_default_scores())
+            continue
+        results.append({
+            "direction": float(np.clip(item.get("direction", 0.0), -1.0, 1.0)),
+            "confidence": float(np.clip(item.get("confidence", 0.5), 0.0, 1.0)),
+            "volatility": float(np.clip(item.get("volatility", 0.3), 0.0, 1.0)),
+            "currencies_affected": item.get("currencies_affected", []),
+        })
+    while len(results) < expected_count:
+        results.append(_default_scores())
+    return results
 
 
 def _article_hash(title: str, body: str, pair: str) -> str:
@@ -363,14 +492,64 @@ class LLMSentimentEngine:
         """Score a list of NewsArticle objects.
 
         Returns list of (article, scores_dict) tuples.
+        Uses batch scoring when more than 2 articles to process.
         """
-        results = []
-        for article in articles:
+        uncached = []
+        uncached_indices = []
+        results: List[Tuple[Any, Dict[str, Any]]] = []
+
+        db_path = self._get_cache_path()
+        self._init_cache_db(db_path)
+
+        for i, article in enumerate(articles):
+            title = getattr(article, "title", str(article))
+            body = getattr(article, "body", "")
+            ahash = _article_hash(title, body, pair)
+            cached = self._cached_score(ahash)
+            if cached is not None:
+                results.append((article, cached))
+            else:
+                results.append((article, None))
+                uncached.append(article)
+                uncached_indices.append(i)
+
+        if not uncached:
+            return results
+
+        if len(uncached) >= 3:
+            try:
+                batch_scores = self._score_batch_internal(uncached, pair)
+                for idx, scores in enumerate(batch_scores):
+                    article = uncached[idx]
+                    title = getattr(article, "title", str(article))
+                    body = getattr(article, "body", "")
+                    ahash = _article_hash(title, body, pair)
+                    self._cache_score(ahash, scores, pair)
+                    real_idx = uncached_indices[idx]
+                    results[real_idx] = (article, scores)
+                return results
+            except Exception as e:
+                logger.warning("Batch scoring failed, falling back to individual: %s", e)
+
+        for article in uncached:
             title = getattr(article, "title", str(article))
             body = getattr(article, "body", "")
             scores = self.score_article(title, body, pair)
-            results.append((article, scores))
+            real_idx = uncached_indices[uncached.index(article)]
+            results[real_idx] = (article, scores)
+
         return results
+
+    def _score_batch_internal(self, articles: list, pair: str) -> List[Dict[str, Any]]:
+        articles_text_parts = []
+        for i, article in enumerate(articles):
+            title = getattr(article, "title", str(article))
+            body = getattr(article, "body", "")
+            articles_text_parts.append(
+                f"[{i}] Title: {title[:150]}\nBody: {_strip_html(str(body))[:400]}"
+            )
+        articles_text = "\n\n".join(articles_text_parts)
+        return self.backend.analyze_batch(articles_text, pair, len(articles))
 
     def merge_with_vader(
         self,

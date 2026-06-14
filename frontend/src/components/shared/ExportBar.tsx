@@ -23,10 +23,8 @@ export function ExportBar({ onExportCsv, onExportPng, onExportJson, disabled }: 
             key={btn.label}
             onClick={btn.onClick}
             disabled={isDisabled}
-            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold uppercase transition-all duration-150 hover:border-[var(--color-brand)]"
+            className="flex items-center gap-1.5 rounded-md border border-(--color-glass-border) bg-(--color-surface) px-3 py-1.5 text-xs font-semibold uppercase transition-all duration-150 hover:border-[var(--color-brand)]"
             style={{
-              borderColor: "var(--color-glass-border)",
-              backgroundColor: "var(--color-surface)",
               color: isDisabled ? "var(--color-text-muted)" : "var(--color-text-primary)",
               letterSpacing: "0.05em",
               cursor: isDisabled ? "not-allowed" : "pointer",

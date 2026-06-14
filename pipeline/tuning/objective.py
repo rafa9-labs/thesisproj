@@ -1058,6 +1058,11 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
             log_print(f"Trial {trial.number} prune-suppressed: {e}", level="DEBUG")
             return _bad_obj(direction)
         log_print(f"Trial {trial.number} pruned: {e}", level="DEBUG")
+        _pr_reason = str(e)[:120]
+        try:
+            trial.set_user_attr("prune_reason", _pr_reason)
+        except Exception:
+            pass
         raise
 
     except Exception as e:
@@ -1079,7 +1084,12 @@ def optuna_objective(trial, train_data, base_features, evaluate_cv_func, cv_conf
         if DISABLE_OPTUNA_PRUNING:
             return _bad_obj(direction)
         else:
-            raise optuna.TrialPruned(f"Trial pruned due to error -> {cause}")
+            _pr_reason = f"Trial pruned due to error -> {cause}"
+            try:
+                trial.set_user_attr("prune_reason", _pr_reason)
+            except Exception:
+                pass
+            raise optuna.TrialPruned(_pr_reason)
 
     # Always run cleanup (success, prune, or error)
     try:

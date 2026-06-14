@@ -58,6 +58,8 @@ class JobManager:
                 r["config"] = json.loads(r["config"])
             if r.get("result"):
                 r["result"] = json.loads(r["result"])
+            if r.get("study_meta"):
+                r["study_meta"] = json.loads(r["study_meta"])
         return rows
 
     def force_stop_job(self, job_id: str) -> bool:
@@ -102,6 +104,8 @@ class JobManager:
                 d["config"] = json.loads(d["config"])
             if d.get("result"):
                 d["result"] = json.loads(d["result"])
+            if d.get("study_meta"):
+                d["study_meta"] = json.loads(d["study_meta"])
             return d
 
     def list_jobs(self, job_type: Optional[str] = None, limit: int = 50) -> List[Dict]:
@@ -121,6 +125,8 @@ class JobManager:
                 r["config"] = json.loads(r["config"])
             if r.get("result"):
                 r["result"] = json.loads(r["result"])
+            if r.get("study_meta"):
+                r["study_meta"] = json.loads(r["study_meta"])
         return rows
 
     def list_jobs_paginated(self, job_type: Optional[str] = None, limit: int = 50, offset: int = 0) -> tuple[List[Dict], int]:
@@ -149,9 +155,29 @@ class JobManager:
                 r["config"] = json.loads(r["config"])
             if r.get("result"):
                 r["result"] = json.loads(r["result"])
+            if r.get("study_meta"):
+                r["study_meta"] = json.loads(r["study_meta"])
         return rows, total
 
     def delete_job(self, job_id: str) -> bool:
         with self.store._cursor() as (conn, cur):
             cur.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
             return cur.rowcount > 0
+
+    def update_study_meta(self, job_id: str, meta: dict) -> bool:
+        now = self._now()
+        meta["saved_at"] = now
+        with self.store._cursor() as (conn, cur):
+            cur.execute(
+                "UPDATE jobs SET study_meta = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(meta), now, job_id),
+            )
+            return cur.rowcount > 0
+
+    def get_study_meta(self, job_id: str) -> Optional[dict]:
+        with self.store._cursor() as (conn, cur):
+            cur.execute("SELECT study_meta FROM jobs WHERE id = ?", (job_id,))
+            row = cur.fetchone()
+            if row and row[0]:
+                return json.loads(row[0])
+            return None

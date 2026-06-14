@@ -28,9 +28,8 @@ export function RiskPanel({ show, config, onChange, onToggle }: RiskPanelProps) 
     <div className="flex items-center gap-2">
       <button
         onClick={onToggle}
-        className="text-[10px] font-medium uppercase tracking-[0.08em] rounded-md border px-2 py-1 transition"
+        className="rounded-md border border-(--color-glass-border) px-2 py-1 text-[10px] font-medium tracking-[0.08em] uppercase transition"
         style={{
-          borderColor: "var(--color-glass-border)",
           color: show ? "var(--color-brand)" : "var(--color-text-muted)",
           backgroundColor: show ? "var(--color-brand-glow)" : "transparent",
         }}
@@ -41,9 +40,7 @@ export function RiskPanel({ show, config, onChange, onToggle }: RiskPanelProps) 
         <div className="flex flex-wrap gap-3">
           {FIELDS.map((rc) => (
             <div key={rc.key} className="flex items-center gap-1">
-              <span className="text-[9px] uppercase" style={{ color: "var(--color-text-muted)" }}>
-                {rc.label}
-              </span>
+              <span className="text-[9px] text-(--color-text-muted) uppercase">{rc.label}</span>
               <input
                 type="number"
                 value={config[rc.key]}
@@ -51,13 +48,7 @@ export function RiskPanel({ show, config, onChange, onToggle }: RiskPanelProps) 
                 min={rc.min}
                 max={rc.max}
                 step={rc.step}
-                className="rounded-md border px-1.5 py-0.5 text-[10px] w-14 transition focus:outline-none"
-                style={{
-                  borderColor: "var(--color-glass-border)",
-                  backgroundColor: "var(--color-glass)",
-                  color: "var(--color-text-primary)",
-                  fontFamily: "var(--font-mono)",
-                }}
+                className="w-14 rounded-md border border-(--color-glass-border) bg-(--color-glass) px-1.5 py-0.5 font-mono text-[10px] text-(--color-text-primary) transition focus:outline-none"
               />
             </div>
           ))}

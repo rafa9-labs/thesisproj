@@ -24,26 +24,17 @@ export function SignificanceMatrix({ models = [], pValues }: SignificanceMatrixP
   if (pValues === null) {
     return (
       <div className="flex flex-col gap-2">
-        <h3
-          className="text-xs font-semibold uppercase tracking-[0.08em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
+        <h3 className="text-xs font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
           Significance Testing
         </h3>
-        <div
-          className="flex items-center justify-center rounded-sm border p-8"
-          style={{
-            backgroundColor: "var(--color-surface)",
-            borderColor: "var(--color-border)",
-          }}
-        >
-          <div className="flex flex-col items-center gap-2 text-center max-w-md">
-            <span className="text-sm" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+        <div className="flex items-center justify-center rounded-sm border border-(--color-border) bg-(--color-surface) p-8">
+          <div className="flex max-w-md flex-col items-center gap-2 text-center">
+            <span className="font-mono text-sm text-(--color-text-muted)">
               Requires multiple repeats (repeats &gt; 1)
             </span>
-            <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-              Run a backtest with repeats to generate paired t-test p-values between models.
-              The matrix shows whether performance differences are statistically significant.
+            <span className="text-xs text-(--color-text-muted)">
+              Run a backtest with repeats to generate paired t-test p-values between models. The
+              matrix shows whether performance differences are statistically significant.
             </span>
           </div>
         </div>
@@ -62,19 +53,10 @@ export function SignificanceMatrix({ models = [], pValues }: SignificanceMatrixP
 
   return (
     <div className="flex flex-col gap-2">
-      <h3
-        className="text-xs font-semibold uppercase tracking-[0.08em]"
-        style={{ color: "var(--color-text-secondary)" }}
-      >
+      <h3 className="text-xs font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
         Significance Testing
       </h3>
-      <div
-        className="rounded-sm border overflow-auto p-3"
-        style={{
-          borderColor: "var(--color-border)",
-          backgroundColor: "var(--color-surface)",
-        }}
-      >
+      <div className="overflow-auto rounded-sm border border-(--color-border) bg-(--color-surface) p-3">
         <svg width={totalW} height={totalH} viewBox={`0 0 ${totalW} ${totalH}`}>
           {models.map((model, col) => (
             <g key={`h-${model}`}>
@@ -134,7 +116,7 @@ export function SignificanceMatrix({ models = [], pValues }: SignificanceMatrixP
             }),
           )}
         </svg>
-        <div className="flex items-center gap-4 mt-2 text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+        <div className="mt-2 flex items-center gap-4 text-[10px] text-(--color-text-muted)">
           <span>ns = not significant (p&gt;0.1)</span>
           <span>* p&lt;0.05</span>
           <span>** p&lt;0.01</span>

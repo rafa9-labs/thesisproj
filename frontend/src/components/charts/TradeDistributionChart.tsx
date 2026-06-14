@@ -26,27 +26,27 @@ export function TradeDistributionChart({ trades }: TradeDistributionChartProps) 
     <ChartCard title="Trade P&L Distribution" subtitle={`${(trades ?? []).length} trades`}>
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={bins} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#2A2E39" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-elevated)" />
           <XAxis
             dataKey="bin"
-            tick={{ fill: "#787B86", fontSize: 9, fontFamily: "JetBrains Mono" }}
+            tick={{ fill: "var(--color-text-muted)", fontSize: 9, fontFamily: "var(--font-mono)" }}
             angle={-45}
             textAnchor="end"
             height={50}
           />
           <YAxis
-            tick={{ fill: "#787B86", fontSize: 10, fontFamily: "JetBrains Mono" }}
+            tick={{ fill: "var(--color-text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" }}
             tickFormatter={(v: number) => String(v)}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "#2A2E39",
-              border: "1px solid #363A45",
+              backgroundColor: "var(--color-elevated)",
+              border: "1px solid var(--color-glass-border)",
               borderRadius: 6,
               fontSize: 12,
-              fontFamily: "JetBrains Mono",
+              fontFamily: "var(--font-mono)",
             }}
-            labelStyle={{ color: "#80899F" }}
+            labelStyle={{ color: "var(--color-text-muted)" }}
             formatter={(value: number) => [String(value), "Trades"]}
             labelFormatter={(label: string) => `Return: ${label}%`}
           />

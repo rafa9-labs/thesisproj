@@ -244,20 +244,28 @@ def _write_active(data: Dict[str, str]) -> None:
         raise
 
 
-def get_active_model_id(model_type: str) -> Optional[str]:
-    return _read_active().get(model_type)
+def get_active_model_id(model_type: str | None = None) -> Optional[str]:
+    """Return the active model ID.
+
+    With no arguments, returns the one global active model's ID (or None).
+    With a type argument, returns the active model's ID only if it matches the given type.
+    """
+    data = _read_active()
+    if model_type is not None:
+        return data.get(model_type)
+    for v in data.values():
+        return v
+    return None
 
 
 def set_active_model_id(model_type: str, snapshot_id: str) -> None:
-    data = _read_active()
-    data[model_type] = snapshot_id
-    _write_active(data)
+    """Set the single global active model. Replaces any previously active model."""
+    _write_active({model_type: snapshot_id})
 
 
-def clear_active_model_id(model_type: str) -> None:
-    data = _read_active()
-    data.pop(model_type, None)
-    _write_active(data)
+def clear_active_model_id() -> None:
+    """Clear the global active model pointer."""
+    _write_active({})
 
 
 # ──────────────────────────────────────────────────────

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import type { Metrics, TradeRecord, MonthlyResult, HpoParamImportance, HpoTrial } from "@/api/schemas";
+import type {
+  Metrics,
+  TradeRecord,
+  MonthlyResult,
+  HpoParamImportance,
+  HpoTrial,
+} from "@/api/schemas";
 
 describe("API Schema types — runtime shape validation", () => {
   it("Metrics accepts full object", () => {
@@ -66,8 +72,8 @@ describe("API Schema types — runtime shape validation", () => {
       entry_date: "2024-01-15T10:00:00",
       exit_date: "2024-01-17T14:00:00",
       direction: "BUY",
-      entry_price: 1.08420,
-      exit_price: 1.08540,
+      entry_price: 1.0842,
+      exit_price: 1.0854,
       pips: 12,
       return_pct: 0.12,
       duration_bars: 8,
@@ -83,8 +89,8 @@ describe("API Schema types — runtime shape validation", () => {
       entry_date: "2024-01-20",
       exit_date: "2024-01-21",
       direction: "SELL",
-      entry_price: 1.09000,
-      exit_price: 1.08920,
+      entry_price: 1.09,
+      exit_price: 1.0892,
       pips: -8,
       return_pct: -0.08,
       duration_bars: 4,

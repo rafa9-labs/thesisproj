@@ -23,7 +23,8 @@ interface TradeHistoryProps {
 }
 
 function downloadCsv(trades: TradeRecord[]) {
-  const header = "trade_id,direction,size,entry_price,exit_price,pnl,exit_reason,risk_blocked,oanda_order_id";
+  const header =
+    "trade_id,direction,size,entry_price,exit_price,pnl,exit_reason,risk_blocked,oanda_order_id";
   const rows = trades.map((t) =>
     [
       t.trade_id,
@@ -74,27 +75,17 @@ export function TradeHistory({ trades }: TradeHistoryProps) {
   ];
 
   return (
-    <div
-      className="rounded-sm border p-3 flex flex-col flex-1 min-h-0"
-      style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-glass)" }}
-    >
+    <div className="flex min-h-0 flex-1 flex-col rounded-sm border border-(--color-glass-border) bg-(--color-glass) p-3">
       {/* Header row */}
-      <div className="flex items-center justify-between mb-2">
-        <h4
-          className="text-[10px] font-medium uppercase tracking-[0.12em]"
-          style={{ color: "var(--color-text-muted)" }}
-        >
+      <div className="mb-2 flex items-center justify-between">
+        <h4 className="text-[10px] font-medium tracking-[0.12em] text-(--color-text-muted) uppercase">
           Trade Journal
         </h4>
         <div className="flex items-center gap-1">
           <button
             onClick={() => downloadCsv(trades)}
             disabled={trades.length === 0}
-            className="flex items-center gap-1 rounded-md border px-2 py-0.5 text-[9px] font-semibold uppercase transition hover:border-[var(--color-border-active)] disabled:opacity-30 disabled:cursor-not-allowed"
-            style={{
-              borderColor: "var(--color-glass-border)",
-              color: "var(--color-text-muted)",
-            }}
+            className="flex items-center gap-1 rounded-md border border-(--color-glass-border) px-2 py-0.5 text-[9px] font-semibold text-(--color-text-muted) uppercase transition hover:border-[var(--color-border-active)] disabled:cursor-not-allowed disabled:opacity-30"
             title="Export CSV"
           >
             <FileSpreadsheet size={10} />
@@ -104,19 +95,18 @@ export function TradeHistory({ trades }: TradeHistoryProps) {
       </div>
 
       {/* Search */}
-      <div className="flex items-center gap-1.5 rounded-md border px-2 py-1 mb-2" style={{ borderColor: "var(--color-glass-border)", backgroundColor: "rgba(0,0,0,0.15)" }}>
-        <Search size={10} style={{ color: "var(--color-text-muted)", flexShrink: 0 }} />
+      <div className="mb-2 flex items-center gap-1.5 rounded-md border border-(--color-glass-border) bg-[rgba(0,0,0,0.15)] px-2 py-1">
+        <Search size={10} className="shrink-0 text-(--color-text-muted)" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search ID…"
-          className="bg-transparent text-[9px] flex-1 outline-none"
-          style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}
+          className="flex-1 bg-transparent font-mono text-[9px] text-(--color-text-primary) outline-none"
         />
       </div>
 
       {/* Filter chips */}
-      <div className="flex items-center gap-1 mb-2">
+      <div className="mb-2 flex items-center gap-1">
         {filters.map((f) => (
           <button
             key={f.key}
@@ -131,21 +121,19 @@ export function TradeHistory({ trades }: TradeHistoryProps) {
             {f.label}
           </button>
         ))}
-        <span className="text-[9px] ml-auto" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+        <span className="ml-auto font-mono text-[9px] text-(--color-text-muted)">
           {filtered.length}
         </span>
       </div>
 
       {/* Trade list */}
-      <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 min-h-0" style={{ scrollbarWidth: "thin" }}>
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto [scrollbar-width:thin]">
         {filtered.length === 0 ? (
-          <div className="text-[10px] text-center py-4" style={{ color: "var(--color-text-muted)" }}>
+          <div className="py-4 text-center text-[10px] text-(--color-text-muted)">
             No trades yet
           </div>
         ) : (
-          filtered.map((t) => (
-            <TradeRow key={t.trade_id} trade={t} />
-          ))
+          filtered.map((t) => <TradeRow key={t.trade_id} trade={t} />)
         )}
       </div>
     </div>
@@ -155,12 +143,10 @@ export function TradeHistory({ trades }: TradeHistoryProps) {
 function TradeRow({ trade: t }: { trade: TradeRecord }) {
   if (t.risk_blocked) {
     return (
-      <div className="rounded px-2 py-1.5" style={{ backgroundColor: "rgba(245,158,11,0.06)" }}>
-        <div className="flex items-center justify-between" style={{ fontSize: "10px" }}>
-          <span className="font-semibold" style={{ color: "var(--color-accent-warning)", fontFamily: "var(--font-mono)" }}>
-            BLOCKED
-          </span>
-          <span className="font-medium" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+      <div className="rounded bg-[rgba(245,158,11,0.06)] px-2 py-1.5">
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="font-mono font-semibold text-(--color-accent-warning)">BLOCKED</span>
+          <span className="font-mono font-medium text-(--color-text-muted)">
             {t.risk_reason?.slice(0, 40)}
           </span>
         </div>
@@ -177,34 +163,30 @@ function TradeRow({ trade: t }: { trade: TradeRecord }) {
     >
       <div className="flex items-center justify-between" style={{ fontSize: "10px" }}>
         <span
-          className="font-semibold"
+          className="font-mono font-semibold"
           style={{
-            color: t.direction === "LONG" ? "var(--color-accent-success)" : "var(--color-accent-danger)",
-            fontFamily: "var(--font-mono)",
+            color:
+              t.direction === "LONG" ? "var(--color-accent-success)" : "var(--color-accent-danger)",
           }}
         >
           {t.direction}
         </span>
-        <span className="font-medium" style={{ color: pnlColor, fontFamily: "var(--font-mono)" }}>
+        <span className="font-mono font-medium" style={{ color: pnlColor }}>
           {pnlDisplay}
         </span>
-        <span className="font-medium" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-          {t.exit_reason}
-        </span>
+        <span className="font-mono font-medium text-(--color-text-muted)">{t.exit_reason}</span>
       </div>
-      <div className="flex items-center justify-between mt-0.5" style={{ fontSize: "9px" }}>
-        <span className="text-[9px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+      <div className="mt-0.5 flex items-center justify-between text-[9px]">
+        <span className="font-mono text-[9px] text-(--color-text-muted)">
           Entry {t.entry_price.toFixed(5)}
         </span>
-        <span className="text-[9px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+        <span className="font-mono text-[9px] text-(--color-text-muted)">
           Exit {t.exit_price?.toFixed(5) ?? "—"}
         </span>
-        <span className="text-[9px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-          x{t.size.toFixed(2)}
-        </span>
+        <span className="font-mono text-[9px] text-(--color-text-muted)">x{t.size.toFixed(2)}</span>
       </div>
       {t.oanda_order_id && (
-        <div className="text-[8px] mt-0.5" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+        <div className="mt-0.5 font-mono text-[8px] text-(--color-text-muted)">
           OANDA: {t.oanda_order_id.slice(0, 14)}
         </div>
       )}

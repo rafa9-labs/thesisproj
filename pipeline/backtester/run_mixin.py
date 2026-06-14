@@ -1016,25 +1016,46 @@ class RunMixin:
                                 print(msg)
                             raise _opt.TrialPruned(msg)
 
-                        # -- (C) Early-abort hopeless Sharpe ----------------------------------
-                        # After cv_early_sharpe_folds (default 3) valid folds, if the mean
-                        # Sharpe is below the threshold (default -1.0), prune the trial.
-                        # No amount of additional folds will salvage a config this bad.
+                        # -- (C) Adaptive early-abort hopeless Sharpe ----------------------------------
+                        # After cv_early_sharpe_folds (default 3) valid folds, check against
+                        # the champion median baseline.  This replaces the old hardcoded
+                        # cv_early_sharpe_threshold which was model-blind.
+                        _adaptive = bool(config.get("adaptive_pruning", True))
                         _early_sharpe_folds = int(config.get("cv_early_sharpe_folds", 3))
-                        _early_sharpe_thr   = float(config.get("cv_early_sharpe_threshold", -1.0))
-                        if (_relax > 0.0 and processed >= _early_sharpe_folds
-                                and k_valid >= _early_sharpe_folds):
+                        if processed >= _early_sharpe_folds and k_valid >= _early_sharpe_folds:
                             _valid_scores = arr[_np.isfinite(arr)]
                             if len(_valid_scores) >= _early_sharpe_folds:
                                 _mean_sharpe = float(_np.mean(_valid_scores))
-                                if _mean_sharpe < _early_sharpe_thr * _relax:
-                                    msg = (f"[MiniBlockCV:EARLY_HOPELESS] "
-                                           f"mean Sharpe={_mean_sharpe:.3f} "
-                                           f"< {_early_sharpe_thr:.0f} "
-                                           f"after {_early_sharpe_folds} folds -> prune trial")
-                                    if bool(config.get("print_cv_debug", False)):
-                                        print(msg)
-                                    raise _opt.TrialPruned(msg)
+                                if _adaptive:
+                                    try:
+                                        from pipeline.tuning.adaptive_pruner import AdaptivePruner
+                                        _should_prune_trial, _cutoff_trial, _reason_trial = \
+                                            AdaptivePruner.should_prune_trial(
+                                                trial.number if trial is not None else -1,
+                                                list(_valid_scores),
+                                            )
+                                        if _should_prune_trial:
+                                            msg = (f"[MiniBlockCV:ADAPTIVE_HOPELESS] "
+                                                   f"mean Sharpe={_mean_sharpe:.3f} "
+                                                   f"< cutoff={_cutoff_trial:.3f} ({_reason_trial}) "
+                                                   f"-> prune trial")
+                                            if bool(config.get("print_cv_debug", False)):
+                                                print(msg)
+                                            raise _opt.TrialPruned(msg)
+                                    except _opt.TrialPruned:
+                                        raise
+                                    except Exception as _ae:
+                                        pass
+                                else:
+                                    _early_sharpe_thr = float(config.get("cv_early_sharpe_threshold", -1.0))
+                                    if _relax > 0.0 and _mean_sharpe < _early_sharpe_thr * _relax:
+                                        msg = (f"[MiniBlockCV:EARLY_HOPELESS] "
+                                               f"mean Sharpe={_mean_sharpe:.3f} "
+                                               f"< {_early_sharpe_thr:.0f} "
+                                               f"after {_early_sharpe_folds} folds -> prune trial")
+                                        if bool(config.get("print_cv_debug", False)):
+                                            print(msg)
+                                        raise _opt.TrialPruned(msg)
 
 
                     # --------------------------------------------
@@ -2765,115 +2786,148 @@ class RunMixin:
                                     )
 
                                     if relax > 0.0:
-                                        base_min_k = float(
-                                            config.get(
-                                                "prune_min_folds",
-                                                2,
-                                            )
-                                        )
-                                        base_abs_fl = float(
-                                            config.get(
-                                                "prune_abs_floor_sr",
-                                                -8.0,
-                                            )
-                                        )
-                                        base_iqr_m = float(
-                                            config.get(
-                                                "prune_iqr_mult",
-                                                0.75,
-                                            )
-                                        )
+                                        k_done = int(arr_t.size)
 
-                                        k_done = int(
-                                            arr_t.size
-                                        )
-                                        min_k = max(
-                                            1,
-                                            int(
-                                                round(
-                                                    base_min_k
+                                        _adaptive = bool(config.get("adaptive_pruning", True))
+                                        if _adaptive:
+                                            # Adaptive fold-level pruning against champion median.
+                                            if k_done >= 3:
+                                                import optuna as _opt
+                                                try:
+                                                    from pipeline.tuning.adaptive_pruner import AdaptivePruner
+                                                    _should_prune_f, _cutoff_f, _reason_f = \
+                                                        AdaptivePruner.should_prune_fold(
+                                                            trial.number if trial is not None else -1,
+                                                            list(arr_t[:k_done]),
+                                                            len(arr_t),
+                                                            step_idx,
+                                                            float(interim),
+                                                        )
+                                                    if _should_prune_f:
+                                                        if bool(config.get("cv_strict_pruning", False)):
+                                                            raise _opt.TrialPruned(
+                                                                "Pruned by AdaptivePruner: "
+                                                                f"interim={interim:.4f} "
+                                                                f"< cutoff={_cutoff_f:.4f} "
+                                                                f"({_reason_f}) "
+                                                                f"at step={step_idx}"
+                                                            )
+                                                        else:
+                                                            raise RuntimeError(
+                                                                "FoldPrunedByAdaptiveGate: "
+                                                                f"interim={interim:.4f} "
+                                                                f"< cutoff={_cutoff_f:.4f} "
+                                                                f"({_reason_f}) "
+                                                                f"at step={step_idx}"
+                                                            )
+                                                except (_opt.TrialPruned, RuntimeError):
+                                                    raise
+                                                except Exception:
+                                                    pass
+                                        else:
+                                            # Legacy IQR + abs_floor gate (model-blind, hardcoded)
+                                            base_min_k = float(
+                                                config.get(
+                                                    "prune_min_folds",
+                                                    2,
+                                                )
+                                            )
+                                            base_abs_fl = float(
+                                                config.get(
+                                                    "prune_abs_floor_sr",
+                                                    -8.0,
+                                                )
+                                            )
+                                            base_iqr_m = float(
+                                                config.get(
+                                                    "prune_iqr_mult",
+                                                    0.75,
+                                                )
+                                            )
+
+                                            min_k = max(
+                                                1,
+                                                int(
+                                                    round(
+                                                        base_min_k
+                                                        * relax
+                                                    )
+                                                ),
+                                            )
+
+                                            if base_abs_fl < 0:
+                                                abs_fl = (
+                                                    base_abs_fl
+                                                    / max(
+                                                        relax,
+                                                        1e-6,
+                                                    )
+                                                )
+                                            else:
+                                                abs_fl = (
+                                                    base_abs_fl
                                                     * relax
                                                 )
-                                            ),
-                                        )
 
-                                        if base_abs_fl < 0:
-                                            abs_fl = (
-                                                base_abs_fl
-                                                / max(
-                                                    relax,
-                                                    1e-6,
-                                                )
-                                            )
-                                        else:
-                                            abs_fl = (
-                                                base_abs_fl
+                                            iqr_m = (
+                                                base_iqr_m
                                                 * relax
                                             )
 
-                                        iqr_m = (
-                                            base_iqr_m
-                                            * relax
-                                        )
-
-                                        if k_done >= 3:
-                                            q1, q3 = (
-                                                np.percentile(
-                                                    arr_t,
-                                                    [25, 75],
-                                                )
-                                            )
-                                        else:
-                                            q1 = float(
-                                                np.min(
-                                                    arr_t
-                                                )
-                                            )
-                                            q3 = float(
-                                                np.max(
-                                                    arr_t
-                                                )
-                                            )
-
-                                        iqr = max(
-                                            1e-12,
-                                            (float(q3) - float(q1)),
-                                        )
-                                        rel_fl = float(
-                                            np.median(
-                                                arr_t
-                                            )
-                                        ) - iqr_m * iqr
-                                        gate = max(
-                                            abs_fl, rel_fl
-                                        )
-
-                                        if (
-                                            k_done
-                                            >= min_k
-                                        ) and (
-                                            interim
-                                            < gate
-                                        ):
-                                            import optuna as _opt
-                                            if bool(config.get("cv_strict_pruning", False)):
-                                                # Keep legacy behavior (abort whole trial)
-                                                raise _opt.TrialPruned(
-                                                    "Pruned early: "
-                                                    f"interim={interim:.4f} "
-                                                    f"< gate={gate:.4f} "
-                                                    f"at step={step_idx}"
+                                            if k_done >= 3:
+                                                q1, q3 = (
+                                                    np.percentile(
+                                                        arr_t,
+                                                        [25, 75],
+                                                    )
                                                 )
                                             else:
-                                                # Downgrade to fold-level invalidation; the outer
-                                                # exception handler will convert this to a NaN score
-                                                # and keep evaluating remaining blocks.
-                                                raise RuntimeError(
-                                                    "FoldPrunedByGate: "
-                                                    f"interim={interim:.4f} "
-                                                    f"< gate={gate:.4f} "
-                                                    f"at step={step_idx}"
+                                                q1 = float(
+                                                    np.min(
+                                                        arr_t
+                                                    )
                                                 )
+                                                q3 = float(
+                                                    np.max(
+                                                        arr_t
+                                                    )
+                                                )
+
+                                            iqr = max(
+                                                1e-12,
+                                                (float(q3) - float(q1)),
+                                            )
+                                            rel_fl = float(
+                                                np.median(
+                                                    arr_t
+                                                )
+                                            ) - iqr_m * iqr
+                                            gate = max(
+                                                abs_fl, rel_fl
+                                            )
+
+                                            if (
+                                                k_done
+                                                >= min_k
+                                            ) and (
+                                                interim
+                                                < gate
+                                            ):
+                                                import optuna as _opt
+                                                if bool(config.get("cv_strict_pruning", False)):
+                                                    raise _opt.TrialPruned(
+                                                        "Pruned early: "
+                                                        f"interim={interim:.4f} "
+                                                        f"< gate={gate:.4f} "
+                                                        f"at step={step_idx}"
+                                                    )
+                                                else:
+                                                    raise RuntimeError(
+                                                        "FoldPrunedByGate: "
+                                                        f"interim={interim:.4f} "
+                                                        f"< gate={gate:.4f} "
+                                                        f"at step={step_idx}"
+                                                    )
 
                                 # Also honor Optuna's own pruner
                                 import optuna as _opt
@@ -3692,6 +3746,12 @@ class RunMixin:
                         trial.set_user_attr("precision_trade_cv", med_p)
 
                         trial.set_user_attr("cv_k_valid", int(k_valid))
+                        
+                        # Store fold scores for the adaptive pruner
+                        try:
+                            trial.set_user_attr("_adaptive_fold_scores", list(block_scores[:K_plan]))
+                        except Exception:
+                            pass
                         
                         # Attach intent-precision aggregates for Optuna pruning
                         try:

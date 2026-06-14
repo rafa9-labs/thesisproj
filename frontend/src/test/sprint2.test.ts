@@ -135,9 +135,33 @@ describe("Sprint 2: playback speed intervals", () => {
 
 describe("Sprint 2: trade filtering by timestamp", () => {
   const trades = [
-    { trade_id: 1, entry_time: 100, exit_time: 150, direction: "BUY" as const, entry_price: 1.08, exit_price: 1.085, pnl_pct: 0.46 },
-    { trade_id: 2, entry_time: 200, exit_time: 250, direction: "SELL" as const, entry_price: 1.083, exit_price: 1.078, pnl_pct: -0.46 },
-    { trade_id: 3, entry_time: 300, exit_time: 350, direction: "BUY" as const, entry_price: 1.08, exit_price: 1.09, pnl_pct: 0.93 },
+    {
+      trade_id: 1,
+      entry_time: 100,
+      exit_time: 150,
+      direction: "BUY" as const,
+      entry_price: 1.08,
+      exit_price: 1.085,
+      pnl_pct: 0.46,
+    },
+    {
+      trade_id: 2,
+      entry_time: 200,
+      exit_time: 250,
+      direction: "SELL" as const,
+      entry_price: 1.083,
+      exit_price: 1.078,
+      pnl_pct: -0.46,
+    },
+    {
+      trade_id: 3,
+      entry_time: 300,
+      exit_time: 350,
+      direction: "BUY" as const,
+      entry_price: 1.08,
+      exit_price: 1.09,
+      pnl_pct: 0.93,
+    },
   ];
 
   it("filters trades with entry_time before current timestamp", () => {

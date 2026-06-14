@@ -15,14 +15,7 @@ export function RuntimeEstimate() {
   if (selectedModels.length === 0) return null;
 
   if (isLoading) {
-    return (
-      <span
-        className="text-xs"
-        style={{ color: "var(--color-text-muted)" }}
-      >
-        Estimating runtime...
-      </span>
-    );
+    return <span className="text-xs text-(--color-text-muted)">Estimating runtime...</span>;
   }
 
   if (isError || !data) return null;
@@ -45,24 +38,13 @@ export function RuntimeEstimate() {
 
   return (
     <div className="flex items-center gap-3">
-      <span
-        className="text-xs font-medium uppercase tracking-wide"
-        style={{ color: "var(--color-text-muted)" }}
-      >
+      <span className="text-xs font-medium tracking-wide text-(--color-text-muted) uppercase">
         Est. Runtime:
       </span>
-      <span
-        className="text-sm font-bold"
-        style={{ color }}
-      >
+      <span className="text-sm font-bold" style={{ color }}>
         {formatTime(estimated_minutes_low)} – {formatTime(estimated_minutes_high)}
       </span>
-      <span
-        className="text-xs"
-        style={{ color: "var(--color-text-muted)" }}
-      >
-        ({total_trials} HPO trials)
-      </span>
+      <span className="text-xs text-(--color-text-muted)">({total_trials} HPO trials)</span>
     </div>
   );
 }

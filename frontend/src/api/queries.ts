@@ -28,6 +28,7 @@ import type {
   RegimeMatrixResponse,
   RegimeLabelsResponse,
   CommitteeSnapshotListResponse,
+  SavedCommitteeListResponse,
   FullCycleRequest,
   FullCycleStatusResponse,
   FullCycleResultsResponse,
@@ -133,7 +134,9 @@ export function useActiveBacktests() {
   return useQuery({
     queryKey: ["active-backtests"],
     queryFn: async () => {
-      const { data } = await apiClient.get<{ jobs: JobSummary[]; total: number }>("/backtest/active");
+      const { data } = await apiClient.get<{ jobs: JobSummary[]; total: number }>(
+        "/backtest/active",
+      );
       return data;
     },
     refetchInterval: 10_000,
@@ -145,7 +148,9 @@ export function useForceStopJob() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (jobId: string) => {
-      const { data } = await apiClient.post<{ job_id: string; status: string }>(`/backtest/${jobId}/force-stop`);
+      const { data } = await apiClient.post<{ job_id: string; status: string }>(
+        `/backtest/${jobId}/force-stop`,
+      );
       return data;
     },
     onSuccess: (_, jobId) => {
@@ -309,10 +314,11 @@ export function useRuntimeEstimate(models: string[], months: number, hpoIntensit
   return useQuery({
     queryKey: ["runtime-estimate", models, months, hpoIntensity],
     queryFn: async () => {
-      const { data } = await apiClient.post<RuntimeEstimateResponse>(
-        "/backtest/estimate-runtime",
-        { models, months, hpo_intensity: hpoIntensity } as RuntimeEstimateRequest,
-      );
+      const { data } = await apiClient.post<RuntimeEstimateResponse>("/backtest/estimate-runtime", {
+        models,
+        months,
+        hpo_intensity: hpoIntensity,
+      } as RuntimeEstimateRequest);
       return data;
     },
     enabled: models.length > 0 && months > 0,
@@ -349,9 +355,12 @@ export function useNewsArticles(pair?: string, days?: number) {
   return useQuery({
     queryKey: ["news-articles", pair, days],
     queryFn: async () => {
-      const { data } = await apiClient.get<import("./schemas").NewsArticlesResponse>("/news/articles", {
-        params: { pair: pair ?? "", days: days ?? 30 },
-      });
+      const { data } = await apiClient.get<import("./schemas").NewsArticlesResponse>(
+        "/news/articles",
+        {
+          params: { pair: pair ?? "", days: days ?? 30 },
+        },
+      );
       return data;
     },
     staleTime: 60_000,
@@ -363,9 +372,12 @@ export function useLiveSentiment(pair: string = "EURUSD") {
   return useQuery({
     queryKey: ["live-sentiment", pair],
     queryFn: async () => {
-      const { data } = await apiClient.get<import("./schemas").LiveSentimentResponse>("/news/sentiment/live", {
-        params: { pair },
-      });
+      const { data } = await apiClient.get<import("./schemas").LiveSentimentResponse>(
+        "/news/sentiment/live",
+        {
+          params: { pair },
+        },
+      );
       return data;
     },
     staleTime: 60_000,
@@ -425,11 +437,24 @@ export function useStartTrial() {
   });
 }
 
-export function useResultsHistory(params: { limit?: number; offset?: number; pair?: string; model?: string; sort_by?: string; sort_order?: string } = {}) {
+export function useResultsHistory(
+  params: {
+    limit?: number;
+    offset?: number;
+    pair?: string;
+    model?: string;
+    sort_by?: string;
+    sort_order?: string;
+    status?: string;
+  } = {},
+) {
   return useQuery({
     queryKey: ["results-history", params],
     queryFn: async () => {
-      const { data } = await apiClient.get<{ results: import("./schemas").BacktestSummaryItem[]; total: number }>("/backtest/results/summary", { params });
+      const { data } = await apiClient.get<{
+        results: import("./schemas").BacktestSummaryItem[];
+        total: number;
+      }>("/backtest/results/summary", { params });
       return data;
     },
     staleTime: 10_000,
@@ -457,9 +482,12 @@ export function useCandles(pair: string, timeframe: string, limit = 200) {
   return useQuery({
     queryKey: ["candles", pair, timeframe, limit],
     queryFn: async () => {
-      const { data } = await apiClient.get<import("./schemas").CandlesResponse>(`/candles/${pair}/${timeframe}`, {
-        params: { limit },
-      });
+      const { data } = await apiClient.get<import("./schemas").CandlesResponse>(
+        `/candles/${pair}/${timeframe}`,
+        {
+          params: { limit },
+        },
+      );
       return data;
     },
     staleTime: 15_000,
@@ -471,9 +499,12 @@ export function useTradeChartData(jobId: string, model: string) {
   return useQuery({
     queryKey: ["trade-chart-data", jobId, model],
     queryFn: async () => {
-      const { data } = await apiClient.get<import("./schemas").TradeChartData>(`/backtest/${jobId}/trades/chart-data`, {
-        params: { model },
-      });
+      const { data } = await apiClient.get<import("./schemas").TradeChartData>(
+        `/backtest/${jobId}/trades/chart-data`,
+        {
+          params: { model },
+        },
+      );
       return data;
     },
     enabled: !!jobId && !!model,
@@ -558,7 +589,14 @@ export function usePaperSessions() {
     queryKey: ["paper-sessions"],
     queryFn: async () => {
       const { data } = await apiClient.get<
-        Array<{ session_id: string; pair: string; model_type: string; timeframe: string; status: string; created_at: string }>
+        Array<{
+          session_id: string;
+          pair: string;
+          model_type: string;
+          timeframe: string;
+          status: string;
+          created_at: string;
+        }>
       >("/trading/paper/sessions");
       return data;
     },
@@ -643,7 +681,14 @@ export function useBacktestProgress(jobId: string | null) {
       );
       if (data.events && data.events.length > 0) {
         if (import.meta.env.DEV) {
-          console.log("[POLL] events:", data.events.length, "total:", data.total, "cursor:", cursor);
+          console.log(
+            "[POLL] events:",
+            data.events.length,
+            "total:",
+            data.total,
+            "cursor:",
+            cursor,
+          );
         }
         for (const evt of data.events) {
           handleWsEvent(evt as WsEvent);
@@ -667,7 +712,7 @@ export function useLlmAnalysis(jobId: string | null, model: string | null) {
     queryKey: ["llm-analysis", jobId, model],
     queryFn: async () => {
       const { data } = await apiClient.post<LlmAnalysisResponse>(
-        `/backtest/${jobId}/analyze?model=${encodeURIComponent(model ?? "")}`
+        `/backtest/${jobId}/analyze?model=${encodeURIComponent(model ?? "")}`,
       );
       return data;
     },
@@ -682,8 +727,42 @@ export function useSaveModelFromJob() {
   return useMutation({
     mutationFn: async ({ jobId, modelName }: { jobId: string; modelName?: string }) => {
       const params = modelName ? `?model_name=${encodeURIComponent(modelName)}` : "";
-      const { data } = await apiClient.post<{ status: string; model_id: string; snapshot_path: string }>(
-        `/models/save-from-job/${jobId}${params}`
+      const { data } = await apiClient.post<{
+        status: string;
+        model_id: string;
+        snapshot_path: string;
+      }>(`/models/save-from-job/${jobId}${params}`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deployed-models"] });
+    },
+  });
+}
+
+export function useBulkDeleteModels() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (modelIds: string[]) => {
+      const { data } = await apiClient.post<{ status: string; deleted: number }>(
+        "/models/deployed/bulk/delete",
+        { model_ids: modelIds },
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deployed-models"] });
+    },
+  });
+}
+
+export function useBulkActivateModels() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (modelIds: string[]) => {
+      const { data } = await apiClient.post<{ status: string; activated: number }>(
+        "/models/deployed/bulk/activate",
+        { model_ids: modelIds },
       );
       return data;
     },
@@ -785,9 +864,8 @@ export function useLiveSessionsList() {
   return useQuery({
     queryKey: ["live-sessions"],
     queryFn: async () => {
-      const { data } = await apiClient.get<Array<import("./schemas").LiveSessionInfo>>(
-        "/trading/live/sessions",
-      );
+      const { data } =
+        await apiClient.get<Array<import("./schemas").LiveSessionInfo>>("/trading/live/sessions");
       return data;
     },
     refetchInterval: 10_000,
@@ -860,12 +938,71 @@ export function useCommitteeSnapshots() {
   return useQuery({
     queryKey: ["committee", "snapshots"],
     queryFn: async () => {
-      const { data } = await apiClient.get<CommitteeSnapshotListResponse>(
-        "/committee/snapshots",
-      );
+      const { data } = await apiClient.get<CommitteeSnapshotListResponse>("/committee/snapshots");
       return data;
     },
     staleTime: 30_000,
+  });
+}
+
+export function useSavedCommittees() {
+  return useQuery({
+    queryKey: ["committee", "saved"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<SavedCommitteeListResponse>("/committee/saved");
+      return data;
+    },
+    staleTime: 15_000,
+  });
+}
+
+export function useSaveCommittee() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: {
+      name: string;
+      full_cycle_job_id?: string;
+      pair?: string;
+      timeframe?: string;
+      config_json: Record<string, unknown>;
+      trust_score?: number;
+      avg_sharpe?: number;
+      tags?: string[];
+    }) => {
+      const { data } = await apiClient.post<{ status: string; id: string }>(
+        "/committee/saved",
+        req,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["committee", "saved"] });
+    },
+  });
+}
+
+export function useDeleteSavedCommittee() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/committee/saved/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["committee", "saved"] });
+    },
+  });
+}
+
+export function useActivateSavedCommittee() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.post(`/committee/saved/${id}/activate`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["committee", "saved"] });
+      queryClient.invalidateQueries({ queryKey: ["committee", "config"] });
+    },
   });
 }
 
@@ -886,14 +1023,17 @@ export interface CommitteeMetricsResponse {
   trust_multiplier: number;
   effective_multiplier: number;
   throttle_summary: Record<string, { multiplier: number; level: string }>;
-  per_model_health: Record<string, {
-    rolling_sharpe: number | null;
-    rolling_hit_rate: number | null;
-    total_signals: number;
-    wins: number;
-    losses: number;
-    status: "healthy" | "unhealthy" | "insufficient_data";
-  }>;
+  per_model_health: Record<
+    string,
+    {
+      rolling_sharpe: number | null;
+      rolling_hit_rate: number | null;
+      total_signals: number;
+      wins: number;
+      losses: number;
+      status: "healthy" | "unhealthy" | "insufficient_data";
+    }
+  >;
   recent_signals: Array<{
     timestamp: string;
     signal: number;
@@ -930,9 +1070,7 @@ export function useStartFullCycle() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (req: FullCycleRequest) => {
-      const { data } = await apiClient.post<FullCycleStatusResponse>(
-        "/committee/full-cycle", req,
-      );
+      const { data } = await apiClient.post<FullCycleStatusResponse>("/committee/full-cycle", req);
       return data;
     },
     onSuccess: () => {
@@ -953,7 +1091,15 @@ export function useFullCycleStatus(jobId: string | null) {
     enabled: !!jobId,
     refetchInterval: (query) => {
       const phase = query.state.data?.phase;
-      if (!phase || phase === "completed" || phase === "failed" || phase === "validation_failed" || phase === "cancelled" || phase === "orphaned") return false;
+      if (
+        !phase ||
+        phase === "completed" ||
+        phase === "failed" ||
+        phase === "validation_failed" ||
+        phase === "cancelled" ||
+        phase === "orphaned"
+      )
+        return false;
       return 2_000;
     },
   });
@@ -990,17 +1136,13 @@ export function useFullCycleLogs(jobId: string | null, since: number) {
   return useQuery({
     queryKey: ["full-cycle", "logs", jobId, since],
     queryFn: async () => {
-      const { data } = await apiClient.get<LogsResponse>(
-        `/committee/full-cycle/${jobId}/logs`,
-        { params: { since } },
-      );
+      const { data } = await apiClient.get<LogsResponse>(`/committee/full-cycle/${jobId}/logs`, {
+        params: { since },
+      });
       return data;
     },
     enabled: !!jobId,
-    refetchInterval: (query) => {
-      const phase = query.state.data?.entries?.length
-        ? "running"
-        : "running";
+    refetchInterval: () => {
       return 1_500;
     },
   });

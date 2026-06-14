@@ -47,22 +47,14 @@ const sampleOosPeriods = [
 describe("EquityChart", () => {
   it("renders title", () => {
     render(
-      <EquityChart
-        models={["logistic"]}
-        oosPeriods={emptyOosPeriods}
-        oosEquity={emptyOosEquity}
-      />
+      <EquityChart models={["logistic"]} oosPeriods={emptyOosPeriods} oosEquity={emptyOosEquity} />,
     );
     expect(screen.getByText("Walk-Forward Equity")).toBeInTheDocument();
   });
 
   it("shows waiting message when no data", () => {
     render(
-      <EquityChart
-        models={["logistic"]}
-        oosPeriods={emptyOosPeriods}
-        oosEquity={emptyOosEquity}
-      />
+      <EquityChart models={["logistic"]} oosPeriods={emptyOosPeriods} oosEquity={emptyOosEquity} />,
     );
     expect(screen.getByText("Waiting for simulation data...")).toBeInTheDocument();
   });
@@ -73,7 +65,7 @@ describe("EquityChart", () => {
         models={["logistic"]}
         oosPeriods={sampleOosPeriods}
         oosEquity={sampleOosEquity}
-      />
+      />,
     );
     expect(screen.getByTestId("responsive-container")).toBeInTheDocument();
     expect(screen.getByTestId("line-chart")).toBeInTheDocument();
@@ -85,7 +77,7 @@ describe("EquityChart", () => {
         models={["logistic"]}
         oosPeriods={sampleOosPeriods}
         oosEquity={sampleOosEquity}
-      />
+      />,
     );
     expect(screen.getByText("Per-Month Summary")).toBeInTheDocument();
   });
@@ -96,7 +88,7 @@ describe("EquityChart", () => {
         models={["logistic"]}
         oosPeriods={emptyOosPeriods}
         oosEquity={sampleOosEquity}
-      />
+      />,
     );
     expect(screen.queryByText("Per-Month Summary")).not.toBeInTheDocument();
   });
@@ -107,7 +99,7 @@ describe("EquityChart", () => {
         models={["logistic"]}
         oosPeriods={sampleOosPeriods}
         oosEquity={sampleOosEquity}
-      />
+      />,
     );
     const btn = screen.getByRole("button", { name: "%" });
     expect(btn).toBeInTheDocument();
@@ -121,7 +113,7 @@ describe("EquityChart", () => {
         models={["logistic", "xgboost"]}
         oosPeriods={sampleOosPeriods}
         oosEquity={sampleOosEquity}
-      />
+      />,
     );
     const lines = screen.getAllByTestId("line");
     expect(lines.length).toBeGreaterThanOrEqual(2);

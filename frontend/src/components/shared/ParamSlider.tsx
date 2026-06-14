@@ -21,10 +21,7 @@ export function ParamSlider({
   return (
     <div className="flex flex-col gap-2 py-3">
       <div className="flex items-center justify-between">
-        <span
-          className="text-[11px] font-medium uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-text-muted)" }}
-        >
+        <span className="text-[11px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
           {label}
         </span>
         <input
@@ -34,15 +31,7 @@ export function ParamSlider({
           max={max}
           step={step}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="w-20 rounded border px-2 py-1 text-right text-xs transition-all duration-200 focus:outline-none"
-          style={{
-            fontFamily: "var(--font-mono)",
-            backgroundColor: "var(--color-glass)",
-            borderColor: "var(--color-glass-border)",
-            color: "var(--color-brand)",
-            fontWeight: 500,
-            backdropFilter: "blur(8px)",
-          }}
+          className="w-20 rounded border border-(--color-glass-border) bg-(--color-glass) px-2 py-1 text-right font-mono text-xs font-medium text-(--color-brand) backdrop-blur-[8px] transition-all duration-200 focus:outline-none"
         />
       </div>
       <input
@@ -59,7 +48,7 @@ export function ParamSlider({
         }}
       />
       {description && (
-        <p className="text-[11px] font-light leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
+        <p className="text-[11px] leading-relaxed font-light text-(--color-text-muted)">
           {description}
         </p>
       )}

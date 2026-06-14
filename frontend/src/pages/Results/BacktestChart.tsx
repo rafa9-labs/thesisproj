@@ -1,5 +1,11 @@
 import { useEffect, useRef } from "react";
-import { createChart, type IChartApi, CandlestickSeries, LineSeries, ColorType } from "lightweight-charts";
+import {
+  createChart,
+  type IChartApi,
+  CandlestickSeries,
+  LineSeries,
+  ColorType,
+} from "lightweight-charts";
 import { useTradeChartData } from "@/api/queries";
 
 interface BacktestChartProps {
@@ -68,17 +74,23 @@ export function BacktestChart({ jobId, model, height = 520 }: BacktestChartProps
       })),
     );
 
-    const markers = (data.trades ?? []).map((t) => ({
-      time: t.direction === "BUY" ? t.entry_time : t.exit_time,
-      position: t.direction === "BUY" ? ("belowBar" as const) : ("aboveBar" as const),
-      color: t.direction === "BUY" ? "#26a69a" : "#ef5350",
-      shape: t.direction === "BUY" ? ("arrowUp" as const) : ("arrowDown" as const),
-      text: `${(t.pnl_pct ?? 0) > 0 ? "+" : ""}${(t.pnl_pct ?? 0).toFixed(2)}%`,
-      size: 2,
-    }));
+    const markers = (data.trades ?? [])
+      .filter((t) => t.entry_time != null && t.exit_time != null)
+      .map((t) => ({
+        time: (t.direction === "BUY" ? t.entry_time : t.exit_time) as unknown as number,
+        position: t.direction === "BUY" ? "belowBar" : "aboveBar",
+        color: t.direction === "BUY" ? "#26a69a" : "#ef5350",
+        shape: t.direction === "BUY" ? "arrowUp" : "arrowDown",
+        text: `${(t.pnl_pct ?? 0) > 0 ? "+" : ""}${(t.pnl_pct ?? 0).toFixed(2)}%`,
+        size: 2,
+      }));
 
     if (markers.length > 0) {
-      candleSeries.setMarkers(markers);
+      try {
+        candleSeries.setMarkers(markers as any);
+      } catch {
+        // v5 marker API compatibility
+      }
     }
 
     chart.timeScale().fitContent();
@@ -124,27 +136,27 @@ export function BacktestChart({ jobId, model, height = 520 }: BacktestChartProps
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>
+        <span className="text-[11px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
           Trade Visualization
         </span>
-        <span className="text-[10px]" style={{ color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>
+        <span className="font-mono text-[10px] text-(--color-text-secondary)">
           {model} — {data?.pair} {data?.timeframe} · {data?.trades?.length ?? 0} trades
         </span>
       </div>
 
       <div
         ref={containerRef}
-        className="w-full rounded-sm overflow-hidden border"
-        style={{ borderColor: "var(--color-glass-border)", backgroundColor: "#131722", minHeight: height }}
+        className="w-full overflow-hidden rounded-sm border border-(--color-glass-border)"
+        style={{ backgroundColor: "#131722", minHeight: height }}
       >
         {isLoading && (
           <div className="flex items-center justify-center" style={{ height }}>
-            <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>Loading trade chart...</span>
+            <span className="text-xs text-(--color-text-muted)">Loading trade chart...</span>
           </div>
         )}
         {!isLoading && (data?.candles ?? []).length === 0 && (
           <div className="flex items-center justify-center" style={{ height }}>
-            <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>No chart data available</span>
+            <span className="text-xs text-(--color-text-muted)">No chart data available</span>
           </div>
         )}
       </div>

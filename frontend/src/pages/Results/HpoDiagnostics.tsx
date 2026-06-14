@@ -44,7 +44,9 @@ export function OptimizationTrace({ trials }: { trials: HpoTrial[] }) {
     y: padT + plotH - ((best - minVal) / range) * plotH,
   }));
 
-  const linePath = bestLine.map((p, i) => (i === 0 ? `M${p.x},${p.y}` : `L${p.x},${p.y}`)).join(" ");
+  const linePath = bestLine
+    .map((p, i) => (i === 0 ? `M${p.x},${p.y}` : `L${p.x},${p.y}`))
+    .join(" ");
 
   return (
     <svg width="100%" height={chartH} viewBox={`0 0 ${chartW} ${chartH}`}>
@@ -53,8 +55,22 @@ export function OptimizationTrace({ trials }: { trials: HpoTrial[] }) {
         const val = maxVal - (i / 4) * range;
         return (
           <g key={i}>
-            <line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke="var(--color-border)" strokeWidth={0.5} />
-            <text x={padL - 5} y={y + 3} textAnchor="end" fill="var(--color-text-muted)" fontSize={9} fontFamily="var(--font-mono)">
+            <line
+              x1={padL}
+              y1={y}
+              x2={chartW - padR}
+              y2={y}
+              stroke="var(--color-border)"
+              strokeWidth={0.5}
+            />
+            <text
+              x={padL - 5}
+              y={y + 3}
+              textAnchor="end"
+              fill="var(--color-text-muted)"
+              fontSize={9}
+              fontFamily="var(--font-mono)"
+            >
               {val != null ? val.toFixed(2) : "—"}
             </text>
           </g>
@@ -78,7 +94,13 @@ export function OptimizationTrace({ trials }: { trials: HpoTrial[] }) {
             {i + 1}
           </text>
         ))}
-      <text x={padL + plotW / 2} y={chartH} textAnchor="middle" fill="var(--color-text-muted)" fontSize={9}>
+      <text
+        x={padL + plotW / 2}
+        y={chartH}
+        textAnchor="middle"
+        fill="var(--color-text-muted)"
+        fontSize={9}
+      >
         Trial
       </text>
     </svg>
@@ -91,17 +113,8 @@ export function HpoDiagnostics({ paramImportance, trials }: HpoDiagnosticsProps)
 
   if (importance.length === 0 && trialData.length === 0) {
     return (
-      <div
-        className="flex items-center justify-center rounded-sm border p-8"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          borderColor: "var(--color-border)",
-          color: "var(--color-text-muted)",
-        }}
-      >
-        <span className="text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-          No HPO diagnostics available
-        </span>
+      <div className="flex items-center justify-center rounded-sm border border-(--color-border) bg-(--color-surface) p-8 text-(--color-text-muted)">
+        <span className="font-mono text-sm">No HPO diagnostics available</span>
       </div>
     );
   }
@@ -113,41 +126,24 @@ export function HpoDiagnostics({ paramImportance, trials }: HpoDiagnosticsProps)
 
   return (
     <div className="flex flex-col gap-2">
-      <h3
-        className="text-xs font-semibold uppercase tracking-[0.08em]"
-        style={{ color: "var(--color-text-secondary)" }}
-      >
+      <h3 className="text-xs font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
         HPO Diagnostics
       </h3>
       <div className="grid grid-cols-2 gap-4">
-        <div
-          className="rounded-sm border p-3"
-          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
-        >
-          <span
-            className="text-[10px] font-semibold uppercase tracking-wide block mb-2"
-            style={{ color: "var(--color-text-muted)" }}
-          >
+        <div className="rounded-sm border border-(--color-border) bg-(--color-surface) p-3">
+          <span className="mb-2 block text-[10px] font-semibold tracking-wide text-(--color-text-muted) uppercase">
             Param Importance
           </span>
           <HorizontalBarChart data={barData} barColor="var(--color-accent-success)" />
         </div>
-        <div
-          className="rounded-sm border p-3"
-          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
-        >
-          <span
-            className="text-[10px] font-semibold uppercase tracking-wide block mb-2"
-            style={{ color: "var(--color-text-muted)" }}
-          >
+        <div className="rounded-sm border border-(--color-border) bg-(--color-surface) p-3">
+          <span className="mb-2 block text-[10px] font-semibold tracking-wide text-(--color-text-muted) uppercase">
             Optimization Trace — {trialData.length} trials
           </span>
           {trialData.length > 0 ? (
             <OptimizationTrace trials={trialData} />
           ) : (
-            <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-              No trial data
-            </span>
+            <span className="text-xs text-(--color-text-muted)">No trial data</span>
           )}
         </div>
       </div>

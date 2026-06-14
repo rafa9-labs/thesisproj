@@ -47,7 +47,8 @@ export class WebSocketManager {
     this.ws.onmessage = (msg) => {
       try {
         const parsed = JSON.parse(msg.data);
-        if (import.meta.env.DEV) console.log("[WS] received:", parsed.event, parsed.job_id?.slice(0, 8));
+        if (import.meta.env.DEV)
+          console.log("[WS] received:", parsed.event, parsed.job_id?.slice(0, 8));
         this.listeners.forEach((fn) => fn(parsed));
       } catch {
         if (import.meta.env.DEV) console.warn("[WS] failed to parse:", msg.data.slice(0, 100));
@@ -56,7 +57,8 @@ export class WebSocketManager {
     };
 
     this.ws.onclose = (ev) => {
-      if (import.meta.env.DEV) console.warn("[WS] closed, code:", ev.code, "wasClean:", ev.wasClean, "reason:", ev.reason);
+      if (import.meta.env.DEV)
+        console.warn("[WS] closed, code:", ev.code, "wasClean:", ev.wasClean, "reason:", ev.reason);
       if (!ev.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30_000);
         this.reconnectAttempts++;

@@ -30,6 +30,10 @@ from api.schemas.backtest import (
     QuickTestPreset,
     RuntimeEstimateRequest,
     RuntimeEstimateResponse,
+    StudyMetaRequest,
+    StudyMetaResponse,
+    StudySummaryItem,
+    StudyListResponse,
 )
 from api.services import JobManager
 from api.tasks import download_data_task, run_backtest_task, IS_DESKTOP
@@ -351,20 +355,33 @@ def get_results_summary(
     model: str = Query("", description="Filter by model"),
     sort_by: str = Query("created_at", description="Sort column: created_at, sharpe, total_return_pct, win_rate, max_drawdown_pct"),
     sort_order: str = Query("desc", description="Sort order: asc or desc"),
+    status: str = Query("completed", description="Filter by status: completed, failed, or all"),
 ):
     store = get_data_store()
     jm = JobManager(store)
 
     all_jobs, _ = jm.list_jobs_paginated(job_type="backtest", limit=2000, offset=0)
 
+    status_filter = status.lower().strip()
+    allowed_statuses = {"completed", "failed"}
+
     results = []
     for job in all_jobs:
-        if job.get("status") != "completed":
-            continue
+        job_status = job.get("status", "")
+        if status_filter == "all":
+            if job_status not in allowed_statuses:
+                continue
+        elif status_filter in allowed_statuses:
+            if job_status != status_filter:
+                continue
+        else:
+            if job_status != "completed":
+                continue
         result = job.get("result", {})
         cfg = job.get("config", {})
         job_pair = result.get("pair") or cfg.get("pair", "")
         job_models = result.get("models") or cfg.get("models", [])
+        job_error = job.get("error")
 
         if pair and job_pair != pair:
             continue
@@ -372,20 +389,39 @@ def get_results_summary(
             continue
 
         raw_metrics = result.get("metrics", [])
-        for m in raw_metrics:
+        _study_meta = job.get("study_meta")
+        _study_meta_obj = None
+        if _study_meta and isinstance(_study_meta, dict):
+            _study_meta_obj = StudyMetaResponse(**_study_meta)
+
+        if not raw_metrics:
             results.append(BacktestSummaryItem(
                 job_id=job["id"],
                 created_at=job["created_at"],
                 pair=job_pair,
                 timeframe=cfg.get("timeframe", ""),
                 models=job_models,
-                sharpe=m.get("sharpe"),
-                total_return_pct=m.get("total_return_pct"),
-                win_rate=m.get("win_rate"),
-                max_drawdown_pct=m.get("max_drawdown"),
-                total_trades=m.get("total_trades"),
-                status=job["status"],
+                status=job_status,
+                error=job_error,
+                study_meta=_study_meta_obj,
             ))
+        else:
+            for m in raw_metrics:
+                results.append(BacktestSummaryItem(
+                    job_id=job["id"],
+                    created_at=job["created_at"],
+                    pair=job_pair,
+                    timeframe=cfg.get("timeframe", ""),
+                    models=job_models,
+                    sharpe=m.get("sharpe"),
+                    total_return_pct=m.get("total_return_pct"),
+                    win_rate=m.get("win_rate"),
+                    max_drawdown_pct=m.get("max_drawdown"),
+                    total_trades=m.get("total_trades"),
+                    status=job_status,
+                    error=job_error,
+                    study_meta=_study_meta_obj,
+                ))
 
     valid_sort_cols = {
         "created_at": "created_at",
@@ -841,18 +877,19 @@ def get_trade_chart_data(job_id: str, model: str = Query(..., description="Model
             try:
                 entry_raw = t.get("entry_time") or t.get("entry_date") or ""
                 exit_raw = t.get("exit_time") or t.get("exit_date") or ""
-                if isinstance(entry_raw, str):
-                    entry_dt = pd.to_datetime(entry_raw)
-                    entry_epoch = int(entry_dt.timestamp())
-                else:
-                    entry_epoch = int(entry_raw) if entry_raw else 0
-                if isinstance(exit_raw, str):
-                    exit_dt = pd.to_datetime(exit_raw)
-                    exit_epoch = int(exit_dt.timestamp())
-                else:
-                    exit_epoch = int(exit_raw) if exit_raw else 0
 
-                side = t.get("side", "")
+                def _parse_epoch(raw: str) -> int:
+                    if not raw or raw == "NaT":
+                        return 0
+                    dt = pd.to_datetime(raw)
+                    if pd.isna(dt):
+                        return 0
+                    return int(dt.timestamp())
+
+                entry_epoch = _parse_epoch(entry_raw) if isinstance(entry_raw, str) else (int(entry_raw) if entry_raw else 0)
+                exit_epoch = _parse_epoch(exit_raw) if isinstance(exit_raw, str) else (int(exit_raw) if exit_raw else 0)
+
+                side = t.get("side") or t.get("direction") or ""
                 direction = "BUY" if side in ("long", "buy", "BUY", 1, 1.0) else "SELL"
 
                 entry_c = find_nearest_candle(entry_epoch)
@@ -948,6 +985,107 @@ def debug_job_events(job_id: str, limit: int = Query(50, ge=1, le=500)):
         },
         "websocket_connections": ws_connections,
     }
+
+
+# ── Study Metadata (Save/Load) ────────────────────────────────────────────
+
+@router.patch("/{job_id}/study-meta", response_model=StudyMetaResponse)
+def update_study_meta(job_id: str, meta: StudyMetaRequest):
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    payload = meta.model_dump(exclude_none=True)
+    jm.update_study_meta(job_id, payload)
+    return StudyMetaResponse(**payload, saved_at=jm._now())
+
+
+@router.get("/{job_id}/config")
+def get_backtest_config(job_id: str):
+    store = get_data_store()
+    jm = JobManager(store)
+    job = jm.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, f"Job {job_id} not found")
+    return {"job_id": job_id, "config": job.get("config", {})}
+
+
+@router.get("/studies", response_model=StudyListResponse)
+def get_studies(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    pair: str = Query("", description="Filter by pair"),
+    model: str = Query("", description="Filter by model"),
+    favorite_only: bool = Query(False, description="Only show favorites"),
+    tag: str = Query("", description="Filter by tag"),
+    search: str = Query("", description="Search display_name"),
+    sort_by: str = Query("created_at", description="created_at, sharpe, total_return_pct, win_rate, max_drawdown_pct"),
+    sort_order: str = Query("desc", description="asc or desc"),
+):
+    store = get_data_store()
+    jm = JobManager(store)
+    all_jobs, _ = jm.list_jobs_paginated(job_type="backtest", limit=2000, offset=0)
+
+    results = []
+    for job in all_jobs:
+        if job.get("status") != "completed":
+            continue
+        result = job.get("result", {})
+        cfg = job.get("config", {})
+        job_pair = result.get("pair") or cfg.get("pair", "")
+        job_models = result.get("models") or cfg.get("models", [])
+
+        if pair and job_pair != pair:
+            continue
+        if model and model not in job_models:
+            continue
+
+        _study_meta = job.get("study_meta")
+        _study_meta_obj = None
+        if _study_meta and isinstance(_study_meta, dict):
+            _study_meta_obj = StudyMetaResponse(**_study_meta)
+
+        if favorite_only and (not _study_meta_obj or not _study_meta_obj.is_favorite):
+            continue
+        if tag and _study_meta_obj and tag not in _study_meta_obj.tags:
+            continue
+        if search and _study_meta_obj:
+            _dn = (_study_meta_obj.display_name or "").lower()
+            if search.lower() not in _dn:
+                continue
+
+        raw_metrics = result.get("metrics", [])
+        for m in raw_metrics:
+            results.append(StudySummaryItem(
+                job_id=job["id"],
+                created_at=job["created_at"],
+                pair=job_pair,
+                timeframe=cfg.get("timeframe", ""),
+                models=job_models,
+                sharpe=m.get("sharpe"),
+                total_return_pct=m.get("total_return_pct"),
+                win_rate=m.get("win_rate"),
+                max_drawdown_pct=m.get("max_drawdown"),
+                total_trades=m.get("total_trades"),
+                status=job["status"],
+                study_meta=_study_meta_obj,
+            ))
+
+    valid_sort_cols = {
+        "created_at": "created_at",
+        "sharpe": "sharpe",
+        "total_return_pct": "total_return_pct",
+        "win_rate": "win_rate",
+        "max_drawdown_pct": "max_drawdown_pct",
+    }
+    sort_col = valid_sort_cols.get(sort_by, "created_at")
+    reverse = sort_order == "desc"
+    results.sort(key=lambda x: getattr(x, sort_col) if getattr(x, sort_col) is not None else 0.0, reverse=reverse)
+
+    total = len(results)
+    paged = results[offset : offset + limit]
+    return StudyListResponse(results=paged, total=total, offset=offset, limit=limit)
 
 
 @router.delete("/{job_id}", status_code=204)

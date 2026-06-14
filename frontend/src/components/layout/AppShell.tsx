@@ -23,7 +23,9 @@ function hasChosenDataSource(): boolean {
 function markDataSourceChosen(): void {
   try {
     localStorage.setItem(DS_CHOSEN_KEY, "true");
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 export function AppShell() {
@@ -48,7 +50,7 @@ export function AppShell() {
   };
 
   return (
-    <div className="flex h-full w-full" style={{ backgroundColor: "var(--color-app)" }}>
+    <div className="flex h-full w-full bg-(--color-app)">
       <DataSourceModal
         isOpen={showDataSource}
         onBack={() => setShowDataSource(false)}
@@ -60,17 +62,11 @@ export function AppShell() {
       <div className="flex flex-1 flex-col overflow-hidden" style={{ minWidth: 0 }}>
         <TopBar />
 
-        <div
-          className="flex-1 overflow-y-auto px-6 py-4 animate-fade-in"
-          style={{ backgroundColor: "var(--color-app)" }}
-        >
+        <div className="flex-1 animate-fade-in overflow-y-auto bg-(--color-app) px-6 py-4">
           <Outlet />
         </div>
 
-        <TerminalPanel
-          apiOk={health?.status === "ok"}
-          wsConnected={wsConnected}
-        />
+        <TerminalPanel apiOk={health?.status === "ok"} wsConnected={wsConnected} />
         <UpdateNotification />
       </div>
     </div>

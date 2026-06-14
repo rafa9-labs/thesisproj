@@ -10,29 +10,16 @@ export function ChartCard({ title, subtitle, children }: ChartCardProps) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h3
-          className="text-[11px] font-medium uppercase tracking-[0.12em]"
-          style={{ color: "var(--color-text-muted)" }}
-        >
+        <h3 className="text-[11px] font-medium tracking-[0.12em] text-(--color-text-muted) uppercase">
           {title}
         </h3>
         {subtitle && (
-          <span
-            className="text-[10px] font-light"
-            style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
-          >
+          <span className="font-mono text-[10px] font-light text-(--color-text-muted)">
             {subtitle}
           </span>
         )}
       </div>
-      <div
-        className="rounded-sm border p-4 transition-all duration-300"
-        style={{
-          borderColor: "var(--color-glass-border)",
-          backgroundColor: "var(--color-glass)",
-          backdropFilter: "blur(12px)",
-        }}
-      >
+      <div className="rounded-sm border border-(--color-glass-border) bg-(--color-glass) p-4 backdrop-blur-[12px] transition-all duration-300">
         {children}
       </div>
     </div>

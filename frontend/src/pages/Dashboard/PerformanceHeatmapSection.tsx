@@ -25,16 +25,10 @@ export function PerformanceHeatmapSection({ data, isLoading }: PerformanceHeatma
   if (isLoading) {
     return (
       <div className="flex flex-col gap-2">
-        <h3
-          className="text-xs font-semibold uppercase tracking-[0.08em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
+        <h3 className="text-xs font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
           Model × Pair Performance
         </h3>
-        <div
-          className="h-[200px] rounded-sm border animate-pulse"
-          style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
-        />
+        <div className="h-[200px] animate-pulse rounded-sm border border-(--color-border) bg-(--color-surface)" />
       </div>
     );
   }
@@ -42,10 +36,7 @@ export function PerformanceHeatmapSection({ data, isLoading }: PerformanceHeatma
   if (!data || data.models.length === 0) {
     return (
       <div className="flex flex-col gap-2">
-        <h3
-          className="text-xs font-semibold uppercase tracking-[0.08em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
+        <h3 className="text-xs font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
           Model × Pair Performance
         </h3>
         <SharpeHeatmap models={[]} pairs={[]} cells={[]} />
@@ -56,10 +47,7 @@ export function PerformanceHeatmapSection({ data, isLoading }: PerformanceHeatma
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <h3
-          className="text-xs font-semibold uppercase tracking-[0.08em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
+        <h3 className="text-xs font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
           Model × Pair Performance
         </h3>
         <div className="flex gap-1">
@@ -67,13 +55,13 @@ export function PerformanceHeatmapSection({ data, isLoading }: PerformanceHeatma
             <button
               key={opt.key}
               onClick={() => setMetric(opt.key)}
-              className="rounded-md border px-2 py-0.5 text-[10px] transition-colors"
+              className="rounded-md border px-2 py-0.5 font-mono text-[10px] transition-colors"
               style={{
                 borderColor: metric === opt.key ? "var(--color-primary)" : "var(--color-border)",
-                backgroundColor: metric === opt.key ? "var(--color-primary-glow)" : "var(--color-surface)",
+                backgroundColor:
+                  metric === opt.key ? "var(--color-primary-glow)" : "var(--color-surface)",
                 color: metric === opt.key ? "var(--color-primary)" : "var(--color-text-secondary)",
                 cursor: "pointer",
-                fontFamily: "var(--font-mono)",
               }}
             >
               {opt.label}

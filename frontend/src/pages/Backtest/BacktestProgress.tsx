@@ -7,10 +7,18 @@ import { TradeLog } from "./TradeLog";
 
 type Tab = "hpo-and-results" | "trade";
 
-function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function TabButton({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
-      className="px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors"
+      className="rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors"
       style={{
         backgroundColor: active ? "var(--color-brand)" : "transparent",
         color: active ? "white" : "var(--color-text-muted)",
@@ -27,36 +35,50 @@ function ProgressBar({ pct, text }: { pct: number; text: string }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-3">
-        <div
-          className="h-2 flex-1 overflow-hidden rounded-full"
-          style={{ backgroundColor: "var(--color-elevated)" }}
-        >
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-(--color-elevated)">
           <div
             className="h-full rounded-full transition-all duration-300"
             style={{
               width: `${pct}%`,
-              backgroundColor:
-                pct >= 100 ? "var(--color-accent-success)" : "var(--color-brand)",
+              backgroundColor: pct >= 100 ? "var(--color-accent-success)" : "var(--color-brand)",
             }}
           />
         </div>
-        <span className="text-xs min-w-[36px] text-right" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+        <span className="min-w-[36px] text-right font-mono text-xs text-(--color-text-primary)">
           {Math.round(pct)}%
         </span>
       </div>
-      <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-        {text}
-      </p>
+      <p className="text-xs text-(--color-text-secondary)">{text}</p>
     </div>
   );
 }
 
-function ModelPill({ model, mp, done, current }: { model: string; mp?: { phase: string; hpoTrial: number; hpoTotalTrials: number; simMonth: number; simTotalMonths: number }; done: boolean; current: boolean }) {
+function ModelPill({
+  model,
+  mp,
+  done,
+  current,
+}: {
+  model: string;
+  mp?: {
+    phase: string;
+    hpoTrial: number;
+    hpoTotalTrials: number;
+    simMonth: number;
+    simTotalMonths: number;
+  };
+  done: boolean;
+  current: boolean;
+}) {
   return (
     <div
       className="flex flex-col gap-1 rounded-md border px-2.5 py-1.5"
       style={{
-        borderColor: done ? "var(--color-accent-success)" : current ? "var(--color-brand)" : "var(--color-border)",
+        borderColor: done
+          ? "var(--color-accent-success)"
+          : current
+            ? "var(--color-brand)"
+            : "var(--color-border)",
         backgroundColor: done ? "rgba(34,197,94,0.08)" : "transparent",
         minWidth: 120,
       }}
@@ -72,19 +94,19 @@ function ModelPill({ model, mp, done, current }: { model: string; mp?: { phase: 
                 : "var(--color-text-muted)",
           }}
         />
-        <span className="text-[11px] font-medium" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+        <span className="font-mono text-[11px] font-medium text-(--color-text-primary)">
           {model}
         </span>
       </div>
       {mp && !done && (
         <div className="flex gap-2 pl-3">
           {mp.phase === "hpo" && (
-            <span className="text-[10px]" style={{ color: "var(--color-accent)", fontFamily: "var(--font-mono)" }}>
+            <span className="font-mono text-[10px] text-(--color-accent)">
               HPO {mp.hpoTrial}/{mp.hpoTotalTrials}
             </span>
           )}
           {mp.phase === "simulation" && (
-            <span className="text-[10px]" style={{ color: "var(--color-accent-success)", fontFamily: "var(--font-mono)" }}>
+            <span className="font-mono text-[10px] text-(--color-accent-success)">
               Sim {mp.simMonth}/{mp.simTotalMonths}
             </span>
           )}
@@ -110,7 +132,11 @@ export function BacktestProgress({ jobId }: { jobId: string | null }) {
     if (restStatus.status === "completed") {
       handleWsEvent({ event: "job_complete", job_id: jobId, metrics: [] });
     } else if (restStatus.status === "failed") {
-      handleWsEvent({ event: "job_failed", job_id: jobId, error: restStatus.error ?? "Unknown error" });
+      handleWsEvent({
+        event: "job_failed",
+        job_id: jobId,
+        error: restStatus.error ?? "Unknown error",
+      });
     }
   }, [restStatus?.status, restStatus?.error, jobId, handleWsEvent]);
 
@@ -119,21 +145,13 @@ export function BacktestProgress({ jobId }: { jobId: string | null }) {
   const activeTab: Tab = job.activeTab || "hpo-and-results";
 
   return (
-    <div
-      className="rounded-sm border p-4"
-      style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
-    >
+    <div className="rounded-sm border border-(--color-border) bg-(--color-surface) p-4">
       {/* Header */}
       <div className="mb-3 flex items-center justify-between">
-        <h3
-          className="text-xs font-semibold uppercase tracking-[0.1em]"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
+        <h3 className="text-xs font-semibold tracking-[0.1em] text-(--color-text-secondary) uppercase">
           Running Backtest
         </h3>
-        <span className="text-xs" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-          {job.pair}
-        </span>
+        <span className="font-mono text-xs text-(--color-text-muted)">{job.pair}</span>
       </div>
 
       {/* Progress bar */}
@@ -144,15 +162,31 @@ export function BacktestProgress({ jobId }: { jobId: string | null }) {
         {(job.models ?? []).map((m) => {
           const done = (job.completedModels ?? []).includes(m);
           const current = job.currentModel === m;
-          const mp = job.modelPhases.get(m) as { phase: string; hpoTrial: number; hpoTotalTrials: number; simMonth: number; simTotalMonths: number } | undefined;
+          const mp = job.modelPhases.get(m) as
+            | {
+                phase: string;
+                hpoTrial: number;
+                hpoTotalTrials: number;
+                simMonth: number;
+                simTotalMonths: number;
+              }
+            | undefined;
           return <ModelPill key={m} model={m} mp={mp} done={done} current={current} />;
         })}
       </div>
 
       {/* Tab bar */}
       <div className="mt-4 flex gap-2">
-        <TabButton label="HPO and Results" active={activeTab === "hpo-and-results"} onClick={() => setActiveTab(jobId!, "hpo-and-results")} />
-        <TabButton label="Trade Log" active={activeTab === "trade"} onClick={() => setActiveTab(jobId!, "trade")} />
+        <TabButton
+          label="HPO and Results"
+          active={activeTab === "hpo-and-results"}
+          onClick={() => setActiveTab(jobId!, "hpo-and-results")}
+        />
+        <TabButton
+          label="Trade Log"
+          active={activeTab === "trade"}
+          onClick={() => setActiveTab(jobId!, "trade")}
+        />
       </div>
 
       {/* Tab content */}
@@ -168,7 +202,11 @@ export function BacktestProgress({ jobId }: { jobId: string | null }) {
             <OosPerformanceChart
               model={job.currentModel ?? ""}
               equity={job.oosEquity}
-              totalPeriods={job.oosPeriods.length > 0 ? job.oosPeriods[job.oosPeriods.length - 1].total_periods : 0}
+              totalPeriods={
+                job.oosPeriods.length > 0
+                  ? job.oosPeriods[job.oosPeriods.length - 1].total_periods
+                  : 0
+              }
               currentPeriod={job.oosPeriods.length}
               bestTrial={job.bestTrial}
               periods={job.oosPeriods}
@@ -180,8 +218,8 @@ export function BacktestProgress({ jobId }: { jobId: string | null }) {
 
       {/* Error */}
       {job.error && (
-        <div className="mt-3 rounded-md border p-2" style={{ borderColor: "var(--color-accent-danger)", backgroundColor: "rgba(242,54,69,0.05)" }}>
-          <p className="text-xs" style={{ color: "var(--color-accent-danger)" }}>{job.error}</p>
+        <div className="mt-3 rounded-md border border-(--color-accent-danger) bg-red-500/[0.05] p-2">
+          <p className="text-xs text-(--color-accent-danger)">{job.error}</p>
         </div>
       )}
     </div>

@@ -11,7 +11,13 @@ export interface DashboardKPIValues {
 
 export function computeDashboardKPIs(allResults: JobResults[]): DashboardKPIValues {
   if (allResults.length === 0) {
-    return { avgSharpe: null, avgWinRate: null, profitableMonthsPct: null, avgReturn: null, maxDrawdown: null };
+    return {
+      avgSharpe: null,
+      avgWinRate: null,
+      profitableMonthsPct: null,
+      avgReturn: null,
+      maxDrawdown: null,
+    };
   }
 
   let sharpeSum = 0;

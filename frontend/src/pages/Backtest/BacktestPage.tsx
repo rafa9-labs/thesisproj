@@ -14,19 +14,15 @@ import { FeaturesPanel } from "./FeaturesPanel";
 import { LabelsPanel } from "./LabelsPanel";
 import { ExecutionPanel } from "./ExecutionPanel";
 import { HyperparamsTab } from "./HyperparamsTab";
-import { QuickStartTab } from "./QuickStartTab";
 import { RunSummary } from "./RunSummary";
 
-import { ForwardTestTab } from "./ForwardTestTab";
-
 const TABS = [
-  { key: "quickstart", label: "Quick Start" },
-  { key: "asset", label: "Asset & Model" },
+  { key: "asset", label: "Asset & Timeframe" },
+  { key: "models", label: "Models" },
   { key: "study", label: "Study & HPO" },
   { key: "features", label: "Features" },
   { key: "hyperparams", label: "Hyperparameters" },
   { key: "execution", label: "Execution" },
-  { key: "forwardtest", label: "Forward Test" },
 ];
 
 export function BacktestPage() {
@@ -39,7 +35,7 @@ export function BacktestPage() {
   const submit = useSubmitBacktest();
 
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("quickstart");
+  const [activeTab, setActiveTab] = useState("asset");
 
   const [presetName, setPresetName] = useState("");
   const [showSavePreset, setShowSavePreset] = useState(false);
@@ -68,7 +64,7 @@ export function BacktestPage() {
   };
 
   return (
-    <div className="flex flex-col flex-1" style={{ minHeight: "100%" }}>
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Status strip */}
       <ConfigSummaryBar />
 
@@ -80,62 +76,51 @@ export function BacktestPage() {
       {/* 24px gap between tab nav and main content */}
       <div className="h-6 shrink-0" />
 
-      {/* Content area grows to fill remaining space */}
-      <div className="flex flex-col flex-1">
+      {/* Content area — scrollable, bottom padding for sticky footer clearance */}
+      <div className="flex flex-1 flex-col overflow-y-auto pb-6">
+        {/* Asset & Timeframe */}
+        {activeTab === "asset" && (
+          <div className="flex flex-col gap-5 pt-4">
+            <AssetSelector />
+          </div>
+        )}
 
-      {/* Quick Start */}
-      {activeTab === "quickstart" && (
-        <QuickStartTab />
-      )}
+        {/* Models */}
+        {activeTab === "models" && (
+          <div className="flex flex-col gap-5 pt-4">
+            <ModelSelector />
+          </div>
+        )}
 
-      {/* Asset & Model */}
-      {activeTab === "asset" && (
-        <div className="flex flex-col gap-5 pt-4">
-          <AssetSelector />
-          <ModelSelector />
-        </div>
-      )}
+        {/* Study & HPO */}
+        {activeTab === "study" && (
+          <div className="flex flex-col gap-5 pt-4">
+            <HpoPanel />
+          </div>
+        )}
 
-      {/* Study & HPO */}
-      {activeTab === "study" && (
-        <div className="flex flex-col gap-5 pt-4">
-          <HpoPanel />
-        </div>
-      )}
+        {/* Features */}
+        {activeTab === "features" && (
+          <div className="flex flex-col gap-5 pt-4">
+            <FeaturesPanel />
+            <LabelsPanel />
+          </div>
+        )}
 
-      {/* Features */}
-      {activeTab === "features" && (
-        <div className="flex flex-col gap-5 pt-4">
-          <FeaturesPanel />
-          <LabelsPanel />
-        </div>
-      )}
+        {/* Hyperparameters */}
+        {activeTab === "hyperparams" && (
+          <div className="flex flex-col gap-5 pt-4">
+            <HyperparamsTab />
+          </div>
+        )}
 
-      {/* Hyperparameters */}
-      {activeTab === "hyperparams" && (
-        <div className="flex flex-col gap-5 pt-4">
-          <HyperparamsTab />
-        </div>
-      )}
-
-      {/* Execution */}
-      {activeTab === "execution" && (
-        <div className="flex flex-col gap-5 pt-4">
-          <ExecutionPanel defaultOpen={true} />
-        </div>
-      )}
-
-      {/* Forward Test */}
-      {activeTab === "forwardtest" && (
-        <div className="flex flex-col gap-5 pt-4">
-          <ForwardTestTab />
-        </div>
-      )}
-
-      </div>{/* end flex-1 content area */}
-
-      {/* Bottom spacer so content clears the sticky footer */}
-      <div className="h-[72px] shrink-0" />
+        {/* Execution */}
+        {activeTab === "execution" && (
+          <div className="flex flex-col gap-5 pt-4">
+            <ExecutionPanel defaultOpen={true} />
+          </div>
+        )}
+      </div>
 
       {/* Validation bar — sticky footer */}
       <ValidationBar
@@ -158,11 +143,10 @@ export function BacktestPage() {
           onClick={() => setShowSavePreset(false)}
         >
           <div
-            className="flex w-[400px] flex-col gap-4 rounded-sm border p-5"
-            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
+            className="flex w-[400px] flex-col gap-4 rounded-sm border border-(--color-border) bg-(--color-surface) p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
+            <h3 className="text-sm font-semibold text-(--color-text-primary)">
               Save as Quick Start Preset
             </h3>
             <input
@@ -170,15 +154,15 @@ export function BacktestPage() {
               value={presetName}
               onChange={(e) => setPresetName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSavePreset()}
-              className="rounded-md border px-3 py-2 text-xs w-full"
-              style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-elevated)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", outline: "none" }}
+              className="w-full rounded-md border border-(--color-border) bg-(--color-elevated) px-3 py-2 font-mono text-xs text-(--color-text-primary)"
+              style={{ outline: "none" }}
               autoFocus
             />
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowSavePreset(false)}
-                className="rounded-md px-4 py-1.5 text-xs font-semibold uppercase"
-                style={{ border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}
+                className="rounded-md px-4 py-1.5 text-xs font-semibold text-(--color-text-secondary) uppercase"
+                style={{ border: "1px solid var(--color-border)" }}
               >
                 Cancel
               </button>
@@ -188,7 +172,9 @@ export function BacktestPage() {
                 className="rounded-md px-4 py-1.5 text-xs font-semibold uppercase"
                 style={{
                   backgroundColor: presetName.trim() ? "var(--color-brand)" : "var(--color-border)",
-                  color: presetName.trim() ? "var(--color-text-inverse)" : "var(--color-text-muted)",
+                  color: presetName.trim()
+                    ? "var(--color-text-inverse)"
+                    : "var(--color-text-muted)",
                 }}
               >
                 Save

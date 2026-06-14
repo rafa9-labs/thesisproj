@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { X, ChevronLeft, Upload, Key, Zap, Database, CheckCircle, AlertCircle, FileText } from "lucide-react";
+import {
+  X,
+  ChevronLeft,
+  Upload,
+  Key,
+  Zap,
+  Database,
+  CheckCircle,
+  AlertCircle,
+  FileText,
+} from "lucide-react";
 import { useDemoSeed, useStoreApiKey, useUploadCsv } from "@/api/queries";
 import apiClient from "@/api/client";
 
@@ -34,9 +44,13 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
 
   const goBack = () => {
     if (step !== "choice") {
-      if (step === "oanda-download") { setStep("oanda-key"); }
-      else if (step === "oanda-key") { setStep("choice"); }
-      else { setStep("choice"); }
+      if (step === "oanda-download") {
+        setStep("oanda-key");
+      } else if (step === "oanda-key") {
+        setStep("choice");
+      } else {
+        setStep("choice");
+      }
       setError("");
     } else {
       onBack();
@@ -133,29 +147,19 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
 
   const togglePair = (p: string) => {
     const next = new Set(selectedPairs);
-    if (next.has(p)) next.delete(p); else next.add(p);
+    if (next.has(p)) next.delete(p);
+    else next.add(p);
     setSelectedPairs(next);
   };
 
   const toggleTf = (tf: string) => {
     const next = new Set(selectedTfs);
-    if (next.has(tf)) next.delete(tf); else next.add(tf);
+    if (next.has(tf)) next.delete(tf);
+    else next.add(tf);
     setSelectedTfs(next);
   };
 
   /* ── Shared styles ───────────────────────────────────────── */
-
-  const cardBtn = (active = false) => ({
-    display: "flex" as const,
-    alignItems: "center" as const,
-    gap: "16px",
-    padding: "16px",
-    borderRadius: "8px",
-    border: `1px solid ${active ? "var(--color-brand)" : "var(--color-card-border)"}`,
-    backgroundColor: active ? "rgba(0, 229, 255, 0.05)" : "var(--color-input-bg)",
-    cursor: "pointer" as const,
-    transition: "all 0.15s",
-  });
 
   const primaryBtn = (disabled = false) => ({
     width: "100%" as const,
@@ -176,55 +180,44 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
     transition: "all 0.15s",
   });
 
-  const backBtn = {
-    padding: "8px",
-    borderRadius: "8px",
+  const BACK_BTN_STYLE: React.CSSProperties = {
     border: "1px solid #1E2A3A",
     backgroundColor: "var(--color-input-bg)",
     color: "var(--color-text-muted)",
-    cursor: "pointer" as const,
-    transition: "all 0.15s",
   };
 
-  const inputStyle = (hasError = false) => ({
-    width: "100%" as const,
-    padding: "10px 12px",
-    borderRadius: "8px",
-    border: `1px solid ${hasError ? "var(--color-event-high)" : "var(--color-card-border)"}`,
+  const BACK_BTN_CLASS = "p-2 rounded-lg cursor-pointer transition duration-150";
+
+  const INPUT_CLASS = "w-full px-3 py-2.5 rounded-lg font-mono text-[13px] outline-none";
+
+  const inputStyle: React.CSSProperties = {
     backgroundColor: "var(--color-input-bg)",
     color: "var(--color-text-primary)",
-    fontFamily: "var(--font-mono, monospace)" as const,
-    fontSize: "13px",
-    outline: "none" as const,
-  });
+  };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(2px)" }}
-    >
-      <div
-        className="relative w-full max-w-[520px] rounded-sm overflow-hidden shadow-2xl"
-        style={{ backgroundColor: "var(--color-app)", border: "1px solid #1E2A3A" }}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/[0.7] backdrop-blur-[2px]">
+      <div className="relative w-full max-w-[520px] overflow-hidden rounded-sm border border-[#1E2A3A] bg-(--color-app) shadow-2xl">
         {/* cyan top accent */}
         <div
           className="h-[3px] w-full"
-          style={{ background: "linear-gradient(90deg, var(--color-brand) 0%, rgba(0,229,255,0.15) 100%)" }}
+          style={{
+            background: "linear-gradient(90deg, var(--color-brand) 0%, rgba(0,229,255,0.15) 100%)",
+          }}
         />
 
-        <div className="px-8 pt-7 pb-8 flex flex-col gap-5">
+        <div className="flex flex-col gap-5 px-8 pt-7 pb-8">
           {/* ── Header with back button ── */}
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <h1 className="text-lg font-bold" style={{ color: "var(--color-text-primary)", letterSpacing: "0.5px" }}>
+              <h1 className="text-lg font-bold tracking-[0.5px] text-(--color-text-primary)">
                 {step === "choice" && "Connect Your Data"}
                 {step === "demo-info" && "Demo Mode"}
                 {step === "csv-upload" && "Upload CSV Data"}
                 {step === "oanda-key" && "Enter OANDA API Key"}
                 {step === "oanda-download" && "Download Market Data"}
               </h1>
-              <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
+              <p className="mt-1 text-xs text-(--color-text-muted)">
                 {step === "choice" && "Select how you want to get started"}
                 {step === "demo-info" && "Get started instantly with pre-loaded market data"}
                 {step === "csv-upload" && "Import your own historical data files"}
@@ -234,11 +227,11 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
             </div>
             <div className="flex items-center gap-2">
               {step !== "choice" && (
-                <button onClick={goBack} style={backBtn}>
+                <button onClick={goBack} className={BACK_BTN_CLASS} style={BACK_BTN_STYLE}>
                   <ChevronLeft size={16} />
                 </button>
               )}
-              <button onClick={onBack} style={{ ...backBtn, padding: "8px 8px" }}>
+              <button onClick={onBack} className={BACK_BTN_CLASS} style={BACK_BTN_STYLE}>
                 <X size={16} />
               </button>
             </div>
@@ -246,10 +239,7 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
 
           {/* ── ERROR ── */}
           {error && (
-            <div
-              className="flex items-center gap-2 px-3 py-2 rounded-sm text-xs"
-              style={{ backgroundColor: "rgba(239, 68, 68, 0.1)", color: "var(--color-event-high)", border: "1px solid rgba(239, 68, 68, 0.2)" }}
-            >
+            <div className="flex items-center gap-2 rounded-sm border border-red-500/[0.2] bg-red-500/[0.1] px-3 py-2 text-xs text-(--color-event-high)">
               <AlertCircle size={12} />
               {error}
             </div>
@@ -263,55 +253,46 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
               {/* Demo */}
               <button
                 onClick={() => setStep("demo-info")}
-                className="flex items-center gap-4 p-4 rounded-sm border transition-all text-left"
-                style={{ backgroundColor: "var(--color-input-bg)", borderColor: "var(--color-card-border)", cursor: "pointer" }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-brand)"; e.currentTarget.style.backgroundColor = "rgba(0, 229, 255, 0.03)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-card-border)"; e.currentTarget.style.backgroundColor = "var(--color-input-bg)"; }}
+                className="flex cursor-pointer items-center gap-4 rounded-sm border border-(--color-card-border) bg-(--color-input-bg) p-4 text-left transition-all hover:border-(--color-brand) hover:bg-[rgba(0,229,255,0.03)]"
               >
-                <div className="p-2.5 rounded-sm" style={{ backgroundColor: "rgba(0, 229, 255, 0.12)" }}>
-                  <Database size={18} style={{ color: "var(--color-brand)" }} />
+                <div className="bg-cyan/[0.12] rounded-sm p-2.5">
+                  <Database size={18} className="text-(--color-brand)" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>Demo Mode</p>
-                  <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>Pre-loaded sample market data</p>
+                  <p className="text-sm font-semibold text-(--color-text-primary)">Demo Mode</p>
+                  <p className="text-xs text-(--color-text-muted)">Pre-loaded sample market data</p>
                 </div>
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
+                <div className="h-3 w-3 rounded-full bg-(--color-brand)" />
               </button>
 
               {/* OANDA */}
               <button
                 onClick={() => setStep("oanda-key")}
-                className="flex items-center gap-4 p-4 rounded-sm border transition-all text-left"
-                style={{ backgroundColor: "var(--color-input-bg)", borderColor: "var(--color-card-border)", cursor: "pointer" }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#2962FF"; e.currentTarget.style.backgroundColor = "rgba(41, 98, 255, 0.03)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-card-border)"; e.currentTarget.style.backgroundColor = "var(--color-input-bg)"; }}
+                className="flex cursor-pointer items-center gap-4 rounded-sm border border-(--color-card-border) bg-(--color-input-bg) p-4 text-left transition-all hover:border-[#2962FF] hover:bg-[rgba(41,98,255,0.03)]"
               >
-                <div className="p-2.5 rounded-sm" style={{ backgroundColor: "rgba(41, 98, 255, 0.12)" }}>
-                  <Key size={18} style={{ color: "#2962FF" }} />
+                <div className="rounded-sm bg-[rgba(41,98,255,0.12)] p-2.5">
+                  <Key size={18} className="text-[#2962FF]" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>OANDA API</p>
-                  <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>Live market data connection</p>
+                  <p className="text-sm font-semibold text-(--color-text-primary)">OANDA API</p>
+                  <p className="text-xs text-(--color-text-muted)">Live market data connection</p>
                 </div>
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#2962FF" }} />
+                <div className="h-3 w-3 rounded-full bg-[#2962FF]" />
               </button>
 
               {/* CSV */}
               <button
                 onClick={() => setStep("csv-upload")}
-                className="flex items-center gap-4 p-4 rounded-sm border transition-all text-left"
-                style={{ backgroundColor: "var(--color-input-bg)", borderColor: "var(--color-card-border)", cursor: "pointer" }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-brand)"; e.currentTarget.style.backgroundColor = "rgba(0, 229, 255, 0.03)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-card-border)"; e.currentTarget.style.backgroundColor = "var(--color-input-bg)"; }}
+                className="flex cursor-pointer items-center gap-4 rounded-sm border border-(--color-card-border) bg-(--color-input-bg) p-4 text-left transition-all hover:border-(--color-brand) hover:bg-[rgba(0,229,255,0.03)]"
               >
-                <div className="p-2.5 rounded-sm" style={{ backgroundColor: "rgba(0, 229, 255, 0.12)" }}>
-                  <Upload size={18} style={{ color: "var(--color-brand)" }} />
+                <div className="bg-cyan/[0.12] rounded-sm p-2.5">
+                  <Upload size={18} className="text-(--color-brand)" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>CSV Upload</p>
-                  <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>Backtest with historical data</p>
+                  <p className="text-sm font-semibold text-(--color-text-primary)">CSV Upload</p>
+                  <p className="text-xs text-(--color-text-muted)">Backtest with historical data</p>
                 </div>
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
+                <div className="h-3 w-3 rounded-full bg-(--color-brand)" />
               </button>
             </div>
           )}
@@ -321,11 +302,8 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
           {/* ================================================================ */}
           {step === "demo-info" && (
             <div className="flex flex-col gap-5">
-              <div
-                className="rounded-sm p-5 flex flex-col gap-3"
-                style={{ backgroundColor: "rgba(0, 229, 255, 0.06)", borderLeft: "3px solid var(--color-brand)" }}
-              >
-                <p className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
+              <div className="bg-cyan/[0.06] flex flex-col gap-3 rounded-sm border-l-[3px] border-l-(--color-brand) p-5">
+                <p className="text-sm font-semibold text-(--color-text-primary)">
                   What you get with Demo Mode
                 </p>
                 <div className="flex flex-col gap-2">
@@ -337,18 +315,14 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
                     "No API key required — start in seconds",
                   ].map((item) => (
                     <div key={item} className="flex items-start gap-2">
-                      <CheckCircle size={13} style={{ color: "var(--color-brand)", marginTop: 2, flexShrink: 0 }} />
-                      <span className="text-xs" style={{ color: "rgba(255,255,255,0.80)", lineHeight: 1.5 }}>{item}</span>
+                      <CheckCircle size={13} className="mt-0.5 shrink-0 text-(--color-brand)" />
+                      <span className="text-xs leading-normal text-white/[0.80]">{item}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <button
-                onClick={handleStartDemo}
-                disabled={loading}
-                style={primaryBtn(loading)}
-              >
+              <button onClick={handleStartDemo} disabled={loading} style={primaryBtn(loading)}>
                 <Zap size={16} />
                 {loading ? "Loading Demo Data..." : "Start with Demo Data"}
               </button>
@@ -362,37 +336,54 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
             <div className="flex flex-col gap-4">
               {/* Drop zone */}
               <label
-                className="px-4 py-8 rounded-sm border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all"
-                style={{
-                  borderColor: csvFiles.length > 0 ? "var(--color-brand)" : "var(--color-card-border)",
-                  backgroundColor: csvFiles.length > 0 ? "rgba(0, 229, 255, 0.03)" : "var(--color-input-bg)",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-brand)"; e.currentTarget.style.backgroundColor = "rgba(0, 229, 255, 0.05)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = csvFiles.length > 0 ? "var(--color-brand)" : "var(--color-card-border)"; e.currentTarget.style.backgroundColor = csvFiles.length > 0 ? "rgba(0, 229, 255, 0.03)" : "var(--color-input-bg)"; }}
+                className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed px-4 py-8 transition-all hover:border-(--color-brand) hover:bg-[rgba(0,229,255,0.05)] ${csvFiles.length > 0 ? "border-(--color-brand) bg-[rgba(0,229,255,0.03)]" : "border-(--color-card-border) bg-(--color-input-bg)"}`}
               >
-                <Upload size={24} style={{ color: csvFiles.length > 0 ? "var(--color-brand)" : "var(--color-text-muted)" }} />
-                <p className="text-sm font-semibold" style={{ color: csvFiles.length > 0 ? "var(--color-text-primary)" : "var(--color-text-muted)" }}>
-                  {csvFiles.length > 0 ? `${csvFiles.length} file(s) selected` : "Click to select CSV files"}
+                <Upload
+                  size={24}
+                  style={{
+                    color: csvFiles.length > 0 ? "var(--color-brand)" : "var(--color-text-muted)",
+                  }}
+                />
+                <p
+                  className="text-sm font-semibold"
+                  style={{
+                    color:
+                      csvFiles.length > 0 ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                  }}
+                >
+                  {csvFiles.length > 0
+                    ? `${csvFiles.length} file(s) selected`
+                    : "Click to select CSV files"}
                 </p>
-                <p className="text-xs" style={{ color: "var(--color-text-dim)" }}>
-                  OHLC data with timestamps (.csv)
-                </p>
-                <input type="file" accept=".csv" multiple onChange={handleFileSelect} className="hidden" />
+                <p className="text-xs text-(--color-text-dim)">OHLC data with timestamps (.csv)</p>
+                <input
+                  type="file"
+                  accept=".csv"
+                  multiple
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
               </label>
 
               {/* File list */}
               {csvFiles.length > 0 && (
                 <div className="flex flex-col gap-1.5">
                   {csvFiles.map((f, i) => (
-                    <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-sm" style={{ backgroundColor: "var(--color-input-bg)" }}>
-                      <FileText size={12} style={{ color: "var(--color-text-muted)" }} />
-                      <span className="flex-1 text-xs truncate" style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 rounded-sm bg-(--color-input-bg) px-3 py-2"
+                    >
+                      <FileText size={12} className="text-(--color-text-muted)" />
+                      <span className="flex-1 truncate font-mono text-xs text-(--color-text-primary)">
                         {f.name}
                       </span>
-                      <span className="text-[10px] tabular-nums" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+                      <span className="font-mono text-[10px] text-(--color-text-muted) tabular-nums">
                         {(f.size / 1024).toFixed(0)} KB
                       </span>
-                      <button onClick={() => removeCsvFile(i)} className="text-[10px]" style={{ color: "var(--color-event-high)", cursor: "pointer" }}>
+                      <button
+                        onClick={() => removeCsvFile(i)}
+                        className="cursor-pointer text-[10px] text-(--color-event-high)"
+                      >
                         ✕
                       </button>
                     </div>
@@ -406,7 +397,9 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
                 style={primaryBtn(loading || csvFiles.length === 0)}
               >
                 <Zap size={16} />
-                {loading ? "Importing..." : `Import & Start${csvFiles.length > 0 ? ` (${csvFiles.length} file${csvFiles.length > 1 ? "s" : ""})` : ""}`}
+                {loading
+                  ? "Importing..."
+                  : `Import & Start${csvFiles.length > 0 ? ` (${csvFiles.length} file${csvFiles.length > 1 ? "s" : ""})` : ""}`}
               </button>
             </div>
           )}
@@ -417,40 +410,42 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
           {step === "oanda-key" && (
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-text-muted)" }}>
+                <label className="text-xs font-semibold tracking-wider text-(--color-text-muted) uppercase">
                   OANDA API Key
                 </label>
                 <input
                   type="password"
                   value={oandaKey}
-                  onChange={(e) => { setOandaKey(e.target.value); setError(""); }}
+                  onChange={(e) => {
+                    setOandaKey(e.target.value);
+                    setError("");
+                  }}
                   placeholder="Paste your API key here"
-                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-brand)"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = error ? "var(--color-event-high)" : "var(--color-card-border)"; }}
-                  style={inputStyle(!!error)}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = error
+                      ? "var(--color-event-high)"
+                      : "var(--color-card-border)";
+                  }}
+                  className={`${INPUT_CLASS} ${error ? "border-(--color-event-high)" : "border-(--color-card-border)"} focus:border-(--color-brand)`}
+                  style={inputStyle}
                 />
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-text-muted)" }}>
-                  Account ID <span style={{ color: "var(--color-text-dim)", fontWeight: 400 }}>(optional)</span>
+                <label className="text-xs font-semibold tracking-wider text-(--color-text-muted) uppercase">
+                  Account ID <span className="font-normal text-(--color-text-dim)">(optional)</span>
                 </label>
                 <input
                   type="text"
                   value={accountId}
                   onChange={(e) => setAccountId(e.target.value)}
                   placeholder="e.g. 101-001-1234567-001"
-                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-brand)"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-card-border)"; }}
-                  style={inputStyle()}
+                  className={`${INPUT_CLASS} border-(--color-card-border) focus:border-(--color-brand)`}
+                  style={inputStyle}
                 />
               </div>
 
-              <button
-                onClick={handleConnectOanda}
-                disabled={loading}
-                style={primaryBtn(loading)}
-              >
+              <button onClick={handleConnectOanda} disabled={loading} style={primaryBtn(loading)}>
                 <Key size={16} />
                 {loading ? "Connecting..." : "Connect"}
               </button>
@@ -462,17 +457,14 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
           {/* ================================================================ */}
           {step === "oanda-download" && (
             <div className="flex flex-col gap-5">
-              <div
-                className="rounded-sm p-3 text-xs flex items-center gap-2"
-                style={{ backgroundColor: "rgba(0, 229, 255, 0.06)", borderLeft: "3px solid var(--color-brand)", color: "rgba(255,255,255,0.80)" }}
-              >
-                <CheckCircle size={13} style={{ color: "var(--color-brand)" }} />
+              <div className="bg-cyan/[0.06] flex items-center gap-2 rounded-sm border-l-[3px] border-l-(--color-brand) p-3 text-xs text-white/[0.80]">
+                <CheckCircle size={13} className="text-(--color-brand)" />
                 Connected to OANDA — select data to download
               </div>
 
               {/* Pairs */}
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-text-muted)" }}>
+                <label className="text-xs font-semibold tracking-wider text-(--color-text-muted) uppercase">
                   Pairs
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -480,16 +472,15 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
                     <button
                       key={p}
                       onClick={() => togglePair(p)}
+                      className="cursor-pointer rounded-[6px] px-[14px] py-[6px] font-mono text-[12px] transition duration-150"
                       style={{
-                        padding: "6px 14px",
-                        borderRadius: "6px",
                         border: `1px solid ${selectedPairs.has(p) ? "var(--color-brand)" : "var(--color-card-border)"}`,
-                        backgroundColor: selectedPairs.has(p) ? "rgba(0, 229, 255, 0.1)" : "transparent",
-                        color: selectedPairs.has(p) ? "var(--color-brand)" : "var(--color-text-muted)",
-                        fontSize: "12px",
-                        fontFamily: "var(--font-mono)",
-                        cursor: "pointer",
-                        transition: "all 0.15s",
+                        backgroundColor: selectedPairs.has(p)
+                          ? "rgba(0, 229, 255, 0.1)"
+                          : "transparent",
+                        color: selectedPairs.has(p)
+                          ? "var(--color-brand)"
+                          : "var(--color-text-muted)",
                       }}
                     >
                       {p}
@@ -500,7 +491,7 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
 
               {/* Timeframes */}
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-text-muted)" }}>
+                <label className="text-xs font-semibold tracking-wider text-(--color-text-muted) uppercase">
                   Timeframes
                 </label>
                 <div className="flex gap-2">
@@ -508,16 +499,15 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
                     <button
                       key={tf}
                       onClick={() => toggleTf(tf)}
+                      className="cursor-pointer rounded-[6px] px-[14px] py-[6px] font-mono text-[12px] transition duration-150"
                       style={{
-                        padding: "6px 14px",
-                        borderRadius: "6px",
                         border: `1px solid ${selectedTfs.has(tf) ? "var(--color-brand)" : "var(--color-card-border)"}`,
-                        backgroundColor: selectedTfs.has(tf) ? "rgba(0, 229, 255, 0.1)" : "transparent",
-                        color: selectedTfs.has(tf) ? "var(--color-brand)" : "var(--color-text-muted)",
-                        fontSize: "12px",
-                        fontFamily: "var(--font-mono)",
-                        cursor: "pointer",
-                        transition: "all 0.15s",
+                        backgroundColor: selectedTfs.has(tf)
+                          ? "rgba(0, 229, 255, 0.1)"
+                          : "transparent",
+                        color: selectedTfs.has(tf)
+                          ? "var(--color-brand)"
+                          : "var(--color-text-muted)",
                       }}
                     >
                       {tf}
@@ -527,8 +517,9 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
               </div>
 
               {/* Summary */}
-              <div className="text-xs" style={{ color: "var(--color-text-dim)" }}>
-                {Array.from(selectedPairs).length * Array.from(selectedTfs).length} download(s) queued &middot; 5 years each
+              <div className="text-xs text-(--color-text-dim)">
+                {Array.from(selectedPairs).length * Array.from(selectedTfs).length} download(s)
+                queued &middot; 5 years each
               </div>
 
               <button

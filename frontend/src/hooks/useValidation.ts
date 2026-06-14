@@ -88,9 +88,7 @@ export function useValidation(): ValidationResult {
       };
       const blocked = incompatible[s.logitSolver];
       if (blocked?.includes(s.logitPenalty)) {
-        errors.push(
-          `Solver '${s.logitSolver}' does not support penalty '${s.logitPenalty}'`,
-        );
+        errors.push(`Solver '${s.logitSolver}' does not support penalty '${s.logitPenalty}'`);
       }
       if (s.logitC < 0.001) warnings.push("C < 0.001 — very strong regularization");
       if (s.logitC > 10000) warnings.push("C > 10000 — very weak regularization");
@@ -107,7 +105,8 @@ export function useValidation(): ValidationResult {
       errors.push("Start date must be before end date");
     }
     if (s.startDate && s.endDate && dataMin && dataMax) {
-      const rangeDays = (new Date(s.endDate).getTime() - new Date(s.startDate).getTime()) / 86400000;
+      const rangeDays =
+        (new Date(s.endDate).getTime() - new Date(s.startDate).getTime()) / 86400000;
       const trainDays = s.trainMonths * 30;
       const testDays = s.testMonths * 30;
       if (rangeDays < trainDays + testDays) {
@@ -127,15 +126,37 @@ export function useValidation(): ValidationResult {
 
     return { warnings, errors, ok: errors.length === 0 };
   }, [
-    s.useTripleBarrier, s.tbPtMult, s.tbSlMult, s.tbNeutralZone, s.tbMaxHolding,
-    s.labelThreshold, s.lags, s.lagDepth,
-    s.useSqueezeBreakout, s.useSqueezeExpansion, s.useBbands,
-    s.useMacdAtrRatio, s.useMacd, s.useAtr,
-    s.usePriceMaZ, s.useSma, s.useEma,
-    s.useMtfAlignment, s.useMtfMa, s.fracdiffD,
-    s.targetActiveRate, s.targetCoverage,
-    s.selectedModels, s.logitSolver, s.logitPenalty, s.logitC,
-    s.startDate, s.endDate, s.trainMonths, s.testMonths,
-    dataMin, dataMax,
+    s.useTripleBarrier,
+    s.tbPtMult,
+    s.tbSlMult,
+    s.tbNeutralZone,
+    s.tbMaxHolding,
+    s.labelThreshold,
+    s.lags,
+    s.lagDepth,
+    s.useSqueezeBreakout,
+    s.useSqueezeExpansion,
+    s.useBbands,
+    s.useMacdAtrRatio,
+    s.useMacd,
+    s.useAtr,
+    s.usePriceMaZ,
+    s.useSma,
+    s.useEma,
+    s.useMtfAlignment,
+    s.useMtfMa,
+    s.fracdiffD,
+    s.targetActiveRate,
+    s.targetCoverage,
+    s.selectedModels,
+    s.logitSolver,
+    s.logitPenalty,
+    s.logitC,
+    s.startDate,
+    s.endDate,
+    s.trainMonths,
+    s.testMonths,
+    dataMin,
+    dataMax,
   ]);
 }

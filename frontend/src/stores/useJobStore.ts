@@ -134,8 +134,20 @@ export const useJobStore = create<JobStore>()((set, get) => ({
   handleWsEvent: (event) =>
     set((state) => {
       if (import.meta.env.DEV) {
-        const e = event as { event?: string; model?: string; job_id?: string; status?: string; trial_number?: number; phase?: string };
-        console.log("[Store] handleWsEvent:", e.event, e.model ?? "", e.status ?? e.phase ?? e.trial_number ?? "");
+        const e = event as {
+          event?: string;
+          model?: string;
+          job_id?: string;
+          status?: string;
+          trial_number?: number;
+          phase?: string;
+        };
+        console.log(
+          "[Store] handleWsEvent:",
+          e.event,
+          e.model ?? "",
+          e.status ?? e.phase ?? e.trial_number ?? "",
+        );
       }
       const next = new Map(state.activeJobs);
       const jobId = (event as { job_id?: string }).job_id;
@@ -167,7 +179,7 @@ export const useJobStore = create<JobStore>()((set, get) => ({
       if (event.event === "cycle_started") {
         const cycle: CycleState = {
           model: event.model,
-          cycleNumber: event.cycle_number ?? (updated.cycles.length + 1),
+          cycleNumber: event.cycle_number ?? updated.cycles.length + 1,
           phase: "hpo",
           hpoTrials: [],
           bestTrial: null,
@@ -193,7 +205,13 @@ export const useJobStore = create<JobStore>()((set, get) => ({
           nextMetrics.set(event.model, event.metrics ?? {});
           updated.metrics = nextMetrics;
           const phaseMap = new Map(updated.modelPhases);
-          const mp = phaseMap.get(event.model) || { phase: "complete" as const, hpoTrial: 0, hpoTotalTrials: 0, simMonth: 0, simTotalMonths: 0 };
+          const mp = phaseMap.get(event.model) || {
+            phase: "complete" as const,
+            hpoTrial: 0,
+            hpoTotalTrials: 0,
+            simMonth: 0,
+            simTotalMonths: 0,
+          };
           phaseMap.set(event.model, { ...mp, phase: "complete" });
           updated.modelPhases = phaseMap;
           const totalModels = updated.models?.length || 1;
@@ -210,7 +228,13 @@ export const useJobStore = create<JobStore>()((set, get) => ({
       if (event.event === "model_phase") {
         const m = event.model;
         const phaseMap = new Map(updated.modelPhases);
-        const mp = phaseMap.get(m) || { phase: "pending" as const, hpoTrial: 0, hpoTotalTrials: 0, simMonth: 0, simTotalMonths: 0 };
+        const mp = phaseMap.get(m) || {
+          phase: "pending" as const,
+          hpoTrial: 0,
+          hpoTotalTrials: 0,
+          simMonth: 0,
+          simTotalMonths: 0,
+        };
         phaseMap.set(m, { ...mp, phase: event.phase as "hpo" | "simulation" });
         updated.modelPhases = phaseMap;
         updated.currentModel = m;
@@ -229,7 +253,13 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         const trial = event.trial ?? 0;
         const totalTrials = event.total_trials ?? event.n_trials ?? 0;
         const phaseMap = new Map(updated.modelPhases);
-        const mp = phaseMap.get(m) || { phase: "hpo" as const, hpoTrial: 0, hpoTotalTrials: 0, simMonth: 0, simTotalMonths: 0 };
+        const mp = phaseMap.get(m) || {
+          phase: "hpo" as const,
+          hpoTrial: 0,
+          hpoTotalTrials: 0,
+          simMonth: 0,
+          simTotalMonths: 0,
+        };
         phaseMap.set(m, { ...mp, phase: "hpo", hpoTrial: trial, hpoTotalTrials: totalTrials });
         updated.modelPhases = phaseMap;
         updated.completedWork = event.completed_work ?? updated.completedWork;
@@ -253,15 +283,21 @@ export const useJobStore = create<JobStore>()((set, get) => ({
           trial_state: event.trial_state ?? "COMPLETE",
         };
         updated.hpoTrials = [...updated.hpoTrials, row];
-        if (row.score != null && (updated.bestTrial == null || row.score > (updated.bestTrial.score ?? -Infinity))) {
+        if (
+          row.score != null &&
+          (updated.bestTrial == null || row.score > (updated.bestTrial.score ?? -Infinity))
+        ) {
           updated.bestTrial = row;
         }
         const modelName = (event as { model?: string }).model;
         if (modelName) {
           updated.cycles = updated.cycles.map((c) => {
             if (c.model === modelName) {
-              const nextBest = row.score != null && (c.bestTrial == null || row.score > (c.bestTrial.score ?? -Infinity))
-                ? row : c.bestTrial;
+              const nextBest =
+                row.score != null &&
+                (c.bestTrial == null || row.score > (c.bestTrial.score ?? -Infinity))
+                  ? row
+                  : c.bestTrial;
               return {
                 ...c,
                 phase: "hpo" as const,
@@ -281,8 +317,19 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         const month = event.month ?? event.period ?? 0;
         const totalMonths = event.total_months ?? event.total_periods ?? 0;
         const phaseMap = new Map(updated.modelPhases);
-        const mp = phaseMap.get(m) || { phase: "simulation" as const, hpoTrial: 0, hpoTotalTrials: 0, simMonth: 0, simTotalMonths: 0 };
-        phaseMap.set(m, { ...mp, phase: "simulation", simMonth: month, simTotalMonths: totalMonths });
+        const mp = phaseMap.get(m) || {
+          phase: "simulation" as const,
+          hpoTrial: 0,
+          hpoTotalTrials: 0,
+          simMonth: 0,
+          simTotalMonths: 0,
+        };
+        phaseMap.set(m, {
+          ...mp,
+          phase: "simulation",
+          simMonth: month,
+          simTotalMonths: totalMonths,
+        });
         updated.modelPhases = phaseMap;
         updated.completedWork = event.completed_work ?? updated.completedWork;
         updated.totalWork = event.total_work ?? updated.totalWork;
@@ -294,7 +341,9 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         updated.periodTotals = event.n_periods ?? updated.periodTotals;
         const entries: typeof updated.oosEquity = [];
         for (let p = 1; p <= (event.n_periods ?? 0); p++) {
-          const bhEntry = (event.bh_curve as Array<{ period: number; bh: number }> | undefined)?.find((b) => b.period === p);
+          const bhEntry = (
+            event.bh_curve as Array<{ period: number; bh: number }> | undefined
+          )?.find((b) => b.period === p);
           entries.push({
             period: p,
             modelName: event.model,
@@ -341,9 +390,14 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         updated.oosPeriods = [...updated.oosPeriods, periodResult];
         if (event.equity != null && event.equity_bh != null) {
           const existingIdx = updated.oosEquity.findIndex(
-            (e) => e.period === event.period && e.modelName === event.model
+            (e) => e.period === event.period && e.modelName === event.model,
           );
-          const entry = { period: event.period, modelName: event.model, equity: event.equity, bh: event.equity_bh };
+          const entry = {
+            period: event.period,
+            modelName: event.model,
+            equity: event.equity,
+            bh: event.equity_bh,
+          };
           if (existingIdx >= 0) {
             updated.oosEquity = [
               ...updated.oosEquity.slice(0, existingIdx),

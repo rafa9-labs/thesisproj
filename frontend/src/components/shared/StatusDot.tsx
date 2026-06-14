@@ -20,11 +20,7 @@ export function StatusDot({ color, label, size = 8, pulse = false }: StatusDotPr
           />
         )}
       </div>
-      {label && (
-        <span className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
-          {label}
-        </span>
-      )}
+      {label && <span className="text-[11px] text-(--color-text-muted)">{label}</span>}
     </div>
   );
 }

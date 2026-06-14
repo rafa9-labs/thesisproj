@@ -6,7 +6,20 @@ interface MonthlyReturnsChartProps {
   height?: number;
 }
 
-const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 /** Maps a return % (−1..+1 raw fraction, or number) to a muted institutional color */
 function returnToColor(ret: number | null | undefined): string {
@@ -81,10 +94,7 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
 
   if (years.length === 0) {
     return (
-      <div
-        className="flex items-center justify-center rounded-sm p-8"
-        style={{ backgroundColor: "var(--color-surface)", color: "var(--color-text-dim)", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}
-      >
+      <div className="flex items-center justify-center rounded-sm bg-(--color-surface) p-8 font-mono text-[12px] text-(--color-text-dim)">
         No monthly data available
       </div>
     );
@@ -92,32 +102,17 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
 
   return (
     <div className="relative select-none">
-      <div
-        className="rounded-sm overflow-hidden"
-        style={{ backgroundColor: "var(--color-surface)", border: "1px solid #2A2E39" }}
-      >
+      <div className="overflow-hidden rounded-sm border border-[#2A2E39] bg-(--color-surface)">
         {/* Header row: months */}
         <div
-          className="grid"
-          style={{
-            gridTemplateColumns: "52px repeat(12, minmax(0, 1fr))",
-            borderBottom: "1px solid #2A2E39",
-          }}
+          className="grid border-b border-[#2A2E39]"
+          style={{ gridTemplateColumns: "52px repeat(12, minmax(0, 1fr))" }}
         >
-          <div style={{ padding: "4px 6px" }} />
+          <div className="p-[4px_6px]" />
           {MONTH_LABELS.map((m) => (
             <div
               key={m}
-              className="text-center"
-              style={{
-                padding: "4px 2px",
-                fontSize: 10,
-                fontFamily: "Inter, sans-serif",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                color: "var(--color-text-muted)",
-              }}
+              className="p-[4px_2px] text-center font-sans text-[10px] font-semibold tracking-[0.06em] text-(--color-text-muted) uppercase"
             >
               {m}
             </div>
@@ -135,15 +130,7 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
             }}
           >
             {/* Year label */}
-            <div
-              className="flex items-center justify-end pr-2"
-              style={{
-                fontSize: 10,
-                fontFamily: "JetBrains Mono, monospace",
-                color: "var(--color-text-muted)",
-                borderRight: "1px solid #2A2E39",
-              }}
-            >
+            <div className="flex items-center justify-end border-r border-[#2A2E39] pr-2 font-mono text-[10px] text-(--color-text-muted)">
               {yr}
             </div>
 
@@ -155,17 +142,15 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
               return (
                 <div
                   key={mo}
-                  className="flex items-center justify-center cursor-default transition-all duration-100"
+                  className="flex h-[30px] cursor-default items-center justify-center font-mono text-[9px] font-semibold outline-offset-[-1px] transition-all duration-100"
                   style={{
-                    height: 30,
                     backgroundColor: bg,
-                    fontSize: 9,
-                    fontFamily: "JetBrains Mono, monospace",
-                    fontWeight: 600,
                     color: tc,
                     borderLeft: mo > 0 ? "1px solid rgba(19,23,34,0.5)" : "none",
-                    outline: hoveredCell?.year === yr && hoveredCell?.month === mo ? "1px solid rgba(255,255,255,0.15)" : "none",
-                    outlineOffset: -1,
+                    outline:
+                      hoveredCell?.year === yr && hoveredCell?.month === mo
+                        ? "1px solid rgba(255,255,255,0.15)"
+                        : "none",
                   }}
                   onMouseEnter={(e) => {
                     if (!cell) return;
@@ -189,11 +174,8 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
         ))}
 
         {/* Legend */}
-        <div
-          className="flex items-center gap-2 px-3 py-2"
-          style={{ borderTop: "1px solid #2A2E39", fontSize: 9, fontFamily: "Inter, sans-serif", color: "var(--color-text-muted)" }}
-        >
-          <span className="uppercase tracking-[0.06em]">Return</span>
+        <div className="flex items-center gap-2 border-t border-[#2A2E39] px-3 py-2 font-sans text-[9px] text-(--color-text-muted)">
+          <span className="tracking-[0.06em] uppercase">Return</span>
           {[
             { bg: "rgba(242,54,69,0.85)", label: "< -3%" },
             { bg: "rgba(242,54,69,0.60)", label: "-3 – -1.5%" },
@@ -203,7 +185,7 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
             { bg: "rgba(8,153,129,0.85)", label: "> 3%" },
           ].map((s) => (
             <div key={s.label} className="flex items-center gap-1">
-              <div style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: s.bg }} />
+              <div className="h-[10px] w-[10px] rounded-[2px]" style={{ backgroundColor: s.bg }} />
               <span>{s.label}</span>
             </div>
           ))}
@@ -213,47 +195,45 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
       {/* Floating tooltip */}
       {hoveredCell && tooltipPos && (
         <div
-          className="fixed z-50 pointer-events-none rounded-sm px-3 py-2 text-[11px]"
+          className="pointer-events-none fixed z-50 min-w-[160px] rounded-sm border border-[#2A2E39] bg-(--color-elevated) px-3 py-2 font-mono text-[11px] text-(--color-text-primary) shadow-[0_8px_24px_rgba(0,0,0,0.5)]"
           style={{
             left: tooltipPos.x + 12,
             top: tooltipPos.y - 80,
-            backgroundColor: "var(--color-elevated)",
-            border: "1px solid #2A2E39",
-            fontFamily: "JetBrains Mono, monospace",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-            minWidth: 160,
-            color: "var(--color-text-primary)",
           }}
         >
-          <div
-            className="font-semibold mb-1.5 pb-1.5 text-[10px] uppercase tracking-wider"
-            style={{ color: "var(--color-text-muted)", borderBottom: "1px solid #2A2E39" }}
-          >
+          <div className="mb-1.5 border-b border-[#2A2E39] pb-1.5 text-[10px] font-semibold tracking-wider text-(--color-text-muted) uppercase">
             {MONTH_LABELS[hoveredCell.month]} {hoveredCell.year}
           </div>
           <div className="flex flex-col gap-1">
             <div className="flex justify-between gap-4">
-              <span style={{ color: "var(--color-text-muted)" }}>Return</span>
-              <span style={{ color: returnToTextColor(hoveredCell.return_pct), fontWeight: 700 }}>
+              <span className="text-(--color-text-muted)">Return</span>
+              <span
+                className="font-bold"
+                style={{ color: returnToTextColor(hoveredCell.return_pct) }}
+              >
                 {formatPct(hoveredCell.return_pct)}
               </span>
             </div>
             {hoveredCell.win_rate != null && (
               <div className="flex justify-between gap-4">
-                <span style={{ color: "var(--color-text-muted)" }}>Win Rate</span>
+                <span className="text-(--color-text-muted)">Win Rate</span>
                 <span>{formatPct(hoveredCell.win_rate)}</span>
               </div>
             )}
             {hoveredCell.trades != null && (
               <div className="flex justify-between gap-4">
-                <span style={{ color: "var(--color-text-muted)" }}>Trades</span>
+                <span className="text-(--color-text-muted)">Trades</span>
                 <span>{hoveredCell.trades}</span>
               </div>
             )}
             {hoveredCell.sharpe != null && (
               <div className="flex justify-between gap-4">
-                <span style={{ color: "var(--color-text-muted)" }}>Sharpe</span>
-                <span style={{ color: (hoveredCell.sharpe ?? 0) >= 1 ? "#089981" : "var(--color-text-primary)" }}>
+                <span className="text-(--color-text-muted)">Sharpe</span>
+                <span
+                  style={{
+                    color: (hoveredCell.sharpe ?? 0) >= 1 ? "#089981" : "var(--color-text-primary)",
+                  }}
+                >
                   {hoveredCell.sharpe.toFixed(2)}
                 </span>
               </div>

@@ -27,107 +27,61 @@ export function RegimeHeatmap() {
 
   if (isLoading) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 60 }}>
-        <div style={{ width: 24, height: 24, borderRadius: "50%", border: "3px solid var(--color-glass-border)", borderTopColor: "var(--color-brand)", animation: "spin 1s linear infinite" }} />
-        <span style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 16 }}>Loading regime data...</span>
+      <div className="flex flex-col items-center justify-center p-[60px]">
+        <div className="h-6 w-6 animate-spin rounded-full border-[3px] border-(--color-glass-border) border-t-(--color-brand)" />
+        <span className="mt-4 text-[11px] text-(--color-text-muted)">Loading regime data...</span>
       </div>
     );
   }
 
   if (!matrix?.entries?.length) {
     return (
-      <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-glass-border)", borderRadius: 4, padding: 60, textAlign: "center" }}>
-        <span style={{ fontSize: 12, color: "var(--color-text-dim)", display: "block", marginBottom: 8 }}>No regime matrix available</span>
-        <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>Run the Full Cycle pipeline first to generate regime performance data.</span>
+      <div className="rounded border border-(--color-glass-border) bg-(--color-surface) p-[60px] text-center">
+        <span className="mb-2 block text-xs text-(--color-text-dim)">
+          No regime matrix available
+        </span>
+        <span className="text-[10px] text-(--color-text-muted)">
+          Run the Full Cycle pipeline first to generate regime performance data.
+        </span>
       </div>
     );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div className="flex flex-col gap-6">
       {/* Regime Distribution Chart */}
-      <div
-        style={{
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-glass-border)",
-          borderRadius: 4,
-          padding: 20,
-        }}
-      >
-        <h2
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "var(--color-text-primary)",
-            margin: "0 0 16px",
-          }}
-        >
+      <div className="rounded border border-(--color-glass-border) bg-(--color-surface) p-5">
+        <h2 className="mb-4 text-[13px] font-semibold tracking-[0.08em] text-(--color-text-primary) uppercase">
           Market Regime Distribution
-          <span
-            style={{
-              fontSize: 10,
-              color: "var(--color-text-muted)",
-              marginLeft: 8,
-            }}
-          >
+          <span className="ml-2 text-[10px] text-(--color-text-muted)">
             Last {labels?.count ?? 0} Bars
           </span>
         </h2>
 
         {isLoading ? (
-          <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>
-            Loading...
-          </div>
+          <div className="text-xs text-(--color-text-muted)">Loading...</div>
         ) : labels && labels.labels.length > 0 ? (
           <RegimeBarChart labels={labels.labels} />
         ) : (
-          <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>
+          <div className="text-xs text-(--color-text-muted)">
             No regime data available. Run ExpertProfiler first.
           </div>
         )}
       </div>
 
       {/* Regime × Model Matrix */}
-      <div
-        style={{
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-glass-border)",
-          borderRadius: 4,
-          padding: 20,
-        }}
-      >
-        <h2
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "var(--color-text-primary)",
-            margin: "0 0 16px",
-          }}
-        >
+      <div className="rounded border border-(--color-glass-border) bg-(--color-surface) p-5">
+        <h2 className="mb-4 text-[13px] font-semibold tracking-[0.08em] text-(--color-text-primary) uppercase">
           Regime x Model Performance Matrix
-          <span
-            style={{
-              fontSize: 10,
-              color: "var(--color-text-muted)",
-              marginLeft: 8,
-            }}
-          >
-            Sharpe per Regime
-          </span>
+          <span className="ml-2 text-[10px] text-(--color-text-muted)">Sharpe per Regime</span>
         </h2>
 
         {matrixLoading ? (
-          <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>
-            Loading...
-          </div>
+          <div className="text-xs text-(--color-text-muted)">Loading...</div>
         ) : matrix && matrix.entries.length > 0 ? (
           <MatrixGrid entries={matrix.entries} regimes={matrix.regimes} models={matrix.models} />
         ) : (
-          <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>
+          <div className="text-xs text-(--color-text-muted)">
             No matrix data. Run ExpertProfiler (PROFILE=1) to generate.
           </div>
         )}
@@ -146,58 +100,31 @@ function RegimeBarChart({ labels }: { labels: { regime_name: string }[] }) {
   const barHeight = 28;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div className="flex flex-col gap-1">
       {entries.map(([name, count]) => {
         const pct = (count / maxCount) * 100;
         return (
-          <div
-            key={name}
-            style={{ display: "flex", alignItems: "center", gap: 8 }}
-          >
+          <div key={name} className="flex items-center gap-2">
             <div
-              style={{
-                width: 120,
-                fontSize: 11,
-                fontWeight: 500,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                color: regimeColor(name),
-                textAlign: "right",
-                flexShrink: 0,
-              }}
+              className="w-[120px] shrink-0 text-right text-[11px] font-medium tracking-[0.06em] uppercase"
+              style={{ color: regimeColor(name) }}
             >
               {regimeLabel(name)}
             </div>
             <div
-              style={{
-                flex: 1,
-                height: barHeight,
-                borderRadius: 2,
-                background: "var(--color-elevated)",
-                overflow: "hidden",
-                position: "relative",
-              }}
+              className="relative flex-1 overflow-hidden rounded-[2px] bg-(--color-elevated)"
+              style={{ height: barHeight }}
             >
               <div
+                className="h-full rounded-[2px] opacity-70"
                 style={{
-                  height: "100%",
                   width: `${pct}%`,
                   background: regimeColor(name),
-                  opacity: 0.7,
-                  borderRadius: 2,
                   transition: "width 0.3s ease",
                 }}
               />
             </div>
-            <div
-              style={{
-                width: 48,
-                fontSize: 11,
-                fontFamily: "var(--font-mono)",
-                color: "var(--color-text-secondary)",
-                textAlign: "right",
-              }}
-            >
+            <div className="w-12 text-right font-mono text-[11px] text-(--color-text-secondary)">
               {count}
             </div>
           </div>
@@ -223,43 +150,18 @@ function MatrixGrid({
   }
 
   return (
-    <div style={{ overflow: "auto" }}>
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          fontSize: 11,
-        }}
-      >
+    <div className="overflow-auto">
+      <table className="w-full text-[11px]" style={{ borderCollapse: "collapse" }}>
         <thead>
           <tr>
-            <th
-              style={{
-                padding: "6px 10px",
-                textAlign: "left",
-                color: "var(--color-text-muted)",
-                fontWeight: 500,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                fontSize: 10,
-                borderBottom: "1px solid var(--color-glass-border)",
-              }}
-            >
+            <th className="border-b border-(--color-glass-border) px-[10px] py-[6px] text-left text-[10px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
               Model
             </th>
             {regimes.map((r) => (
               <th
                 key={r}
-                style={{
-                  padding: "6px 10px",
-                  textAlign: "right",
-                  color: regimeColor(r),
-                  fontWeight: 500,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  fontSize: 10,
-                  borderBottom: "1px solid var(--color-glass-border)",
-                }}
+                className="border-b border-(--color-glass-border) px-[10px] py-[6px] text-right text-[10px] font-medium tracking-[0.06em] uppercase"
+                style={{ color: regimeColor(r) }}
               >
                 {regimeLabel(r)}
               </th>
@@ -268,45 +170,23 @@ function MatrixGrid({
         </thead>
         <tbody>
           {models.map((model) => (
-            <tr
-              key={model}
-              style={{
-                borderBottom: "1px solid var(--color-glass-border)",
-              }}
-            >
-              <td
-                style={{
-                  padding: "8px 10px",
-                  color: "var(--color-text-primary)",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 11,
-                }}
-              >
+            <tr key={model} className="border-b border-(--color-glass-border)">
+              <td className="px-[10px] py-2 font-mono text-[11px] text-(--color-text-primary)">
                 {model}
               </td>
               {regimes.map((regime) => {
                 const e = lookup[regime]?.[model];
                 const sharpe = e?.sharpe ?? NaN;
                 const val = isNaN(sharpe) ? "--" : sharpe.toFixed(2);
-                const color =
-                  isNaN(sharpe)
-                    ? "var(--color-text-dim)"
-                    : sharpe > 0.5
-                      ? "#089981"
-                      : sharpe > 0
-                        ? "var(--color-text-secondary)"
-                        : "#F23645";
+                const color = isNaN(sharpe)
+                  ? "var(--color-text-dim)"
+                  : sharpe > 0.5
+                    ? "#089981"
+                    : sharpe > 0
+                      ? "var(--color-text-secondary)"
+                      : "#F23645";
                 return (
-                  <td
-                    key={regime}
-                    style={{
-                      padding: "8px 10px",
-                      textAlign: "right",
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 11,
-                      color,
-                    }}
-                  >
+                  <td key={regime} className="px-[10px] py-2 text-right font-mono text-[11px]">
                     {val}
                   </td>
                 );

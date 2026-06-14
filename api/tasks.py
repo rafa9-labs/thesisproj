@@ -383,6 +383,10 @@ if not IS_DESKTOP:
                     "task": "prefetch_news",
                     "schedule": 3600.0,
                 },
+                "prefetch-calendar-daily": {
+                    "task": "prefetch_calendar",
+                    "schedule": 86400.0,
+                },
             },
         )
         _celery_available = True
@@ -701,6 +705,73 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     if _run_backtest_via_wsl(job_id, config):
         return
 
+    # --- S12.1: Pre-fetch news once per job (deployment only) ---
+    _news_agg = None
+    _econ_events = None
+    _llm_agg = None
+    _filtered_articles = []
+    config_overrides = config.get("config_overrides", {})
+    _use_news = bool(config_overrides.get("use_news", config.get("use_news", True)))
+    if _use_news:
+        import logging as _logging
+        _nl = _logging.getLogger(__name__)
+
+        _timeframe = config.get("timeframe", "H1")
+        _freq_map = {"M30": "30min", "H1": "1h", "H4": "4h"}
+        _news_freq = _freq_map.get(_timeframe, "1h")
+
+        try:
+            from news.scraper import NewsScraper, ECONOMIC_EVENTS
+            from news.sentiment import SentimentAnalyzer
+
+            scraper = NewsScraper()
+            articles = scraper.fetch_all()
+
+            _start_dt = pd.Timestamp(start) if start else pd.Timestamp(end) - pd.Timedelta(days=365)
+            _end_dt = pd.Timestamp(end) + pd.Timedelta(days=1)
+
+            _filtered_articles = [
+                a for a in articles
+                if _start_dt <= pd.Timestamp(a.timestamp) <= _end_dt
+            ]
+
+            if _filtered_articles:
+                _news_backend = str(config_overrides.get("news_sentiment_backend", "vader"))
+                analyzer = SentimentAnalyzer(backend=_news_backend)
+                scored = analyzer.score_articles(_filtered_articles)
+                _news_agg = analyzer.aggregate_to_df(scored, freq=_news_freq)
+
+                _years = set()
+                for y in range(_start_dt.year, _end_dt.year + 1):
+                    _years.add(y)
+                _econ_events = []
+                for y in sorted(_years):
+                    _econ_events.extend(
+                        NewsScraper.economic_calendar_events(y, list(ECONOMIC_EVENTS))
+                    )
+        except Exception as _news_pre_exc:
+            _nl.warning("News pre-fetch failed (will skip news features): %s", _news_pre_exc)
+
+        _llm_enabled = bool(config_overrides.get("llm_sentiment_enabled", False))
+        if _llm_enabled and _filtered_articles:
+            try:
+                from pipeline.llm.sentiment import LLMSentimentEngine
+
+                _llm_cfg = {
+                    "llm_sentiment_enabled": _llm_enabled,
+                    "llm_backend": config_overrides.get("llm_backend", "ollama"),
+                    "llm_model": config_overrides.get("llm_model", "llama3"),
+                    "llm_api_key": config_overrides.get("llm_api_key", ""),
+                    "llm_weight": config_overrides.get("llm_weight", 0.7),
+                    "llm_batch_size": config_overrides.get("llm_batch_size", 10),
+                    "llm_cache_ttl_hours": config_overrides.get("llm_cache_ttl_hours", 720),
+                }
+                llm_engine = LLMSentimentEngine(config=_llm_cfg)
+                llm_scored = llm_engine.score_articles(_filtered_articles, pair=pair)
+                _llm_agg = llm_engine.aggregate_to_df(llm_scored, freq=_news_freq)
+            except Exception as _llm_pre_exc:
+                _nl.warning("LLM sentiment pre-fetch failed (will skip LLM features): %s", _llm_pre_exc)
+
     try:
         for cycle_idx, model_type in enumerate(models):
             _check_force_stopped(job_id)
@@ -750,6 +821,13 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 bt._progress_callback = _progress_cb
                 bt._force_stop_checker = lambda: _is_cancelled(job_id)
                 bt._job_id = job_id
+
+                # S12.1: Inject pre-fetched news into backtester (deployment only)
+                if _news_agg is not None:
+                    bt._news_aggregated = _news_agg
+                    bt._news_economic_events = _econ_events
+                if _llm_agg is not None:
+                    bt._llm_aggregated = _llm_agg
 
                 from api.process_cleanup import register_backtester as _reg_bt_task
                 _reg_bt_task(job_id, bt)
@@ -897,6 +975,20 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                     if pd.api.types.is_datetime64_any_dtype(safe_trades[col]):
                         safe_trades[col] = safe_trades[col].astype(str)
                 safe_trades = safe_trades.where(pd.notnull(safe_trades), None)
+
+                safe_trades.rename(columns={
+                    "entry_time": "entry_date",
+                    "exit_time": "exit_date",
+                    "side": "direction",
+                    "pnl_pct": "return_pct",
+                    "bars_held": "duration_bars",
+                }, inplace=True)
+
+                if "direction" in safe_trades.columns:
+                    safe_trades["direction"] = safe_trades["direction"].map(
+                        lambda x: "BUY" if x == "long" else ("SELL" if x == "short" else str(x))
+                    )
+
                 metrics_row["trades"] = json.loads(safe_trades.to_json(orient="records", date_format="iso"))
             else:
                 metrics_row["trades"] = []
@@ -1350,11 +1442,26 @@ def _prefetch_news_impl():
         return {"status": "error", "reason": str(exc)[:200]}
 
 
+def _prefetch_calendar_impl():
+    """Background task: refresh economic calendar cache daily."""
+    import logging
+    _cal_log = logging.getLogger(__name__)
+    try:
+        from news.scraper import NewsScraper
+        events = NewsScraper.fetch_calendar_live()
+        _cal_log.info("Calendar prefetch: %d events cached", len(events))
+        return {"status": "ok", "events": len(events)}
+    except Exception as exc:
+        _cal_log.warning("Calendar prefetch failed: %s", exc)
+        return {"status": "error", "reason": str(exc)[:200]}
+
+
 if _celery_available and celery_app is not None:
     run_backtest_task = celery_app.task(name="run_backtest")(_run_backtest_impl)
     download_data_task = celery_app.task(name="download_data")(_download_data_impl)
     run_forward_test_task = celery_app.task(name="run_forward_test")(_run_forward_test_impl)
     prefetch_news_task = celery_app.task(name="prefetch_news")(_prefetch_news_impl)
+    prefetch_calendar_task = celery_app.task(name="prefetch_calendar")(_prefetch_calendar_impl)
 else:
     class _SyncTask:
         """Celery-compatible task interface for synchronous (desktop) execution."""
@@ -1379,5 +1486,13 @@ else:
     class DownloadDataSync(_SyncTask):
         _func = staticmethod(_download_data_impl)
 
+    class PrefetchNewsSync(_SyncTask):
+        _func = staticmethod(_prefetch_news_impl)
+
+    class PrefetchCalendarSync(_SyncTask):
+        _func = staticmethod(_prefetch_calendar_impl)
+
     run_backtest_task = RunBacktestSync()
     download_data_task = DownloadDataSync()
+    prefetch_news_task = PrefetchNewsSync()
+    prefetch_calendar_task = PrefetchCalendarSync()

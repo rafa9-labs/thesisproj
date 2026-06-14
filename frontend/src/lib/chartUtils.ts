@@ -52,7 +52,10 @@ export function computeRollingReturn(
   return result;
 }
 
-export function binTradeReturns(trades: TradeRecord[], numBins?: number): { bin: string; count: number; positive: boolean }[] {
+export function binTradeReturns(
+  trades: TradeRecord[],
+  numBins?: number,
+): { bin: string; count: number; positive: boolean }[] {
   if (trades.length === 0) return [];
 
   const returns = trades.map((t) => t.return_pct).filter((r) => r != null);
@@ -86,7 +89,9 @@ export function binTradeReturns(trades: TradeRecord[], numBins?: number): { bin:
   return bins;
 }
 
-export function cumulativePnlFromTrades(trades: TradeRecord[]): { tradeNum: number; cumPnl: number }[] {
+export function cumulativePnlFromTrades(
+  trades: TradeRecord[],
+): { tradeNum: number; cumPnl: number }[] {
   const sorted = [...trades]
     .filter((t) => t.entry_date && t.return_pct != null)
     .sort((a, b) => a.entry_date.localeCompare(b.entry_date));
@@ -98,7 +103,10 @@ export function cumulativePnlFromTrades(trades: TradeRecord[]): { tradeNum: numb
   });
 }
 
-export function monthlySparklineData(monthly: MonthlyResult[] | null, key: keyof MonthlyResult): number[] {
+export function monthlySparklineData(
+  monthly: MonthlyResult[] | null,
+  key: keyof MonthlyResult,
+): number[] {
   if (!monthly || monthly.length === 0) return [];
   return monthly.map((m) => {
     const v = m[key];

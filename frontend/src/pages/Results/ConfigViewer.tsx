@@ -1,95 +1,68 @@
-import { useState } from "react";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 
 interface ConfigViewerProps {
   config: Record<string, unknown> | null;
 }
 
-function JsonValue({ value, indent }: { value: unknown; indent: number }) {
-  if (value === null) {
-    return <span style={{ color: "var(--color-text-muted)" }}>null</span>;
-  }
-  if (typeof value === "boolean") {
-    return <span style={{ color: "var(--color-accent-info)" }}>{String(value)}</span>;
-  }
-  if (typeof value === "number") {
-    return <span style={{ color: "var(--color-accent-warning)" }}>{value}</span>;
-  }
-  if (typeof value === "string") {
-    return <span style={{ color: "var(--color-accent-success)" }}>"{value}"</span>;
-  }
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return <span style={{ color: "var(--color-text-muted)" }}>[]</span>;
-    }
-    return (
-      <span className="flex flex-col">
-        <span style={{ color: "var(--color-text-muted)" }}>[</span>
-        {value.map((item, i) => (
-          <span key={i} style={{ paddingLeft: indent + 12 }}>
-            <JsonValue value={item} indent={indent + 12} />
-            {i < value.length - 1 && <span style={{ color: "var(--color-text-muted)" }}>,</span>}
-          </span>
-        ))}
-        <span style={{ paddingLeft: indent, color: "var(--color-text-muted)" }}>]</span>
-      </span>
-    );
-  }
-  if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 0) {
-      return <span style={{ color: "var(--color-text-muted)" }}>{"{}"}</span>;
-    }
-    return (
-      <span className="flex flex-col">
-        <span style={{ color: "var(--color-text-muted)" }}>{"{"}</span>
-        {entries.map(([k, v], i) => (
-          <span key={k} style={{ paddingLeft: indent + 12 }}>
-            <span style={{ color: "var(--color-accent)" }}>"{k}"</span>
-            <span style={{ color: "var(--color-text-muted)" }}>: </span>
-            <JsonValue value={v} indent={indent + 12} />
-            {i < entries.length - 1 && <span style={{ color: "var(--color-text-muted)" }}>,</span>}
-          </span>
-        ))}
-        <span style={{ paddingLeft: indent, color: "var(--color-text-muted)" }}>{"}"}</span>
-      </span>
-    );
-  }
-  return <span>{String(value)}</span>;
-}
-
 export function ConfigViewer({ config }: ConfigViewerProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
   if (!config || Object.keys(config).length === 0) {
     return null;
   }
 
+  const handleExport = () => {
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "kodaquant-config.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleLoad = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const loaded = JSON.parse(evt.target?.result as string);
+          const configOverrides = loaded?.config ?? loaded;
+          const backtestUrl = `/backtest?config=${encodeURIComponent(JSON.stringify(configOverrides))}`;
+          window.open(backtestUrl, "_blank");
+        } catch {
+          alert("Invalid JSON config file.");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
   return (
-    <div className="flex flex-col gap-1">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] transition-colors"
-        style={{ color: "var(--color-text-secondary)", cursor: "pointer" }}
-      >
-        {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        Best Configuration
-      </button>
-      {isOpen && (
-        <div
-          className="rounded-sm border p-4 overflow-auto"
-          style={{
-            backgroundColor: "var(--color-surface)",
-            borderColor: "var(--color-border)",
-            fontFamily: "var(--font-mono)",
-            fontSize: 12,
-            lineHeight: 1.6,
-            maxHeight: 400,
-          }}
+    <div className="flex flex-col gap-2">
+      <h3 className="text-[10px] font-semibold tracking-[0.08em] text-(--color-text-muted) uppercase">
+        Configuration
+      </h3>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleExport}
+          className="flex cursor-pointer items-center gap-1.5 rounded-md border border-(--color-glass-border) bg-white/[0.04] px-3 py-2 text-[10px] font-medium tracking-wider text-(--color-text-secondary) uppercase transition-all hover:brightness-110"
         >
-          <JsonValue value={config} indent={0} />
-        </div>
-      )}
+          <Download size={11} />
+          Export Config (.json)
+        </button>
+        <button
+          onClick={handleLoad}
+          className="flex cursor-pointer items-center gap-1.5 rounded-md border border-(--color-glass-border) bg-white/[0.04] px-3 py-2 text-[10px] font-medium tracking-wider text-(--color-text-secondary) uppercase transition-all hover:brightness-110"
+        >
+          <Upload size={11} />
+          Load Config Schema
+        </button>
+      </div>
     </div>
   );
 }

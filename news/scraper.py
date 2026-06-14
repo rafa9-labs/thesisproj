@@ -35,6 +35,7 @@ ECONOMIC_EVENTS = [
     "PMI",
     "ECB_Rate",
     "BOE_Rate",
+    "BOJ_Rate",
 ]
 
 RSS_FEEDS = {
@@ -77,7 +78,11 @@ class NewsArticle:
         if len(text) <= 180:
             return text
         return text[:177].rsplit(" ", 1)[0] + "..."
-    
+
+    @property
+    def highlighted_body(self) -> str:
+        return _highlight_sentiment_phrases(_strip_html(self.body))
+
     @staticmethod
     def bias_label(score: float) -> str:
         if score > 0.05:
@@ -85,6 +90,71 @@ class NewsArticle:
         if score < -0.05:
             return "short"
         return "neutral"
+
+
+# ── Sentiment keyword highlighting for frontend display ──────────────
+
+_BULLISH_PHRASES = [
+    r"\b(bullish?|surge[ds]?|rall(?:y|ies|ied)|soar[esd]?|jump[esd]?|climb[esd]?|"
+    r"boost[esd]?|rebound[esd]?|outperform[esd]?|beat[es]?\s+(?:forecast|estimate|expectation)|"
+    r"upward|upbeat|rosy|optimis[mt]|dovish|doves?|"
+    r"easing?|stimulus|accommodati(?:ve|on)|rate\s+cut|cut\s+rates?|"
+    r"strong(?:er|ly)?\s+(?:growth|data|demand|recovery|jobs|employment|GDP)|"
+    r"improve[ds]?\s+(?:outlook|sentiment|confidence)|"
+    r"expansion|recovery|growing?|growth|positive|"
+    r"resilien[ct]|stable|stability)\b",
+]
+
+_BEARISH_PHRASES = [
+    r"\b(bearish?|plummet[esd]?|plung[esd]?|tumble[esd]?|slump[esd]?|sink[esd]?|"
+    r"drop[peds]?|decline[ds]?|fall[es]?|fading?|weaken[esd]?|"
+    r"underperform[esd]?|miss[es]?\s+(?:forecast|estimate|expectation)|"
+    r"downward|gloomy|pessimis[mt]|hawkish|hawks?|"
+    r"tightening|rate\s+hike|hik(?:e|ed|ing)\s+rates?|"
+    r"weak(?:er)?\s+(?:growth|data|demand|recovery|jobs|employment|GDP)|"
+    r"deteriorat(?:e|ing|ion)|worse|worries?|concern|fears?|"
+    r"recession|contraction|slowdown|stagflation|crisis|turmoil|"
+    r"risk-off|risk\s+off|sell-off|selloff|"
+    r"uncertain|volatile|volatility|tension[es]?|conflict|"
+    r"inflation(?:ary)?\s+(?:fears?|concern|pressure|risk|surge|spike|rise))\b",
+]
+
+_bullish_re = _re.compile("|".join(_BULLISH_PHRASES), _re.IGNORECASE)
+_bearish_re = _re.compile("|".join(_BEARISH_PHRASES), _re.IGNORECASE)
+
+
+def _highlight_sentiment_phrases(text: str) -> str:
+    if not text:
+        return ""
+
+    spans = []
+    for m in _bearish_re.finditer(text):
+        spans.append((m.start(), m.end(), "bearish"))
+    for m in _bullish_re.finditer(text):
+        spans.append((m.start(), m.end(), "bullish"))
+    if not spans:
+        return text
+
+    spans.sort(key=lambda x: (x[0], -x[1]))
+
+    merged = []
+    for s in spans:
+        if merged and s[0] < merged[-1][1]:
+            last = merged[-1]
+            if last[2] == s[2]:
+                merged[-1] = (last[0], max(last[1], s[1]), last[2])
+            continue
+        merged.append(s)
+
+    result = []
+    last_end = 0
+    for start, end, sentiment in merged:
+        result.append(text[last_end:start])
+        cls = "text-emerald-400 bg-emerald-500/10 px-0.5 rounded font-semibold" if sentiment == "bullish" else "text-rose-400 bg-rose-500/10 px-0.5 rounded font-semibold"
+        result.append(f'<span class="{cls}">{text[start:end]}</span>')
+        last_end = end
+    result.append(text[last_end:])
+    return "".join(result)
 
 
 class NewsScraper:
@@ -248,27 +318,30 @@ class NewsScraper:
 
     # -- Economic Calendar --------------------------------------------
 
+    _EVENT_CURRENCY_MAP = {
+        "NFP": "USD",
+        "FOMC": "USD",
+        "CPI": "USD",
+        "GDP": "USD",
+        "Retail_Sales": "USD",
+        "PMI": "USD",
+        "ECB_Rate": "EUR",
+        "BOE_Rate": "GBP",
+        "BOJ_Rate": "JPY",
+    }
+
     @staticmethod
     def economic_calendar_events(
         year: int,
         events: List[str] | None = None,
     ) -> List[Dict]:
-        """Return a hardcoded economic calendar for major FX events.
+        """Return an economic calendar for major FX events.
 
-        This provides known NFP, FOMC, CPI release dates by year.
-        For production use, replace with a live calendar API.
+        Uses hardcoded approximate dates per event type.
+        Each dict has keys: ``date``, ``event``, ``impact`` (1-3), ``currency``.
 
-        Parameters
-        ----------
-        year : int
-            Year to get events for.
-        events : list[str] or None
-            Filter to these event names (from :data:`ECONOMIC_EVENTS`).
-
-        Returns
-        -------
-        list[dict]
-            Each dict has keys: ``date``, ``event``, ``impact`` (1-3).
+        For production use, call :meth:`fetch_calendar_live` which tries
+        online sources before falling back to this method.
         """
         event_filter = set(events) if events else set(ECONOMIC_EVENTS)
 
@@ -276,9 +349,8 @@ class NewsScraper:
         nfp_dates = []
         for month in range(1, 13):
             try:
-                first_day = datetime(year, month, 1)
-                friday_count = 0
                 day = 1
+                friday_count = 0
                 while day <= 31:
                     try:
                         d = datetime(year, month, day)
@@ -293,16 +365,15 @@ class NewsScraper:
             except Exception:
                 pass
 
-        # FOMC meetings (approximate -- 8 per year, ~every 6 weeks)
+        # FOMC meetings (approximate -- 8 per year)
         fomc_dates = []
-        fomc_months = [1, 3, 5, 6, 7, 9, 10, 12]
-        for month in fomc_months:
+        for month in [1, 3, 5, 6, 7, 9, 10, 12]:
             try:
                 fomc_dates.append(datetime(year, month, 15))
             except ValueError:
                 pass
 
-        # CPI (typically mid-month, ~12th-15th)
+        # CPI (mid-month)
         cpi_dates = []
         for month in range(1, 13):
             try:
@@ -311,33 +382,88 @@ class NewsScraper:
                 pass
 
         result = []
+        _cur = NewsScraper._EVENT_CURRENCY_MAP
         if "NFP" in event_filter:
             for d in nfp_dates:
-                result.append({"date": d, "event": "NFP", "impact": 3})
+                result.append({"date": d, "event": "NFP", "impact": 3, "currency": _cur.get("NFP", "USD")})
         if "FOMC" in event_filter:
             for d in fomc_dates:
-                result.append({"date": d, "event": "FOMC", "impact": 3})
+                result.append({"date": d, "event": "FOMC", "impact": 3, "currency": _cur.get("FOMC", "USD")})
         if "CPI" in event_filter:
             for d in cpi_dates:
-                result.append({"date": d, "event": "CPI", "impact": 2})
+                result.append({"date": d, "event": "CPI", "impact": 2, "currency": _cur.get("CPI", "USD")})
         if "GDP" in event_filter:
             for month in [1, 4, 7, 10]:
-                result.append({"date": datetime(year, month, 27), "event": "GDP", "impact": 2})
+                result.append({"date": datetime(year, month, 27), "event": "GDP", "impact": 2, "currency": _cur.get("GDP", "USD")})
         if "Retail_Sales" in event_filter:
             for month in range(1, 13):
-                result.append({"date": datetime(year, month, 14), "event": "Retail_Sales", "impact": 2})
+                result.append({"date": datetime(year, month, 14), "event": "Retail_Sales", "impact": 2, "currency": _cur.get("Retail_Sales", "USD")})
         if "PMI" in event_filter:
             for month in range(1, 13):
-                result.append({"date": datetime(year, month, 1), "event": "PMI", "impact": 1})
+                result.append({"date": datetime(year, month, 1), "event": "PMI", "impact": 1, "currency": _cur.get("PMI", "USD")})
         if "ECB_Rate" in event_filter:
             for month in [1, 3, 4, 6, 7, 9, 10, 12]:
-                result.append({"date": datetime(year, month, 20), "event": "ECB_Rate", "impact": 3})
+                result.append({"date": datetime(year, month, 20), "event": "ECB_Rate", "impact": 3, "currency": _cur.get("ECB_Rate", "EUR")})
         if "BOE_Rate" in event_filter:
             for month in [2, 3, 5, 6, 8, 9, 11, 12]:
-                result.append({"date": datetime(year, month, 10), "event": "BOE_Rate", "impact": 3})
+                result.append({"date": datetime(year, month, 10), "event": "BOE_Rate", "impact": 3, "currency": _cur.get("BOE_Rate", "GBP")})
+        if "BOJ_Rate" in event_filter:
+            for month in [1, 3, 4, 6, 7, 9, 10, 12]:
+                result.append({"date": datetime(year, month, 20), "event": "BOJ_Rate", "impact": 3, "currency": _cur.get("BOJ_Rate", "JPY")})
 
         result.sort(key=lambda x: x["date"])
         return result
+
+    @staticmethod
+    def fetch_calendar_live(
+        year: int | None = None,
+    ) -> List[Dict]:
+        """Try to fetch economic calendar from online sources.
+
+        Falls back to hardcoded calendar if online sources are unavailable.
+        Caches results to Parquet for fast subsequent access.
+
+        Parameters
+        ----------
+        year : int or None
+            Year to fetch. Defaults to current year.
+
+        Returns
+        -------
+        list[dict]
+            Each dict: ``date``, ``event``, ``impact``, ``currency``.
+        """
+        if year is None:
+            year = datetime.now(timezone.utc).year
+
+        # Try to load from Parquet cache first
+        cached = _load_calendar_cache(year)
+        if cached is not None:
+            return cached
+
+        # Try online source
+        try:
+            import requests
+            current_year = datetime.now(timezone.utc).year
+            if year == current_year:
+                resp = requests.get(
+                    "https://cdn.jsdelivr.net/gh/fawazahmed0/forex-calendar@main/calendar.json",
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                events = _parse_online_calendar(data)
+                if events:
+                    _save_calendar_cache(year, events)
+                    return events
+        except Exception:
+            logger.debug("Online calendar fetch failed, using hardcoded")
+
+        # Fallback to hardcoded
+        fallback = NewsScraper.economic_calendar_events(year)
+        _save_calendar_cache(year, fallback)
+        return fallback
+
 
     # -- Disk Cache ---------------------------------------------------
 
@@ -585,3 +711,60 @@ class NewsScraper:
             if pair in tags or base in tags or quote in tags:
                 relevant.append(article)
         return relevant
+
+
+# ── Calendar Cache Helpers (module-level) ────────────────────────────
+
+def _calendar_cache_path(year: int) -> Path:
+    return _CACHE_DIR / f"calendar_{year}.parquet"
+
+
+def _load_calendar_cache(year: int) -> List[Dict] | None:
+    path = _calendar_cache_path(year)
+    if not path.exists():
+        return None
+    try:
+        df = pd.read_parquet(path)
+        mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        age_days = (datetime.now(timezone.utc) - mtime).days
+        if age_days > 1:
+            return None
+        return df.to_dict("records")
+    except Exception:
+        return None
+
+
+def _save_calendar_cache(year: int, events: List[Dict]) -> None:
+    if not events:
+        return
+    df = pd.DataFrame(events)
+    for col in ["date"]:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col]).dt.strftime("%Y-%m-%d")
+    path = _calendar_cache_path(year)
+    tmp = path.with_suffix(".tmp")
+    df.to_parquet(tmp, index=False)
+    os.replace(tmp, path)
+
+
+def _parse_online_calendar(data: list) -> List[Dict]:
+    events = []
+    for item in data:
+        try:
+            date_str = item.get("date", "")
+            event_name = item.get("name", item.get("event", "")).strip()
+            if not event_name or not date_str:
+                continue
+            impact_map = {"High": 3, "Medium": 2, "Low": 1}
+            impact = impact_map.get(item.get("impact", "medium"), 2)
+            currency = item.get("currency", item.get("country", "USD")).upper()
+            date = datetime.strptime(date_str[:10], "%Y-%m-%d")
+            events.append({
+                "date": date,
+                "event": event_name[:80],
+                "impact": impact,
+                "currency": currency[:3],
+            })
+        except Exception:
+            continue
+    return events

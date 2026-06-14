@@ -26,24 +26,15 @@ export function ParameterExplorer({ metrics }: Props) {
   const validCount = trials.filter((t) => t.value != null).length;
 
   return (
-    <div
-      className="rounded-sm border p-5"
-      style={{
-        borderColor: "var(--color-glass-border)",
-        backgroundColor: "var(--color-glass)",
-      }}
-    >
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-sm border border-(--color-glass-border) bg-(--color-glass) p-5">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Activity size={16} style={{ color: "var(--color-accent)" }} />
-          <h3
-            className="text-xs font-semibold uppercase tracking-[0.1em]"
-            style={{ color: "var(--color-text-secondary)" }}
-          >
+          <Activity size={16} className="text-(--color-accent)" />
+          <h3 className="text-xs font-semibold tracking-[0.1em] text-(--color-text-secondary) uppercase">
             Parameter Explorer
           </h3>
         </div>
-        <span className="text-[10px] font-mono" style={{ color: "var(--color-text-muted)" }}>
+        <span className="font-mono text-[10px] text-(--color-text-muted)">
           {validCount}/{trials.length} trials
         </span>
       </div>
@@ -51,9 +42,9 @@ export function ParameterExplorer({ metrics }: Props) {
       <div className="flex flex-col gap-4">
         {/* Parallel Coordinates */}
         <div>
-          <div className="flex items-center gap-1.5 mb-2">
-            <TrendingUp size={11} style={{ color: "var(--color-text-muted)" }} />
-            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
+          <div className="mb-2 flex items-center gap-1.5">
+            <TrendingUp size={11} className="text-(--color-text-muted)" />
+            <span className="text-[10px] tracking-[0.06em] text-(--color-text-muted) uppercase">
               Parallel Coordinates
             </span>
           </div>
@@ -64,9 +55,9 @@ export function ParameterExplorer({ metrics }: Props) {
 
         {/* Contour Plot */}
         <div>
-          <div className="flex items-center gap-1.5 mb-2">
-            <TrendingUp size={11} style={{ color: "var(--color-text-muted)" }} />
-            <span className="text-[10px] uppercase tracking-[0.06em]" style={{ color: "var(--color-text-muted)" }}>
+          <div className="mb-2 flex items-center gap-1.5">
+            <TrendingUp size={11} className="text-(--color-text-muted)" />
+            <span className="text-[10px] tracking-[0.06em] text-(--color-text-muted) uppercase">
               Contour (Param × Param vs Score)
             </span>
           </div>

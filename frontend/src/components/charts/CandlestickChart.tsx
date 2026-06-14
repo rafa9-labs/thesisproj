@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { createChart, type IChartApi, type ISeriesApi, CandlestickSeries, HistogramSeries, LineSeries, ColorType } from "lightweight-charts";
+import {
+  createChart,
+  type IChartApi,
+  type ISeriesApi,
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
+  ColorType,
+} from "lightweight-charts";
 import { useCandles } from "@/api/queries";
 import { TIMEFRAMES } from "@/lib/constants";
 
@@ -24,7 +32,7 @@ export function CandlestickChart({
   pair,
   timeframe = "M30",
   limit = 200,
-  height = 460,
+  height,
   onTimeframeChange,
   overlayLines,
   showVolume = true,
@@ -49,7 +57,10 @@ export function CandlestickChart({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const chart = createChart(containerRef.current, {
+    const container = containerRef.current;
+    const chartHeight = height ?? container.clientHeight;
+
+    const chart = createChart(container, {
       layout: {
         background: { type: ColorType.Solid, color: "#131722" },
         textColor: "#80899F",
@@ -60,8 +71,8 @@ export function CandlestickChart({
         vertLines: { color: "#2A2E39" },
         horzLines: { color: "#2A2E39" },
       },
-      width: containerRef.current.clientWidth,
-      height,
+      width: container.clientWidth,
+      height: chartHeight,
       crosshair: { mode: 0 },
       timeScale: {
         borderColor: "#2A2E39",
@@ -98,10 +109,13 @@ export function CandlestickChart({
 
     const observer = new ResizeObserver(() => {
       if (containerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
+        chartRef.current.applyOptions({
+          width: containerRef.current.clientWidth,
+          ...(height == null ? { height: containerRef.current.clientHeight } : {}),
+        });
       }
     });
-    observer.observe(containerRef.current);
+    observer.observe(container);
     observerRef.current = observer;
 
     chartRef.current = chart;
@@ -166,31 +180,31 @@ export function CandlestickChart({
   }, [data, isLoading, pair, overlayLines, showVolume, candles]);
 
   useEffect(() => {
-    if (chartRef.current && containerRef.current) {
+    if (chartRef.current && containerRef.current && height != null) {
       chartRef.current.applyOptions({ height });
     }
   }, [height]);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex h-full min-h-0 flex-col gap-2">
       {showToolbar && (
         <div className="flex items-center gap-1.5">
           {TIMEFRAMES.map((tf) => (
             <button
               key={tf.key}
               onClick={() => handleTimeframeChange(tf.key)}
-              className="rounded-md border px-2.5 py-0.5 text-[10px] font-medium uppercase transition-all duration-200"
+              className="rounded-md border px-2.5 py-0.5 font-mono text-[10px] font-medium uppercase transition-all duration-200"
               style={{
-                borderColor: activeTf === tf.key ? "var(--color-brand)" : "var(--color-glass-border)",
+                borderColor:
+                  activeTf === tf.key ? "var(--color-brand)" : "var(--color-glass-border)",
                 backgroundColor: activeTf === tf.key ? "var(--color-brand-glow)" : "transparent",
                 color: activeTf === tf.key ? "var(--color-brand)" : "var(--color-text-muted)",
-                fontFamily: "var(--font-mono)",
               }}
             >
               {tf.label}
             </button>
           ))}
-          <span className="text-[10px] ml-2" style={{ color: "var(--color-text-muted)" }}>
+          <span className="ml-2 text-[10px] text-(--color-text-muted)">
             {pair} {activeTf}
           </span>
         </div>
@@ -198,17 +212,17 @@ export function CandlestickChart({
 
       <div
         ref={containerRef}
-        className="w-full rounded-sm overflow-hidden border"
-        style={{ borderColor: "var(--color-glass-border)", backgroundColor: "var(--color-app)", minHeight: height }}
+        className="w-full overflow-hidden rounded-sm border border-(--color-glass-border) bg-(--color-app)"
+        style={height != null ? { minHeight: height } : { flex: 1, minHeight: 200 }}
       >
         {isLoading && (
-          <div className="flex items-center justify-center" style={{ height }}>
-            <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>Loading candles...</span>
+          <div className="flex items-center justify-center" style={{ height: height ?? "100%" }}>
+            <span className="text-xs text-(--color-text-muted)">Loading candles...</span>
           </div>
         )}
         {!isLoading && candles.length === 0 && (
-          <div className="flex items-center justify-center" style={{ height }}>
-            <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+          <div className="flex items-center justify-center" style={{ height: height ?? "100%" }}>
+            <span className="text-xs text-(--color-text-muted)">
               No data for {pair} at {activeTf}
             </span>
           </div>

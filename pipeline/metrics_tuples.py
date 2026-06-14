@@ -587,6 +587,8 @@ CLASS_DEFAULTS = {
         "cv_use_psr_trim": False,
 
         # --- Pruning controls ---
+        "adaptive_pruning": True,
+        "adaptive_grace_trials": 10,
         "prune_min_folds": 3,
         "prune_iqr_mult": 1.0125,
         "prune_abs_floor_sr": -8.0,

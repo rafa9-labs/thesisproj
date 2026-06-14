@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLiveSentiment, useNewsStatus } from "@/api/queries";
 import { formatPercent } from "@/lib/formatters";
+import { BullBearBar } from "@/components/shared/BullBearBar";
 import type { LiveSentimentPairData, LiveSentimentResponse } from "@/api/schemas";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
@@ -10,6 +11,9 @@ interface ArticleItem {
   sentiment_score: number;
   timestamp: string;
   relevance_tier?: number;
+  url?: string;
+  body?: string;
+  summary?: string;
 }
 
 function formatStaleness(ageHours: number | undefined | null): string {
@@ -20,119 +24,33 @@ function formatStaleness(ageHours: number | undefined | null): string {
   return `${Math.round(ageHours / 24)}d ago`;
 }
 
-/** Confidence-adjusted horizontal Bull/Bear bar — dims when data is thin */
-function BullBearBar({
-  position,
-  articleCount = 0,
-  confidence = null,
-  compact = false,
-  vaderContribution,
-  llmContribution,
-}: {
-  position: number;
-  articleCount?: number;
-  confidence?: number | null;
-  compact?: boolean;
-  vaderContribution?: number | null;
-  llmContribution?: number | null;
-}) {
-  const clamped = Math.max(-1, Math.min(1, position));
-  const pct = ((clamped + 1) / 2) * 100;
-  const isLong = clamped > 0;
-  const hasData = articleCount > 0;
-  const isLowData = hasData && articleCount < 3;
-  const color = isLong
-    ? "var(--color-accent-success)"
-    : clamped < 0
-      ? "var(--color-accent-danger)"
-      : "var(--color-text-muted)";
-  const barOpacity = hasData
-    ? isLowData
-      ? 0.4
-      : confidence != null && confidence < 0.3
-        ? 0.6
-        : 1
-    : 0.15;
-
-  const bar = (
-    <div
-      className="relative w-full rounded-full overflow-hidden"
-      style={{
-        height: compact ? 3 : 6,
-        backgroundColor: "var(--color-glass-hover)",
-      }}
-    >
-      {hasData && (
-        <div
-          className="absolute top-0 h-full rounded-full transition-all duration-500"
-          style={{
-            left: clamped >= 0 ? "50%" : `${pct}%`,
-            width: `${Math.abs(clamped) * 50}%`,
-            backgroundColor: color,
-            opacity: barOpacity,
-          }}
-        />
-      )}
-      <div className="absolute top-0 h-full w-px" style={{ left: "50%", backgroundColor: "var(--color-text-muted)" }} />
-    </div>
-  );
-
-  if (compact) return bar;
-
-  return (
-    <div className="flex flex-col gap-1">
-      {bar}
-      <div className="flex items-center justify-between text-[9px]">
-        <span style={{ color: "var(--color-accent-danger)" }}>SHORT</span>
-        {isLowData && (
-          <span className="tabular-nums" style={{ color: "var(--color-accent-warning)", fontFamily: "var(--font-mono)" }}>
-            low data
-          </span>
-        )}
-        <span
-          className="tabular-nums"
-          style={{
-            fontFamily: "var(--font-mono)",
-            color:
-              clamped > 0.3
-                ? "var(--color-accent-success)"
-                : clamped < -0.3
-                  ? "var(--color-accent-danger)"
-                  : "var(--color-text-muted)",
-            opacity: isLowData ? 0.55 : 1,
-          }}
-        >
-          {clamped > 0 ? "+" : ""}
-          {clamped.toFixed(2)}
-        </span>
-        <span style={{ color: "var(--color-accent-success)" }}>LONG</span>
-      </div>
-      {!compact && vaderContribution != null && llmContribution != null && (
-        <div className="flex items-center justify-center gap-2 text-[8px]" style={{ color: "var(--color-text-dim)" }}>
-          <span>VADER: {vaderContribution > 0 ? "+" : ""}{vaderContribution.toFixed(2)}</span>
-          <span>·</span>
-          <span>LLM: {llmContribution > 0 ? "+" : ""}{llmContribution.toFixed(2)}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Compact row showing one pair in the overview grid */
-function MiniPairRow({ pair, data, isOther = false }: { pair: string; data: LiveSentimentPairData; isOther?: boolean }) {
+function MiniPairRow({
+  pair,
+  data,
+  isOther = false,
+}: {
+  pair: string;
+  data: LiveSentimentPairData;
+  isOther?: boolean;
+}) {
   const pos = data.recommended_position ?? 0;
   const count = data.article_count ?? 0;
   const scoreText = pos > 0 ? `+${pos.toFixed(2)}` : pos.toFixed(2);
   const scoreColor =
-    pos > 0.05 ? "var(--color-accent-success)" : pos < -0.05 ? "var(--color-accent-danger)" : "var(--color-text-muted)";
+    pos > 0.05
+      ? "var(--color-accent-success)"
+      : pos < -0.05
+        ? "var(--color-accent-danger)"
+        : "var(--color-text-muted)";
 
   return (
     <div
       className="flex items-center gap-2 py-1.5"
-      style={{ borderBottom: isOther ? "none" : "0.5px dashed var(--color-glass-border)" }}
+      style={{ borderBottom: isOther ? "none" : "1px solid var(--color-glass-border)" }}
     >
       <span
-        className="text-[10px] font-mono w-14 shrink-0 tabular-nums"
+        className="w-14 shrink-0 font-mono text-[10px] tabular-nums"
         style={{ color: isOther ? "var(--color-text-dim)" : "var(--color-text-secondary)" }}
       >
         {pair}
@@ -140,13 +58,21 @@ function MiniPairRow({ pair, data, isOther = false }: { pair: string; data: Live
       <div className="flex-1">
         <BullBearBar position={pos} articleCount={count} compact />
       </div>
-      <span className="text-[9px] font-mono w-10 text-right tabular-nums" style={{ color: scoreColor }}>
+      <span
+        className="w-10 text-right font-mono text-[10px] font-semibold tabular-nums"
+        style={{ color: scoreColor }}
+      >
         {scoreText}
       </span>
       <span
-        className="text-[8px] font-mono w-5 text-right tabular-nums"
+        className="w-5 text-right font-mono text-[9px] font-medium tabular-nums"
         style={{
-          color: count === 0 ? "var(--color-accent-warning)" : count < 3 ? "var(--color-text-muted)" : "var(--color-text-dim)",
+          color:
+            count === 0
+              ? "var(--color-accent-warning)"
+              : count < 3
+                ? "var(--color-text-muted)"
+                : "var(--color-text-secondary)",
         }}
       >
         {count}
@@ -166,13 +92,13 @@ function SentimentOverview({ sentiment }: { sentiment: LiveSentimentResponse | u
   const otherEntry = entries.find(([pair]) => pair === "OTHER");
 
   return (
-    <div className="flex flex-col -mx-1">
+    <div className="-mx-1 flex flex-col">
       {majorRows.map(([pair, data]) => (
         <MiniPairRow key={pair} pair={pair} data={data} />
       ))}
       {otherEntry && (
         <>
-          <div className="my-1 mx-1" style={{ borderTop: "1px dashed var(--color-glass-border)" }} />
+          <div className="mx-1 my-1 border-t border-(--color-glass-border)" />
           <MiniPairRow pair={otherEntry[0]} data={otherEntry[1]} isOther />
         </>
       )}
@@ -196,16 +122,13 @@ function SentimentScores({
     { label: "CONF", value: confidence != null ? formatPercent(confidence) : "—" },
   ];
   return (
-    <div className="grid grid-cols-3 mt-3 pt-3" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
+    <div className="mt-3 grid grid-cols-3 gap-2 border-t border-(--color-glass-border) pt-3">
       {items.map(({ label, value }) => (
         <div key={label} className="flex flex-col items-center gap-0.5">
-          <span className="text-[9px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--color-text-muted)" }}>
+          <span className="text-[9px] font-medium tracking-[0.1em] text-(--color-text-dim) uppercase">
             {label}
           </span>
-          <span
-            className="text-[12px] tabular-nums"
-            style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-secondary)" }}
-          >
+          <span className="font-mono text-sm font-semibold text-(--color-text-primary) tabular-nums">
             {value}
           </span>
         </div>
@@ -214,8 +137,9 @@ function SentimentScores({
   );
 }
 
-/** Article row — fixed height, strict 1-line title truncation */
+/** Article row — clickable title, expandable body */
 function ArticleRow({ article }: { article: ArticleItem }) {
+  const [expanded, setExpanded] = useState(false);
   const score = article.sentiment_score;
   const isBullish = score > 0.2;
   const isBearish = score < -0.2;
@@ -224,6 +148,8 @@ function ArticleRow({ article }: { article: ArticleItem }) {
     : isBearish
       ? "var(--color-accent-danger)"
       : "var(--color-glass-border)";
+  const hasBody = !!(article.body || article.summary);
+  const bodyText = article.body || article.summary || "";
 
   const now = new Date().getTime();
   const ts = new Date(article.timestamp).getTime();
@@ -232,30 +158,46 @@ function ArticleRow({ article }: { article: ArticleItem }) {
   const hoursDiff = Math.floor(minsDiff / 60);
   const daysDiff = Math.floor(hoursDiff / 24);
   const timeStr =
-    daysDiff > 0 ? `${daysDiff}d` : hoursDiff > 0 ? `${hoursDiff}h` : minsDiff > 0 ? `${minsDiff}m` : "now";
+    daysDiff > 0
+      ? `${daysDiff}d`
+      : hoursDiff > 0
+        ? `${hoursDiff}h`
+        : minsDiff > 0
+          ? `${minsDiff}m`
+          : "now";
+
+  const handleClick = () => {
+    if (hasBody) setExpanded(!expanded);
+  };
 
   return (
     <div
-      className="flex items-center gap-2 border-l-2 pl-2"
-      style={{
-        borderLeftColor: borderColor,
-        height: 32,
-        flexShrink: 0,
-      }}
+      className="flex shrink-0 cursor-pointer flex-col border-l-2 transition-colors hover:bg-(--color-glass-hover)"
+      style={{ borderLeftColor: borderColor }}
+      onClick={handleClick}
     >
-      <span className="flex-1 min-w-0 text-[10px] truncate" style={{ color: "var(--color-text-primary)", lineHeight: "1.3" }}>
-        {article.title}
-      </span>
-      <span
-        className="shrink-0 text-[9px] tabular-nums"
-        style={{
-          color: "var(--color-text-muted)",
-          fontFamily: "var(--font-mono)",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {article.source} · {timeStr}
-      </span>
+      <div className="flex h-8 items-center justify-between gap-2 py-3 pr-2 pl-2">
+        <a
+          href={article.url || "#"}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="min-w-0 flex-1 truncate text-[10px] leading-[1.3] text-(--color-text-primary) transition-colors hover:text-(--color-brand) hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {article.title}
+        </a>
+        <span className="shrink-0 font-mono text-[9px] whitespace-nowrap text-(--color-text-muted) uppercase tabular-nums">
+          {article.source}
+        </span>
+        <span className="shrink-0 font-mono text-[9px] whitespace-nowrap text-(--color-text-dim) tabular-nums">
+          {timeStr}
+        </span>
+      </div>
+      {expanded && hasBody && (
+        <p className="px-2 pb-2 text-[10px] leading-relaxed text-(--color-text-dim)">
+          {bodyText.length > 250 ? bodyText.slice(0, 247) + "..." : bodyText}
+        </p>
+      )}
     </div>
   );
 }
@@ -274,9 +216,9 @@ export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
 
   if (sentLoading) {
     return (
-      <div className="flex flex-col gap-3 animate-pulse">
-        <div className="h-8 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
-        <div className="h-16 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+      <div className="flex animate-pulse flex-col gap-3">
+        <div className="h-8 rounded bg-(--color-glass-hover)" />
+        <div className="h-16 rounded bg-(--color-glass-hover)" />
       </div>
     );
   }
@@ -284,9 +226,7 @@ export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
   if (isError) {
     return (
       <div className="flex flex-col items-center gap-2 py-4">
-        <span className="text-[10px]" style={{ color: "var(--color-accent-danger)" }}>
-          Sentiment unavailable
-        </span>
+        <span className="text-[10px] text-(--color-accent-danger)">Sentiment unavailable</span>
       </div>
     );
   }
@@ -295,13 +235,13 @@ export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
     <div className="flex flex-col gap-4">
       <SentimentOverview sentiment={sentiment} />
 
-      <div className="pt-2" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-mono font-semibold" style={{ color: "var(--color-text-secondary)" }}>
+      <div className="border-t border-(--color-glass-border) pt-2">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="font-mono text-[10px] font-semibold text-(--color-text-secondary)">
             {pair}
           </span>
           {pairData?.currencies_affected && pairData.currencies_affected.length > 0 && (
-            <span className="text-[8px]" style={{ color: "var(--color-text-dim)" }}>
+            <span className="text-[8px] text-(--color-text-dim)">
               affects: {pairData.currencies_affected.join(", ")}
             </span>
           )}
@@ -309,16 +249,17 @@ export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
 
         {isNoData ? (
           <div className="flex flex-col items-center gap-1 py-3">
-            <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
-              No news data available
-            </span>
-            <span className="text-[9px]" style={{ color: "var(--color-text-muted)", opacity: 0.6 }}>
+            <span className="text-[10px] text-(--color-text-muted)">No news data available</span>
+            <span className="text-[9px] text-(--color-text-muted) opacity-60">
               RSS feeds will populate over time
             </span>
           </div>
         ) : (
           <>
-            <BullBearBar position={recommendedPosition} articleCount={articleCount} confidence={positionConfidence}
+            <BullBearBar
+              position={recommendedPosition}
+              articleCount={articleCount}
+              confidence={positionConfidence}
               vaderContribution={pairData?.vader_contribution ?? null}
               llmContribution={pairData?.llm_contribution ?? null}
             />
@@ -327,28 +268,23 @@ export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
               vader={pairData?.vader_sentiment ?? null}
               confidence={pairData?.llm_confidence ?? null}
             />
-            <div className="flex items-center justify-between mt-2">
-              <span
-                className="text-[9px] tabular-nums"
-                style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
-              >
+            <div className="mt-2 flex items-center justify-between">
+              <span className="font-mono text-[9px] text-(--color-text-muted) tabular-nums">
                 {articleCount} articles
                 {articleCount > 0 && articleCount < 3 && (
-                  <span className="ml-1" style={{ color: "var(--color-accent-warning)" }}>
-                    — limited
-                  </span>
+                  <span className="ml-1 text-(--color-accent-warning)">— limited</span>
                 )}
               </span>
               {cacheAge != null && (
-                <span className="text-[9px]" style={{ color: "var(--color-text-muted)" }}>
+                <span className="text-[9px] text-(--color-text-muted)">
                   {formatStaleness(cacheAge)}
                 </span>
               )}
             </div>
           </>
         )}
-        {sentiment?.backend === "vader" && !isNoData && (
-          <span className="text-[9px] block mt-2" style={{ color: "var(--color-accent-warning)" }}>
+        {sentiment?.backend === "vader" && !sentiment?.llm_available && !isNoData && (
+          <span className="mt-2 block text-[9px] text-(--color-accent-warning)">
             LLM unavailable — using VADER fallback.
           </span>
         )}
@@ -367,35 +303,47 @@ export function NewsArticlesPanel({ pair = "EURUSD" }: { pair?: string }) {
   const tierCounts = sentiment?.article_count_by_tier;
 
   const tiers = [
-    { key: "exact" as const, label: `${pair} articles`, filter: (a: typeof articles[number]) => a.relevance_tier === 1 },
-    { key: "partial" as const, label: "Related currency news", filter: (a: typeof articles[number]) => a.relevance_tier === 2 },
-    { key: "other" as const, label: "Other / untagged", filter: (a: typeof articles[number]) => a.relevance_tier === 0 },
+    {
+      key: "exact" as const,
+      label: `${pair} articles`,
+      filter: (a: (typeof articles)[number]) => a.relevance_tier === 1,
+    },
+    {
+      key: "partial" as const,
+      label: "Related currency news",
+      filter: (a: (typeof articles)[number]) => a.relevance_tier === 2,
+    },
+    {
+      key: "other" as const,
+      label: "Other / untagged",
+      filter: (a: (typeof articles)[number]) => a.relevance_tier === 0,
+    },
   ];
 
   const toggle = (key: string) => setExpanded((p) => ({ ...p, [key]: !p[key] }));
 
   if (sentLoading) {
     return (
-      <div className="flex flex-col gap-2 animate-pulse">
+      <div className="flex animate-pulse flex-col gap-2">
         {Array.from({ length: 5 }, (_, i) => (
-          <div key={i} className="h-8 rounded" style={{ backgroundColor: "var(--color-glass-hover)" }} />
+          <div key={i} className="h-8 rounded bg-(--color-glass-hover)" />
         ))}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-0 h-full">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] uppercase tracking-[0.1em] font-medium" style={{ color: "var(--color-text-muted)" }}>
+    <div className="flex h-full flex-col gap-0">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
           Top Articles
         </span>
-        <span className="text-[9px]" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
+        <span className="font-mono text-[9px] text-(--color-text-muted)">
           {newsStatus?.cached_articles ?? 0} cached
         </span>
       </div>
       {articles.length > 0 ? (
-        <div className="flex flex-col gap-1 overflow-y-auto max-h-[480px]">
+        <div className="flex max-h-[480px] flex-col gap-1 overflow-y-auto">
           {tiers.map(({ key, label, filter }) => {
             const tierArticles = articles.filter(filter);
             if (tierArticles.length === 0) return null;
@@ -405,24 +353,24 @@ export function NewsArticlesPanel({ pair = "EURUSD" }: { pair?: string }) {
               <div key={key}>
                 <button
                   onClick={() => toggle(key)}
-                  className="flex items-center gap-1 w-full text-left py-1"
-                  style={{ color: "var(--color-text-muted)" }}
+                  className="flex w-full items-center gap-1 py-1 text-left text-(--color-text-muted)"
                 >
                   {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-                  <span className="text-[9px] uppercase tracking-[0.06em] font-medium">{label}</span>
-                  <span className="text-[8px] tabular-nums" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-dim)" }}>
+                  <span className="text-[9px] font-medium tracking-[0.06em] uppercase">
+                    {label}
+                  </span>
+                  <span className="font-mono text-[8px] text-(--color-text-dim) tabular-nums">
                     ({count})
                   </span>
                 </button>
-                {isExpanded && tierArticles.map((a, i) => (
-                  <ArticleRow key={`${a.title}-${i}`} article={a} />
-                ))}
+                {isExpanded &&
+                  tierArticles.map((a, i) => <ArticleRow key={`${a.title}-${i}`} article={a} />)}
               </div>
             );
           })}
         </div>
       ) : (
-        <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+        <span className="text-[10px] text-(--color-text-muted)">
           No articles available. RSS feeds will populate over time.
         </span>
       )}

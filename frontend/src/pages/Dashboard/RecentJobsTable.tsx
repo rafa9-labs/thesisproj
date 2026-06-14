@@ -5,10 +5,7 @@ import { useDeleteJob } from "@/api/queries";
 import { EquityThumbnail } from "@/components/charts/EquityThumbnail";
 import type { JobSummary, EquityPoint } from "@/api/schemas";
 
-const STATUS_STYLES: Record<
-  string,
-  { dot: string; bg: string; text: string; label: string }
-> = {
+const STATUS_STYLES: Record<string, { dot: string; bg: string; text: string; label: string }> = {
   completed: {
     dot: "var(--color-accent-success)",
     bg: "rgba(34,197,94,0.10)",
@@ -49,46 +46,43 @@ export function RecentJobsTable({ jobs, equityData }: RecentJobsTableProps) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h3
-          className="text-[11px] font-medium uppercase tracking-[0.12em]"
-          style={{ color: "var(--color-text-muted)" }}
-        >
+        <h3 className="text-[11px] font-medium tracking-[0.12em] text-(--color-text-muted) uppercase">
           Recent Activity
         </h3>
         <button
           onClick={() => navigate("/results")}
-          className="flex items-center gap-1 text-[11px] font-medium transition-colors duration-200 hover:text-[var(--color-text-primary)]"
-          style={{ color: "var(--color-text-muted)" }}
+          className="flex items-center gap-1 text-[11px] font-medium text-(--color-text-muted) transition-colors duration-200 hover:text-[var(--color-text-primary)]"
         >
           View all
           <ArrowRight size={12} strokeWidth={1.5} />
         </button>
       </div>
 
-      <div
-        className="rounded-sm border overflow-hidden"
-        style={{
-          borderColor: "var(--color-glass-border)",
-          backgroundColor: "var(--color-glass)",
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+      <div className="overflow-hidden rounded-sm border border-(--color-glass-border) bg-(--color-glass) backdrop-blur-[12px]">
+        <table className="w-full border-collapse text-xs">
           <thead>
-            <tr
-              style={{
-                backgroundColor: "var(--color-surface)",
-                color: "var(--color-text-muted)",
-                borderBottom: "1px solid var(--color-glass-border)",
-              }}
-            >
-              <th className="px-3 py-2.5 text-left font-medium uppercase tracking-[0.1em] text-[10px]">Job</th>
-              <th className="px-3 py-2.5 text-left font-medium uppercase tracking-[0.1em] text-[10px]">Equity</th>
-              <th className="px-3 py-2.5 text-left font-medium uppercase tracking-[0.1em] text-[10px]">Pair</th>
-              <th className="px-3 py-2.5 text-left font-medium uppercase tracking-[0.1em] text-[10px]">Models</th>
-              <th className="px-3 py-2.5 text-left font-medium uppercase tracking-[0.1em] text-[10px]">Status</th>
-              <th className="px-3 py-2.5 text-left font-medium uppercase tracking-[0.1em] text-[10px]">Created</th>
-              <th className="px-3 py-2.5 text-right font-medium uppercase tracking-[0.1em] text-[10px]">Actions</th>
+            <tr className="border-b border-(--color-glass-border) bg-(--color-surface) text-(--color-text-muted)">
+              <th className="px-3 py-2.5 text-left text-[10px] font-medium tracking-[0.1em] uppercase">
+                Job
+              </th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-medium tracking-[0.1em] uppercase">
+                Equity
+              </th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-medium tracking-[0.1em] uppercase">
+                Pair
+              </th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-medium tracking-[0.1em] uppercase">
+                Models
+              </th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-medium tracking-[0.1em] uppercase">
+                Status
+              </th>
+              <th className="px-3 py-2.5 text-left text-[10px] font-medium tracking-[0.1em] uppercase">
+                Created
+              </th>
+              <th className="px-3 py-2.5 text-right text-[10px] font-medium tracking-[0.1em] uppercase">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -102,52 +96,32 @@ export function RecentJobsTable({ jobs, equityData }: RecentJobsTableProps) {
               return (
                 <tr
                   key={job.job_id}
-                  className="group transition-colors duration-200 hover:bg-[var(--color-glass-hover)]"
-                  style={{
-                    borderBottom: "1px solid var(--color-glass-border)",
-                    cursor: "pointer",
-                  }}
+                  className="group cursor-pointer border-b border-(--color-glass-border) transition-colors duration-200 hover:bg-[var(--color-glass-hover)]"
                   onClick={() => {
                     if (job.status === "completed") {
                       navigate(`/results/${job.job_id}`);
                     }
                   }}
                 >
-                  <td
-                    className="px-3 py-2.5"
-                    style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}
-                  >
+                  <td className="px-3 py-2.5 font-mono text-(--color-text-primary)">
                     {job.job_id.slice(0, 8)}…
                   </td>
                   <td className="px-3 py-2.5">
                     {equityData?.[job.job_id] ? (
                       <EquityThumbnail data={equityData[job.job_id]} />
                     ) : (
-                      <div
-                        style={{
-                          width: 120,
-                          height: 36,
-                          borderRadius: 4,
-                          backgroundColor: "var(--color-glass-hover)",
-                        }}
-                      />
+                      <div className="h-[36px] w-[120px] rounded-[4px] bg-(--color-glass-hover)" />
                     )}
                   </td>
-                  <td
-                    className="px-3 py-2.5"
-                    style={{ color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}
-                  >
+                  <td className="px-3 py-2.5 font-mono text-(--color-text-primary)">
                     {job.pair ?? "—"}
                   </td>
-                  <td
-                    className="px-3 py-2.5 max-w-[200px] truncate"
-                    style={{ color: "var(--color-text-secondary)" }}
-                  >
+                  <td className="max-w-[200px] truncate px-3 py-2.5 text-(--color-text-secondary)">
                     {job.models?.join(", ") ?? "—"}
                   </td>
                   <td className="px-3 py-2.5">
                     <div
-                      className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em]"
+                      className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium tracking-[0.08em] uppercase"
                       style={{
                         backgroundColor: status.bg,
                         color: status.text,
@@ -160,10 +134,7 @@ export function RecentJobsTable({ jobs, equityData }: RecentJobsTableProps) {
                       {status.label}
                     </div>
                   </td>
-                  <td
-                    className="px-3 py-2.5"
-                    style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}
-                  >
+                  <td className="px-3 py-2.5 font-mono text-(--color-text-muted)">
                     {formatRelativeTime(job.created_at)}
                   </td>
                   <td className="px-3 py-2.5 text-right">
@@ -174,11 +145,8 @@ export function RecentJobsTable({ jobs, equityData }: RecentJobsTableProps) {
                             e.stopPropagation();
                             navigate(`/results/${job.job_id}`);
                           }}
-                          className="rounded p-1.5 transition-colors duration-200 hover:bg-[var(--color-primary-glow)]"
-                          style={{
-                            color: "var(--color-text-muted)",
-                            cursor: "pointer",
-                          }}
+                          className="rounded p-1.5 text-(--color-text-muted) transition-colors duration-200 hover:bg-[var(--color-primary-glow)]"
+                          className="cursor-pointer"
                           title="View results"
                         >
                           <Eye size={14} strokeWidth={1.5} />
@@ -189,11 +157,8 @@ export function RecentJobsTable({ jobs, equityData }: RecentJobsTableProps) {
                           e.stopPropagation();
                           deleteJob.mutate(job.job_id);
                         }}
-                        className="rounded p-1.5 transition-colors duration-200 hover:bg-[var(--color-accent-danger)]"
-                        style={{
-                          color: "var(--color-text-muted)",
-                          cursor: "pointer",
-                        }}
+                        className="rounded p-1.5 text-(--color-text-muted) transition-colors duration-200 hover:bg-[var(--color-accent-danger)]"
+                        className="cursor-pointer"
                         title="Delete job"
                       >
                         <Trash2 size={14} strokeWidth={1.5} />

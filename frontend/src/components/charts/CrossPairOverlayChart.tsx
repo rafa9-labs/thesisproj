@@ -93,40 +93,21 @@ export function CrossPairOverlayChart({ model, curves, height = 400 }: CrossPair
 
   if (validCurves.length === 0) {
     return (
-      <div
-        className="flex items-center justify-center rounded-sm border p-8"
-        style={{
-          height,
-          backgroundColor: "var(--color-surface)",
-          borderColor: "var(--color-border)",
-          color: "var(--color-text-muted)",
-        }}
-      >
-        <span className="text-sm" style={{ fontFamily: "var(--font-mono)" }}>
-          Select a model and at least 2 pairs to compare
-        </span>
+      <div className="flex items-center justify-center rounded-sm border border-(--color-border) bg-(--color-surface) p-8 text-(--color-text-muted)">
+        <span className="font-mono text-sm">Select a model and at least 2 pairs to compare</span>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-2">
-      <h3
-        className="text-xs font-semibold uppercase tracking-[0.08em]"
-        style={{ color: "var(--color-text-secondary)" }}
-      >
+      <h3 className="text-xs font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
         Cross-Pair Equity Overlay — {model}
       </h3>
-      <div
-        className="rounded-sm border overflow-hidden relative"
-        style={{ borderColor: "var(--color-border)" }}
-      >
+      <div className="relative overflow-hidden rounded-sm border border-(--color-border)">
         <div
-          className="absolute top-3 left-3 z-10 flex flex-col gap-1 rounded-md px-3 py-2"
-          style={{
-            backgroundColor: "var(--color-app)",
-            border: "1px solid var(--color-border)",
-          }}
+          className="absolute top-3 left-3 z-10 flex flex-col gap-1 rounded-md bg-(--color-app) px-3 py-2"
+          style={{ border: "1px solid var(--color-border)" }}
         >
           {validCurves.map((curve, i) => (
             <div key={curve.pair} className="flex items-center gap-2">
@@ -134,9 +115,7 @@ export function CrossPairOverlayChart({ model, curves, height = 400 }: CrossPair
                 className="inline-block h-0.5 w-4 rounded"
                 style={{ backgroundColor: PAIR_COLORS[i % PAIR_COLORS.length] }}
               />
-              <span className="text-[10px]" style={{ color: "var(--color-text-secondary)" }}>
-                {curve.pair}
-              </span>
+              <span className="text-[10px] text-(--color-text-secondary)">{curve.pair}</span>
             </div>
           ))}
         </div>

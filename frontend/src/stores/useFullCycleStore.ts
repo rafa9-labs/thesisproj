@@ -2,15 +2,32 @@ import { create } from "zustand";
 import { FC_PRESETS } from "@/lib/constants";
 
 export const CORE_MODELS = [
-  "logistic", "svm", "random_forest", "xgboost",
-  "lightgbm", "catboost", "lstm", "ensemble_adaptive_regime",
+  "logistic",
+  "svm",
+  "random_forest",
+  "xgboost",
+  "lightgbm",
+  "catboost",
+  "lstm",
+  "ensemble_adaptive_regime",
 ];
 
 export const ALL_MODELS = [
-  "logistic", "svm", "random_forest", "decision_tree",
-  "xgboost", "lightgbm", "catboost",
-  "cnn", "lstm", "transformer", "gru", "gru_lstm",
-  "meta_ensemble", "stacking_ensemble", "ensemble_adaptive_regime",
+  "logistic",
+  "svm",
+  "random_forest",
+  "decision_tree",
+  "xgboost",
+  "lightgbm",
+  "catboost",
+  "cnn",
+  "lstm",
+  "transformer",
+  "gru",
+  "gru_lstm",
+  "meta_ensemble",
+  "stacking_ensemble",
+  "ensemble_adaptive_regime",
 ];
 
 interface FullCycleState {
@@ -49,6 +66,7 @@ interface FullCycleState {
   deployedSessionId: string | null;
   deployedPair: string;
   deployedTimeframe: string;
+  deployedJobId: string | null;
   executionMode: string;
   selectedHistoryJobId: string | null;
 }
@@ -87,6 +105,7 @@ interface FullCycleActions {
   setCommitteeWeightMethod: (v: string) => void;
   setCommitteeMinSharpe: (v: number) => void;
   setDeployedSession: (sessionId: string, pair: string, timeframe: string) => void;
+  setDeployedJobId: (jobId: string | null) => void;
   clearDeployedSession: () => void;
   setExecutionMode: (v: string) => void;
   setSelectedHistoryJobId: (id: string | null) => void;
@@ -129,6 +148,7 @@ export const useFullCycleStore = create<FullCycleState & FullCycleActions>()((se
   deployedSessionId: null,
   deployedPair: "EURUSD",
   deployedTimeframe: "H1",
+  deployedJobId: null,
   executionMode: "paper",
   selectedHistoryJobId: null,
 
@@ -169,8 +189,7 @@ export const useFullCycleStore = create<FullCycleState & FullCycleActions>()((se
   setFactoryPatience: (v) => set({ factoryPatience: v }),
   setStoppingTolerance: (v) => set({ stoppingTolerance: v }),
 
-  setHpoTrial: (model, value) =>
-    set((s) => ({ hpoTrials: { ...s.hpoTrials, [model]: value } })),
+  setHpoTrial: (model, value) => set((s) => ({ hpoTrials: { ...s.hpoTrials, [model]: value } })),
   setHpoStartupTrial: (model, value) =>
     set((s) => ({ hpoStartupTrials: { ...s.hpoStartupTrials, [model]: value } })),
 
@@ -180,8 +199,8 @@ export const useFullCycleStore = create<FullCycleState & FullCycleActions>()((se
 
   setDeployedSession: (sessionId, pair, timeframe) =>
     set({ deployedSessionId: sessionId, deployedPair: pair, deployedTimeframe: timeframe }),
-  clearDeployedSession: () =>
-    set({ deployedSessionId: null }),
+  setDeployedJobId: (jobId) => set({ deployedJobId: jobId }),
+  clearDeployedSession: () => set({ deployedSessionId: null, deployedJobId: null }),
   setExecutionMode: (v) => set({ executionMode: v }),
   setSelectedHistoryJobId: (id) => set({ selectedHistoryJobId: id }),
 
@@ -196,7 +215,9 @@ export const useFullCycleStore = create<FullCycleState & FullCycleActions>()((se
       ...(cfg.maxIterations !== undefined && { maxIterations: cfg.maxIterations as number }),
       ...(cfg.proposer !== undefined && { proposer: cfg.proposer as string }),
       ...(cfg.llmBackend !== undefined && { llmBackend: cfg.llmBackend as string }),
-      ...(cfg.skipFeatureSweep !== undefined && { skipFeatureSweep: cfg.skipFeatureSweep as boolean }),
+      ...(cfg.skipFeatureSweep !== undefined && {
+        skipFeatureSweep: cfg.skipFeatureSweep as boolean,
+      }),
       ...(cfg.debugMode !== undefined && { debugMode: cfg.debugMode as boolean }),
     });
   },

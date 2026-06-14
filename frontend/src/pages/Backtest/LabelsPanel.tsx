@@ -2,17 +2,8 @@ import { useBacktestStore } from "@/stores/useBacktestStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamToggle } from "@/components/shared/ParamToggle";
+import { Panel, PanelHeader, Section } from "@/components/shared/Panel";
 import { RANGES } from "@/lib/constants";
-
-const sectionClass = "rounded-sm border p-6";
-const sectionStyle: React.CSSProperties = {
-  borderColor: "var(--color-glass-border)",
-  backgroundColor: "rgba(255,255,255,0.02)",
-};
-const sectionTitleClass = "mb-1 text-[11px] font-medium uppercase tracking-[0.12em]";
-const sectionTitleStyle: React.CSSProperties = { color: "var(--color-text-secondary)" };
-const explainerClass = "mb-5 text-[11px] font-light leading-relaxed max-w-[720px]";
-const explainerStyle: React.CSSProperties = { color: "var(--color-text-muted)" };
 
 export function LabelsPanel() {
   const setField = useBacktestStore((s) => s.setField);
@@ -21,30 +12,17 @@ export function LabelsPanel() {
   const s = useBacktestStore.getState();
 
   return (
-    <div
-      className="flex flex-col gap-6 rounded-sm border p-6"
-      style={{
-        backgroundColor: "var(--color-glass)",
-        borderColor: "var(--color-glass-border)",
-        backdropFilter: "blur(12px)",
-      }}
-    >
-      <h3
-        className="text-[11px] font-medium uppercase tracking-[0.12em]"
-        style={{ color: "var(--color-text-muted)" }}
-      >
-        Labels &amp; Triple Barrier
-      </h3>
+    <Panel>
+      <PanelHeader
+        title="Labels & Triple Barrier"
+        subtitle="Define how price movements become model targets."
+      />
 
       {/* Label Threshold */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-brand)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Label Configuration</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          Defines how price movements are converted into target labels for the model. Higher thresholds require larger moves to register as a signal.
-        </p>
+      <Section
+        title="Label Configuration"
+        description="Defines how price movements are converted into target labels for the model. Higher thresholds require larger moves to register as a signal."
+      >
         <div className="max-w-sm">
           <ParamSlider
             label="Label Threshold"
@@ -56,37 +34,29 @@ export function LabelsPanel() {
             onChange={(v) => setField("labelThreshold", v)}
           />
         </div>
-      </section>
+      </Section>
 
       {/* Triple Barrier */}
-      <section className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="h-3 w-[2px] rounded-full" style={{ backgroundColor: "var(--color-accent-success)" }} />
-          <h4 className={sectionTitleClass} style={sectionTitleStyle}>Triple Barrier</h4>
-        </div>
-        <p className={explainerClass} style={explainerStyle}>
-          An advanced labeling method from quantitative finance. Each trade has a profit target (upper barrier), stop-loss (lower barrier), and time limit (vertical barrier). The first one hit determines the label.
-        </p>
+      <Section
+        title="Triple Barrier"
+        accent="var(--color-accent-success)"
+        description="An advanced labeling method from quantitative finance. Each trade has a profit target (upper barrier), stop-loss (lower barrier), and time limit (vertical barrier). The first one hit determines the label."
+      >
         <div className="flex flex-col gap-5">
           <ParamToggle
             label="Use Triple Barrier"
             checked={useTB}
-            description={verbose
-              ? "Classifies a trade as successful only if it hits a profit target before hitting stop-loss or timing out."
-              : "Profit target / stop-loss / time limit labeling."}
+            description={
+              verbose
+                ? "Classifies a trade as successful only if it hits a profit target before hitting stop-loss or timing out."
+                : "Profit target / stop-loss / time limit labeling."
+            }
             onChange={(v) => setField("useTripleBarrier", v)}
           />
 
           {useTB && (
-            <div
-              className="flex flex-col gap-6 rounded-sm border p-6"
-              style={{
-                borderColor: "var(--color-glass-border)",
-                backgroundColor: "var(--color-glass)",
-                backdropFilter: "blur(8px)",
-              }}
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-6">
+            <div className="flex flex-col gap-6 rounded-lg border border-(--color-glass-border) bg-(--color-glass) p-5 backdrop-blur-[8px]">
+              <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-3">
                 <ParamSlider
                   label="PT Mult"
                   value={s.tbPtMult}
@@ -129,7 +99,7 @@ export function LabelsPanel() {
             </div>
           )}
         </div>
-      </section>
-    </div>
+      </Section>
+    </Panel>
   );
 }

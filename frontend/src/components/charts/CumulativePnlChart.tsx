@@ -25,32 +25,43 @@ export function CumulativePnlChart({ trades }: CumulativePnlChartProps) {
   const finalPnl = data[data.length - 1].cumPnl;
 
   return (
-    <ChartCard title="Cumulative P&L" subtitle={`${data.length} trades · Final: ${finalPnl >= 0 ? "+" : ""}${finalPnl?.toFixed?.(1) ?? "0"}%`}>
+    <ChartCard
+      title="Cumulative P&L"
+      subtitle={`${data.length} trades · Final: ${finalPnl >= 0 ? "+" : ""}${finalPnl?.toFixed?.(1) ?? "0"}%`}
+    >
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#2A2E39" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-elevated)" />
           <XAxis
             dataKey="tradeNum"
-            tick={{ fill: "#787B86", fontSize: 10, fontFamily: "JetBrains Mono" }}
-            label={{ value: "Trade #", position: "insideBottomRight", offset: -5, style: { fill: "#787B86", fontSize: 10 } }}
+            tick={{ fill: "var(--color-text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" }}
+            label={{
+              value: "Trade #",
+              position: "insideBottomRight",
+              offset: -5,
+              style: { fill: "var(--color-text-muted)", fontSize: 10 },
+            }}
           />
           <YAxis
-            tick={{ fill: "#787B86", fontSize: 10, fontFamily: "JetBrains Mono" }}
-            tickFormatter={(v: number) => v == null ? "" : `${v.toFixed(0)}%`}
+            tick={{ fill: "var(--color-text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" }}
+            tickFormatter={(v: number) => (v == null ? "" : `${v.toFixed(0)}%`)}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "#2A2E39",
-              border: "1px solid #363A45",
+              backgroundColor: "var(--color-elevated)",
+              border: "1px solid var(--color-glass-border)",
               borderRadius: 6,
               fontSize: 12,
-              fontFamily: "JetBrains Mono",
+              fontFamily: "var(--font-mono)",
             }}
-            labelStyle={{ color: "#80899F" }}
-            formatter={(value: number) => [value == null ? "—" : `${value.toFixed(2)}%`, "Cum. P&L"]}
+            labelStyle={{ color: "var(--color-text-muted)" }}
+            formatter={(value: number) => [
+              value == null ? "—" : `${value.toFixed(2)}%`,
+              "Cum. P&L",
+            ]}
             labelFormatter={(label: number) => `Trade #${label}`}
           />
-          <ReferenceLine y={0} stroke="#363A45" strokeDasharray="3 3" />
+          <ReferenceLine y={0} stroke="var(--color-glass-border)" strokeDasharray="3 3" />
           <Line
             type="stepAfter"
             dataKey="cumPnl"

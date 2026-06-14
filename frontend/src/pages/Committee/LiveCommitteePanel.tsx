@@ -3,30 +3,7 @@ import { useFullCycleStore } from "@/stores/useFullCycleStore";
 import apiClient from "@/api/client";
 import { useState } from "react";
 
-const healthCardStyle: React.CSSProperties = {
-  background: "var(--color-elevated)",
-  border: "1px solid var(--color-glass-border)",
-  borderRadius: 4,
-  padding: "10px 12px",
-  textAlign: "center",
-};
-
-const thStyleH: React.CSSProperties = {
-  padding: "4px 8px",
-  textAlign: "left",
-  color: "var(--color-text-muted)",
-  fontWeight: 500,
-  letterSpacing: "0.06em",
-  textTransform: "uppercase",
-  fontSize: 9,
-  borderBottom: "1px solid var(--color-glass-border)",
-};
-
-const tdStyleH: React.CSSProperties = {
-  padding: "5px 8px",
-  color: "var(--color-text-secondary)",
-  fontSize: 10,
-};
+const healthCardClasses = "bg-(--color-elevated) border border-(--color-glass-border)";
 
 interface Props {
   sessionId?: string | null;
@@ -45,21 +22,32 @@ export function LiveCommitteePanel({ sessionId }: Props) {
     setDeploying(true);
     setDeployError(null);
     try {
-      const { data } = await apiClient.post<{
-        session_id: string; pair: string; timeframe: string; models: string[]; features: string[];
-        snapshot_loaded: boolean; feature_count: number;
-      }>("/live/deploy-committee", {
+      const payload: Record<string, unknown> = {
         pair: store.deployedPair,
         timeframe: store.deployedTimeframe,
         initial_equity: 10000.0,
         confidence_threshold: 0.55,
-        execution_mode: store.executionMode,
-      });
+        mode: store.executionMode,
+      };
+      if (store.deployedJobId) {
+        payload.full_cycle_job_id = store.deployedJobId;
+      }
+      const { data } = await apiClient.post<{
+        session_id: string;
+        pair: string;
+        timeframe: string;
+        models: string[];
+        features: string[];
+        snapshot_loaded: boolean;
+        feature_count: number;
+      }>("/trading/live/committee/start", payload);
       store.setDeployedSession(data.session_id, data.pair, data.timeframe);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail
-        ?? (err as { message?: string })?.message
-        ?? "Deploy failed";
+      const msg =
+        (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data
+          ?.detail ??
+        (err as { message?: string })?.message ??
+        "Deploy failed";
       setDeployError(msg);
     } finally {
       setDeploying(false);
@@ -78,44 +66,15 @@ export function LiveCommitteePanel({ sessionId }: Props) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div className="flex flex-col gap-[24px]">
       {/* Status */}
-      <div
-        style={{
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-glass-border)",
-          borderRadius: 4,
-          padding: 20,
-        }}
-      >
-        <h2
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "var(--color-text-primary)",
-            margin: "0 0 16px",
-          }}
-        >
+      <div className="rounded-[4px] border border-(--color-glass-border) bg-(--color-surface) p-[20px]">
+        <h2 className="mb-[16px] text-[13px] font-semibold tracking-[0.08em] text-(--color-text-primary) uppercase">
           Live Committee Status
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              marginLeft: 12,
-              fontSize: 10,
-              color: "var(--color-text-muted)",
-              fontWeight: 400,
-            }}
-          >
+          <span className="ml-[12px] inline-flex items-center gap-[6px] text-[10px] font-normal text-(--color-text-muted)">
             <span
+              className="inline-block h-[6px] w-[6px] rounded-full"
               style={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                display: "inline-block",
                 background: metrics
                   ? metrics.committee_healthy
                     ? "var(--color-accent-success)"
@@ -135,22 +94,15 @@ export function LiveCommitteePanel({ sessionId }: Props) {
           </span>
         </h2>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+        <div className="mb-[12px] flex flex-wrap items-center gap-[10px]">
           {!effectiveSessionId && (
             <>
               <button
                 onClick={handleDeploy}
                 disabled={deploying}
+                className="rounded-[4px] border-none px-[20px] py-[8px] text-[10px] font-semibold tracking-[0.06em] text-(--color-text-inverse) uppercase"
                 style={{
                   background: deploying ? "var(--color-text-dim)" : "var(--color-accent-success)",
-                  border: "none",
-                  borderRadius: 4,
-                  color: "var(--color-text-inverse)",
-                  padding: "8px 20px",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
                   cursor: deploying ? "not-allowed" : "pointer",
                 }}
               >
@@ -159,15 +111,7 @@ export function LiveCommitteePanel({ sessionId }: Props) {
               <select
                 value={store.executionMode}
                 onChange={(e) => store.setExecutionMode(e.target.value)}
-                style={{
-                  background: "var(--color-input-bg)",
-                  border: "1px solid var(--color-glass-border)",
-                  borderRadius: 4,
-                  color: "var(--color-text-primary)",
-                  padding: "7px 10px",
-                  fontSize: 10,
-                  fontFamily: "var(--font-mono)",
-                }}
+                className="rounded-[4px] border border-(--color-glass-border) bg-(--color-input-bg) px-[10px] py-[7px] font-mono text-[10px] text-(--color-text-primary)"
               >
                 <option value="paper">Paper Sim</option>
                 <option value="oanda">OANDA Direct</option>
@@ -177,31 +121,12 @@ export function LiveCommitteePanel({ sessionId }: Props) {
           )}
           {effectiveSessionId && (
             <>
-              <span style={{
-                fontSize: 10,
-                fontFamily: "var(--font-mono)",
-                color: "var(--color-brand)",
-                background: "rgba(0,229,255,0.08)",
-                border: "1px solid rgba(0,229,255,0.2)",
-                borderRadius: 3,
-                padding: "4px 10px",
-              }}>
+              <span className="rounded-[3px] border border-[rgba(0,229,255,0.2)] bg-[rgba(0,229,255,0.08)] px-[10px] py-[4px] font-mono text-[10px] text-(--color-brand)">
                 Session: {effectiveSessionId}
               </span>
               <button
                 onClick={handleStop}
-                style={{
-                  background: "rgba(242,54,69,0.12)",
-                  color: "var(--color-accent-danger)",
-                  border: "1px solid rgba(242,54,69,0.25)",
-                  borderRadius: 4,
-                  padding: "6px 14px",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  cursor: "pointer",
-                }}
+                className="cursor-pointer rounded-[4px] border border-[rgba(242,54,69,0.25)] bg-[rgba(242,54,69,0.12)] px-[14px] py-[6px] text-[10px] font-semibold tracking-[0.06em] text-(--color-accent-danger) uppercase"
               >
                 Stop
               </button>
@@ -210,85 +135,35 @@ export function LiveCommitteePanel({ sessionId }: Props) {
         </div>
 
         {deployError && (
-          <div style={{
-            padding: 10,
-            background: "rgba(242,54,69,0.08)",
-            border: "1px solid rgba(242,54,69,0.2)",
-            borderRadius: 4,
-            fontSize: 10,
-            fontFamily: "var(--font-mono)",
-            color: "var(--color-accent-danger)",
-            marginBottom: 12,
-          }}>
+          <div className="mb-[12px] rounded-[4px] border border-[rgba(242,54,69,0.2)] bg-[rgba(242,54,69,0.08)] p-[10px] font-mono text-[10px] text-(--color-accent-danger)">
             {deployError}
           </div>
         )}
 
-        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.6, margin: 0 }}>
-          The live committee runner processes streaming OHLC bars, classifies the
-          current market regime, routes predictions through the best models for
-          that regime, and blends signals. Deploy a committee configuration to
-          start live trading.
+        <p className="m-0 text-[12px] leading-[1.6] text-(--color-text-secondary)">
+          The live committee runner processes streaming OHLC bars, classifies the current market
+          regime, routes predictions through the best models for that regime, and blends signals.
+          Deploy a committee configuration to start live trading.
         </p>
       </div>
 
       {/* Active Config */}
       {config && (
-        <div
-          style={{
-            background: "var(--color-surface)",
-            border: "1px solid var(--color-glass-border)",
-            borderRadius: 4,
-            padding: 20,
-          }}
-        >
-          <h3
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "var(--color-text-primary)",
-              margin: "0 0 12px",
-            }}
-          >
+        <div className="rounded-[4px] border border-(--color-glass-border) bg-(--color-surface) p-[20px]">
+          <h3 className="mb-[12px] text-[12px] font-semibold tracking-[0.08em] text-(--color-text-primary) uppercase">
             Active Configuration
           </h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className="flex flex-col gap-[8px]">
             {Object.entries(config.regimes).map(([regime, assignment]) => (
-              <div
-                key={regime}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  fontSize: 11,
-                }}
-              >
-                <span
-                  style={{
-                    width: 120,
-                    fontWeight: 500,
-                    letterSpacing: "0.06em",
-                    textTransform: "uppercase",
-                    color: "var(--color-brand)",
-                    flexShrink: 0,
-                  }}
-                >
+              <div key={regime} className="flex items-center gap-[12px] text-[11px]">
+                <span className="w-[120px] shrink-0 font-medium tracking-[0.06em] text-(--color-brand) uppercase">
                   {regime.replace(/_/g, " ")}
                 </span>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                <div className="flex flex-wrap gap-[4px]">
                   {assignment.models.map((model, idx) => (
                     <span
                       key={`${model}-${idx}`}
-                      style={{
-                        background: "var(--color-elevated)",
-                        borderRadius: 3,
-                        padding: "2px 8px",
-                        fontSize: 10,
-                        fontFamily: "var(--font-mono)",
-                        color: "var(--color-text-secondary)",
-                      }}
+                      className="rounded-[3px] bg-(--color-elevated) px-[8px] py-[2px] font-mono text-[10px] text-(--color-text-secondary)"
                     >
                       {model} {(assignment.weights[idx] * 100).toFixed(0)}%
                     </span>
@@ -302,63 +177,28 @@ export function LiveCommitteePanel({ sessionId }: Props) {
 
       {/* Model Store Snapshots */}
       {snapshots && snapshots.snapshots.length > 0 && (
-        <div
-          style={{
-            background: "var(--color-surface)",
-            border: "1px solid var(--color-glass-border)",
-            borderRadius: 4,
-            padding: 20,
-          }}
-        >
-          <h3
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "var(--color-text-primary)",
-              margin: "0 0 12px",
-            }}
-          >
+        <div className="rounded-[4px] border border-(--color-glass-border) bg-(--color-surface) p-[20px]">
+          <h3 className="mb-[12px] text-[12px] font-semibold tracking-[0.08em] text-(--color-text-primary) uppercase">
             Model Store Snapshots
           </h3>
           {snapshots.snapshots.map((snap) => (
             <div
               key={snap.version}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "8px 0",
-                borderBottom: "1px solid var(--color-glass-border)",
-              }}
+              className="flex items-center justify-between border-b border-(--color-glass-border) py-[8px]"
             >
               <div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontFamily: "var(--font-mono)",
-                    color: "var(--color-text-primary)",
-                  }}
-                >
+                <div className="font-mono text-[11px] text-(--color-text-primary)">
                   {snap.version}
                 </div>
-                <div style={{ fontSize: 10, color: "var(--color-text-muted)", marginTop: 2 }}>
+                <div className="mt-[2px] text-[10px] text-(--color-text-muted)">
                   {snap.created_at}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              <div className="flex flex-wrap gap-[4px]">
                 {snap.models.map((m) => (
                   <span
                     key={m}
-                    style={{
-                      background: "var(--color-elevated)",
-                      borderRadius: 3,
-                      padding: "1px 6px",
-                      fontSize: 9,
-                      fontFamily: "var(--font-mono)",
-                      color: "var(--color-text-secondary)",
-                    }}
+                    className="rounded-[3px] bg-(--color-elevated) px-[6px] py-[1px] font-mono text-[9px] text-(--color-text-secondary)"
                   >
                     {m}
                   </span>
@@ -370,94 +210,120 @@ export function LiveCommitteePanel({ sessionId }: Props) {
       )}
 
       {/* Health Monitoring */}
-      <div
-        style={{
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-glass-border)",
-          borderRadius: 4,
-          padding: 20,
-        }}
-      >
-        <h3
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "var(--color-text-primary)",
-            margin: "0 0 12px",
-          }}
-        >
+      <div className="rounded-[4px] border border-(--color-glass-border) bg-(--color-surface) p-[20px]">
+        <h3 className="mb-[12px] text-[12px] font-semibold tracking-[0.08em] text-(--color-text-primary) uppercase">
           Health Monitoring
         </h3>
 
         {metrics ? (
           <>
             {/* Summary cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginBottom: 16 }}>
-              <div style={healthCardStyle}>
-                <div style={{ fontSize: 18, fontFamily: "var(--font-mono)", fontWeight: 600, color: metrics.committee_healthy ? "#089981" : "#F23645" }}>
+            <div className="mb-[16px] grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-[8px]">
+              <div className={`rounded px-3 py-2.5 text-center ${healthCardClasses}`}>
+                <div
+                  className="font-mono text-[18px] font-semibold"
+                  style={{
+                    color: metrics.committee_healthy ? "#089981" : "#F23645",
+                  }}
+                >
                   {metrics.committee_healthy ? "HEALTHY" : "UNHEALTHY"}
                 </div>
-                <div style={{ fontSize: 9, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</div>
+                <div className="text-[9px] tracking-[0.06em] text-(--color-text-dim) uppercase">
+                  Status
+                </div>
               </div>
-              <div style={healthCardStyle}>
-                <div style={{ fontSize: 18, fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+              <div className={`rounded px-3 py-2.5 text-center ${healthCardClasses}`}>
+                <div className="font-mono text-[18px] font-semibold text-(--color-text-secondary)">
                   {metrics.bar_count}
                 </div>
-                <div style={{ fontSize: 9, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Bars</div>
+                <div className="text-[9px] tracking-[0.06em] text-(--color-text-dim) uppercase">
+                  Bars
+                </div>
               </div>
-              <div style={healthCardStyle}>
-                <div style={{ fontSize: 18, fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+              <div className={`rounded px-3 py-2.5 text-center ${healthCardClasses}`}>
+                <div className="font-mono text-[18px] font-semibold text-(--color-text-secondary)">
                   {metrics.non_zero_signals}
                 </div>
-                <div style={{ fontSize: 9, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Signals</div>
+                <div className="text-[9px] tracking-[0.06em] text-(--color-text-dim) uppercase">
+                  Signals
+                </div>
               </div>
-              <div style={healthCardStyle}>
-                <div style={{ fontSize: 18, fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+              <div className={`rounded px-3 py-2.5 text-center ${healthCardClasses}`}>
+                <div className="font-mono text-[18px] font-semibold text-(--color-text-secondary)">
                   {metrics.current_regime.replace(/_/g, " ")}
                 </div>
-                <div style={{ fontSize: 9, color: "var(--color-text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Regime</div>
+                <div className="text-[9px] tracking-[0.06em] text-(--color-text-dim) uppercase">
+                  Regime
+                </div>
               </div>
             </div>
 
             {/* Per-model health table */}
-            <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-muted)", marginBottom: 8 }}>
+            <div className="mb-[8px] text-[10px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
               Model Health
             </div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10 }}>
+            <table className="w-full border-collapse text-[10px]">
               <thead>
                 <tr>
-                  <th style={thStyleH}>Model</th>
-                  <th style={{ ...thStyleH, textAlign: "right" }}>Sharpe</th>
-                  <th style={{ ...thStyleH, textAlign: "right" }}>Hit Rate</th>
-                  <th style={{ ...thStyleH, textAlign: "right" }}>Signals</th>
-                  <th style={thStyleH}>Status</th>
+                  <th className="border-b border-(--color-glass-border) px-2 py-1 text-left text-[9px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
+                    Model
+                  </th>
+                  <th className="border-b border-(--color-glass-border) px-2 py-1 text-right text-[9px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
+                    Sharpe
+                  </th>
+                  <th className="border-b border-(--color-glass-border) px-2 py-1 text-right text-[9px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
+                    Hit Rate
+                  </th>
+                  <th className="border-b border-(--color-glass-border) px-2 py-1 text-right text-[9px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
+                    Signals
+                  </th>
+                  <th className="border-b border-(--color-glass-border) px-2 py-1 text-left text-[9px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
+                    Status
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {Object.entries(metrics.per_model_health).map(([model, health]) => (
-                  <tr key={model} style={{ borderBottom: "1px solid var(--color-glass-border)" }}>
-                    <td style={{ ...tdStyleH, fontFamily: "var(--font-mono)" }}>{model}</td>
-                    <td style={{ ...tdStyleH, textAlign: "right", fontFamily: "var(--font-mono)", color: (health.rolling_sharpe ?? 0) >= 0 ? "#089981" : "#F23645" }}>
+                  <tr key={model} className="border-b border-(--color-glass-border)">
+                    <td className="font-mono">{model}</td>
+                    <td
+                      className="text-right font-mono"
+                      style={{
+                        color: (health.rolling_sharpe ?? 0) >= 0 ? "#089981" : "#F23645",
+                      }}
+                    >
                       {health.rolling_sharpe !== null ? health.rolling_sharpe.toFixed(2) : "—"}
                     </td>
-                    <td style={{ ...tdStyleH, textAlign: "right", fontFamily: "var(--font-mono)", color: (health.rolling_hit_rate ?? 0) >= 0.5 ? "#089981" : (health.rolling_hit_rate ?? 0) >= 0.35 ? "#F2B436" : "#F23645" }}>
-                      {health.rolling_hit_rate !== null ? (health.rolling_hit_rate * 100).toFixed(0) + "%" : "—"}
+                    <td
+                      className="text-right font-mono"
+                      style={{
+                        color:
+                          (health.rolling_hit_rate ?? 0) >= 0.5
+                            ? "#089981"
+                            : (health.rolling_hit_rate ?? 0) >= 0.35
+                              ? "#F2B436"
+                              : "#F23645",
+                      }}
+                    >
+                      {health.rolling_hit_rate !== null
+                        ? (health.rolling_hit_rate * 100).toFixed(0) + "%"
+                        : "—"}
                     </td>
-                    <td style={{ ...tdStyleH, textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--color-text-dim)" }}>
+                    <td className="text-right font-mono text-(--color-text-dim)">
                       {health.total_signals}
                     </td>
-                    <td style={tdStyleH}>
-                      <span style={{
-                        display: "inline-block",
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: health.status === "healthy" ? "#089981"
-                          : health.status === "unhealthy" ? "#F23645"
-                          : "var(--color-text-dim)",
-                      }} />
+                    <td className="px-2 py-1.5 text-[10px] text-(--color-text-secondary)">
+                      <span
+                        className="inline-block h-[8px] w-[8px] rounded-full"
+                        style={{
+                          background:
+                            health.status === "healthy"
+                              ? "#089981"
+                              : health.status === "unhealthy"
+                                ? "#F23645"
+                                : "var(--color-text-dim)",
+                        }}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -465,10 +331,9 @@ export function LiveCommitteePanel({ sessionId }: Props) {
             </table>
           </>
         ) : (
-          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: 0 }}>
-            Model health tracking (rolling Sharpe, hit rate) will appear here
-            once the live committee runner is deployed. Models flagged as
-            unhealthy are automatically rotated.
+          <p className="m-0 text-[12px] text-(--color-text-secondary)">
+            Model health tracking (rolling Sharpe, hit rate) will appear here once the live
+            committee runner is deployed. Models flagged as unhealthy are automatically rotated.
           </p>
         )}
       </div>

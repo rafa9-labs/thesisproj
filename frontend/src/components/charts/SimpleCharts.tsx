@@ -13,10 +13,7 @@ export function SimpleBarChart({
 }: BarChartProps) {
   if (data.length === 0) {
     return (
-      <div
-        className="flex items-center justify-center rounded-sm border"
-        style={{ height, backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
-      >
+      <div className="flex items-center justify-center rounded-sm border border-(--color-border) bg-(--color-surface) text-(--color-text-muted)">
         No data
       </div>
     );
