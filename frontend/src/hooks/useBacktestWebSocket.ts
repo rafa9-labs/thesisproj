@@ -28,10 +28,11 @@ export function useBacktestWebSocket(jobId: string | null) {
     });
 
     return () => {
-      if (import.meta.env.DEV) console.log("[WS-HOOK] cleaning up for job:", jobId.slice(0, 8));
+      if (import.meta.env.DEV) console.log("[WS-HOOK] unsubscribing for job:", jobId.slice(0, 8));
       clearTimeout(timer);
       unsub();
-      wsManager.disconnect();
+      // Keep wsManager connected across tab switches so the backend polling loop
+      // and progress updates survive component unmount/remount.
     };
   }, [jobId]);
 
