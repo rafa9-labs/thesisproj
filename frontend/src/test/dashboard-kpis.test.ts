@@ -34,6 +34,8 @@ describe("computeDashboardKPIs", () => {
       avgSharpe: null,
       avgWinRate: null,
       profitableMonthsPct: null,
+      avgReturn: null,
+      maxDrawdown: null,
     });
   });
 
