@@ -21,7 +21,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from pydantic import BaseModel
 
 from api.dependencies import get_data_store
-from api.routers.prices import _get_oanda_credentials, _oanda_api_call
+from api.routers.prices import _fetch_oanda_prices_cached
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +187,7 @@ async def _signal_loop(session_id: str):
 
     while session.get("status") == "running":
         try:
-            raw_prices, source = _oanda_api_call(pair.replace("", ""))
+            (raw_prices, source), _ = await _fetch_oanda_prices_cached(pair.replace("", ""))
 
             mid_price = None
             if source == "oanda" and raw_prices:

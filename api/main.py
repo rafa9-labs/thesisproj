@@ -1,7 +1,9 @@
 """KodaQuant — FastAPI application."""
 from contextlib import asynccontextmanager
 import asyncio
+import logging
 import os
+import time
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,6 +59,27 @@ app = FastAPI(
 )
 
 install_security_middleware(app)
+
+
+@app.middleware("http")
+async def request_timing_middleware(request, call_next):
+    """Log request latency and payload size for local performance auditing."""
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000.0
+    size_header = response.headers.get("content-length")
+    payload_bytes = int(size_header) if size_header else 0
+    response.headers["X-Response-Time-Ms"] = f"{duration_ms:.2f}"
+    logging.info(
+        "method=%s path=%s status=%s duration_ms=%.2f payload_bytes=%d",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+        payload_bytes,
+    )
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,

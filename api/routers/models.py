@@ -1,6 +1,6 @@
 """Model registry and hyperparameter endpoints."""
 import os
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from api.schemas.backtest import ModelInfo, ModelListResponse
 from api.schemas.hyperparams import (
@@ -10,6 +10,7 @@ from api.schemas.hyperparams import (
     ModelHyperparams,
     ModelHyperparamsResponse,
 )
+from api.utils.cache import cached
 from config import SEARCH_SPACE
 
 MODEL_DESCRIPTIONS = {
@@ -59,7 +60,8 @@ router = APIRouter(prefix="/models", tags=["models"])
 
 
 @router.get("", response_model=ModelListResponse)
-def list_models():
+@cached("models", ttl=3600)
+def list_models(response: Response):
     models = []
     for name, (display, category, desc) in MODEL_DESCRIPTIONS.items():
         models.append(ModelInfo(
@@ -72,7 +74,8 @@ def list_models():
 
 
 @router.get("/hyperparams", response_model=ModelHyperparamsResponse)
-def get_hyperparams():
+@cached("hyperparams", ttl=3600)
+def get_hyperparams(response: Response):
     """Return SEARCH_SPACE metadata so the frontend can build per-model hyperparameter UIs."""
     result = []
     for name, (display, category, _) in MODEL_DESCRIPTIONS.items():
@@ -281,7 +284,7 @@ def predict_with_features(req: PredictWithDataRequest):
         from datetime import datetime, timezone
         store = DataStore(settings.db_full_path)
         now = datetime.now(timezone.utc).isoformat()
-        with store._cursor() as (conn, cur):
+        with store._write_cursor() as (conn, cur):
             for i in range(len(classes)):
                 cur.execute(
                     "INSERT INTO live_predictions (timestamp, model_id, pair, timeframe, predicted_class, confidence) VALUES (?, ?, ?, ?, ?, ?)",

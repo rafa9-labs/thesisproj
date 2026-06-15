@@ -19,7 +19,7 @@ class JobManager:
     def create_job(self, job_id: str, job_type: str, config: Dict[str, Any]) -> Dict:
         """Backward-compatible wrapper that bypasses the concurrency limit."""
         now = self._now()
-        with self.store._cursor() as (conn, cur):
+        with self.store._write_cursor() as (conn, cur):
             cur.execute(
                 "INSERT INTO jobs (id, type, status, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (job_id, job_type, "pending", json.dumps(config), now, now),
@@ -28,7 +28,7 @@ class JobManager:
 
     def create_job_atomic(self, job_id: str, job_type: str, config: Dict[str, Any], max_active: int = 1) -> Dict:
         now = self._now()
-        with self.store._cursor() as (conn, cur):
+        with self.store._write_cursor() as (conn, cur):
             cur.execute(
                 "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running')",
                 (job_type,),
@@ -64,7 +64,7 @@ class JobManager:
 
     def force_stop_job(self, job_id: str) -> bool:
         now = self._now()
-        with self.store._cursor() as (conn, cur):
+        with self.store._write_cursor() as (conn, cur):
             cur.execute(
                 "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'running')",
                 ("failed", "Force stopped by user", now, job_id),
@@ -74,7 +74,7 @@ class JobManager:
     def clear_pending_queue(self) -> int:
         """Mark all pending/running jobs as failed. Returns count updated."""
         now = self._now()
-        with self.store._cursor() as (conn, cur):
+        with self.store._write_cursor() as (conn, cur):
             cur.execute(
                 "UPDATE jobs SET status = ?, error = ?, updated_at = ? "
                 "WHERE status IN ('pending', 'running')",
@@ -86,7 +86,7 @@ class JobManager:
 
     def update_status(self, job_id: str, status: str, result: Optional[Dict] = None, error: Optional[str] = None):
         now = self._now()
-        with self.store._cursor() as (conn, cur):
+        with self.store._write_cursor() as (conn, cur):
             cur.execute(
                 "UPDATE jobs SET status = ?, result = ?, error = ?, updated_at = ? WHERE id = ?",
                 (status, json.dumps(result) if result else None, error, now, job_id),
@@ -160,14 +160,14 @@ class JobManager:
         return rows, total
 
     def delete_job(self, job_id: str) -> bool:
-        with self.store._cursor() as (conn, cur):
+        with self.store._write_cursor() as (conn, cur):
             cur.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
             return cur.rowcount > 0
 
     def update_study_meta(self, job_id: str, meta: dict) -> bool:
         now = self._now()
         meta["saved_at"] = now
-        with self.store._cursor() as (conn, cur):
+        with self.store._write_cursor() as (conn, cur):
             cur.execute(
                 "UPDATE jobs SET study_meta = ?, updated_at = ? WHERE id = ?",
                 (json.dumps(meta), now, job_id),

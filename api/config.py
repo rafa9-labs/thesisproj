@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     csv_data_dir: str = "csv_data"
     results_dir: str = "results"
 
+    # Cache backend: memory | sqlite | redis. SQLite is the default so that
+    # multi-worker Uvicorn deployments share a coherent cache without extra
+    # infrastructure. Redis is stubbed for future horizontal scaling.
+    cache_backend: str = "sqlite"
+    cache_db_path: str = "data/cache.db"
+
     project_root: str = str(Path(__file__).resolve().parent.parent)
 
     model_check_interval: float = 2.0
@@ -45,6 +51,15 @@ class Settings(BaseSettings):
         if os.path.isabs(self.db_path):
             return self.db_path
         return os.path.join(self.project_root, self.db_path)
+
+    @property
+    def cache_db_full_path(self) -> str:
+        fx_data_dir = os.environ.get("FX_DATA_DIR")
+        if fx_data_dir:
+            return os.path.join(fx_data_dir, "cache.db")
+        if os.path.isabs(self.cache_db_path):
+            return self.cache_db_path
+        return os.path.join(self.project_root, self.cache_db_path)
 
     @property
     def csv_data_full_path(self) -> str:

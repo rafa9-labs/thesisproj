@@ -204,7 +204,7 @@ def save_committee(req: SaveCommitteeRequest):
     committee_id = str(_uuid.uuid4())[:12]
     now = _dt.now(_tz.utc).isoformat()
 
-    with store._cursor() as (conn, cur):
+    with store._write_cursor() as (conn, cur):
         cur.execute(
             "INSERT INTO saved_committees (id, name, full_cycle_job_id, pair, timeframe, config_json, trust_score, avg_sharpe, is_active, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
             (committee_id, req.name, req.full_cycle_job_id, req.pair, req.timeframe,
@@ -219,7 +219,7 @@ def delete_saved_committee(committee_id: str):
     from api.config import settings
     from pipeline.data_sqlite import DataStore
     store = DataStore(settings.db_full_path)
-    with store._cursor() as (conn, cur):
+    with store._write_cursor() as (conn, cur):
         cur.execute("SELECT id FROM saved_committees WHERE id = ?", (committee_id,))
         if not cur.fetchone():
             raise HTTPException(404, f"Saved committee {committee_id} not found")
@@ -232,7 +232,7 @@ def activate_saved_committee(committee_id: str):
     from api.config import settings
     from pipeline.data_sqlite import DataStore
     store = DataStore(settings.db_full_path)
-    with store._cursor() as (conn, cur):
+    with store._write_cursor() as (conn, cur):
         cur.execute("SELECT id, config_json FROM saved_committees WHERE id = ?", (committee_id,))
         row = cur.fetchone()
         if not row:
