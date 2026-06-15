@@ -133,8 +133,6 @@ export function BacktestPage() {
         hasDates={true}
         onDeploy={() => setSummaryOpen(true)}
         onSavePreset={hasModels ? () => setShowSavePreset(true) : undefined}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
       />
 
       {/* Save Preset dialog */}
