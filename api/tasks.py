@@ -1335,6 +1335,11 @@ def _download_data_impl(job_id: str, pair: str, years: int = 10, base_timeframe:
 
         jm.update_status(job_id, "completed", result={"pair": pair, "granularities": saved})
         _pub("download_complete", job_id, {"pair": pair})
+        try:
+            from api.utils.cache import clear_cache
+            clear_cache("pairs")
+        except Exception:
+            pass
         return {"pair": pair, "granularities": saved}
 
     except Exception as e:

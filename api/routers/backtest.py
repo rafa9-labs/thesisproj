@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from api.config import settings
 from api.dependencies import get_data_store
@@ -38,13 +38,16 @@ from api.schemas.backtest import (
 )
 from api.services import JobManager
 from api.tasks import download_data_task, run_backtest_task, IS_DESKTOP
+from api.utils.cache import cached, clear_cache
+from api.utils.downsampling import downsample_aligned
 from pipeline.pair_config import VALID_PAIRS
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
 
 @router.get("/presets", response_model=list[QuickTestPreset])
-def list_quick_test_presets():
+@cached("presets", ttl=3600)
+def list_quick_test_presets(response: Response):
     return QUICK_TEST_PRESETS
 
 
@@ -330,9 +333,12 @@ def get_cross_pair_curves(
         for m in raw_metrics:
             if m.get("model") != model:
                 continue
-            curve = m.get("equity_curve")
+            curve = _coerce_curve(m.get("equity_curve"))
             if not curve:
                 continue
+            if len(curve) > 1500:
+                from api.utils.downsampling import lttb_downsample
+                curve = lttb_downsample(curve, 1000)
             dedup_key = f"{job_pair}::{job.get('id', '')}"
             if dedup_key in used_jobs:
                 continue
@@ -645,6 +651,11 @@ def get_backtest_results(job_id: str):
                 pct_volatile=wp.get("pct_volatile"),
             ))
 
+        ec = _coerce_curve(m.get("equity_curve"))
+        bhc = _coerce_curve(m.get("buy_hold_curve"))
+        ddc = _coerce_curve(m.get("drawdown_curve"))
+        ec, bhc, ddc = downsample_aligned(ec, bhc, ddc)
+
         metrics.append(BacktestResultMetrics(
             model=m.get("model", ""),
             sharpe=m.get("sharpe"),
@@ -661,9 +672,9 @@ def get_backtest_results(job_id: str):
             directional_accuracy=m.get("directional_accuracy"),
             precision_macro=m.get("precision_macro"),
             f1_macro=m.get("f1_macro"),
-            equity_curve=_coerce_curve(m.get("equity_curve")),
-            buy_hold_curve=_coerce_curve(m.get("buy_hold_curve")),
-            drawdown_curve=_coerce_curve(m.get("drawdown_curve")),
+            equity_curve=ec,
+            buy_hold_curve=bhc,
+            drawdown_curve=ddc,
             monthly_results=m.get("monthly_results"),
             trades=m.get("trades"),
             hpo_param_importance=m.get("hpo_param_importance"),
@@ -922,6 +933,8 @@ def get_trade_chart_data(job_id: str, model: str = Query(..., description="Model
             {"time": e.get("time", 0), "value": e.get("value", 0)}
             for e in equity_curve if isinstance(e, dict)
         ]
+        if len(equity_curve) > 1500:
+            equity_curve = lttb_downsample(equity_curve, 1000)
     else:
         equity_curve = []
 

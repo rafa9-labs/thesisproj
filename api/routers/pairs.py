@@ -1,9 +1,10 @@
 """Pair registry and data endpoints."""
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from api.dependencies import get_data_store
+from api.utils.cache import cached, clear_cache
 from api.schemas.pairs import (
     DataRangeResponse,
     DataStatusResponse,
@@ -19,8 +20,12 @@ from pipeline.pair_config import get_pair_config, register_custom_pair
 router = APIRouter(prefix="/pairs", tags=["pairs"])
 
 
-def _build_pair_info(symbol: str, store) -> PairInfo:
-    """Build PairInfo from registry or from DB fallback."""
+def _build_pair_info(symbol: str, store, db_pair_map: dict | None = None) -> PairInfo:
+    """Build PairInfo from registry or from DB fallback.
+
+    ``db_pair_map`` is an optional pre-fetched mapping of symbol -> row from
+    the ``pairs`` table. Passing it avoids an extra query per custom pair.
+    """
     try:
         cfg = get_pair_config(symbol)
         return PairInfo(
@@ -33,7 +38,11 @@ def _build_pair_info(symbol: str, store) -> PairInfo:
             typical_spread_bps=cfg.typical_spread_bps,
         )
     except ValueError:
-        db_pair = store.get_pair(symbol)
+        db_pair = None
+        if db_pair_map is not None:
+            db_pair = db_pair_map.get(symbol)
+        if db_pair is None:
+            db_pair = store.get_pair(symbol)
         if db_pair:
             return PairInfo(
                 symbol=db_pair["symbol"],
@@ -56,7 +65,8 @@ def _build_pair_info(symbol: str, store) -> PairInfo:
 
 
 @router.get("", response_model=PairListResponse)
-def list_pairs():
+@cached("pairs", ttl=24 * 3600)
+def list_pairs(response: Response):
     store = get_data_store()
     summary = store.get_pair_summary()
 
@@ -72,6 +82,9 @@ def list_pairs():
             end_date=s.get("end_date"),
         ))
 
+    # Pre-fetch custom pair metadata in a single query to avoid N+1 lookups.
+    db_pair_map = {p["symbol"]: p for p in store.list_pairs()}
+
     # Always show all registry pairs (even without data) so users can download them
     from pipeline.pair_config import PAIR_REGISTRY
     seen = set()
@@ -80,7 +93,7 @@ def list_pairs():
         if symbol in seen:
             continue
         seen.add(symbol)
-        info = _build_pair_info(symbol, store)
+        info = _build_pair_info(symbol, store, db_pair_map)
         pairs.append(PairDetail(
             pair=info,
             timeframes=pair_map.get(symbol, []),
@@ -89,7 +102,7 @@ def list_pairs():
     for symbol in pair_map:
         if symbol not in seen:
             seen.add(symbol)
-            info = _build_pair_info(symbol, store)
+            info = _build_pair_info(symbol, store, db_pair_map)
             pairs.append(PairDetail(
                 pair=info,
                 timeframes=pair_map.get(symbol, []),
@@ -167,6 +180,7 @@ def define_pair(req: DefinePairRequest):
     except ValueError as e:
         raise HTTPException(400, str(e))
 
+    clear_cache("pairs")
     return PairInfo(
         symbol=cfg.symbol,
         oanda_name=cfg.oanda_name,

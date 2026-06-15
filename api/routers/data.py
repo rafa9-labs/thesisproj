@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from api.dependencies import get_data_store
 from api.schemas.pairs import DownloadRequest, DownloadResponse
 from api.services import JobManager
+from api.utils.cache import clear_cache
 from pipeline.pair_config import VALID_PAIRS
 
 
@@ -118,6 +119,7 @@ def upload_csv(
     for i in range(0, len(rows), BATCH_SIZE):
         store.insert_candles_batch(rows[i : i + BATCH_SIZE])
 
+    clear_cache("pairs")
     return {
         "status": "ok",
         "pair": pair,
@@ -211,6 +213,7 @@ def seed_demo(req: SeedDemoRequest):
             end_date=end,
         ))
 
+    clear_cache("pairs")
     return SeedDemoResponse(
         status="ok",
         pairs=result,
