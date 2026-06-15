@@ -43,7 +43,7 @@ def register_snapshot(snapshot_path: str, db_path: str, parent_job_status: str |
     model_id = os.path.basename(snapshot_path.rstrip("/\\"))
 
     store = DataStore(db_path)
-    with store._write_cursor() as (conn, cur):
+    with store._cursor() as (conn, cur):
         cur.execute(
             """INSERT OR REPLACE INTO deployed_models
                (id, model_type, snapshot_path, best_sharpe, best_return,
@@ -90,7 +90,7 @@ def activate_model(model_id: str, db_path: str) -> bool:
     from pipeline.data_sqlite import DataStore
 
     store = DataStore(db_path)
-    with store._write_cursor() as (conn, cur):
+    with store._cursor() as (conn, cur):
         cur.execute("SELECT id, model_type FROM deployed_models WHERE id = ?", (model_id,))
         row = cur.fetchone()
         if not row:
@@ -114,7 +114,7 @@ def deactivate_model(model_id: str, db_path: str) -> bool:
     from pipeline.data_sqlite import DataStore
 
     store = DataStore(db_path)
-    with store._write_cursor() as (conn, cur):
+    with store._cursor() as (conn, cur):
         cur.execute("SELECT id FROM deployed_models WHERE id = ?", (model_id,))
         row = cur.fetchone()
         if not row:
@@ -129,7 +129,7 @@ def delete_model(model_id: str, db_path: str) -> Tuple[bool, str]:
     from pipeline.data_sqlite import DataStore
 
     store = DataStore(db_path)
-    with store._write_cursor() as (conn, cur):
+    with store._cursor() as (conn, cur):
         cur.execute("SELECT id, snapshot_path FROM deployed_models WHERE id = ?", (model_id,))
         row = cur.fetchone()
         if not row:
@@ -150,7 +150,7 @@ def update_tags(model_id: str, db_path: str, action: str, tag: str) -> Optional[
     from pipeline.data_sqlite import DataStore
 
     store = DataStore(db_path)
-    with store._write_cursor() as (conn, cur):
+    with store._cursor() as (conn, cur):
         cur.execute("SELECT tags FROM deployed_models WHERE id = ?", (model_id,))
         row = cur.fetchone()
         if not row:
@@ -208,7 +208,7 @@ def scan_and_repair(db_path: str) -> Dict[str, int]:
 
     for mid, mpath in db_paths.items():
         if not os.path.isdir(mpath):
-            with store._write_cursor() as (conn, cur):
+            with store._cursor() as (conn, cur):
                 cur.execute("DELETE FROM deployed_models WHERE id = ?", (mid,))
             cleaned += 1
 

@@ -58,95 +58,6 @@ function truncateAtSentence(text: string, maxLen: number): string {
   return cut + "\u2026";
 }
 
-/* ── Helpers ── */
-
-function formatImpactLabel(label: string): string {
-  const map: Record<string, string> = {
-    strong_bullish: "Strong Bullish",
-    bullish: "Bullish",
-    neutral: "Neutral",
-    bearish: "Bearish",
-    strong_bearish: "Strong Bearish",
-  };
-  return map[label] ?? "Neutral";
-}
-
-function impactPillDynamicStyle(score: number): string {
-  const intensity = Math.abs(score);
-
-  if (intensity < 0.2) {
-    return "bg-slate-800 text-slate-400 border border-slate-700";
-  }
-
-  if (score > 0) {
-    if (intensity <= 0.5) {
-      return "bg-emerald-900/30 text-emerald-400/70 border border-emerald-900/50";
-    }
-    return "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.2)]";
-  }
-
-  if (intensity <= 0.5) {
-    return "bg-rose-900/30 text-rose-400/70 border border-rose-900/50";
-  }
-  return "bg-rose-500/20 text-rose-400 border border-rose-500/50 shadow-[0_0_10px_rgba(244,63,94,0.2)]";
-}
-
-/* ── Shared structured body renderer ── */
-
-function StructuredArticleBody({
-  fallback,
-}: {
-  fallback: string;
-}) {
-  // Phase 2: Bulletproof paragraph chunking.
-  // 1. Attempt standard newline split.
-  let paragraphs = fallback.split(/\n+/).filter((p) => p.trim() !== "");
-
-  // 2. FORCED FALLBACK: If there's only 1 paragraph and it's long, force chunk it by sentences.
-  if (paragraphs.length <= 1 && fallback.length > 400) {
-    const sentences = fallback.match(/[^.!?]+[.!?]+/g) || [fallback];
-    paragraphs = [];
-    for (let i = 0; i < sentences.length; i += 4) {
-      paragraphs.push(sentences.slice(i, i + 4).join(" ").trim());
-    }
-  }
-
-  const overviewSentence =
-    paragraphs.length > 0 ? paragraphs[0].split(".")[0] + "." : "";
-
-  // Short fallback with no usable chunks.
-  if (paragraphs.length === 0) {
-    return (
-      <p className="text-[13px] leading-relaxed tracking-wide text-slate-200">
-        {truncateAtSentence(fallback, 800)}
-      </p>
-    );
-  }
-
-  return (
-    <>
-      {/* Node A: Overview box — single most impactful sentence only */}
-      <div className="border border-yellow-500/30 p-4">
-        <p className="text-[13px] leading-relaxed text-slate-200">
-          {overviewSentence}
-        </p>
-      </div>
-
-      {/* Node B: Article body — chunked paragraphs */}
-      <div className="mt-6 px-2">
-        {paragraphs.map((para, idx) => (
-          <p
-            key={idx}
-            className="mb-4 text-[13px] text-slate-300 leading-relaxed tracking-wide text-justify"
-          >
-            {para}
-          </p>
-        ))}
-      </div>
-    </>
-  );
-}
-
 /* ── Scored Article Row (Left Panel) ── */
 
 function ScoredArticleRow({ article }: { article: LiveSentimentArticle }) {
@@ -154,9 +65,6 @@ function ScoredArticleRow({ article }: { article: LiveSentimentArticle }) {
   const score = article.sentiment_score;
   const isBullish = score > 0.05;
   const isBearish = score < -0.05;
-  const impactScore = article.market_impact_score ?? score;
-  const impactLabel = article.impact_label ?? "neutral";
-  const pillClass = impactPillDynamicStyle(impactScore);
   const borderColor = isBullish
     ? "var(--color-accent-success)"
     : isBearish
@@ -164,6 +72,9 @@ function ScoredArticleRow({ article }: { article: LiveSentimentArticle }) {
       : "var(--color-glass-border)";
   const hasBody = !!(article.body || article.summary);
   const bodyText = article.body || article.summary || "";
+  const hlBody = article.highlighted_body || null;
+  const llmSentiment = article.llm_sentiment ?? null;
+  const llmConfidence = article.llm_confidence ?? null;
 
   return (
     <div
@@ -173,24 +84,16 @@ function ScoredArticleRow({ article }: { article: LiveSentimentArticle }) {
       <div className="flex items-start gap-3 px-3 py-2.5">
         {/* Content */}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          {/* Title + Impact Pill */}
-          <div className="flex items-start gap-2">
-            <a
-              href={article.url || "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="min-w-0 flex-1 truncate text-[11px] leading-snug font-medium text-(--color-text-primary) transition-colors hover:text-(--color-brand) hover:underline"
-              title={article.url ? "Open source" : undefined}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {article.title}
-            </a>
-            <span
-              className={`shrink-0 self-start rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold tabular-nums leading-none ${pillClass}`}
-            >
-              {impactScore > 0 ? "+" : ""}{impactScore.toFixed(2)} {formatImpactLabel(impactLabel)}
-            </span>
-          </div>
+          <a
+            href={article.url || "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="line-clamp-2 text-[11px] leading-snug font-medium text-(--color-text-primary) transition-colors hover:text-(--color-brand) hover:underline"
+            title={article.url ? "Open source" : undefined}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {article.title}
+          </a>
 
           {!expanded && hasBody && (
             <p className="line-clamp-2 text-[10px] leading-relaxed text-(--color-text-dim)">
@@ -199,23 +102,23 @@ function ScoredArticleRow({ article }: { article: LiveSentimentArticle }) {
           )}
 
           <div className="flex items-center gap-3">
-            {article.llm_sentiment != null && (
+            {llmSentiment != null && (
               <span
                 className="font-mono text-[10px] font-semibold tabular-nums"
                 style={{
                   color:
-                    article.llm_sentiment >= 0
+                    llmSentiment >= 0
                       ? "var(--color-accent-success)"
                       : "var(--color-accent-danger)",
                 }}
               >
-                LLM: {article.llm_sentiment > 0 ? "+" : ""}
-                {article.llm_sentiment.toFixed(2)}
+                LLM: {llmSentiment > 0 ? "+" : ""}
+                {llmSentiment.toFixed(2)}
               </span>
             )}
-            {article.llm_confidence != null && (
+            {llmConfidence != null && (
               <span className="font-mono text-[10px] text-(--color-text-dim) tabular-nums">
-                CONF: {(article.llm_confidence * 100).toFixed(0)}%
+                CONF: {(llmConfidence * 100).toFixed(0)}%
               </span>
             )}
             <span className="text-[9px] text-(--color-text-muted)">
@@ -250,11 +153,20 @@ function ScoredArticleRow({ article }: { article: LiveSentimentArticle }) {
         </div>
       </div>
 
-      {/* Expanded — structured body with overview + paragraph chunks */}
+      {/* Expanded text with sentiment highlighting */}
       {expanded && hasBody && (
         <div className="px-3 pb-3">
-          <div className="mt-2 rounded-md bg-slate-900/80 p-5">
-            <StructuredArticleBody fallback={bodyText} />
+          <div className="mt-2 rounded-md bg-slate-900/60 p-4">
+            {hlBody ? (
+              <p
+                className="text-[11px] leading-relaxed text-slate-300"
+                dangerouslySetInnerHTML={{ __html: hlBody }}
+              />
+            ) : (
+              <p className="text-[11px] leading-relaxed text-slate-300">
+                {truncateAtSentence(bodyText, 800)}
+              </p>
+            )}
           </div>
         </div>
       )}

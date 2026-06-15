@@ -4,10 +4,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-
-from api.utils.cache import cached, clear_cache
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -24,8 +22,7 @@ class ApiKeyPayload(BaseModel):
 
 
 @router.get("")
-@cached("config", ttl=24 * 3600)
-def get_config(response: Response):
+def get_config():
     if _CONFIG_PATH.exists():
         try:
             data = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
@@ -42,7 +39,6 @@ def update_config(payload: ConfigPayload):
             json.dumps(payload.settings, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
-        clear_cache("config")
         return {"status": "ok"}
     except OSError as e:
         raise HTTPException(500, f"Failed to save config: {e}")
@@ -54,7 +50,6 @@ def store_api_key(payload: ApiKeyPayload):
         from api.licensing.storage import SecureStorage
         secure = SecureStorage()
         secure.store_api_key(payload.name, payload.value)
-        clear_cache("config")
         return {"status": "ok", "key_name": payload.name}
     except Exception as e:
         raise HTTPException(500, f"Failed to store API key: {e}")
@@ -71,7 +66,6 @@ def store_kv(payload: KvPayload):
         from api.licensing.storage import SecureStorage
         secure = SecureStorage()
         secure.set_kv(payload.key, payload.value)
-        clear_cache("config")
         return {"status": "ok", "key": payload.key}
     except Exception as e:
         raise HTTPException(500, f"Failed to store value: {e}")

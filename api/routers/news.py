@@ -8,7 +8,6 @@ from typing import Optional
 from fastapi import APIRouter, Query, Response
 
 from api.schemas.news import NewsArticleFull, NewsArticlesResponse, NewsEventItem, NewsEventsResponse
-from api.utils.cache import cached
 from news.scraper import NewsScraper, NewsArticle, _strip_html, _highlight_sentiment_phrases
 
 logger = logging.getLogger(__name__)
@@ -105,13 +104,7 @@ def get_news_events(
 
 
 @router.get("/articles", response_model=NewsArticlesResponse)
-@cached(
-    "news_articles",
-    ttl=15 * 60,
-    key_func=lambda args: (args.get("pair", ""), args.get("days", 30), args.get("page", 1), args.get("page_size", 50)),
-)
 def get_news_articles(
-    response: Response,
     pair: str = Query("", description="Optional currency pair filter (e.g. EURUSD)"),
     days: int = Query(30, description="Max age of articles in days"),
     page: int = Query(1, ge=1, description="Page number"),
@@ -261,11 +254,6 @@ def _format_article(
 
 
 @router.get("/sentiment/live")
-@cached(
-    "news_sentiment",
-    ttl=3600,
-    key_func=lambda args: (args.get("pair", "EURUSD"),),
-)
 def get_live_sentiment(
     response: Response,
     pair: str = Query("EURUSD", description="Currency pair for sentiment analysis"),

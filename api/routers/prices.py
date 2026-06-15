@@ -9,19 +9,15 @@ GET /candles/{pair}/{timeframe}?limit=200
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import time
 from datetime import datetime, timezone
 from typing import List, Optional
 
-import httpx
 import numpy as np
 import pandas as pd
-from cachetools import TTLCache
-from fastapi import APIRouter, HTTPException, Query, Response
-from httpx import Limits
+from fastapi import APIRouter, HTTPException, Query
 
 from api.dependencies import get_data_store
 from pipeline.pair_config import get_pair_config
@@ -31,15 +27,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["prices"])
 
 OANDA_PRACTICE_URL = "https://api-fxpractice.oanda.com"
-
-# Shared async HTTP client for OANDA. Kept alive across requests so the
-# highly-polled /prices/live route does not reopen TCP/TLS every 3 seconds.
-_OANDA_ASYNC_CLIENT: httpx.AsyncClient | None = None
-
-# 2-second in-memory cache for raw OANDA price responses. Multiple frontend
-# widgets polling within the same window share this frame instead of hammering
-# the external API.
-_OANDA_PRICE_CACHE: TTLCache = TTLCache(maxsize=32, ttl=2)
 
 
 def _get_oanda_credentials():
@@ -84,62 +71,8 @@ def _oanda_api_call(instruments: str, max_retries: int = 2):
     return None, "unavailable"
 
 
-async def _get_oanda_async_client() -> httpx.AsyncClient:
-    """Return a shared httpx.AsyncClient with keep-alive for OANDA."""
-    global _OANDA_ASYNC_CLIENT
-    if _OANDA_ASYNC_CLIENT is None:
-        _OANDA_ASYNC_CLIENT = httpx.AsyncClient(
-            base_url=OANDA_PRACTICE_URL,
-            limits=Limits(max_connections=10, max_keepalive_connections=10),
-            timeout=httpx.Timeout(8.0),
-        )
-    return _OANDA_ASYNC_CLIENT
-
-
-async def _oanda_api_call_async(instruments: str, max_retries: int = 2):
-    """Async OANDA pricing call using the shared client."""
-    token, account_id = _get_oanda_credentials()
-    if not token or not account_id:
-        return None, "key_required"
-
-    client = await _get_oanda_async_client()
-    path = f"/v3/accounts/{account_id}/pricing"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
-    params = {"instruments": instruments}
-    last_exc = None
-
-    for attempt in range(max_retries):
-        try:
-            resp = await client.get(path, headers=headers, params=params)
-            resp.raise_for_status()
-            return resp.json().get("prices", []), "oanda"
-        except Exception as e:
-            last_exc = e
-            logger.warning("OANDA async pricing call failed (attempt %d): %s", attempt + 1, e)
-            if attempt < max_retries - 1:
-                await asyncio.sleep(1)
-
-    logger.warning("OANDA async pricing call failed after %d attempts: %s", max_retries, last_exc)
-    return None, "unavailable"
-
-
-async def _fetch_oanda_prices_cached(instruments: str):
-    """Return (prices, source) reusing a 2-second in-memory cache."""
-    cached = _OANDA_PRICE_CACHE.get(instruments)
-    if cached is not None:
-        return cached, True
-    prices, source = await _oanda_api_call_async(instruments)
-    if source == "oanda":
-        _OANDA_PRICE_CACHE[instruments] = (prices, source)
-    return (prices, source), False
-
-
 @router.get("/prices/live")
-async def get_live_prices(
-    response: Response,
+def get_live_prices(
     pairs: str = Query("EURUSD,GBPUSD,USDJPY", description="Comma-separated pair symbols"),
     lookback_bars: int = Query(50, ge=1, le=500, description="Candles for sparkline"),
 ):
@@ -156,10 +89,7 @@ async def get_live_prices(
             raise HTTPException(400, f"Unknown pair: {sym}")
 
     instrument_str = ",".join(instruments)
-    (raw_prices, source), cached = await _fetch_oanda_prices_cached(instrument_str)
-
-    response.headers["Cache-Control"] = "private, max-age=2"
-    response.headers["X-Cache"] = "HIT" if cached else "MISS"
+    raw_prices, source = _oanda_api_call(instrument_str)
 
     if source == "key_required":
         return {"prices": [], "source": "key_required",

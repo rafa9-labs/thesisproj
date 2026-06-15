@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-import threading
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -26,11 +25,6 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-
-
-# Serialize write access across threads so that SQLite's WAL writer never
-# times out under concurrent writers. Readers still proceed in parallel.
-_WRITE_LOCK = threading.Lock()
 
 
 SCHEMA_SQL = """
@@ -128,18 +122,6 @@ CREATE TABLE IF NOT EXISTS saved_committees (
     created_at        TEXT    NOT NULL,
     updated_at        TEXT    NOT NULL
 );
-
-CREATE INDEX IF NOT EXISTS idx_jobs_status_type
-    ON jobs (status, type);
-
-CREATE INDEX IF NOT EXISTS idx_jobs_created_at
-    ON jobs (created_at);
-
-CREATE INDEX IF NOT EXISTS idx_deployed_models_status
-    ON deployed_models (status);
-
-CREATE INDEX IF NOT EXISTS idx_saved_committees_active
-    ON saved_committees (is_active);
 """
 
 
@@ -154,77 +136,30 @@ class DataStore:
     def __init__(self, db_path: str = "data/forex.db"):
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._local = threading.local()
         self._ensure_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        """Create a fresh, standalone connection (kept for vacuum/one-off use)."""
-        conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA cache_size=-64000")
         conn.execute("PRAGMA temp_store=MEMORY")
         return conn
 
-    def _get_connection(self) -> sqlite3.Connection:
-        """Return a thread-local, long-lived SQLite connection.
-
-        Opening/closing sqlite3 connections on every API request is the
-        dominant I/O cost for read-heavy endpoints. This pool keeps one
-        connection per worker thread alive and reuses it across calls.
-        """
-        conn = getattr(self._local, "conn", None)
-        if conn is None:
-            conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA synchronous=NORMAL")
-            conn.execute("PRAGMA cache_size=-64000")
-            conn.execute("PRAGMA temp_store=MEMORY")
-            self._local.conn = conn
-        return conn
-
     @contextmanager
     def _cursor(self):
-        """Read-capable cursor using the thread-local connection."""
-        conn = self._get_connection()
-        cur = conn.cursor()
+        conn = self._connect()
         try:
-            yield conn, cur
+            yield conn, conn.cursor()
             conn.commit()
         except Exception:
             conn.rollback()
             raise
-
-    @contextmanager
-    def _write_cursor(self):
-        """Write cursor serialized by a module-level lock.
-
-        SQLite WAL allows many readers but only one writer. Serializing
-        write attempts in-process prevents busy-timeout errors when the
-        pipeline and API threads write concurrently.
-        """
-        with _WRITE_LOCK:
-            conn = self._get_connection()
-            cur = conn.cursor()
-            try:
-                yield conn, cur
-                conn.commit()
-            except Exception:
-                conn.rollback()
-                raise
-
-    def close_current_connection(self) -> None:
-        """Close the thread-local connection for the calling thread."""
-        conn = getattr(self._local, "conn", None)
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
-            self._local.conn = None
+        finally:
+            conn.close()
 
     def _ensure_schema(self):
-        with self._write_cursor() as (conn, cur):
+        with self._cursor() as (conn, cur):
             expected = {"candles", "pairs", "jobs", "job_events"}
             cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
             existing = {row[0] for row in cur.fetchall()}
@@ -285,15 +220,6 @@ class DataStore:
                     """)
                 except sqlite3.OperationalError:
                     pass
-                try:
-                    cur.executescript("""
-                        CREATE INDEX IF NOT EXISTS idx_jobs_status_type ON jobs (status, type);
-                        CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs (created_at);
-                        CREATE INDEX IF NOT EXISTS idx_deployed_models_status ON deployed_models (status);
-                        CREATE INDEX IF NOT EXISTS idx_saved_committees_active ON saved_committees (is_active);
-                    """)
-                except sqlite3.OperationalError:
-                    pass
             conn.commit()
 
     def _normalize_ts(self, ts: str) -> str:
@@ -309,7 +235,7 @@ class DataStore:
         return ts
 
     def insert_pairs(self, pairs: List[Dict]):
-        with self._write_cursor() as (conn, cur):
+        with self._cursor() as (conn, cur):
             cur.executemany(
                 """INSERT OR REPLACE INTO pairs
                    (symbol, oanda_name, pip_value, lot_size, base_currency, quote_currency, typical_spread_bps)
@@ -333,7 +259,7 @@ class DataStore:
             return [dict(zip(cols, row)) for row in cur.fetchall()]
 
     def insert_candles_batch(self, rows: List[tuple]):
-        with self._write_cursor() as (conn, cur):
+        with self._cursor() as (conn, cur):
             cur.executemany(
                 """INSERT OR REPLACE INTO candles
                    (pair, timeframe, ts, mid_open, mid_high, mid_low, mid_close,
@@ -381,8 +307,8 @@ class DataStore:
 
         sql += " ORDER BY ts"
 
-        conn = self._get_connection()
-        df = pd.read_sql_query(sql, conn, params=params)
+        with self._connect() as conn:
+            df = pd.read_sql_query(sql, conn, params=params)
 
         if df.empty:
             return df
@@ -468,7 +394,7 @@ class DataStore:
             return df.sort_values("time").reset_index(drop=True)
 
     def append_job_event(self, job_id: str, event_data: str) -> int:
-        with self._write_cursor() as (conn, cur):
+        with self._cursor() as (conn, cur):
             cur.execute(
                 "INSERT INTO job_events (job_id, event_index, event_data, created_at) "
                 "VALUES (?, COALESCE((SELECT MAX(event_index) FROM job_events WHERE job_id = ?), -1) + 1, ?, ?)",
@@ -491,11 +417,11 @@ class DataStore:
             return cur.fetchone()[0]
 
     def clear_job_events(self, job_id: str) -> None:
-        with self._write_cursor() as (conn, cur):
+        with self._cursor() as (conn, cur):
             cur.execute("DELETE FROM job_events WHERE job_id = ?", (job_id,))
 
     def trim_job_events(self, job_id: str, max_count: int) -> None:
-        with self._write_cursor() as (conn, cur):
+        with self._cursor() as (conn, cur):
             cur.execute("SELECT COUNT(*) FROM job_events WHERE job_id = ?", (job_id,))
             count = cur.fetchone()[0]
             to_delete = count - max_count
@@ -509,7 +435,7 @@ class DataStore:
 
     def prune_job_events(self, hours: int = 24) -> int:
         from datetime import timedelta
-        with self._write_cursor() as (conn, cur):
+        with self._cursor() as (conn, cur):
             cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
             cur.execute("DELETE FROM job_events WHERE created_at < ?", (cutoff,))
             return cur.rowcount
