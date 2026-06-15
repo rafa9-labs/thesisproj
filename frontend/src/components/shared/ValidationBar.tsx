@@ -1,6 +1,16 @@
-import { TriangleAlert, Bookmark, Rocket, ArrowRight } from "lucide-react";
+import { TriangleAlert, Bookmark, ArrowRight } from "lucide-react";
 import { useRuntimeEstimate } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
+
+const TAB_SEQUENCE = [
+  { key: "quickstart", label: "Quick Start" },
+  { key: "asset", label: "Asset & Model" },
+  { key: "study", label: "Study & HPO" },
+  { key: "features", label: "Features" },
+  { key: "hyperparams", label: "Hyperparameters" },
+  { key: "execution", label: "Execution" },
+  { key: "forwardtest", label: "Forward Test" },
+];
 
 interface Props {
   warnings: number;
@@ -9,9 +19,11 @@ interface Props {
   isSubmitting: boolean;
   hasModels: boolean;
   hasPair: boolean;
-  hasDates?: boolean;
+  hasDates: boolean;
   onDeploy: () => void;
   onSavePreset?: () => void;
+  activeTab?: string;
+  onTabChange?: (tab: string) => void;
 }
 
 function RuntimeInline() {
@@ -39,10 +51,25 @@ function RuntimeInline() {
 
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-[9px] font-semibold tracking-[0.1em] text-(--color-text-muted) uppercase opacity-70">
+      <span
+        style={{
+          fontSize: 9,
+          fontWeight: 600,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: "var(--color-text-muted)",
+          opacity: 0.7,
+        }}
+      >
         EST. RUNTIME
       </span>
-      <span className="font-mono text-xs text-(--color-text-primary)">
+      <span
+        style={{
+          fontSize: 12,
+          fontFamily: "var(--font-mono)",
+          color: "var(--color-text-primary)",
+        }}
+      >
         {fmt(estimated_minutes_low)} – {fmt(estimated_minutes_high)}
       </span>
     </div>
@@ -59,97 +86,145 @@ export function ValidationBar({
   hasDates,
   onDeploy,
   onSavePreset,
+  activeTab,
+  onTabChange,
 }: Props) {
-  const hasDatesValue = hasDates ?? true;
+  const currentIdx = TAB_SEQUENCE.findIndex((t) => t.key === activeTab);
+  const nextTab = currentIdx >= 0 && currentIdx < TAB_SEQUENCE.length - 1
+    ? TAB_SEQUENCE[currentIdx + 1]
+    : null;
   const missingItems: string[] = [];
   if (!hasPair) missingItems.push("a currency pair");
   if (!hasModels) missingItems.push("at least one model");
-  if (!hasDatesValue) missingItems.push("date range");
-
-  const ready = missingItems.length === 0 && errors === 0;
+  if (!hasDates) missingItems.push("date range");
 
   return (
-    <div className="sticky bottom-0 z-20 flex h-[72px] items-center justify-between border-t border-(--color-glass-border) bg-(--color-surface) px-6">
-      {/* Left: deploy status with rocket */}
-      <div className="flex items-center gap-4">
-        <div
-          className="flex h-10 w-10 items-center justify-center rounded-lg"
-          style={{
-            backgroundColor: ready ? "var(--color-brand-glow)" : "var(--color-glass)",
-            border: `1px solid ${ready ? "var(--color-border-active)" : "var(--color-glass-border)"}`,
-            color: ready ? "var(--color-brand)" : "var(--color-text-muted)",
-          }}
-        >
-          <Rocket size={18} strokeWidth={1.75} />
-        </div>
-
-        <div className="flex flex-col gap-0.5">
+    <div
+      className="sticky bottom-0 z-20 flex items-center justify-between px-6 relative"
+      style={{
+        height: 56,
+        borderTop: "1px solid #333",
+        backgroundColor: "var(--color-app)",
+      }}
+    >
+      {/* Left: status + runtime */}
+      <div className="flex items-center gap-6">
+        {/* Status text */}
+        <div className="flex items-center gap-2">
           {missingItems.length > 0 ? (
-            <>
-              <span className="text-[13px] font-semibold text-(--color-text-secondary)">
-                Setup incomplete
-              </span>
-              <span className="font-mono text-[11px] text-(--color-text-muted)">
-                Select {missingItems.join(" and ")} to start
-              </span>
-            </>
+            <span
+              style={{
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              Select {missingItems.join(" and ")} to start
+            </span>
           ) : errors > 0 ? (
-            <>
-              <div className="flex items-center gap-1.5">
-                <TriangleAlert size={13} className="text-(--color-accent-danger)" />
-                <span className="text-[13px] font-semibold text-(--color-accent-danger)">
-                  {errors} config error{errors > 1 ? "s" : ""}
-                </span>
-              </div>
-              <span className="font-mono text-[11px] text-(--color-text-muted)">
-                Resolve errors before deploying
+            <div className="flex items-center gap-1.5">
+              <TriangleAlert size={12} style={{ color: "var(--color-accent-danger)" }} />
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                {errors} config error{errors > 1 ? "s" : ""}
               </span>
-            </>
+            </div>
+          ) : warnings > 0 ? (
+            <div className="flex items-center gap-1.5">
+              <TriangleAlert size={12} style={{ color: "var(--color-accent-warning)" }} />
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                {warnings} warning{warnings > 1 ? "s" : ""}
+              </span>
+            </div>
           ) : (
-            <>
-              <div className="flex items-center gap-2">
-                <span className="text-[14px] font-bold text-(--color-text-primary)">
-                  Ready to Deploy
-                </span>
-                {warnings > 0 && (
-                  <span className="flex items-center gap-1">
-                    <TriangleAlert size={11} className="text-(--color-accent-warning)" />
-                    <span className="font-mono text-[10px] text-(--color-accent-warning)">
-                      {warnings} warning{warnings > 1 ? "s" : ""}
-                    </span>
-                  </span>
-                )}
-              </div>
-              <RuntimeInline />
-            </>
+            <span
+              style={{
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              Ready to deploy
+            </span>
           )}
         </div>
+
+        {/* Divider + runtime */}
+        <RuntimeInline />
       </div>
+
+      {/* Centre: next step */}
+      {nextTab && onTabChange && (
+        <button
+          type="button"
+          onClick={() => onTabChange(nextTab.key)}
+          className="absolute left-1/2 flex items-center gap-1.5 rounded border transition-colors"
+          style={{
+            transform: "translateX(-50%)",
+            height: 28,
+            padding: "0 12px",
+            backgroundColor: "#1D4ED818",
+            borderColor: "#3B82F655",
+            color: "#60A5FA",
+            fontSize: 11,
+            fontFamily: "var(--font-mono)",
+            cursor: "pointer",
+            letterSpacing: "0.04em",
+            whiteSpace: "nowrap",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1D4ED830"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1D4ED818"; }}
+        >
+          Next: {nextTab.label}
+          <ArrowRight size={11} strokeWidth={1.5} />
+        </button>
+      )}
 
       {/* Right: save preset + deploy CTA */}
       <div className="flex items-center gap-3">
         {onSavePreset && canDeploy && (
           <button
             onClick={onSavePreset}
-            className="flex h-11 items-center gap-1.5 rounded-md border border-(--color-glass-border) bg-transparent px-4 text-[11px] font-semibold tracking-[0.06em] text-(--color-text-secondary) uppercase transition-colors duration-150 hover:border-(--color-border-active) hover:text-(--color-text-primary)"
+            className="flex items-center gap-1.5 rounded border px-3 text-[10px] font-semibold uppercase tracking-[0.06em] transition-colors duration-150 hover:brightness-110"
+            style={{
+              height: 34,
+              borderColor: "var(--color-glass-border)",
+              color: "var(--color-text-secondary)",
+              background: "transparent",
+            }}
           >
-            <Bookmark size={13} />
-            Save Draft
+            <Bookmark size={11} />
+            Save Preset
           </button>
         )}
 
         <button
           onClick={onDeploy}
           disabled={!canDeploy || isSubmitting}
-          className="flex h-11 items-center gap-2 rounded-md border-0 bg-(--color-brand) pr-7 pl-7 text-[12px] font-bold tracking-[0.08em] text-(--color-text-inverse) uppercase transition-all duration-150 hover:brightness-110"
+          className="rounded text-[11px] font-bold uppercase tracking-[0.08em] transition-all duration-150 hover:brightness-110"
           style={{
+            height: 34,
+            paddingLeft: 24,
+            paddingRight: 24,
+            backgroundColor: "var(--color-brand)",
+            color: "#0A0D12",
             cursor: canDeploy && !isSubmitting ? "pointer" : "not-allowed",
             opacity: canDeploy ? (isSubmitting ? 0.7 : 1) : 0.35,
-            boxShadow: canDeploy ? "0 0 20px rgba(0,229,255,0.25)" : "none",
+            border: "none",
           }}
         >
           {isSubmitting ? "Submitting..." : "Deploy Backtest"}
-          {!isSubmitting && <ArrowRight size={15} strokeWidth={2.25} />}
         </button>
       </div>
     </div>

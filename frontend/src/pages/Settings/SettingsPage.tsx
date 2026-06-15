@@ -6,32 +6,117 @@ import {
   Key,
   Info,
   ExternalLink,
-  Check,
+  GitBranch,
 } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useConfig, useSaveConfig, useStoreApiKey, useStoreKv } from "@/api/queries";
 
-function SectionCard({
-  icon,
-  title,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-}) {
+// ─── Primitives ────────────────────────────────────────────────────────────────
+
+function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="flex flex-col rounded-lg border border-(--color-glass-border) bg-(--color-glass) p-6">
-      <div className="mb-6 flex items-center gap-2.5 border-b border-(--color-glass-border) pb-4">
-        <span className="flex text-(--color-brand)">{icon}</span>
-        <h3 className="text-[11px] font-semibold tracking-[0.1em] text-(--color-text-primary) uppercase">
-          {title}
-        </h3>
-      </div>
-      {children}
-    </div>
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className="relative flex-shrink-0 rounded-full transition-colors"
+      style={{
+        width: 28,
+        height: 14,
+        backgroundColor: value ? "#1D4ED833" : "#1F2937",
+        border: `1px solid ${value ? "#3B82F6" : "#374151"}`,
+      }}
+      aria-pressed={value}
+    >
+      <span
+        className="absolute rounded-full transition-all"
+        style={{
+          width: 8,
+          height: 8,
+          top: 2,
+          left: value ? 15 : 3,
+          backgroundColor: value ? "#3B82F6" : "#4B5563",
+        }}
+      />
+    </button>
   );
 }
+
+function NumericInput({
+  value,
+  min,
+  max,
+  onChange,
+  width = 56,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (v: number) => void;
+  width?: number;
+}) {
+  return (
+    <input
+      type="number"
+      value={value}
+      min={min}
+      max={max}
+      onChange={(e) => {
+        const v = Number(e.target.value);
+        if (v >= min && v <= max) onChange(v);
+      }}
+      className="rounded border text-right focus:outline-none"
+      style={{
+        width,
+        height: 26,
+        padding: "0 6px",
+        backgroundColor: "#131722",
+        borderColor: "#2A2E39",
+        color: "#D1D4DC",
+        fontSize: 11,
+        fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+      }}
+    />
+  );
+}
+
+function TextInput({
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  type = "text",
+  width = 220,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onBlur?: () => void;
+  placeholder?: string;
+  type?: string;
+  width?: number;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+      placeholder={placeholder}
+      className="rounded border focus:outline-none"
+      style={{
+        width,
+        height: 26,
+        padding: "0 8px",
+        backgroundColor: "#131722",
+        borderColor: "#2A2E39",
+        color: "#D1D4DC",
+        fontSize: 11,
+        fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+      }}
+    />
+  );
+}
+
+// ─── Layout primitives ─────────────────────────────────────────────────────────
 
 function FieldRow({
   label,
@@ -43,86 +128,70 @@ function FieldRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col justify-between gap-2 border-t border-(--color-glass-border) py-3 sm:flex-row sm:items-center sm:gap-4">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-[12px] font-medium text-(--color-text-primary)">{label}</span>
-        {hint && <span className="text-[10px] text-(--color-text-muted)">{hint}</span>}
+    <div
+      className="flex items-center justify-between"
+      style={{ minHeight: 34, borderBottom: "1px solid #2A2E3940", padding: "0 0" }}
+    >
+      <div className="flex flex-col" style={{ gap: 1 }}>
+        <span style={{ fontSize: 11, color: "#787B86", letterSpacing: "0.03em" }}>{label}</span>
+        {hint && <span style={{ fontSize: 10, color: "#4B5563" }}>{hint}</span>}
       </div>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
+      <div className="flex items-center gap-2">{children}</div>
     </div>
   );
 }
 
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+function SectionPanel({ children }: { children: React.ReactNode }) {
   return (
-    <button
-      onClick={() => onChange(!value)}
-      aria-checked={value}
-      role="switch"
-      className="relative h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-all duration-200"
+    <div
+      className="flex flex-col"
       style={{
-        backgroundColor: value ? "var(--color-brand)" : "var(--color-glass-border)",
-        boxShadow: value ? "0 0 8px rgba(0,229,255,0.25)" : "none",
+        backgroundColor: "#1E222D",
+        border: "1px solid #2A2E39",
+        borderRadius: 4,
+        padding: "10px 14px",
+        gap: 0,
       }}
     >
-      <span
-        className="absolute top-0.5 h-4 w-4 rounded-full transition-all duration-200"
-        style={{
-          backgroundColor: value ? "var(--color-text-inverse)" : "var(--color-text-muted)",
-          left: value ? 18 : 2,
-        }}
-      />
-    </button>
-  );
-}
-
-function TextInput({
-  value,
-  onChange,
-  onBlur,
-  placeholder,
-  type = "text",
-  mono = true,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onBlur?: () => void;
-  placeholder?: string;
-  type?: string;
-  mono?: boolean;
-}) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={onBlur}
-      placeholder={placeholder}
-      className="w-full rounded-md border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 text-xs text-(--color-text-primary) transition-colors duration-200 focus:outline-none sm:w-64"
-      style={{ fontFamily: mono ? "var(--font-mono)" : "var(--font-sans)" }}
-    />
-  );
-}
-
-function StaticPill({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-md border border-(--color-glass-border) bg-(--color-glass-hover) px-3 py-1.5 font-mono text-xs text-(--color-text-secondary)">
       {children}
-    </span>
+    </div>
   );
 }
 
-function SavedBadge({ show }: { show: boolean }) {
-  if (!show) return null;
+function SectionLabel({ label }: { label: string }) {
   return (
-    <span className="flex items-center gap-1 text-[10px] font-medium text-(--color-accent-success)">
-      <Check size={10} strokeWidth={2.5} />
-      Saved
-    </span>
+    <div
+      className="flex items-center gap-2"
+      style={{ marginBottom: 8 }}
+    >
+      <span
+        style={{
+          fontSize: 9,
+          letterSpacing: "0.1em",
+          color: "#4B5563",
+          textTransform: "uppercase",
+          fontWeight: 600,
+        }}
+      >
+        {label}
+      </span>
+      <div style={{ flex: 1, height: 1, backgroundColor: "#2A2E39" }} />
+    </div>
   );
 }
 
-/* ─────────────────────── license sub-section ─────────────────────── */
+// ─── Nav items ─────────────────────────────────────────────────────────────────
+
+const NAV_ITEMS = [
+  { key: "general", label: "General", icon: <SettingsIcon size={13} strokeWidth={1.5} /> },
+  { key: "gpu", label: "GPU & Compute", icon: <Cpu size={13} strokeWidth={1.5} /> },
+  { key: "datasources", label: "Data Sources", icon: <Database size={13} strokeWidth={1.5} /> },
+  { key: "license", label: "License", icon: <Key size={13} strokeWidth={1.5} /> },
+  { key: "pipeline", label: "Pipeline Configuration", icon: <GitBranch size={13} strokeWidth={1.5} /> },
+  { key: "about", label: "About", icon: <Info size={13} strokeWidth={1.5} /> },
+];
+
+// ─── License sub-section ───────────────────────────────────────────────────────
 
 interface LicenseInfo {
   plan: string;
@@ -135,7 +204,7 @@ interface LicenseInfo {
   machine_id: string;
 }
 
-function LicenseSection() {
+function LicenseContent() {
   const [license, setLicense] = useState<LicenseInfo | null>(null);
   const [inputKey, setInputKey] = useState("");
   const [activating, setActivating] = useState(false);
@@ -145,7 +214,7 @@ function LicenseSection() {
     const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
     fetch(`${apiBase}/license/status`)
       .then((r) => r.json())
-      .then((data) => setLicense(data as LicenseInfo))
+      .then((d) => setLicense(d as LicenseInfo))
       .catch(() => {});
   }, []);
 
@@ -162,8 +231,8 @@ function LicenseSection() {
       });
       const data = await res.json();
       if (data.success) {
-        const statusRes = await fetch(`${apiBase}/license/status`);
-        setLicense(await statusRes.json());
+        const r2 = await fetch(`${apiBase}/license/status`);
+        setLicense(await r2.json());
         setInputKey("");
       } else {
         setError(data.detail || data.error || "Activation failed");
@@ -175,105 +244,282 @@ function LicenseSection() {
     }
   };
 
-  const handleDeactivate = async () => {
-    try {
-      const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
-      await fetch(`${apiBase}/license/deactivate`, { method: "POST" });
-      const statusRes = await fetch(`${apiBase}/license/status`);
-      setLicense(await statusRes.json());
-    } catch {
-      /* ignore */
-    }
-  };
-
   if (!license) {
-    return <p className="text-[11px] text-(--color-text-muted)">Checking license status…</p>;
+    return <span style={{ fontSize: 11, color: "#4B5563" }}>Checking license status…</span>;
   }
 
-  const planLabel: Record<string, string> = {
-    free: "Free",
-    trial: "Trial",
-    pro: "Pro",
-    team: "Team",
-  };
   const planColor: Record<string, string> = {
-    free: "var(--color-text-muted)",
-    trial: "var(--color-accent-warning)",
-    pro: "var(--color-brand)",
-    team: "var(--color-accent-success)",
+    free: "#4B5563",
+    trial: "#F59E0B",
+    pro: "#3B82F6",
+    team: "#10B981",
   };
-  const color = planColor[license.plan] ?? "var(--color-text-muted)";
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span
-            className="rounded-md border px-3 py-1 text-[11px] font-semibold tracking-wider uppercase"
-            style={{
-              borderColor: color,
-              backgroundColor: `color-mix(in srgb, ${color} 9%, transparent)`,
-              color,
-            }}
-          >
-            {planLabel[license.plan] || license.plan}
-          </span>
-          {license.trial_active && (
-            <span className="text-[11px] text-(--color-accent-warning)">
-              {license.trial_days_left} days remaining
-            </span>
-          )}
-        </div>
-        {license.licensed && (
-          <button
-            onClick={handleDeactivate}
-            className="cursor-pointer rounded-md border border-(--color-glass-border) px-2.5 py-1 text-[10px] tracking-wider text-(--color-text-muted) uppercase transition-colors duration-150 hover:border-[var(--color-border-active)]"
-          >
-            Deactivate
-          </button>
-        )}
-      </div>
-
-      {license.needs_activation && !license.trial_active && (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <TextInput value={inputKey} onChange={setInputKey} placeholder="XXXX-XXXX-XXXX-XXXX" />
-            <button
-              onClick={handleActivate}
-              disabled={activating}
-              className="flex shrink-0 items-center rounded-md bg-(--color-brand) px-3 py-1.5 text-xs font-semibold tracking-wider text-(--color-text-inverse) uppercase shadow-[0_0_10px_rgba(0,229,255,0.2)] transition-all duration-200"
-              style={{
-                cursor: activating ? "not-allowed" : "pointer",
-                opacity: activating ? 0.6 : 1,
-              }}
-            >
-              {activating ? "Activating…" : "Activate"}
-            </button>
-          </div>
-          {error && <p className="text-[10px] text-(--color-accent-danger)">{error}</p>}
-        </div>
-      )}
-
+    <div className="flex flex-col gap-3">
+      <FieldRow label="Plan">
+        <span
+          style={{
+            fontSize: 10,
+            fontFamily: "var(--font-mono)",
+            color: planColor[license.plan] ?? "#D1D4DC",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        >
+          {license.plan}
+          {license.trial_active && ` · ${license.trial_days_left}d left`}
+        </span>
+      </FieldRow>
       {license.machine_id && (
         <FieldRow label="Machine ID">
-          <span className="font-mono text-[11px] text-(--color-text-muted)">
+          <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "#4B5563" }}>
             {license.machine_id}
           </span>
         </FieldRow>
       )}
-
-      <p className="text-[11px] text-(--color-text-muted)">
-        {license.plan === "free"
-          ? "Free tier: 3 models (Logistic, XGBoost, RF) + fixed lot sizing"
-          : license.plan === "trial"
-            ? "Full feature access during trial period"
-            : "All features unlocked"}
-      </p>
+      {license.needs_activation && !license.trial_active && (
+        <div className="flex flex-col gap-2 pt-1">
+          <div className="flex items-center gap-2">
+            <TextInput
+              value={inputKey}
+              onChange={setInputKey}
+              placeholder="XXXX-XXXX-XXXX-XXXX"
+              width={200}
+            />
+            <button
+              type="button"
+              onClick={handleActivate}
+              disabled={activating}
+              style={{
+                height: 26,
+                padding: "0 12px",
+                fontSize: 10,
+                letterSpacing: "0.06em",
+                backgroundColor: "#1D4ED818",
+                border: "1px solid #3B82F655",
+                color: "#60A5FA",
+                borderRadius: 3,
+                cursor: activating ? "not-allowed" : "pointer",
+                opacity: activating ? 0.6 : 1,
+                fontFamily: "inherit",
+              }}
+            >
+              {activating ? "ACTIVATING…" : "ACTIVATE"}
+            </button>
+          </div>
+          {error && <span style={{ fontSize: 10, color: "#F23645" }}>{error}</span>}
+        </div>
+      )}
+      {license.licensed && (
+        <button
+          type="button"
+          onClick={async () => {
+            const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
+            await fetch(`${apiBase}/license/deactivate`, { method: "POST" }).catch(() => {});
+            const r = await fetch(`${apiBase}/license/status`).catch(() => null);
+            if (r) setLicense(await r.json());
+          }}
+          style={{
+            alignSelf: "flex-start",
+            height: 24,
+            padding: "0 10px",
+            fontSize: 10,
+            letterSpacing: "0.06em",
+            backgroundColor: "transparent",
+            border: "1px solid #2A2E39",
+            color: "#4B5563",
+            borderRadius: 3,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          DEACTIVATE
+        </button>
+      )}
     </div>
   );
 }
 
-/* ─────────────────────── main page ─────────────────────── */
+// ─── Content panels per section ────────────────────────────────────────────────
+
+function GeneralContent({ store, syncToBackend }: { store: ReturnType<typeof useSettingsStore>; syncToBackend: (k: string, v: unknown) => void }) {
+  return (
+    <SectionPanel>
+      <SectionLabel label="Application" />
+      <FieldRow label="Verbose Mode (Apprentice)" hint="Show extended explanations in tooltips">
+        <Toggle
+          value={store.verboseMode}
+          onChange={(v) => { store.setField("verboseMode", v); syncToBackend("verboseMode", v); }}
+        />
+      </FieldRow>
+      <FieldRow label="Theme">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#4B5563" }}>Dark (only)</span>
+      </FieldRow>
+      <FieldRow label="API URL">
+        <TextInput
+          value={store.apiUrl}
+          onChange={(v) => store.setField("apiUrl", v)}
+          onBlur={() => syncToBackend("apiUrl", store.apiUrl)}
+          width={200}
+        />
+      </FieldRow>
+    </SectionPanel>
+  );
+}
+
+function GpuContent({ store, syncToBackend }: { store: ReturnType<typeof useSettingsStore>; syncToBackend: (k: string, v: unknown) => void }) {
+  return (
+    <SectionPanel>
+      <SectionLabel label="Compute Resources" />
+      <FieldRow label="Thread Budget" hint="CPU threads allocated to training workers (1–16)">
+        <NumericInput
+          value={store.threadBudget}
+          min={1}
+          max={16}
+          onChange={(v) => { store.setField("threadBudget", v); syncToBackend("threadBudget", v); }}
+        />
+      </FieldRow>
+      <FieldRow label="Mixed Precision (FP16)" hint="Use half-precision tensors on CUDA devices">
+        <Toggle
+          value={store.mixedPrecision}
+          onChange={(v) => { store.setField("mixedPrecision", v); syncToBackend("mixedPrecision", v); }}
+        />
+      </FieldRow>
+      <FieldRow label="GPU Status">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#4B5563" }}>
+          Detected at startup — see terminal
+        </span>
+      </FieldRow>
+    </SectionPanel>
+  );
+}
+
+function DataSourcesContent({
+  store,
+  onOandaBlur,
+  onAccountBlur,
+  apiKeySaved,
+  accountIdSaved,
+}: {
+  store: ReturnType<typeof useSettingsStore>;
+  onOandaBlur: () => void;
+  onAccountBlur: () => void;
+  apiKeySaved: boolean;
+  accountIdSaved: boolean;
+}) {
+  return (
+    <SectionPanel>
+      <SectionLabel label="OANDA" />
+      <FieldRow label="API Key">
+        <div className="flex items-center gap-2">
+          <TextInput
+            value={store.oandaApiKey ?? ""}
+            onChange={(v) => store.setField("oandaApiKey", v || null)}
+            onBlur={onOandaBlur}
+            placeholder="Enter API key…"
+            type="password"
+            width={220}
+          />
+          {apiKeySaved && (
+            <span style={{ fontSize: 10, color: "#089981", fontFamily: "var(--font-mono)" }}>SAVED</span>
+          )}
+        </div>
+      </FieldRow>
+      <FieldRow label="Account ID">
+        <div className="flex items-center gap-2">
+          <TextInput
+            value={store.oandaAccountId ?? ""}
+            onChange={(v) => store.setField("oandaAccountId", v || null)}
+            onBlur={onAccountBlur}
+            placeholder="e.g. 001-001-12345678-001"
+            width={220}
+          />
+          {accountIdSaved && (
+            <span style={{ fontSize: 10, color: "#089981", fontFamily: "var(--font-mono)" }}>SAVED</span>
+          )}
+        </div>
+      </FieldRow>
+      <FieldRow label="Data Directory">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#4B5563" }}>
+          Set via DATA_DIR env var
+        </span>
+      </FieldRow>
+    </SectionPanel>
+  );
+}
+
+function PipelineContent({ store, syncToBackend }: { store: ReturnType<typeof useSettingsStore>; syncToBackend: (k: string, v: unknown) => void }) {
+  return (
+    <SectionPanel>
+      <SectionLabel label="Pipeline Defaults" />
+      <FieldRow label="Configuration">
+        <span style={{ fontSize: 11, color: "#4B5563" }}>
+          Advanced parameters are set per-backtest.{" "}
+          <code style={{ fontFamily: "var(--font-mono)", color: "#6B7280" }}>config.py</code> holds global defaults.
+        </span>
+      </FieldRow>
+      <div style={{ paddingTop: 8 }}>
+        <button
+          type="button"
+          onClick={() => {
+            store.setField("verboseMode", false);
+            store.setField("threadBudget", 4);
+            store.setField("mixedPrecision", true);
+            store.setField("apiUrl", "http://localhost:8000");
+            syncToBackend("reset", true);
+          }}
+          style={{
+            height: 26,
+            padding: "0 12px",
+            fontSize: 10,
+            letterSpacing: "0.06em",
+            backgroundColor: "transparent",
+            border: "1px solid #2A2E39",
+            color: "#787B86",
+            borderRadius: 3,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            textTransform: "uppercase",
+          }}
+        >
+          Reset to Defaults
+        </button>
+      </div>
+    </SectionPanel>
+  );
+}
+
+function AboutContent() {
+  return (
+    <SectionPanel>
+      <SectionLabel label="Application Info" />
+      <FieldRow label="Version">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#D1D4DC" }}>v1.0.0-dev</span>
+      </FieldRow>
+      <FieldRow label="Pipeline">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#D1D4DC" }}>Forex ML Backtester</span>
+      </FieldRow>
+      <FieldRow label="Models Registered">
+        <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "#D1D4DC" }}>10</span>
+      </FieldRow>
+      <FieldRow label="Repository">
+        <a
+          href="https://github.com/rafa9-labs/thesisproj"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1"
+          style={{ fontSize: 11, color: "#3B82F6", fontFamily: "var(--font-mono)" }}
+        >
+          rafa9-labs/thesisproj
+          <ExternalLink size={10} strokeWidth={1.5} />
+        </a>
+      </FieldRow>
+    </SectionPanel>
+  );
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
   const store = useSettingsStore();
@@ -281,6 +527,7 @@ export function SettingsPage() {
   const saveConfig = useSaveConfig();
   const storeApiKey = useStoreApiKey();
   const storeKv = useStoreKv();
+  const [activeSection, setActiveSection] = useState("general");
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [accountIdSaved, setAccountIdSaved] = useState(false);
   const synced = useRef(false);
@@ -288,12 +535,9 @@ export function SettingsPage() {
   useEffect(() => {
     if (remoteConfig && !synced.current) {
       synced.current = true;
-      if (remoteConfig.threadBudget != null)
-        store.setField("threadBudget", remoteConfig.threadBudget as number);
-      if (remoteConfig.mixedPrecision != null)
-        store.setField("mixedPrecision", remoteConfig.mixedPrecision as boolean);
-      if (remoteConfig.verboseMode != null)
-        store.setField("verboseMode", remoteConfig.verboseMode as boolean);
+      if (remoteConfig.threadBudget != null) store.setField("threadBudget", remoteConfig.threadBudget as number);
+      if (remoteConfig.mixedPrecision != null) store.setField("mixedPrecision", remoteConfig.mixedPrecision as boolean);
+      if (remoteConfig.verboseMode != null) store.setField("verboseMode", remoteConfig.verboseMode as boolean);
       if (remoteConfig.apiUrl != null) store.setField("apiUrl", remoteConfig.apiUrl as string);
     }
   }, [remoteConfig]);
@@ -303,193 +547,85 @@ export function SettingsPage() {
   };
 
   const handleOandaBlur = () => {
-    const key = store.oandaApiKey;
-    if (key) {
-      storeApiKey.mutate(
-        { name: "oanda", value: key },
-        {
-          onSuccess: () => {
-            setApiKeySaved(true);
-            setTimeout(() => setApiKeySaved(false), 2000);
-          },
-        },
-      );
+    if (store.oandaApiKey) {
+      storeApiKey.mutate({ name: "oanda", value: store.oandaApiKey }, {
+        onSuccess: () => { setApiKeySaved(true); setTimeout(() => setApiKeySaved(false), 2000); },
+      });
     }
   };
 
   const handleAccountIdBlur = () => {
-    const acc = store.oandaAccountId;
-    if (acc) {
-      storeKv.mutate(
-        { key: "oanda_account_id", value: acc },
-        {
-          onSuccess: () => {
-            setAccountIdSaved(true);
-            setTimeout(() => setAccountIdSaved(false), 2000);
-          },
-        },
-      );
+    if (store.oandaAccountId) {
+      storeKv.mutate({ key: "oanda_account_id", value: store.oandaAccountId }, {
+        onSuccess: () => { setAccountIdSaved(true); setTimeout(() => setAccountIdSaved(false), 2000); },
+      });
     }
   };
 
-  const threadPct = ((store.threadBudget - 1) / 15) * 100;
+  const renderContent = () => {
+    switch (activeSection) {
+      case "general": return <GeneralContent store={store} syncToBackend={syncToBackend} />;
+      case "gpu": return <GpuContent store={store} syncToBackend={syncToBackend} />;
+      case "datasources": return (
+        <DataSourcesContent
+          store={store}
+          onOandaBlur={handleOandaBlur}
+          onAccountBlur={handleAccountIdBlur}
+          apiKeySaved={apiKeySaved}
+          accountIdSaved={accountIdSaved}
+        />
+      );
+      case "license": return <SectionPanel><SectionLabel label="License" /><LicenseContent /></SectionPanel>;
+      case "pipeline": return <PipelineContent store={store} syncToBackend={syncToBackend} />;
+      case "about": return <AboutContent />;
+      default: return null;
+    }
+  };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
-      {/* ── Row 1: General + GPU & Compute ── */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <SectionCard icon={<SettingsIcon size={14} strokeWidth={1.5} />} title="General">
-          <FieldRow label="Verbose Mode" hint="Outputs detailed logs during pipeline runs">
-            <Toggle
-              value={store.verboseMode}
-              onChange={(v) => {
-                store.setField("verboseMode", v);
-                syncToBackend("verboseMode", v);
-              }}
-            />
-          </FieldRow>
-          <FieldRow label="API URL" hint="Backend service endpoint">
-            <TextInput
-              value={store.apiUrl}
-              onChange={(v) => store.setField("apiUrl", v)}
-              onBlur={() => syncToBackend("apiUrl", store.apiUrl)}
-            />
-          </FieldRow>
-          <FieldRow label="Theme">
-            <StaticPill>Dark (only)</StaticPill>
-          </FieldRow>
-        </SectionCard>
-
-        <SectionCard icon={<Cpu size={14} strokeWidth={1.5} />} title="GPU & Compute">
-          <FieldRow label="Thread Budget" hint="Parallel workers for training and evaluation">
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={1}
-                max={16}
-                value={store.threadBudget}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  store.setField("threadBudget", v);
-                  syncToBackend("threadBudget", v);
-                }}
-                className="w-28"
-                style={{
-                  accentColor: "var(--color-brand)",
-                }}
-              />
-              <span className="w-5 text-right font-mono text-xs font-semibold text-(--color-brand)">
-                {store.threadBudget}
-              </span>
-            </div>
-          </FieldRow>
-          <FieldRow label="Mixed Precision (FP16)" hint="Reduces VRAM usage, may affect accuracy">
-            <Toggle
-              value={store.mixedPrecision}
-              onChange={(v) => {
-                store.setField("mixedPrecision", v);
-                syncToBackend("mixedPrecision", v);
-              }}
-            />
-          </FieldRow>
-          <FieldRow label="GPU Status">
-            <StaticPill>Detected at startup</StaticPill>
-          </FieldRow>
-        </SectionCard>
-      </div>
-
-      {/* ── Row 2: Data Sources ── */}
-      <SectionCard icon={<Database size={14} strokeWidth={1.5} />} title="Data Sources">
-        <FieldRow label="OANDA API Key" hint="Used for live price feeds and order routing">
-          <TextInput
-            value={store.oandaApiKey ?? ""}
-            onChange={(v) => store.setField("oandaApiKey", v || null)}
-            onBlur={handleOandaBlur}
-            placeholder="Enter API key…"
-            type="password"
-          />
-          <SavedBadge show={apiKeySaved} />
-        </FieldRow>
-        <FieldRow label="OANDA Account ID" hint="Your brokerage account identifier">
-          <TextInput
-            value={store.oandaAccountId ?? ""}
-            onChange={(v) => store.setField("oandaAccountId", v || null)}
-            onBlur={handleAccountIdBlur}
-            placeholder="Enter account ID…"
-          />
-          <SavedBadge show={accountIdSaved} />
-        </FieldRow>
-        <FieldRow label="Data Directory" hint="Override via KODA_DATA_DIR environment variable">
-          <StaticPill>Configured via env</StaticPill>
-        </FieldRow>
-      </SectionCard>
-
-      {/* ── Row 3: License + Pipeline ── */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <SectionCard icon={<Key size={14} strokeWidth={1.5} />} title="License">
-          <LicenseSection />
-        </SectionCard>
-
-        <SectionCard
-          icon={<SettingsIcon size={14} strokeWidth={1.5} />}
-          title="Pipeline Configuration"
-        >
-          <p className="text-[11px] leading-relaxed text-(--color-text-muted)">
-            Advanced pipeline parameters are configured per-backtest on the Backtest page. Global
-            defaults are defined in{" "}
-            <code className="font-mono text-(--color-text-secondary)">config.py</code>.
-          </p>
-          <div className="pt-1">
+    <div className="flex gap-0" style={{ minHeight: 0 }}>
+      {/* Left nav sidebar */}
+      <div
+        style={{
+          width: 200,
+          flexShrink: 0,
+          borderRight: "1px solid #2A2E39",
+          paddingRight: 0,
+        }}
+      >
+        {NAV_ITEMS.map((item) => {
+          const active = activeSection === item.key;
+          return (
             <button
-              onClick={() => {
-                store.setField("verboseMode", false);
-                store.setField("threadBudget", 4);
-                store.setField("mixedPrecision", true);
-                store.setField("apiUrl", "http://localhost:8000");
-                syncToBackend("reset", true);
+              key={item.key}
+              type="button"
+              onClick={() => setActiveSection(item.key)}
+              className="flex items-center gap-2.5 w-full transition-colors"
+              style={{
+                height: 36,
+                padding: "0 14px",
+                backgroundColor: active ? "#1E222D" : "transparent",
+                borderLeft: `2px solid ${active ? "#3B82F6" : "transparent"}`,
+                color: active ? "#D1D4DC" : "#787B86",
+                fontSize: 11,
+                cursor: "pointer",
+                textAlign: "left",
+                letterSpacing: "0.02em",
               }}
-              className="cursor-pointer rounded-md border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 text-[11px] font-medium tracking-[0.08em] text-(--color-text-secondary) uppercase transition-all duration-200 hover:border-[var(--color-border-active)]"
             >
-              Reset to Defaults
+              <span style={{ color: active ? "#3B82F6" : "#4B5563", flexShrink: 0 }}>
+                {item.icon}
+              </span>
+              {item.label}
             </button>
-          </div>
-        </SectionCard>
+          );
+        })}
       </div>
 
-      {/* ── Row 4: About ── */}
-      <SectionCard icon={<Info size={14} strokeWidth={1.5} />} title="About">
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {[
-            { label: "Version", value: "v1.0.0-dev" },
-            { label: "Pipeline", value: "Forex ML" },
-            { label: "Models", value: "10 registered" },
-            { label: "Build", value: "rafa9-labs" },
-          ].map(({ label, value }) => (
-            <div
-              key={label}
-              className="flex flex-col gap-1 rounded-lg border border-(--color-glass-border) bg-(--color-glass-hover) p-3"
-            >
-              <span className="text-[9px] tracking-[0.1em] text-(--color-text-muted) uppercase">
-                {label}
-              </span>
-              <span className="font-mono text-[12px] font-medium text-(--color-text-primary)">
-                {value}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-1.5 pt-4">
-          <ExternalLink size={11} className="text-(--color-text-muted)" />
-          <a
-            href="https://github.com/rafa9-labs/thesisproj"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[11px] text-(--color-brand) transition-colors duration-150 hover:underline"
-          >
-            github.com/rafa9-labs/thesisproj
-          </a>
-        </div>
-      </SectionCard>
+      {/* Right content */}
+      <div style={{ flex: 1, paddingLeft: 20, paddingTop: 2 }}>
+        {renderContent()}
+      </div>
     </div>
   );
 }
