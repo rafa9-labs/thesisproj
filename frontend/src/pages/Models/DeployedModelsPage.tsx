@@ -2,10 +2,12 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import apiClient from "@/api/client";
-import { useBulkDeleteModels } from "@/api/queries";
-import { TagEditor } from "@/components/shared/TagEditor";
-import { Box, Trash2, Power, PowerOff, Play, Pencil, Star } from "lucide-react";
-import { SavedCommitteesPanel } from "@/pages/Committee/SavedCommitteesPanel";
+import {
+  useBulkDeleteModels,
+  useSavedCommittees,
+  useDeleteSavedCommittee,
+} from "@/api/queries";
+import { Box, Trash2, Play, Pencil, Star, Search } from "lucide-react";
 
 interface DeployedModel {
   id: string;
@@ -21,37 +23,26 @@ interface DeployedModel {
   max_drawdown: number | null;
   total_trades: number | null;
   sortino: number | null;
+  calmar_ratio?: number | null;
+  profit_factor?: number | null;
+  cagr?: number | null;
+  overfit_score?: number | null;
+  risk_level?: string | null;
   train_start: string | null;
   train_end: string | null;
   feature_count: number | null;
+  seed: number | null;
+  calibrate_method: string | null;
+  consensus_model_count?: number;
+  is_consensus?: boolean;
+  full_cycle_job_id?: string | null;
+  pair?: string;
+  timeframe?: string;
+  avg_sharpe?: number | null;
+  avg_return?: number | null;
+  trust_score?: number | null;
+  regime_count?: number;
 }
-
-const CATEGORY_COLORS: Record<string, string> = {
-  logistic: "var(--color-accent)",
-  svm: "var(--color-accent)",
-  random_forest: "var(--color-accent-success)",
-  decision_tree: "var(--color-accent-success)",
-  xgboost: "var(--color-brand)",
-  lightgbm: "var(--color-accent-success)",
-  catboost: "var(--color-accent-success)",
-  cnn: "var(--color-accent)",
-  lstm: "var(--color-accent)",
-  transformer: "var(--color-accent)",
-  gru: "var(--color-accent)",
-  gru_lstm: "var(--color-accent)",
-  ensemble_adaptive_regime: "var(--color-accent-warning)",
-  ensemble_cnn_lstm_xgboost: "var(--color-accent-warning)",
-  meta_ensemble: "var(--color-accent-warning)",
-  stacking_ensemble: "var(--color-accent-warning)",
-  dqn: "var(--color-accent-danger)",
-};
-
-const ENSEMBLE_TYPES = new Set([
-  "meta_ensemble",
-  "stacking_ensemble",
-  "ensemble_adaptive_regime",
-  "ensemble_cnn_lstm_xgboost",
-]);
 
 function useDeployedModels() {
   return useQuery({
@@ -64,22 +55,6 @@ function useDeployedModels() {
   });
 }
 
-function useActivateModel() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiClient.post(`/models/deployed/${id}/activate`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["deployed-models"] }),
-  });
-}
-
-function useDeactivateModel() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiClient.post(`/models/deployed/${id}/deactivate`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["deployed-models"] }),
-  });
-}
-
 function useDeleteModel() {
   const qc = useQueryClient();
   return useMutation({
@@ -88,24 +63,15 @@ function useDeleteModel() {
   });
 }
 
-function useUpdateTags() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, action, tag }: { id: string; action: string; tag: string }) =>
-      apiClient.patch(`/models/deployed/${id}/tags`, { action, tag }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["deployed-models"] }),
-  });
-}
-
 export function DeployedModelsPage() {
-  const { data: models, isLoading } = useDeployedModels();
-  const activateModel = useActivateModel();
-  const deactivateModel = useDeactivateModel();
+  const { data: models, isLoading: isLoadingModels } = useDeployedModels();
+  const { data: savedData, isLoading: isLoadingSaved } = useSavedCommittees();
   const deleteModel = useDeleteModel();
-  const updateTags = useUpdateTags();
   const bulkDelete = useBulkDeleteModels();
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [modelTypeTab, setModelTypeTab] = useState<string>("all");
+  const deleteCommittee = useDeleteSavedCommittee();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"all" | "favorites">("all");
+  const [modelType, setModelType] = useState<"singular" | "committee" | "all">("singular");
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
@@ -114,35 +80,78 @@ export function DeployedModelsPage() {
   const [editValue, setEditValue] = useState("");
   const navigate = useNavigate();
 
-  const typeTabs = useMemo(() => {
-    const unique = new Set<string>();
-    for (const m of models ?? []) {
-      unique.add(m.model_type);
-    }
-    const sorted = [...unique].sort();
-    const hasEnsemble = sorted.some((t) => ENSEMBLE_TYPES.has(t));
-    return { sorted, hasEnsemble };
-  }, [models]);
+  const modelsFromCommittees: DeployedModel[] = useMemo(() => {
+    if (!savedData?.committees) return [];
+    return savedData.committees
+      .filter((c) => {
+        const sharpe = c.avg_sharpe;
+        return sharpe != null && isFinite(sharpe) && sharpe > -100;
+      })
+      .map((c) => {
+        return {
+          id: c.id,
+          model_type: "consensus",
+          best_sharpe: c.avg_sharpe,
+          best_return: c.avg_return ?? null,
+          created_at: c.created_at,
+          status: c.is_active ? "active" : "inactive",
+          tags: c.tags || [],
+          parent_job_id: null,
+          missing_on_disk: false,
+          win_rate: c.win_rate ?? null,
+          max_drawdown: c.max_drawdown ?? null,
+          total_trades: c.total_trades ?? null,
+          sortino: c.sortino ?? null,
+          train_start: null,
+          train_end: null,
+          feature_count: null,
+          seed: null,
+          calibrate_method: null,
+          consensus_model_count: c.consensus_model_count ?? 0,
+          is_consensus: true,
+          full_cycle_job_id: c.full_cycle_job_id,
+          pair: c.pair,
+          timeframe: c.timeframe,
+          avg_sharpe: c.avg_sharpe,
+          avg_return: c.avg_return ?? null,
+          trust_score: c.trust_score ?? null,
+          regime_count: c.regime_count ?? 0,
+        } as DeployedModel;
+      });
+  }, [savedData]);
+
+  const allDeployed: DeployedModel[] = useMemo(
+    () => (Array.isArray(models) ? models : []),
+    [models],
+  );
+  const modelsSafe: DeployedModel[] = useMemo(
+    () => [...allDeployed, ...modelsFromCommittees],
+    [allDeployed, modelsFromCommittees],
+  );
 
   const filtered = useMemo(() => {
-    let list = models ?? [];
-    if (modelTypeTab === "favorites") {
-      list = list.filter((m) => favorites.has(m.id));
-    } else if (modelTypeTab === "committee") {
-      list = list.filter((m) => ENSEMBLE_TYPES.has(m.model_type));
-    } else if (modelTypeTab !== "all") {
-      list = list.filter((m) => m.model_type === modelTypeTab);
+    let list = modelsSafe;
+    if (modelType === "singular") {
+      list = list.filter((m) => !m.is_consensus);
+    } else if (modelType === "committee") {
+      list = list.filter((m) => m.is_consensus);
     }
-    if (statusFilter === "active") {
-      list = list.filter((m) => m.status === "active");
-    } else if (statusFilter === "inactive") {
-      list = list.filter((m) => m.status === "inactive");
+    if (viewMode === "favorites") {
+      list = list.filter((m) => favorites.has(m.id));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (m) =>
+          (customNames[m.id] || m.model_type).toLowerCase().includes(q) ||
+          m.tags.some((t) => t.toLowerCase().includes(q)) ||
+          (m.pair && m.pair.toLowerCase().includes(q)),
+      );
     }
     return list;
-  }, [models, modelTypeTab, statusFilter, favorites]);
+  }, [modelsSafe, modelType, viewMode, favorites, searchQuery, customNames]);
 
-  function toggleCheck(id: string, e: React.MouseEvent) {
-    e.stopPropagation();
+  function toggleCheck(id: string) {
     setCheckedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -176,6 +185,9 @@ export function DeployedModelsPage() {
   }
 
   function getDisplayName(m: DeployedModel): string {
+    if (m.is_consensus) {
+      return `Consensus +${m.consensus_model_count || 0}`;
+    }
     return customNames[m.id] || m.model_type.toUpperCase();
   }
 
@@ -194,78 +206,45 @@ export function DeployedModelsPage() {
     });
   }
 
-  function renderCard(m: DeployedModel) {
+  const fmtPct = (v: number | null | undefined, decimals = 1) => {
+    if (v == null) return "\u2014";
+    return (v >= 0 ? "+" : "") + v.toFixed(decimals) + "%";
+  };
+
+  const fmtNum = (v: number | null | undefined, decimals = 2) => {
+    if (v == null) return "\u2014";
+    return (v >= 0 ? "+" : "") + v.toFixed(decimals);
+  };
+
+  function renderRow(m: DeployedModel) {
     const isChecked = checkedIds.has(m.id);
     const isFavorite = favorites.has(m.id);
-    const isActive = m.status === "active";
     const isEditing = editingNameId === m.id;
 
     return (
       <div
         key={m.id}
-        role="button"
-        tabIndex={0}
+        role={m.is_consensus ? undefined : "button"}
+        tabIndex={m.is_consensus ? undefined : 0}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest("button, input, label")) return;
+          if (m.is_consensus) return;
+          if (e.ctrlKey || e.metaKey) {
+            toggleCheck(m.id);
+            return;
+          }
           navigate(`/models/${m.id}`);
         }}
-        className={`relative cursor-pointer rounded-lg border p-5 transition-all hover:border-cyan-500/50 ${
-          isActive
-            ? "border-cyan-500 bg-cyan-950/20 shadow-[0_0_14px_rgba(6,182,212,0.08)]"
-            : "border-slate-800 bg-slate-900/40"
-        }`}
+        className={[
+          "flex flex-row items-center justify-between p-4 rounded-lg transition-all border",
+          m.is_consensus
+            ? "border-(--color-glass-border) bg-(--color-glass) border-l-2 border-l-amber-500/40 cursor-default"
+            : "border-(--color-glass-border) bg-(--color-glass) backdrop-blur-[12px] cursor-pointer hover:border-(--color-border-active)",
+        ].join(" ")}
       >
-        {/* ── Header: Title, Edit, ACTIVE badge ── */}
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex min-w-0 items-center gap-2">
-            {isEditing ? (
-              <input
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitRename();
-                  if (e.key === "Escape") setEditingNameId(null);
-                }}
-                onClick={(e) => e.stopPropagation()}
-                className="w-[180px] rounded border border-cyan-500 bg-slate-800 px-2 py-0.5 text-lg font-bold tracking-tight text-slate-100 outline-none"
-                autoFocus
-              />
-            ) : (
-              <>
-                <span className="truncate text-lg font-bold tracking-tight text-slate-100">
-                  {getDisplayName(m)}
-                </span>
-                <button
-                  onClick={(e) => startRename(m.id, m.model_type, e)}
-                  className="shrink-0 cursor-pointer text-slate-500 transition-colors hover:text-cyan-400"
-                  aria-label="Rename model"
-                >
-                  <Pencil size={13} />
-                </button>
-              </>
-            )}
-            {isActive && (
-              <span className="shrink-0 rounded bg-cyan-500/15 px-2 py-0.5 text-[9px] font-bold tracking-[0.06em] text-cyan-400 uppercase">
-                ACTIVE
-              </span>
-            )}
-            {m.missing_on_disk && <span className="text-[9px] text-rose-400">missing</span>}
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              onClick={(e) => toggleFavorite(m.id, e)}
-              className="cursor-pointer transition-colors"
-              aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
-            >
-              <Star
-                size={15}
-                className={
-                  isFavorite ? "fill-cyan-400 text-cyan-400" : "text-slate-600 hover:text-amber-400"
-                }
-              />
-            </button>
+        {/* ── LEFT: Identity ── */}
+        <div className="flex items-center gap-3 min-w-0 w-[240px] shrink-0">
+          {!m.is_consensus && (
             <label
               className="flex shrink-0 cursor-pointer items-center"
               onClick={(e) => e.stopPropagation()}
@@ -273,199 +252,231 @@ export function DeployedModelsPage() {
               <input
                 type="checkbox"
                 checked={isChecked}
-                onChange={() => {
-                  const fakeEvent = { stopPropagation: () => {} } as React.MouseEvent;
-                  toggleCheck(m.id, fakeEvent);
-                }}
-                className="h-5 w-5 cursor-pointer rounded border-slate-600 bg-slate-900/50 transition-colors checked:border-cyan-500 checked:bg-cyan-500 focus:ring-0 focus:ring-offset-0"
+                onChange={() => toggleCheck(m.id)}
+                className="h-4 w-4 cursor-pointer rounded border-(--color-glass-border) bg-(--color-input-bg) transition-colors checked:border-cyan-500 checked:bg-cyan-500 focus:ring-0 focus:ring-offset-0"
               />
             </label>
-          </div>
-        </div>
-
-        {/* ── Stats Micro-Grid ── */}
-        <div className="mt-4 mb-6 grid grid-cols-2 gap-x-4 gap-y-3">
-          <div className="flex flex-col">
-            <span className="text-[10px] tracking-wider text-slate-500 uppercase">Sharpe</span>
-            <span
-              className={`font-mono text-sm ${
-                m.best_sharpe != null
-                  ? m.best_sharpe >= 0
-                    ? "text-emerald-400"
-                    : "text-rose-400"
-                  : "text-slate-600"
-              }`}
-            >
-              {m.best_sharpe != null
-                ? (m.best_sharpe >= 0 ? "+" : "") + m.best_sharpe.toFixed(2)
-                : "\u2014"}
-            </span>
-          </div>
-
-          <div className="flex flex-col">
-            <span className="text-[10px] tracking-wider text-slate-500 uppercase">Return</span>
-            <span
-              className={`font-mono text-sm ${
-                m.best_return != null
-                  ? m.best_return >= 0
-                    ? "text-emerald-400"
-                    : "text-rose-400"
-                  : "text-slate-600"
-              }`}
-            >
-              {m.best_return != null
-                ? (m.best_return >= 0 ? "+" : "") + m.best_return.toFixed(1) + "%"
-                : "\u2014"}
-            </span>
-          </div>
-
-          <div className="flex flex-col">
-            <span className="text-[10px] tracking-wider text-slate-500 uppercase">Win Rate</span>
-            <span className="font-mono text-sm text-slate-200">
-              {m.win_rate != null ? (m.win_rate * 100).toFixed(0) + "%" : "\u2014"}
-            </span>
-          </div>
-
-          <div className="flex flex-col">
-            <span className="text-[10px] tracking-wider text-slate-500 uppercase">Trades</span>
-            <span className="font-mono text-sm text-slate-200">
-              {m.total_trades != null ? m.total_trades : "\u2014"}
-            </span>
-          </div>
-
-          <div className="flex flex-col">
-            <span className="text-[10px] tracking-wider text-slate-500 uppercase">Max DD</span>
-            <span
-              className={`font-mono text-sm ${
-                m.max_drawdown != null
-                  ? m.max_drawdown < -10
-                    ? "text-rose-400"
-                    : "text-slate-200"
-                  : "text-slate-600"
-              }`}
-            >
-              {m.max_drawdown != null ? m.max_drawdown.toFixed(1) + "%" : "\u2014"}
-            </span>
-          </div>
-
-          <div className="flex flex-col">
-            <span className="text-[10px] tracking-wider text-slate-500 uppercase">Sortino</span>
-            <span
-              className={`font-mono text-sm ${
-                m.sortino != null
-                  ? m.sortino >= 0
-                    ? "text-emerald-400"
-                    : "text-rose-400"
-                  : "text-slate-600"
-              }`}
-            >
-              {m.sortino != null ? (m.sortino >= 0 ? "+" : "") + m.sortino.toFixed(2) : "\u2014"}
-            </span>
-          </div>
-        </div>
-
-        {/* ── Training Period ── */}
-        <div className="mb-2 font-mono text-[10px] text-slate-500">
-          {m.train_start && m.train_end
-            ? `${m.train_start.slice(0, 10)} \u2192 ${m.train_end.slice(0, 10)}`
-            : "Period: N/A"}
-          {m.feature_count != null && (
-            <span className="ml-3 text-slate-600">Feat: {m.feature_count}</span>
           )}
-        </div>
-
-        {/* ── Tags ── */}
-        <div className="mb-2">
-          <TagEditor
-            tags={m.tags}
-            onAdd={(tag) => updateTags.mutate({ id: m.id, action: "add", tag })}
-            onRemove={(tag) => updateTags.mutate({ id: m.id, action: "remove", tag })}
-          />
-        </div>
-
-        {/* ── Created Date ── */}
-        <div className="mb-4 text-[9px] text-slate-600">{m.created_at?.slice(0, 10)}</div>
-
-        {/* ── Action Buttons ── */}
-        <div className="grid grid-cols-3 gap-2">
-          {m.status !== "active" && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                activateModel.mutate(m.id);
+          {!m.is_consensus && m.risk_level && (
+            <span
+              className="shrink-0 rounded-full"
+              style={{
+                width: 6,
+                height: 6,
+                backgroundColor:
+                  m.risk_level === "low" ? "#34d399" :
+                  m.risk_level === "medium" ? "#fbbf24" :
+                  m.risk_level === "high" ? "#f87171" : "#475569",
               }}
-              disabled={activateModel.isPending}
-              className="flex items-center justify-center gap-1 rounded-md bg-emerald-600 px-2 py-1.5 text-[10px] font-semibold tracking-[0.04em] text-white uppercase transition-all hover:brightness-110"
-            >
-              <Power size={10} /> Activate
-            </button>
-          )}
-          {m.status === "active" && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                deactivateModel.mutate(m.id);
-              }}
-              disabled={deactivateModel.isPending}
-              className="flex items-center justify-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-[10px] font-semibold tracking-[0.04em] text-slate-300 uppercase transition-all hover:brightness-110"
-            >
-              <PowerOff size={10} /> Deactivate
-            </button>
+              title={`Overfit risk: ${m.risk_level} (${m.overfit_score ?? "?"})`}
+            />
           )}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              apiClient
-                .post("/trading/paper/start", {
-                  model_id: m.id,
-                  model_type: m.model_type,
-                  pair: "EURUSD",
-                  timeframe: "H1",
-                  initial_equity: 10000,
-                  position_sizing: "fixed",
-                })
-                .then((r: { data: { session_id: string } }) => {
-                  window.location.href = `/trading?session=${r.data.session_id}`;
-                })
-                .catch(console.error);
-            }}
-            className="flex items-center justify-center gap-1 rounded-md border border-cyan-500 bg-cyan-500/8 px-2 py-1.5 text-[10px] font-semibold tracking-[0.04em] text-cyan-400 uppercase transition-all hover:brightness-110"
+            onClick={(e) => toggleFavorite(m.id, e)}
+            className="shrink-0 cursor-pointer transition-colors"
+            aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
           >
-            <Play size={10} /> Deploy
+            <Star
+              size={14}
+              className={
+                isFavorite ? "fill-amber-400 text-amber-400" : "text-(--color-text-dim) hover:text-amber-400"
+              }
+            />
           </button>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              {isEditing ? (
+                <input
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitRename();
+                    if (e.key === "Escape") setEditingNameId(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-[140px] rounded border border-cyan-500 bg-(--color-glass) px-2 py-0.5 text-sm font-bold text-(--color-text-primary) outline-none"
+                  autoFocus
+                />
+              ) : (
+                <span className="truncate text-sm font-bold tracking-tight text-(--color-text-primary)">
+                  {getDisplayName(m)}
+                </span>
+              )}
+              {!m.is_consensus && (
+                <button
+                  onClick={(e) => startRename(m.id, m.model_type, e)}
+                  className="shrink-0 cursor-pointer text-(--color-text-muted) transition-colors hover:text-cyan-400"
+                  aria-label="Rename model"
+                >
+                  <Pencil size={11} />
+                </button>
+              )}
+              {m.is_consensus && (
+                <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 uppercase">
+                  CONSENSUS
+                </span>
+              )}
+            </div>
+            <div className="mt-0.5 text-[10px] text-(--color-text-muted)">
+              {m.is_consensus
+                ? `${m.pair || "EURUSD"} / ${m.timeframe || "H1"}`
+                : m.created_at?.slice(0, 10)}
+            </div>
+          </div>
+        </div>
+
+        {/* ── MIDDLE: Metrics ── */}
+        <div className="flex flex-1 items-center gap-4 px-4 min-w-0 justify-center flex-wrap">
+          {m.is_consensus ? (
+            <>
+              <Metric label="Sharpe" value={fmtNum(m.best_sharpe)} color={m.best_sharpe != null && m.best_sharpe >= 0 ? "text-emerald-400" : "text-rose-400"} />
+              <Metric label="Regimes" value={String(m.regime_count ?? 0)} color="text-(--color-text-secondary)" />
+              <Metric label="Models" value={String(m.consensus_model_count ?? 0)} color="text-(--color-text-secondary)" />
+              <Metric label="Trust" value={m.trust_score != null ? m.trust_score.toFixed(2) : "\u2014"} color="text-(--color-text-secondary)" />
+            </>
+          ) : (
+            <>
+              <Metric
+                label="Sharpe"
+                value={m.best_sharpe != null ? fmtNum(m.best_sharpe) : "\u2014"}
+                color={m.best_sharpe != null ? m.best_sharpe >= 0 ? "text-emerald-400" : "text-rose-400" : "text-(--color-text-dim)"}
+              />
+              <Metric
+                label="Return"
+                value={m.best_return != null ? fmtPct(m.best_return, 1) : "\u2014"}
+                color={m.best_return != null ? m.best_return >= 0 ? "text-emerald-400" : "text-rose-400" : "text-(--color-text-dim)"}
+              />
+              <Metric
+                label="Win Rate"
+                value={m.win_rate != null ? (m.win_rate * 100).toFixed(0) + "%" : "\u2014"}
+                color="text-(--color-text-secondary)"
+              />
+              <Metric
+                label="Max DD"
+                value={m.max_drawdown != null ? fmtPct(m.max_drawdown, 1) : "\u2014"}
+                color={m.max_drawdown != null ? m.max_drawdown < -10 ? "text-rose-400" : "text-(--color-text-secondary)" : "text-(--color-text-dim)"}
+              />
+              <Metric label="Trades" value={m.total_trades != null ? String(m.total_trades) : "\u2014"} color="text-(--color-text-secondary)" />
+              {m.risk_level ? (
+                <Metric
+                  label="Overfit"
+                  value={m.risk_level.toUpperCase()}
+                  color={
+                    m.risk_level === "low" ? "text-emerald-400" :
+                    m.risk_level === "medium" ? "text-amber-400" :
+                    "text-rose-400"
+                  }
+                />
+              ) : (
+                <Metric label="Overfit" value={"\u2014"} color="text-(--color-text-dim)" />
+              )}
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-[9px] font-medium tracking-[0.04em] text-(--color-text-muted) uppercase">Info</span>
+                <span className="font-mono text-[9px] text-(--color-text-muted) text-center leading-relaxed max-w-[160px] truncate">
+                  {[
+                    m.seed != null && `S:${m.seed}`,
+                    m.calibrate_method && `Cal:${m.calibrate_method}`,
+                    m.train_start && m.train_end && `${m.train_start.slice(0, 7)}→${m.train_end.slice(0, 7)}`,
+                  ].filter(Boolean).join(" · ") || "\u2014"}
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ── RIGHT: Actions ── */}
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm(`Delete model ${m.model_type} (${m.id.slice(0, 8)}...)?`)) {
-                deleteModel.mutate(m.id);
+              if (m.is_consensus) {
+                apiClient
+                  .post("/trading/live/committee/start", {
+                    pair: m.pair || "EURUSD",
+                    timeframe: m.timeframe || "H1",
+                    initial_equity: 10000,
+                    confidence_threshold: 0.55,
+                    mode: "paper",
+                    full_cycle_job_id: m.full_cycle_job_id,
+                  })
+                  .then((r: { data: { session_id: string } }) => {
+                    window.location.href = `/trading?session=${r.data.session_id}`;
+                  })
+                  .catch(console.error);
+              } else {
+                navigate(`/trading?modelId=${m.id}`);
               }
             }}
-            className="flex items-center justify-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-[10px] font-semibold tracking-[0.04em] text-rose-400 uppercase transition-all hover:brightness-110"
+            className="flex items-center gap-1 rounded-md bg-cyan-600 px-3 py-1.5 text-[10px] font-semibold tracking-[0.04em] text-white uppercase transition-all hover:brightness-110"
           >
-            <Trash2 size={10} /> Delete
+            <Play size={10} /> {m.is_consensus ? "Deploy Committee" : "Deploy Model"}
           </button>
+          {m.is_consensus ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm(`Delete Consensus +${m.consensus_model_count} (${m.id.slice(0, 8)}...)?`)) {
+                  deleteCommittee.mutate(m.id);
+                }
+              }}
+              className="flex items-center gap-1 rounded-md border border-(--color-glass-border) bg-(--color-glass) px-3 py-1.5 text-[10px] font-semibold tracking-[0.04em] text-rose-400 uppercase transition-all hover:brightness-110"
+            >
+              <Trash2 size={10} /> Delete
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/models/${m.id}`);
+                }}
+                className="flex items-center gap-1 rounded-md border border-(--color-glass-border) bg-(--color-glass) px-3 py-1.5 text-[10px] font-semibold tracking-[0.04em] text-(--color-text-secondary) uppercase transition-all hover:brightness-110"
+              >
+                Details
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(`Delete model ${m.model_type} (${m.id.slice(0, 8)}...)?`)) {
+                    deleteModel.mutate(m.id);
+                  }
+                }}
+                className="flex items-center gap-1 rounded-md border border-(--color-glass-border) bg-(--color-glass) px-2 py-1.5 text-[10px] font-semibold tracking-[0.04em] text-rose-400 uppercase transition-all hover:brightness-110"
+              >
+                <Trash2 size={10} />
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Page header */}
+    <div className="flex flex-col gap-4 p-6">
+      {/* ── Unified Control Bar ── */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold tracking-[0.1em] text-slate-100 uppercase">
-            Deployed Models
-          </h2>
-          <p className="mt-1 text-[11px] text-slate-400">
-            Models saved from backtest results. Activate one globally as your trading model. Check
-            models to bulk delete.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Search */}
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-(--color-text-muted)"
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search models..."
+              className="w-[220px] rounded-md border border-(--color-glass-border) bg-(--color-glass) py-1.5 pl-8 pr-3 text-[12px] text-(--color-text-secondary) outline-none transition placeholder:text-(--color-text-dim) focus:border-(--color-border-active)"
+            />
+          </div>
+
+          {/* Bulk actions (visible when checked) */}
           {checkedIds.size > 0 && (
             <>
-              <span className="font-mono text-[10px] whitespace-nowrap text-slate-400">
+              <span className="font-mono text-[10px] whitespace-nowrap text-(--color-text-muted)">
                 {checkedIds.size} selected
               </span>
               <button
@@ -477,140 +488,123 @@ export function DeployedModelsPage() {
               </button>
               <button
                 onClick={clearChecks}
-                className="rounded border border-slate-700 px-2 py-1 text-[9px] text-slate-400 hover:text-slate-200"
+                className="rounded border border-(--color-glass-border) px-2 py-1 text-[9px] text-(--color-text-muted) hover:text-(--color-text-secondary)"
               >
                 Clear
               </button>
             </>
           )}
-          {(["all", "active", "inactive"] as const).map((f) => (
+          {bulkError && (
+            <span className="font-mono text-[10px] text-rose-400">{bulkError}</span>
+          )}
+        </div>
+
+        {/* View mode pill toggle */}
+        <div className="flex items-center gap-3">
+          {/* Model type selector */}
+          <div className="flex items-center rounded-lg bg-(--color-glass) p-0.5 border border-(--color-glass-border)">
             <button
-              key={f}
-              onClick={() => setStatusFilter(f)}
-              className="rounded-md px-3 py-1 text-[10px] font-medium tracking-[0.06em] uppercase transition-all"
-              style={{
-                backgroundColor: statusFilter === f ? "rgba(6,182,212,0.2)" : "rgba(30,41,59,0.6)",
-                color: statusFilter === f ? "rgb(34,211,238)" : "rgb(148,163,184)",
-                border: "1px solid",
-                borderColor: statusFilter === f ? "rgba(6,182,212,0.3)" : "rgb(51,65,85)",
-              }}
+              onClick={() => { setModelType("singular"); clearChecks(); }}
+              className={`rounded-md px-4 py-1.5 text-[10px] font-semibold tracking-[0.06em] uppercase transition-all ${
+                modelType === "singular"
+                  ? "bg-cyan-500/20 text-cyan-400"
+                  : "text-(--color-text-muted) hover:text-(--color-text-secondary)"
+              }`}
             >
-              {f}
+              Singular
             </button>
-          ))}
+            <button
+              onClick={() => { setModelType("committee"); clearChecks(); }}
+              className={`rounded-md px-4 py-1.5 text-[10px] font-semibold tracking-[0.06em] uppercase transition-all ${
+                modelType === "committee"
+                  ? "bg-amber-500/20 text-amber-400"
+                  : "text-(--color-text-muted) hover:text-(--color-text-secondary)"
+              }`}
+            >
+              Committee
+            </button>
+            <button
+              onClick={() => setModelType("all")}
+              className={`rounded-md px-3 py-1.5 text-[10px] font-semibold tracking-[0.06em] uppercase transition-all ${
+                modelType === "all"
+                  ? "bg-(--color-glass-hover) text-(--color-text-secondary)"
+                  : "text-(--color-text-muted) hover:text-(--color-text-secondary)"
+              }`}
+            >
+              All
+            </button>
+          </div>
+
+          {/* Favorites pill */}
+          <div className="flex items-center rounded-lg bg-(--color-glass) p-0.5 border border-(--color-glass-border)">
+          <button
+            onClick={() => setViewMode("all")}
+            className={`rounded-md px-4 py-1.5 text-[10px] font-semibold tracking-[0.06em] uppercase transition-all ${
+              viewMode === "all"
+                ? "bg-cyan-500/20 text-cyan-400"
+                : "text-(--color-text-muted) hover:text-(--color-text-secondary)"
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => {
+              setViewMode("favorites");
+              clearChecks();
+            }}
+            className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-[10px] font-semibold tracking-[0.06em] uppercase transition-all ${
+              viewMode === "favorites"
+                ? "bg-amber-500/20 text-amber-400"
+                : "text-(--color-text-muted) hover:text-(--color-text-secondary)"
+            }`}
+          >
+            <Star size={10} className={viewMode === "favorites" ? "fill-amber-400" : ""} />
+            Favorites
+            {favorites.size > 0 && (
+              <span className="rounded bg-(--color-glass) px-1 py-0 text-[8px] text-(--color-text-secondary)">
+                {favorites.size}
+              </span>
+            )}
+          </button>
         </div>
       </div>
+    </div>
 
-      {/* Primary tabs: model types */}
-      <div className="-mb-2 flex flex-wrap items-center gap-1 overflow-x-auto">
-        <button
-          onClick={() => {
-            setModelTypeTab("all");
-            clearChecks();
-          }}
-          className={`shrink-0 rounded-t px-3 py-1.5 text-[10px] font-semibold tracking-[0.06em] uppercase transition-all ${
-            modelTypeTab === "all"
-              ? "border-b-2 border-cyan-400 bg-slate-800/50 text-cyan-400"
-              : "border-b-2 border-transparent text-slate-500 hover:text-slate-300"
-          }`}
-        >
-          All Models
-        </button>
-        <button
-          onClick={() => {
-            setModelTypeTab("favorites");
-            clearChecks();
-          }}
-          className={`flex shrink-0 items-center gap-1 rounded-t px-3 py-1.5 text-[10px] font-semibold tracking-[0.06em] uppercase transition-all ${
-            modelTypeTab === "favorites"
-              ? "border-b-2 border-amber-400 bg-slate-800/50 text-amber-400"
-              : "border-b-2 border-transparent text-slate-500 hover:text-slate-300"
-          }`}
-        >
-          <Star size={10} className={modelTypeTab === "favorites" ? "fill-amber-400" : ""} />
-          Favorites
-          {favorites.size > 0 && (
-            <span className="ml-0.5 rounded bg-slate-700 px-1 py-0 text-[8px] text-slate-300">
-              {favorites.size}
-            </span>
-          )}
-        </button>
-        {typeTabs.sorted.map((type) => (
-          <button
-            key={type}
-            onClick={() => {
-              setModelTypeTab(type);
-              clearChecks();
-            }}
-            className={`shrink-0 rounded-t px-3 py-1.5 text-[10px] font-medium tracking-[0.04em] uppercase transition-all ${
-              modelTypeTab === type
-                ? "border-b-2 border-cyan-400 bg-slate-800/50 text-cyan-400"
-                : "border-b-2 border-transparent text-slate-500 hover:text-slate-300"
-            }`}
-          >
-            {type}
-          </button>
-        ))}
-        {typeTabs.hasEnsemble && (
-          <button
-            onClick={() => {
-              setModelTypeTab("committee");
-              clearChecks();
-            }}
-            className={`shrink-0 rounded-t px-3 py-1.5 text-[10px] font-medium tracking-[0.04em] uppercase transition-all ${
-              modelTypeTab === "committee"
-                ? "border-b-2 border-amber-400 bg-slate-800/50 text-amber-400"
-                : "border-b-2 border-transparent text-slate-500 hover:text-slate-300"
-            }`}
-          >
-            Committee
-          </button>
-        )}
-        <button
-          onClick={() => {
-            setModelTypeTab("saved-committees");
-            clearChecks();
-          }}
-          className={`shrink-0 rounded-t px-3 py-1.5 text-[10px] font-medium tracking-[0.04em] uppercase transition-all ${
-            modelTypeTab === "saved-committees"
-              ? "border-b-2 border-purple-400 bg-slate-800/50 text-purple-400"
-              : "border-b-2 border-transparent text-slate-500 hover:text-slate-300"
-          }`}
-        >
-          Saved Committees
-        </button>
-      </div>
-
-      {modelTypeTab === "saved-committees" ? (
-        <SavedCommitteesPanel />
-      ) : (
-        <>
-          {!isLoading && filtered.length === 0 && (
-            <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-slate-800 bg-slate-900/40 p-12">
-              <Box size={40} className="text-slate-600" />
-              <span className="text-xs text-slate-400">
-                {models?.length
-                  ? "No models match the current filters."
-                  : "No deployed models yet. Run a backtest, then click Save Model on the Results page."}
-              </span>
-            </div>
-          )}
-
-          {bulkError && (
-            <div className="rounded border border-rose-500/20 bg-rose-500/6 px-3 py-2 font-mono text-[10px] text-rose-400">
-              {bulkError}
-            </div>
-          )}
-
-          {/* Card grid */}
-          <div
-            className="grid gap-4"
-            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))" }}
-          >
-            {filtered.map(renderCard)}
-          </div>
-        </>
+      {/* ── Empty State ── */}
+      {!isLoadingModels && !isLoadingSaved && filtered.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-(--color-glass-border) bg-(--color-glass) p-12">
+          <Box size={40} className="text-(--color-text-dim)" />
+          <span className="text-xs text-(--color-text-muted)">
+            {modelsSafe.length > 0
+              ? "No models match the current filters."
+              : "No deployed models yet. Run a backtest, then click Save Model on the Results page."}
+          </span>
+        </div>
       )}
+
+      {/* ── Model Rows ── */}
+      <div className="flex flex-col gap-2">
+        {filtered.map(renderRow)}
+      </div>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span className="text-[9px] font-medium tracking-[0.04em] text-(--color-text-muted) uppercase">
+        {label}
+      </span>
+      <span className={`font-mono text-[12px] font-semibold ${color}`}>{value}</span>
     </div>
   );
 }

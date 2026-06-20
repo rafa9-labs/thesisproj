@@ -117,7 +117,11 @@ function ModelPill({
 }
 
 export function BacktestProgress({ jobId }: { jobId: string | null }) {
-  const job = useJobStore((s) => (jobId ? s.activeJobs.get(jobId) : undefined));
+  const job = useJobStore((s) => {
+    if (!jobId) return undefined;
+    if (!(s.activeJobs instanceof Map)) return undefined;
+    return s.activeJobs.get(jobId);
+  });
   const handleWsEvent = useJobStore((s) => s.handleWsEvent);
   const setActiveTab = useJobStore((s) => s.setActiveTab);
 
@@ -159,7 +163,7 @@ export function BacktestProgress({ jobId }: { jobId: string | null }) {
 
       {/* Model pills */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {(job.models ?? []).map((m) => {
+        {(Array.isArray(job.models) ? job.models : []).map((m) => {
           const done = (job.completedModels ?? []).includes(m);
           const current = job.currentModel === m;
           const mp = job.modelPhases.get(m) as

@@ -1,8 +1,7 @@
 import { cn } from "@/lib/utils";
 import { useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Eye,
   Trash2,
   Download,
   Search,
@@ -10,11 +9,14 @@ import {
   ChevronDown,
   RefreshCw,
   Clock,
-  BarChart2,
+  MoreHorizontal,
+  FileText,
 } from "lucide-react";
-import { useResultsHistory, useDeleteJob } from "@/api/queries";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { useResultsHistory, useBatchDeleteJobs, useRerunBacktest, useDeleteJob } from "@/api/queries";
 import { formatRelativeTime, formatPercent } from "@/lib/formatters";
-import { useBacktestStore } from "@/stores/useBacktestStore";
+import { TabBar } from "@/components/shared/TabBar";
+import { RunHistoryTable } from "@/pages/Committee/RunHistoryTable";
 import type { BacktestSummaryItem } from "@/api/schemas";
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -115,68 +117,17 @@ function SortHeader({
   );
 }
 
-// ── summary strip ─────────────────────────────────────────────────────────────
-
-function SummaryStrip({ results }: { results: BacktestSummaryItem[] }) {
-  const completed = results.filter((r) => r.status === "completed");
-  const avgSharpe = completed.length
-    ? completed.reduce((a, b) => a + (b.sharpe ?? 0), 0) / completed.length
-    : null;
-  const bestSharpe = completed.length
-    ? Math.max(...completed.map((r) => r.sharpe ?? -Infinity))
-    : null;
-  const pairs = [...new Set(results.map((r) => r.pair).filter(Boolean))].length;
-
-  const stats = [
-    { label: "Total Runs", value: results.length.toString(), mono: false },
-    { label: "Completed", value: completed.length.toString(), mono: false },
-    { label: "Pairs Tested", value: pairs.toString(), mono: false },
-    {
-      label: "Avg Sharpe",
-      value: avgSharpe != null ? avgSharpe.toFixed(2) : "—",
-      mono: true,
-      color: signColor(avgSharpe),
-    },
-    {
-      label: "Best Sharpe",
-      value: bestSharpe != null && isFinite(bestSharpe) ? bestSharpe.toFixed(2) : "—",
-      mono: true,
-      color: signColor(bestSharpe),
-    },
-  ];
-
-  return (
-    <div className="grid grid-cols-5 gap-3">
-      {stats.map((s) => (
-        <div
-          key={s.label}
-          className="flex flex-col gap-1 rounded-sm border border-(--color-glass-border) bg-(--color-elevated) px-4 py-3"
-        >
-          <span className="text-[9px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
-            {s.label}
-          </span>
-          <span
-            className="text-base font-semibold"
-            style={{
-              color: s.color ?? "var(--color-text-primary)",
-              fontFamily: s.mono ? "var(--font-mono)" : undefined,
-            }}
-          >
-            {s.value}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ── main component ────────────────────────────────────────────────────────────
 
 export function ResultsHistoryPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initTab = searchParams.get("tab") === "committee" ? "committee" : "backtest";
+  const batchDelete = useBatchDeleteJobs();
+  const rerun = useRerunBacktest();
   const deleteJob = useDeleteJob();
-  const setField = useBacktestStore((s) => s.setField);
 
+  const [historyTab, setHistoryTab] = useState(initTab);
   const [search, setSearch] = useState("");
   const [pairFilter, setPairFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("completed");
@@ -255,103 +206,120 @@ export function ResultsHistoryPage() {
     URL.revokeObjectURL(url);
   }, [filtered, selected]);
 
+  const handleBatchDelete = useCallback(() => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    batchDelete.mutate(ids, {
+      onSuccess: () => setSelected(new Set()),
+    });
+  }, [selected, batchDelete]);
+
   const handleRerun = useCallback(
-    async (row: BacktestSummaryItem) => {
-      setField("parentJobId", row.job_id);
-      setField("pair", row.pair || "EURUSD");
-      if (row.models?.length) setField("selectedModels", row.models as string[]);
-      navigate("/backtest");
+    (row: BacktestSummaryItem) => {
+      rerun.mutate(row.job_id);
     },
-    [setField, navigate],
+    [rerun],
+  );
+
+  const handleDeleteSingle = useCallback(
+    (jobId: string) => {
+      if (!confirm("Are you sure you want to delete this study?")) return;
+      deleteJob.mutate(jobId);
+    },
+    [deleteJob],
   );
 
   const PAIRS = [...new Set(results.map((r) => r.pair).filter(Boolean))].sort();
 
+  const completed = results.filter((r) => r.status === "completed");
+  const avgSharpe = completed.length
+    ? completed.reduce((a, b) => a + (b.sharpe ?? 0), 0) / completed.length
+    : null;
+  const bestSharpe = completed.length
+    ? Math.max(...completed.map((r) => r.sharpe ?? -Infinity))
+    : null;
+  const pairsCount = [...new Set(results.map((r) => r.pair).filter(Boolean))].length;
+
+  const HISTORY_TABS = [
+    { key: "backtest", label: "Backtest Runs" },
+    { key: "committee", label: "Committee Runs" },
+  ];
+
   return (
-    <div className="flex flex-col gap-5 p-6">
-      {/* ── page header ── */}
-      <div className="flex items-end justify-between">
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <BarChart2 size={16} className="text-(--color-brand)" />
-            <h2 className="text-sm font-semibold tracking-[0.08em] text-(--color-text-primary) uppercase">
-              Results History
-            </h2>
+    <div className="flex flex-col gap-3 py-6">
+      {/* Tab bar for switching between Backtest and Committee history */}
+      <TabBar tabs={HISTORY_TABS} activeTab={historyTab} onTabChange={(tab) => {
+        setHistoryTab(tab);
+        setSearchParams(tab === "committee" ? { tab: "committee" } : {}, { replace: true });
+      }} />
+
+      {historyTab === "committee" ? (
+        <RunHistoryTable
+          activeJobId={null}
+          onSelect={(jobId: string) => {
+            navigate(`/results/${jobId}?type=committee`);
+          }}
+        />
+      ) : (
+        <>
+          {/* ── merged action bar: summary stats + filters + export ── */}
+          <div className="flex flex-wrap items-center gap-3 rounded-sm border border-(--color-glass-border) bg-(--color-surface) px-3 py-2">
+        {!isLoading && results.length > 0 && (
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[10px] tabular-nums text-(--color-text-muted)">
+              <span className="text-(--color-text-primary)">{results.length}</span> runs
+            </span>
+            <span className="font-mono text-[10px] tabular-nums text-(--color-text-muted)">
+              <span className="text-(--color-accent-success)">{completed.length}</span> done
+            </span>
+            <span className="font-mono text-[10px] tabular-nums text-(--color-text-muted)">
+              <span className="text-(--color-text-primary)">{pairsCount}</span> pairs
+            </span>
+            <span className="font-mono text-[10px] tabular-nums" style={{ color: avgSharpe != null ? signColor(avgSharpe) : "var(--color-text-muted)" }}>
+              Sharpe {avgSharpe != null ? avgSharpe.toFixed(2) : "—"}
+            </span>
+            <span className="font-mono text-[10px] tabular-nums" style={{ color: bestSharpe != null && isFinite(bestSharpe) ? signColor(bestSharpe) : "var(--color-text-muted)" }}>
+              Best {bestSharpe != null && isFinite(bestSharpe) ? bestSharpe.toFixed(2) : "—"}
+            </span>
           </div>
-          <p className="pl-6 text-[11px] text-(--color-text-muted)">
-            {isLoading
-              ? "Loading..."
-              : `${data?.total ?? filtered.length} ${statusFilter} backtest${(data?.total ?? filtered.length) !== 1 ? "s" : ""}`}
-          </p>
-        </div>
-
-        {/* export button — only shown when rows selected */}
-        {selected.size > 0 && (
-          <button
-            onClick={exportCSV}
-            className="flex items-center gap-2 rounded-sm border border-(--color-glass-border) px-3 py-2 text-[11px] font-medium text-(--color-text-secondary) transition-colors hover:bg-[var(--color-glass-hover)]"
-          >
-            <Download size={14} />
-            Export {selected.size} row{selected.size !== 1 ? "s" : ""}
-          </button>
         )}
-      </div>
+        {!isLoading && results.length > 0 && (
+          <span className="h-4 w-px bg-(--color-glass-border)" />
+        )}
 
-      {/* ── summary strip ── */}
-      {!isLoading && results.length > 0 && <SummaryStrip results={results} />}
-
-      {/* ── toolbar: search + pair filter ── */}
-      <div className="flex items-center gap-3">
-        {/* search */}
-        <div className="relative flex max-w-sm flex-1 items-center rounded-sm border border-(--color-glass-border) bg-(--color-surface) transition-colors focus-within:border-[var(--color-brand)]">
-          <Search
-            size={16}
-            className="pointer-events-none absolute left-3 shrink-0 text-(--color-text-muted)"
-          />
+        <div className="relative flex flex-1 items-center rounded-sm border border-(--color-glass-border) bg-(--color-input-bg) transition-colors focus-within:border-[var(--color-brand)]" style={{ maxWidth: 240 }}>
+          <Search size={14} className="pointer-events-none absolute left-2.5 shrink-0 text-(--color-text-muted)" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search pair, model, or job ID…"
-            className="w-full bg-transparent py-2.5 pr-3 pl-10 font-mono text-xs text-(--color-text-primary) focus:outline-none"
+            placeholder="Search…"
+            className="w-full bg-transparent py-1.5 pr-2.5 pl-8 font-mono text-[11px] text-(--color-text-primary) focus:outline-none"
           />
           {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-2.5 rounded px-1.5 py-0.5 text-[10px] text-(--color-text-muted)"
-              aria-label="Clear search"
-            >
+            <button onClick={() => setSearch("")} className="absolute right-1.5 rounded px-1 py-0.5 text-[10px] text-(--color-text-muted)" aria-label="Clear search">
               ✕
             </button>
           )}
         </div>
 
-        {/* pair selector */}
-        <div className="relative rounded-sm border border-(--color-glass-border) bg-(--color-surface) transition-colors">
+        <div className="relative rounded-sm border border-(--color-glass-border) bg-(--color-input-bg) transition-colors">
           <select
             value={pairFilter}
             onChange={(e) => setPairFilter(e.target.value)}
-            className="cursor-pointer appearance-none bg-transparent py-2.5 pr-8 pl-3 font-mono text-xs text-(--color-text-primary) focus:outline-none"
+            className="cursor-pointer appearance-none bg-transparent py-1.5 pr-7 pl-2.5 font-mono text-[11px] text-(--color-text-primary) focus:outline-none"
           >
             <option value="">All Pairs</option>
-            {PAIRS.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
+            {PAIRS.map((p) => (<option key={p} value={p}>{p}</option>))}
           </select>
-          <ChevronDown
-            size={12}
-            className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-(--color-text-muted)"
-          />
+          <ChevronDown size={10} className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-(--color-text-muted)" />
         </div>
 
-        {/* status filter */}
-        <div className="flex items-center gap-0.5 rounded-sm border border-(--color-glass-border) bg-(--color-surface) p-0.5">
+        <div className="flex items-center gap-0.5 rounded-sm border border-(--color-glass-border) bg-(--color-input-bg) p-0.5">
           {(["completed", "failed"] as const).map((s) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className="rounded-sm px-3 py-1.5 text-[11px] font-medium capitalize transition-all"
+              className="rounded-sm px-2.5 py-1 text-[10px] font-medium capitalize transition-all"
               style={{
                 backgroundColor: statusFilter === s ? "var(--color-brand-glow)" : "transparent",
                 color: statusFilter === s ? "var(--color-brand)" : "var(--color-text-dim)",
@@ -361,6 +329,26 @@ export function ResultsHistoryPage() {
             </button>
           ))}
         </div>
+
+        {selected.size > 0 && (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={exportCSV}
+              className="flex items-center gap-1.5 rounded-sm border border-(--color-glass-border) px-2.5 py-1 text-[10px] font-medium text-(--color-text-secondary) transition-colors hover:bg-[var(--color-glass-hover)]"
+            >
+              <Download size={12} />
+              Export
+            </button>
+            <button
+              onClick={handleBatchDelete}
+              disabled={batchDelete.isPending}
+              className="flex items-center gap-1.5 rounded-sm border border-[rgba(242,54,69,0.3)] px-2.5 py-1 text-[10px] font-medium text-[var(--color-accent-danger)] transition-colors hover:bg-[rgba(242,54,69,0.1)] disabled:opacity-50"
+            >
+              <Trash2 size={12} />
+              Delete {selected.size}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── table ── */}
@@ -390,17 +378,17 @@ export function ResultsHistoryPage() {
                   Pair / TF
                 </span>
               </th>
-              <th className="px-4 py-3 text-left">
+              <th className="hidden md:table-cell px-4 py-3 text-left">
                 <span className="text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
                   Models
                 </span>
               </th>
-              <th className="px-4 py-3 text-left">
+              <th className="hidden sm:table-cell px-4 py-3 text-left">
                 <span className="text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
                   Status
                 </span>
               </th>
-              <th className="px-4 py-3 text-right">
+              <th className="hidden md:table-cell px-4 py-3 text-right">
                 <SortHeader
                   label="Sharpe"
                   active={sortBy === "sharpe"}
@@ -418,7 +406,7 @@ export function ResultsHistoryPage() {
                   align="right"
                 />
               </th>
-              <th className="px-4 py-3 text-right">
+              <th className="hidden lg:table-cell px-4 py-3 text-right">
                 <SortHeader
                   label="Win %"
                   active={sortBy === "win_rate"}
@@ -427,7 +415,7 @@ export function ResultsHistoryPage() {
                   align="right"
                 />
               </th>
-              <th className="px-4 py-3 text-right">
+              <th className="hidden lg:table-cell px-4 py-3 text-right">
                 <SortHeader
                   label="Max DD"
                   active={sortBy === "max_drawdown_pct"}
@@ -436,14 +424,14 @@ export function ResultsHistoryPage() {
                   align="right"
                 />
               </th>
-              <th className="px-4 py-3 text-right">
+              <th className="hidden lg:table-cell px-4 py-3 text-right">
                 <span className="text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
                   Trades
                 </span>
               </th>
-              <th className="px-4 py-3 text-right">
+              <th className="px-3 py-3 text-right">
                 <span className="text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
-                  Actions
+                  &nbsp;
                 </span>
               </th>
             </tr>
@@ -521,7 +509,7 @@ export function ResultsHistoryPage() {
                     </td>
 
                     {/* models */}
-                    <td className="max-w-[220px] px-4 py-3">
+                    <td className="hidden md:table-cell max-w-[220px] px-4 py-3">
                       <div className="flex flex-wrap gap-1">
                         {row.models.map((m) => (
                           <ModelBadge key={m} model={m} />
@@ -531,7 +519,7 @@ export function ResultsHistoryPage() {
 
                     {/* status */}
                     <td
-                      className="px-4 py-3"
+                      className="hidden sm:table-cell px-4 py-3"
                       title={row.status === "failed" ? (row.error ?? "Job failed") : undefined}
                     >
                       <StatusPill status={row.status} />
@@ -539,7 +527,7 @@ export function ResultsHistoryPage() {
 
                     {/* sharpe */}
                     <td
-                      className="px-4 py-3 text-right font-mono tabular-nums"
+                      className="hidden md:table-cell px-4 py-3 text-right font-mono tabular-nums"
                       style={{ color: signColor(row.sharpe) }}
                     >
                       {fmt(row.sharpe)}
@@ -554,48 +542,62 @@ export function ResultsHistoryPage() {
                     </td>
 
                     {/* win rate */}
-                    <td className="px-4 py-3 text-right font-mono text-(--color-text-primary) tabular-nums">
+                    <td className="hidden lg:table-cell px-4 py-3 text-right font-mono text-(--color-text-primary) tabular-nums">
                       {row.win_rate != null ? formatPercent(row.win_rate) : "—"}
                     </td>
 
                     {/* max dd */}
-                    <td className="px-4 py-3 text-right font-mono text-(--color-accent-danger) tabular-nums">
+                    <td className="hidden lg:table-cell px-4 py-3 text-right font-mono text-(--color-accent-danger) tabular-nums">
                       {row.max_drawdown_pct != null ? formatPercent(row.max_drawdown_pct) : "—"}
                     </td>
 
                     {/* trades */}
-                    <td className="px-4 py-3 text-right font-mono text-(--color-text-secondary) tabular-nums">
+                    <td className="hidden lg:table-cell px-4 py-3 text-right font-mono text-(--color-text-secondary) tabular-nums">
                       {row.total_trades ?? "—"}
                     </td>
 
-                    {/* actions */}
-                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button
-                          onClick={() => handleRerun(row)}
-                          title="Re-run"
-                          aria-label="Re-run backtest"
-                          className="rounded-md p-1.5 text-(--color-brand) transition-colors hover:bg-[var(--color-primary-glow)]"
-                        >
-                          <RefreshCw size={14} />
-                        </button>
-                        <button
-                          onClick={() => navigate(`/results/${row.job_id}`)}
-                          title="View"
-                          aria-label="View results"
-                          className="rounded-md p-1.5 text-(--color-text-muted) transition-colors hover:bg-[var(--color-glass-hover)]"
-                        >
-                          <Eye size={14} />
-                        </button>
-                        <button
-                          onClick={() => deleteJob.mutate(row.job_id)}
-                          title="Delete"
-                          aria-label="Delete backtest"
-                          className="rounded-md p-1.5 text-(--color-text-muted) transition-colors hover:bg-[rgba(242,54,69,0.12)]"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                    {/* actions — kebab menu */}
+                    <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger asChild>
+                          <button
+                            aria-label="Row actions"
+                            className="rounded-md p-1.5 text-[var(--color-text-muted)] opacity-0 transition-all hover:bg-slate-700/50 hover:text-[var(--color-text-primary)] group-hover:opacity-100"
+                          >
+                            <MoreHorizontal size={14} />
+                          </button>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal>
+                          <DropdownMenu.Content
+                            sideOffset={4}
+                            align="end"
+                            className="z-50 min-w-[160px] rounded-md border border-slate-700 bg-slate-850 p-1 shadow-xl"
+                          >
+                            <DropdownMenu.Item
+                              onClick={() => handleRerun(row)}
+                              className="flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[11px] text-slate-200 outline-none transition-colors hover:bg-slate-700/50 hover:text-white"
+                            >
+                              <RefreshCw size={12} />
+                              Re-run Backtest
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item
+                              onClick={() => navigate(`/results/${row.job_id}?tab=logs`)}
+                              className="flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[11px] text-slate-200 outline-none transition-colors hover:bg-slate-700/50 hover:text-white"
+                            >
+                              <FileText size={12} />
+                              View Detailed Logs
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator className="my-1 h-px bg-slate-700" />
+                            <DropdownMenu.Item
+                              onClick={() => handleDeleteSingle(row.job_id)}
+                              className="flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[11px] text-rose-400 outline-none transition-colors hover:bg-rose-500/10 hover:text-rose-300"
+                            >
+                              <Trash2 size={12} />
+                              Delete Study
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu.Root>
                     </td>
                   </tr>
                 );
@@ -612,11 +614,13 @@ export function ResultsHistoryPage() {
               {search && ` matching "${search}"`}
             </span>
             <span className="font-mono">
-              {selected.size > 0 ? `${selected.size} selected` : "Click row to view"}
+              {selected.size > 0 ? `${selected.size} selected — Click row to view` : "Click row to view"}
             </span>
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

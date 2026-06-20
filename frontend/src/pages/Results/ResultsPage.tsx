@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useRef, useMemo } from "react";
 import {
   BarChart3,
@@ -6,40 +6,34 @@ import {
   Play,
   Save,
   GitCompare,
-  ChevronDown,
-  ChevronUp,
   X,
+  Download,
+  Upload,
 } from "lucide-react";
 import { useJobResults, useTradeChartData, useSaveModelFromJob } from "@/api/queries";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ExportBar } from "@/components/shared/ExportBar";
 import { StatusDot } from "@/components/shared/StatusDot";
+import { MonthlyReturnsChart } from "@/components/charts/MonthlyReturnsChart";
 import { MetricsGrid } from "./MetricsGrid";
-import { EquitySection } from "./EquitySection";
+import { UnifiedAnalytics, type UnifiedAnalyticsHandle } from "./UnifiedAnalytics";
 import { TradeLogTable } from "./TradeLogTable";
-import { MonthlySection } from "./MonthlySection";
-import { HpoDiagnostics } from "./HpoDiagnostics";
+import { HpoDiagnostics, BestStudyCard } from "./HpoDiagnostics";
 import { OverfittingPanel } from "./OverfittingPanel";
 import { ValidationScorecard } from "./ValidationScorecard";
 import { WalkForwardPanel } from "./WalkForwardPanel";
 import { ParameterExplorer } from "./ParameterExplorer";
 import { LLMAdvisor } from "./LLMAdvisor";
-import { TrainingDiagnosticsPanel } from "./TrainingDiagnostics";
-import { ConfigViewer } from "./ConfigViewer";
+import { FeatureImportanceSection, PredictionConfidenceSection } from "./TrainingDiagnostics";
 import { LeaderboardTable } from "../Compare/LeaderboardTable";
 import { EquityOverlayChart } from "../Compare/EquityOverlayChart";
 import { SignificanceMatrix } from "../Compare/SignificanceMatrix";
 import { CrossPairSection } from "../Compare/CrossPairSection";
-import { DrawdownChart } from "@/components/charts/DrawdownChart";
-import { TradeDistributionChart } from "@/components/charts/TradeDistributionChart";
-import { RollingMetricsChart } from "@/components/charts/RollingMetricsChart";
-import { CumulativePnlChart } from "@/components/charts/CumulativePnlChart";
 import { ParameterSensitivityChart } from "@/components/charts/ParameterSensitivityChart";
 import { normalizeEquityCurve } from "@/lib/chartUtils";
-import { BacktestChart } from "./BacktestChart";
 import { BacktestPlayback } from "./BacktestPlayback";
+import { CommitteeResultsPage } from "./CommitteeResultsPage";
 import type { TradeRecord } from "@/api/schemas";
-import type { EquityCurveChartHandle } from "@/components/charts/EquityCurveChart";
 
 function Skeleton() {
   return (
@@ -56,29 +50,31 @@ function Skeleton() {
   );
 }
 
-/** Thin collapsible accordion wrapper */
-function Accordion({
-  label,
-  open,
-  onToggle,
+/** Bento Box card — subtle border, minimal padding, optional title bar. */
+function BentoCard({
+  title,
+  right,
   children,
+  className,
 }: {
-  label: string;
-  open: boolean;
-  onToggle: () => void;
+  title?: string;
+  right?: React.ReactNode;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-sm border border-(--color-glass-border)">
-      <button
-        onClick={onToggle}
-        className="flex w-full cursor-pointer items-center justify-between bg-(--color-surface) px-4 py-2 text-left font-sans text-[11px] font-semibold tracking-[0.1em] text-(--color-text-muted) uppercase transition-all hover:opacity-80"
-        style={{ border: "none" }}
-      >
-        {label}
-        {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-      </button>
-      {open && <div className="bg-(--color-app)">{children}</div>}
+    <div className={`rounded-sm border border-(--color-glass-border) bg-(--color-surface) p-3 ${className ?? ""}`}>
+      {(title || right) && (
+        <div className="mb-2 flex items-center justify-between">
+          {title && (
+            <h3 className="text-[10px] font-semibold tracking-[0.06em] text-(--color-text-muted) uppercase">
+              {title}
+            </h3>
+          )}
+          {right}
+        </div>
+      )}
+      {children}
     </div>
   );
 }
@@ -86,22 +82,24 @@ function Accordion({
 export function ResultsPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Branch: committee jobs render their own page
+  if (searchParams.get("type") === "committee") {
+    return <CommitteeResultsPage />;
+  }
+
   const [activeModelIdx, setActiveModelIdx] = useState(0);
   const [selectedTrade, setSelectedTrade] = useState<TradeRecord | null>(null);
   const [showPlayback, setShowPlayback] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [tab, setTab] = useState<"results" | "compare">("results");
-
-  // Progressive disclosure accordion states
-  const [showWalkForward, setShowWalkForward] = useState(true);
-  const [showMonthly, setShowMonthly] = useState(true);
-  const [showDiagnostics, setShowDiagnostics] = useState(true);
   const [showTradeLog, setShowTradeLog] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [diagnosticsModelIdx, setDiagnosticsModelIdx] = useState(0);
 
   const { data: results, isLoading, isError } = useJobResults(jobId ?? null);
   const saveModelMutation = useSaveModelFromJob();
-  const equityChartRef = useRef<EquityCurveChartHandle>(null);
+  const analyticsRef = useRef<UnifiedAnalyticsHandle>(null);
 
   const activeMetric = results?.metrics?.length
     ? results.metrics[Math.min(activeModelIdx, results.metrics.length - 1)]
@@ -113,19 +111,29 @@ export function ResultsPage() {
     activeMetric.sharpe != null &&
     isFinite(activeMetric.sharpe);
   const metrics = results?.metrics ?? [];
+
+  const analyticsModels = useMemo(
+    () =>
+      metrics.map((m) => ({
+        model: m.model,
+        equityCurve: normalizeEquityCurve(m.equity_curve),
+        drawdownCurve: normalizeEquityCurve(m.drawdown_curve),
+        trades: m.trades ? (m.trades as TradeRecord[]) : null,
+      })),
+    [metrics],
+  );
+
   const modelCurves = useMemo(() => {
     if (!metrics.length) return [];
     return metrics
       .filter((m) => m.equity_curve && m.equity_curve.length > 0)
-      .map((m) => ({
-        model: m.model,
-        data: m.equity_curve!,
-      }));
+      .map((m) => ({ model: m.model, data: m.equity_curve! }));
   }, [metrics]);
+
   const { data: tradeChartData } = useTradeChartData(jobId ?? "", activeMetric?.model ?? "");
 
   const handleExportPng = () => {
-    equityChartRef.current?.takeScreenshot();
+    analyticsRef.current?.takeScreenshot();
   };
 
   if (!jobId) {
@@ -147,10 +155,10 @@ export function ResultsPage() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate("/backtest")}
+            onClick={() => navigate("/results")}
             className="flex items-center gap-1 rounded-md border border-(--color-glass-border) bg-transparent px-2 py-1 text-xs text-(--color-text-muted) transition-all duration-200 hover:border-[var(--color-border-active)]"
           >
-            <ArrowLeft size={12} strokeWidth={1.5} /> Back
+            <ArrowLeft size={12} strokeWidth={1.5} /> Results
           </button>
         </div>
         <Skeleton />
@@ -163,10 +171,10 @@ export function ResultsPage() {
       <div className="flex flex-col gap-5">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate("/backtest")}
+            onClick={() => navigate("/results")}
             className="flex items-center gap-1 rounded-md border border-(--color-glass-border) bg-transparent px-2 py-1 text-xs text-(--color-text-muted) transition-all duration-200 hover:border-[var(--color-border-active)]"
           >
-            <ArrowLeft size={12} strokeWidth={1.5} /> Back
+            <ArrowLeft size={12} strokeWidth={1.5} /> Results
           </button>
         </div>
         <EmptyState
@@ -184,7 +192,7 @@ export function ResultsPage() {
     if (!activeMetric?.trades?.length) return;
     const trades = activeMetric.trades;
     const header = Object.keys(trades[0]).join(",");
-    const rows = trades.map((t: Record<string, unknown>) =>
+    const rows = trades.map((t) =>
       Object.values(t)
         .map((v) => String(v ?? ""))
         .join(","),
@@ -209,26 +217,74 @@ export function ResultsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportConfig = () => {
+    if (!results.config || Object.keys(results.config).length === 0) return;
+    const blob = new Blob([JSON.stringify(results.config, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `kodaquant-config_${results.job_id}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleLoadConfig = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const loaded = JSON.parse(evt.target?.result as string);
+          const configOverrides = loaded?.config ?? loaded;
+          const backtestUrl = `/backtest?config=${encodeURIComponent(JSON.stringify(configOverrides))}`;
+          window.open(backtestUrl, "_blank");
+        } catch {
+          alert("Invalid JSON config file.");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+  const diagnosticsMetric = metrics.length
+    ? metrics[Math.min(diagnosticsModelIdx, metrics.length - 1)]
+    : null;
+
+  const diagMonthly = diagnosticsMetric?.monthly_results ?? [];
+  const diagPeriods = diagnosticsMetric?.walkforward_periods;
+  const hasDiagHpo = !!diagnosticsMetric?.hpo_trials && diagnosticsMetric.hpo_trials.length > 0;
+  const diagTradeCount = diagnosticsMetric?.trades?.length ?? 0;
+  const hasWalkForward = (diagPeriods?.length ?? 0) > 1;
+  const hasMonthly = diagMonthly.length > 1;
+
+  const monthlyStart = diagMonthly.length > 0 ? (diagMonthly[0]?.month ?? "").slice(0, 7) : "";
+  const monthlyEnd = diagMonthly.length > 0 ? (diagMonthly[diagMonthly.length - 1]?.month ?? "").slice(0, 7) : "";
+  const monthlyPositive = diagMonthly.filter((m) => (m.return_pct ?? 0) > 0).length;
+
   return (
-    <div className="flex h-full animate-fade-in flex-col gap-5">
+    <div className="flex h-full animate-fade-in flex-col gap-4">
       {/* ── Top ribbon ─────────────────────────────────────────────── */}
-      <div className="flex min-h-[36px] items-center justify-between">
+      <div className="flex min-h-[36px] flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3 leading-none">
           <button
-            onClick={() => navigate("/backtest")}
+            onClick={() => navigate("/results")}
             className="flex cursor-pointer items-center gap-1 rounded-md border border-(--color-glass-border) bg-transparent px-2 py-1.5 text-[11px] leading-none text-(--color-text-muted) transition-all duration-200 hover:border-[var(--color-brand)]"
           >
-            <ArrowLeft size={12} strokeWidth={1.5} /> Back
+            <ArrowLeft size={12} strokeWidth={1.5} /> Results
           </button>
-          <h2 className="text-[11px] font-semibold leading-none tracking-[0.12em] text-(--color-text-muted) uppercase">
-            Results
-          </h2>
           <span className="font-mono text-[11px] leading-none text-(--color-text-secondary)">
             {results.pair}
           </span>
           <StatusDot color="var(--color-brand)" />
         </div>
-        <div className="flex items-center gap-1.5 leading-none">
+        <div className="flex flex-wrap items-center gap-1.5 leading-none">
           {canSaveModel && (
             <>
               {saveMsg ? (
@@ -262,19 +318,34 @@ export function ResultsPage() {
               )}
             </>
           )}
+          {jobId && activeMetric?.model && (
+            <button
+              onClick={() => setShowPlayback(true)}
+              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-(--color-accent-success) bg-[rgba(8,153,129,0.1)] px-2.5 py-1 text-[11px] font-semibold text-(--color-accent-success) uppercase transition-all hover:brightness-110"
+            >
+              <Play size={11} /> Replay
+            </button>
+          )}
+          {/* Config export / load — grouped with export buttons */}
+          <button
+            onClick={handleExportConfig}
+            className="flex cursor-pointer items-center gap-1.5 rounded-md border border-(--color-glass-border) bg-(--color-surface) px-2.5 py-1 text-[11px] font-semibold text-(--color-text-secondary) uppercase transition-all duration-150 hover:border-[var(--color-brand)]"
+            title="Export this run's config as JSON"
+          >
+            <Download size={11} /> Config
+          </button>
+          <button
+            onClick={handleLoadConfig}
+            className="flex cursor-pointer items-center gap-1.5 rounded-md border border-(--color-glass-border) bg-(--color-surface) px-2.5 py-1 text-[11px] font-semibold text-(--color-text-secondary) uppercase transition-all duration-150 hover:border-[var(--color-brand)]"
+            title="Load a config JSON into a new backtest"
+          >
+            <Upload size={11} /> Load
+          </button>
           <ExportBar
             onExportCsv={handleExportCsv}
             onExportPng={handleExportPng}
             onExportJson={handleExportJson}
           />
-          {jobId && activeMetric?.model && (
-            <button
-              onClick={() => setShowPlayback(true)}
-              className="flex items-center gap-1.5 rounded-md border border-(--color-accent-success) bg-[rgba(8,153,129,0.1)] px-2.5 py-1 text-[11px] font-semibold text-(--color-accent-success) uppercase transition-all"
-            >
-              <Play size={11} /> Replay
-            </button>
-          )}
         </div>
       </div>
 
@@ -297,6 +368,16 @@ export function ResultsPage() {
             activeMetric.diagnostics?.vif_warnings?.map((w) => `${w.feature} VIF=${w.vif}`) ?? []
           }
         />
+      )}
+
+      {/* ── Validation badges (pill row) ────────────────────────────── */}
+      {(activeMetric?.overfitting || activeMetric?.walkforward_periods) && (
+        <BentoCard>
+          <ValidationScorecard
+            overfitting={activeMetric?.overfitting ?? null}
+            walkforwardPeriods={activeMetric?.walkforward_periods ?? null}
+          />
+        </BentoCard>
       )}
 
       {/* ── Model selector (multi-model runs) ───────────────────────── */}
@@ -358,130 +439,135 @@ export function ResultsPage() {
 
       {tab === "results" && (
         <div className="flex flex-col gap-3 pb-4">
-          {/* ── Validation Scorecard ─────────────────────────────── */}
-          {(activeMetric?.summary_text || activeMetric?.overfitting || activeMetric?.walkforward_periods) && (
-            <ValidationScorecard
-              overfitting={activeMetric.overfitting ?? null}
-              walkforwardPeriods={activeMetric.walkforward_periods ?? null}
-            />
+          {/* ── Unified Analytics (central chart container) ────────── */}
+          <UnifiedAnalytics
+            ref={analyticsRef}
+            models={analyticsModels}
+            buyHoldCurve={normalizeEquityCurve(activeMetric?.buy_hold_curve ?? null)}
+          />
+
+          {/* ── Diagnostics Model Selector ──────────────────────────── */}
+          {metrics.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
+                Diagnostics:
+              </span>
+              {metrics.map((m, i) => (
+                <button
+                  key={m.model}
+                  onClick={() => setDiagnosticsModelIdx(i)}
+                  className="cursor-pointer rounded-md border px-2.5 py-0.5 text-[11px] font-medium tracking-[0.04em] uppercase transition-all duration-200"
+                  style={{
+                    borderColor:
+                      i === diagnosticsModelIdx
+                        ? "var(--color-brand)"
+                        : "var(--color-glass-border)",
+                    backgroundColor:
+                      i === diagnosticsModelIdx
+                        ? "rgba(0,229,255,0.07)"
+                        : "transparent",
+                    color:
+                      i === diagnosticsModelIdx
+                        ? "var(--color-brand)"
+                        : "var(--color-text-muted)",
+                  }}
+                >
+                  {m.model}
+                </button>
+              ))}
+            </div>
           )}
 
-          {/* ── HERO: main chart area ───────────────────────────────── */}
-          <div className="overflow-hidden rounded-sm border border-(--color-glass-border)">
-            {/* Trade visualization */}
-            {jobId && activeMetric?.model && (
-              <div className="border-b border-(--color-glass-border)">
-                <BacktestChart jobId={jobId} model={activeMetric.model} />
-              </div>
+          {/* ── Walk-Forward — full width, only if >1 period ──────── */}
+          {hasWalkForward && (
+            <BentoCard
+              title={`Walk-Forward — ${diagPeriods!.length} periods`}
+            >
+              <WalkForwardPanel
+                periods={diagPeriods ?? null}
+              />
+            </BentoCard>
+          )}
+
+          {/* ── Monthly Returns — full width, only if >1 month ─────── */}
+          {hasMonthly && (
+            <BentoCard
+              title="Monthly Returns"
+              right={
+                <span className="font-mono text-[9px] text-(--color-text-muted)">
+                  {monthlyStart} → {monthlyEnd} · {monthlyPositive}/{diagMonthly.length} positive
+                </span>
+              }
+            >
+              <MonthlyReturnsChart monthlyResults={diagMonthly} />
+            </BentoCard>
+          )}
+
+          {/* ── Feature Importance + HPO — 2-column grid ───────────── */}
+          <div className="grid grid-cols-1 gap-3 items-start lg:grid-cols-2">
+            <BentoCard
+              title={`Feature Importance — ${diagnosticsMetric?.model ?? ""}`}
+            >
+              <FeatureImportanceSection
+                data={diagnosticsMetric?.diagnostics ?? null}
+                modelName={diagnosticsMetric?.model ?? ""}
+              />
+            </BentoCard>
+
+            {hasDiagHpo ? (
+              <BentoCard
+                title="HPO Diagnostics & Sensitivity"
+                right={
+                  <span className="font-mono text-[10px] text-(--color-text-muted)">
+                    {diagnosticsMetric?.hpo_trials?.length ?? 0} trials
+                  </span>
+                }
+              >
+                <div className="flex flex-col gap-4">
+                  <ParameterExplorer metrics={diagnosticsMetric} />
+                  <HpoDiagnostics
+                    paramImportance={diagnosticsMetric?.hpo_param_importance ?? null}
+                    trials={diagnosticsMetric?.hpo_trials ?? null}
+                  />
+                  <BestStudyCard bestStudy={diagnosticsMetric?.best_study ?? null} />
+                  <ParameterSensitivityChart trials={diagnosticsMetric?.hpo_trials ?? null} />
+                  {diagnosticsMetric?.overfitting && (
+                    <OverfittingPanel
+                      overfitting={diagnosticsMetric.overfitting}
+                      walkforwardPeriods={diagnosticsMetric.walkforward_periods ?? null}
+                    />
+                  )}
+                </div>
+              </BentoCard>
+            ) : (
+              <BentoCard title="HPO Diagnostics & Sensitivity">
+                <p className="text-[11px] text-(--color-text-dim)">
+                  No HPO trials for {diagnosticsMetric?.model ?? "this model"}.
+                </p>
+              </BentoCard>
             )}
-            {/* Equity + Drawdown stacked below */}
-            <div className="bg-(--color-app) px-3 pt-2 pb-3">
-              <EquitySection
-                ref={equityChartRef}
-                equityCurve={normalizeEquityCurve(activeMetric?.equity_curve ?? null)}
-                buyHoldCurve={normalizeEquityCurve(activeMetric?.buy_hold_curve ?? null)}
-                drawdownCurve={normalizeEquityCurve(activeMetric?.drawdown_curve ?? null)}
-              />
-            </div>
           </div>
 
-          {/* ── LLM advisor ─────────────────────────────────────────── */}
-          <LLMAdvisor jobId={jobId ?? null} modelName={activeMetric?.model ?? null} />
+          {/* ── Prediction & Confidence — full width ──────────────── */}
+          <BentoCard>
+            <PredictionConfidenceSection data={diagnosticsMetric?.diagnostics ?? null} />
+          </BentoCard>
 
-          {/* ── 3-column diagnostics grid ───────────────────────────── */}
-          <div className="grid grid-cols-3 gap-3">
-            {/* Col 1: Walk-Forward */}
-            <Accordion
-              label={`Walk-Forward ${activeMetric?.walkforward_periods ? `— ${activeMetric.walkforward_periods.length} periods` : ""}`}
-              open={showWalkForward}
-              onToggle={() => setShowWalkForward((v) => !v)}
-            >
-              <div className="p-2">
-                <WalkForwardPanel
-                  periods={activeMetric?.walkforward_periods ?? null}
-                  modelName={activeMetric?.model ?? ""}
-                />
-              </div>
-            </Accordion>
-
-            {/* Col 2: Monthly Returns */}
-            <Accordion
-              label="Monthly Returns"
-              open={showMonthly}
-              onToggle={() => setShowMonthly((v) => !v)}
-            >
-              <div className="p-2">
-                <MonthlySection monthlyResults={activeMetric?.monthly_results ?? null} />
-              </div>
-            </Accordion>
-
-            {/* Col 3: Training Diagnostics */}
-            <Accordion
-              label={`Training Diagnostics — ${activeMetric?.model ?? ""}`}
-              open={showDiagnostics}
-              onToggle={() => setShowDiagnostics((v) => !v)}
-            >
-              <div className="p-2">
-                <TrainingDiagnosticsPanel
-                  data={activeMetric?.diagnostics ?? null}
-                  modelName={activeMetric?.model ?? ""}
-                />
-              </div>
-            </Accordion>
-          </div>
-
-          {/* ── Additional charts (collapsible) ─────────────────────── */}
-          <Accordion
-            label="Advanced Analytics"
-            open={showAdvanced}
-            onToggle={() => setShowAdvanced((v) => !v)}
-          >
-            <div className="flex flex-col gap-8 p-6">
-              <DrawdownChart
-                drawdownCurve={normalizeEquityCurve(activeMetric?.drawdown_curve ?? null)}
-              />
-              <CumulativePnlChart
-                trades={activeMetric?.trades ? (activeMetric.trades as TradeRecord[]) : null}
-              />
-              <RollingMetricsChart
-                equityCurve={normalizeEquityCurve(activeMetric?.equity_curve ?? null)}
-              />
-              <TradeDistributionChart
-                trades={activeMetric?.trades ? (activeMetric.trades as TradeRecord[]) : null}
-              />
-              <HpoDiagnostics
-                paramImportance={activeMetric?.hpo_param_importance ?? null}
-                trials={activeMetric?.hpo_trials ?? null}
-              />
-              {activeMetric?.overfitting && (
-                <OverfittingPanel
-                  overfitting={activeMetric.overfitting}
-                  walkforwardPeriods={activeMetric.walkforward_periods ?? null}
-                />
-              )}
-              <ParameterSensitivityChart trials={activeMetric?.hpo_trials ?? null} />
-              {activeMetric && <ParameterExplorer metrics={activeMetric} />}
-              <ConfigViewer config={results.config ?? null} />
-            </div>
-          </Accordion>
-
-          {/* ── Trade log ───────────────────────────────────────────── */}
-          <Accordion
-            label={`Trade Log — ${activeMetric?.total_trades ?? 0} trades`}
+          {/* ── Trade Log — self-contained, full width ──────────── */}
+          <TradeLogTable
+            trades={
+              diagnosticsMetric?.trades
+                ? (diagnosticsMetric.trades as import("@/api/schemas").TradeRecord[])
+                : null
+            }
+            onTradeSelect={setSelectedTrade}
+            title={`Trade Log — ${diagTradeCount} executed · ${diagnosticsMetric?.total_trades ?? 0} signals`}
             open={showTradeLog}
             onToggle={() => setShowTradeLog((v) => !v)}
-          >
-            <div className="p-2">
-              <TradeLogTable
-                trades={
-                  activeMetric?.trades
-                    ? (activeMetric.trades as import("@/api/schemas").TradeRecord[])
-                    : null
-                }
-                onTradeSelect={setSelectedTrade}
-              />
-            </div>
-          </Accordion>
+          />
+
+          {/* ── LLM advisor (below trade log) ────────────────────────── */}
+          <LLMAdvisor jobId={jobId ?? null} modelName={diagnosticsMetric?.model ?? null} />
         </div>
       )}
 
@@ -545,7 +631,7 @@ export function ResultsPage() {
           hpoTrials={activeMetric.hpo_trials ?? null}
           pair={results?.pair ?? ""}
           model={activeMetric.model}
-          timeframe={results?.config?.timeframe ?? "M30"}
+          timeframe={(results?.config?.timeframe as string) ?? "M30"}
           onClose={() => setShowPlayback(false)}
         />
       )}

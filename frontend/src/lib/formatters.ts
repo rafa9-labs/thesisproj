@@ -15,7 +15,7 @@ export function formatPercent(value: number | null | undefined, decimals = 1): s
   if (isVoid(value) || isBadNumber(value)) return "—";
   const pct = Math.abs(value) <= 1 ? value * 100 : value;
   if (isBadNumber(pct)) return "—";
-  const sign = pct > 0 ? "+" : "";
+  const sign = pct >= 0 ? "+" : "";
   return `${sign}${pct.toFixed(decimals)}%`;
 }
 

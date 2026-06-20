@@ -1,48 +1,45 @@
-import { useMemo } from "react";
-import type { JobResults } from "@/api/schemas";
+import type { JobResults, FullCycleHistoryEntry } from "@/api/schemas";
 
 export interface DashboardKPIValues {
-  avgSharpe: number | null;
-  avgWinRate: number | null;
-  profitableMonthsPct: number | null;
-  avgReturn: number | null;
+  winRate: number | null;
+  totalProfit: number | null;
+  profitFactor: number | null;
   maxDrawdown: number | null;
+}
+
+export interface CommitteeKPIValues {
+  avgSharpe: number | null;
+  trustScore: number | null;
+  survivors: number | null;
+  factorySharpe: number | null;
 }
 
 export function computeDashboardKPIs(allResults: JobResults[]): DashboardKPIValues {
   if (allResults.length === 0) {
-    return {
-      avgSharpe: null,
-      avgWinRate: null,
-      profitableMonthsPct: null,
-      avgReturn: null,
-      maxDrawdown: null,
-    };
+    return { winRate: null, totalProfit: null, profitFactor: null, maxDrawdown: null };
   }
 
-  let sharpeSum = 0;
-  let sharpeCount = 0;
   let winRateSum = 0;
   let winRateCount = 0;
-  let returnSum = 0;
-  let returnCount = 0;
+  let profitSum = 0;
+  let profitCount = 0;
+  let pfNumerator = 0;
+  let pfDenominator = 0;
   let worstDrawdown: number | null = null;
-  let profitableMonths = 0;
-  let totalMonths = 0;
 
   for (const result of allResults) {
     for (const m of result.metrics ?? []) {
-      if (m.sharpe != null) {
-        sharpeSum += m.sharpe;
-        sharpeCount++;
-      }
       if (m.win_rate != null) {
         winRateSum += m.win_rate;
         winRateCount++;
       }
       if (m.total_return_pct != null) {
-        returnSum += m.total_return_pct;
-        returnCount++;
+        profitSum += m.total_return_pct;
+        profitCount++;
+      }
+      if (m.profit_factor != null) {
+        pfNumerator += m.profit_factor * (m.total_trades ?? 1);
+        pfDenominator += m.total_trades ?? 1;
       }
       if (m.max_drawdown != null) {
         if (worstDrawdown === null || m.max_drawdown < worstDrawdown) {
@@ -50,28 +47,50 @@ export function computeDashboardKPIs(allResults: JobResults[]): DashboardKPIValu
         }
       }
     }
-    for (const m of result.metrics ?? []) {
-      const monthly = m.monthly_results;
-      if (monthly) {
-        for (const month of monthly) {
-          totalMonths++;
-          if (month.return_pct != null && month.return_pct > 0) {
-            profitableMonths++;
-          }
-        }
+  }
+
+  return {
+    winRate: winRateCount > 0 ? winRateSum / winRateCount : null,
+    totalProfit: profitCount > 0 ? profitSum : null,
+    profitFactor: pfDenominator > 0 ? pfNumerator / pfDenominator : null,
+    maxDrawdown: worstDrawdown,
+  };
+}
+
+export function computeCommitteeKPIs(entries: FullCycleHistoryEntry[]): CommitteeKPIValues {
+  const completed = entries.filter((e) => e.status === "completed");
+  if (completed.length === 0) {
+    return { avgSharpe: null, trustScore: null, survivors: null, factorySharpe: null };
+  }
+
+  let sharpeSum = 0;
+  let sharpeCount = 0;
+  let bestTrust: number | null = null;
+  let totalSurvivors = 0;
+  let bestFactory: number | null = null;
+
+  for (const e of completed) {
+    if (e.avg_sharpe != null && isFinite(e.avg_sharpe)) {
+      sharpeSum += e.avg_sharpe;
+      sharpeCount++;
+    }
+    if (e.trust_score != null && isFinite(e.trust_score)) {
+      if (bestTrust === null || e.trust_score > bestTrust) {
+        bestTrust = e.trust_score;
+      }
+    }
+    totalSurvivors += e.survivors_count ?? 0;
+    if (e.factory_best_sharpe != null && isFinite(e.factory_best_sharpe)) {
+      if (bestFactory === null || e.factory_best_sharpe > bestFactory) {
+        bestFactory = e.factory_best_sharpe;
       }
     }
   }
 
   return {
     avgSharpe: sharpeCount > 0 ? sharpeSum / sharpeCount : null,
-    avgWinRate: winRateCount > 0 ? winRateSum / winRateCount : null,
-    profitableMonthsPct: totalMonths > 0 ? profitableMonths / totalMonths : null,
-    avgReturn: returnCount > 0 ? returnSum / returnCount : null,
-    maxDrawdown: worstDrawdown,
+    trustScore: bestTrust,
+    survivors: totalSurvivors > 0 ? totalSurvivors : null,
+    factorySharpe: bestFactory,
   };
-}
-
-export function useDashboardKPIs(allResults: JobResults[]): DashboardKPIValues {
-  return useMemo(() => computeDashboardKPIs(allResults), [allResults]);
 }

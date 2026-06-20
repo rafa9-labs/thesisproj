@@ -63,6 +63,7 @@ class CommitteeBacktestResult:
     total_folds: int = 0
     execution_time_s: float = 0.0
     warnings: List[str] = field(default_factory=list)
+    fold_predictions: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def fold_consistency_cv(self) -> float:
@@ -234,6 +235,18 @@ class CommitteeBacktester:
         self._cancel_check = cancel_check or (lambda: None)
         self._collect_predictions = False
         self._fold_predictions: List[Dict[str, Any]] = []
+        self._meta_labeler: Optional[Any] = None  # P1
+        self._hmm_detector: Optional[Any] = None  # P2
+        self._conviction_sizer: Optional[Any] = None  # P3
+        self._enable_mda_pruning: bool = False  # P5
+
+    def get_meta_labeler(self):
+        """Return the trained MetaLabeler (or None). Call after run_wfo."""
+        return self._meta_labeler
+
+    def get_conviction_sizer(self):
+        """Return the fitted ConvictionSizer (or None). Call after run_wfo."""
+        return self._conviction_sizer
 
     def save_fold_predictions(self, path: str):
         import json
@@ -289,6 +302,22 @@ class CommitteeBacktester:
                   f"{total_models} models in committee")
 
         fold_results: List[CommitteeFoldResult] = []
+
+        # ── Fit HMM on first fold's training data (P2: anchored regime detection) ──
+        if splits:
+            try:
+                from pipeline.hmm_regime import HMMRegimeDetector
+                first_train, _ = splits[0]
+                self._hmm_detector = HMMRegimeDetector(random_state=self.seed)
+                self._hmm_detector.fit(first_train)
+                if verbose:
+                    print(f"  HMMRegimeDetector: {self._hmm_detector.selected_n_states} states, "
+                          f"BIC={self._hmm_detector.bic:.1f}")
+            except Exception as e:
+                self._hmm_detector = None
+                if verbose:
+                    print(f"  HMMRegimeDetector: fit failed ({e}), falling back to GMM")
+
         for fold_idx, (train_slice, test_slice) in enumerate(splits):
             self._cancel_check()
             try:
@@ -306,6 +335,41 @@ class CommitteeBacktester:
         if not fold_results:
             raise RuntimeError("All folds failed. Check data and committee config.")
 
+        # ── Train meta-labeler on accumulated OOS fold predictions (P1) ──
+        if self._fold_predictions:
+            try:
+                from pipeline.meta_labeler import MetaLabeler
+                all_bars = []
+                for fp in self._fold_predictions:
+                    all_bars.extend(fp.get("bars", []))
+                if all_bars:
+                    X_meta = MetaLabeler.build_features(all_bars)
+                    y_meta = MetaLabeler.build_targets(all_bars)
+                    self._meta_labeler = MetaLabeler()
+                    acc = self._meta_labeler.train(X_meta, y_meta)
+                    if verbose:
+                        print(f"  MetaLabeler: {len(X_meta)} samples, accuracy={acc:.3f}")
+            except Exception as e:
+                if verbose:
+                    print(f"  MetaLabeler: training failed ({e})")
+
+        # ── Fit conviction sizer from OOS trades (P3) ──
+        if self._fold_predictions:
+            try:
+                from pipeline.conviction_sizer import ConvictionSizer
+                all_bars = []
+                for fp in self._fold_predictions:
+                    all_bars.extend(fp.get("bars", []))
+                self._conviction_sizer = ConvictionSizer()
+                self._conviction_sizer.fit(all_bars)
+                if verbose and self._conviction_sizer.fitted:
+                    print(f"  ConvictionSizer: fitted L={self._conviction_sizer.L:.3f} "
+                          f"k={self._conviction_sizer.k:.3f} c={self._conviction_sizer.c:.3f} "
+                          f"R^2={self._conviction_sizer.r2:.3f}")
+            except Exception as e:
+                if verbose:
+                    print(f"  ConvictionSizer: fit failed ({e})")
+
         sharpe_vals = [f.sharpe for f in fold_results if not np.isnan(f.sharpe)]
         trade_vals = [f.trades for f in fold_results]
 
@@ -319,6 +383,7 @@ class CommitteeBacktester:
             total_folds=len(fold_results),
             execution_time_s=elapsed,
             warnings=warnings,
+            fold_predictions=list(self._fold_predictions),
         )
 
     # ── Feature preparation ─────────────────────────────────────────
@@ -566,6 +631,37 @@ class CommitteeBacktester:
                 self._trained_models[model_type] = model
             except Exception:
                 self._trained_models[model_type] = None
+
+        # ── 1b. Optional MDA feature pruning (P5) ──
+        if getattr(self, "_enable_mda_pruning", False) and len(feat_cols) > 20:
+            try:
+                from pipeline.feature_utils import compute_mda, prune_noise_features
+                n_train = len(X_flat_train_aligned)
+                split = max(int(n_train * 0.80), 50)
+                X_fit = X_flat_train_aligned[:split]
+                y_fit = y_train_aligned[:split]
+                X_mda = X_flat_train_aligned[split:]
+                y_mda = y_train_aligned[split:]
+
+                if len(X_mda) >= 30:
+                    # Use the first trained model for MDA
+                    first_model_type = unique_models[0] if unique_models else None
+                    mda_model = self._trained_models.get(first_model_type)
+                    if mda_model is not None and hasattr(mda_model, "score"):
+                        # Refit on fit split for MDA validation
+                        try:
+                            mda_model.fit(X_fit, y_fit)
+                        except Exception:
+                            pass
+                        mda = compute_mda(mda_model, X_fit, y_fit, X_mda, y_mda, feat_cols)
+                        kept = prune_noise_features(mda, threshold=0.0)
+                        noise = [f for f in feat_cols if f not in kept]
+                        if noise:
+                            feat_cols = [f for f in feat_cols if f in kept]
+                            if fold_idx == 0:
+                                print(f"  MDA pruned {len(noise)} noise features, kept {len(kept)}")
+            except Exception:
+                pass
 
         # ── 2. Prediction ──
         X_test = test_slice[feat_cols].fillna(0.0).to_numpy(np.float32)
@@ -817,9 +913,18 @@ class CommitteeBacktester:
                          fold_idx: int = 0) -> np.ndarray:
         """Classify each bar into a 7-class regime.
 
-        Uses anchored GMM detection per fold when df_train is provided (per-fold
-        WFO fitting). Falls back to single-fit anchored detection otherwise.
+        Uses HMM when available (P2), falls back to anchored GMM (detect_regimes_anchored).
+        HMM is trained once on the first fold's training data and frozen,
+        ensuring semantic consistency across folds.
         """
+        # ── HMM path (P2) ──
+        if self._hmm_detector is not None and self._hmm_detector.is_fitted:
+            try:
+                return self._hmm_detector.predict_hard(df)
+            except Exception:
+                pass  # fall through to GMM
+
+        # ── GMM fallback ──
         if df_train is not None:
             return detect_regimes_anchored(
                 df, df_train=df_train, window=252,

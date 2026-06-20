@@ -31,10 +31,9 @@ describe("computeDashboardKPIs", () => {
   it("returns nulls for empty array", () => {
     const kpis = computeDashboardKPIs([]);
     expect(kpis).toEqual({
-      avgSharpe: null,
-      avgWinRate: null,
-      profitableMonthsPct: null,
-      avgReturn: null,
+      winRate: null,
+      totalProfit: null,
+      profitFactor: null,
       maxDrawdown: null,
     });
   });
@@ -59,9 +58,10 @@ describe("computeDashboardKPIs", () => {
       }),
     ];
     const kpis = computeDashboardKPIs(results);
-    expect(kpis.avgSharpe).toBeCloseTo(1.47);
-    expect(kpis.avgWinRate).toBeCloseTo(0.552);
-    expect(kpis.profitableMonthsPct).toBeNull();
+    expect(kpis.winRate).toBeCloseTo(0.552);
+    expect(kpis.totalProfit).toBeCloseTo(0.124);
+    expect(kpis.profitFactor).toBeCloseTo(2.1);
+    expect(kpis.maxDrawdown).toBeCloseTo(-0.085);
   });
 
   it("computes across multiple jobs with multiple models", () => {
@@ -113,8 +113,9 @@ describe("computeDashboardKPIs", () => {
       }),
     ];
     const kpis = computeDashboardKPIs(results);
-    expect(kpis.avgSharpe).toBeCloseTo((1.47 + 0.89 + 1.12) / 3);
-    expect(kpis.avgWinRate).toBeCloseTo((0.55 + 0.52 + 0.54) / 3);
+    expect(kpis.winRate).toBeCloseTo((0.55 + 0.52 + 0.54) / 3);
+    expect(kpis.totalProfit).toBeCloseTo(0.12 + 0.06 + 0.09);
+    expect(kpis.maxDrawdown).toBeCloseTo(-0.11);
   });
 
   it("handles null metrics gracefully", () => {
@@ -137,9 +138,9 @@ describe("computeDashboardKPIs", () => {
       }),
     ];
     const kpis = computeDashboardKPIs(results);
-    expect(kpis.avgSharpe).toBeNull();
-    expect(kpis.avgWinRate).toBeNull();
-    expect(kpis.profitableMonthsPct).toBeNull();
+    expect(kpis.winRate).toBeNull();
+    expect(kpis.totalProfit).toBeNull();
+    expect(kpis.profitFactor).toBeNull();
   });
 
   it("handles mix of null and present values", () => {
@@ -174,7 +175,7 @@ describe("computeDashboardKPIs", () => {
       }),
     ];
     const kpis = computeDashboardKPIs(results);
-    expect(kpis.avgSharpe).toBeCloseTo(1.0);
-    expect(kpis.avgWinRate).toBeCloseTo(0.55);
+    expect(kpis.winRate).toBeCloseTo(0.55);
+    expect(kpis.totalProfit).toBeCloseTo(0.05);
   });
 });

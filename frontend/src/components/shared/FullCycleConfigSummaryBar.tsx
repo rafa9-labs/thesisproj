@@ -4,7 +4,8 @@ import { modelDescriptions } from "@/lib/tokens";
 export function FullCycleConfigSummaryBar() {
   const pair = useFullCycleStore((s) => s.pair);
   const timeframe = useFullCycleStore((s) => s.timeframe);
-  const models = useFullCycleStore((s) => s.selectedModels);
+  const modelsRaw = useFullCycleStore((s) => s.selectedModels);
+  const models: string[] = Array.isArray(modelsRaw) ? modelsRaw : [];
   const trainMonths = useFullCycleStore((s) => s.trainMonths);
   const testMonths = useFullCycleStore((s) => s.testMonths);
   const proposer = useFullCycleStore((s) => s.proposer);

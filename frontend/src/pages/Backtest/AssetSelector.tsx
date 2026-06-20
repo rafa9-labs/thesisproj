@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download, CheckCircle, AlertTriangle } from "lucide-react";
+import { TooltipLabel } from "@/components/shared/TooltipLabel";
 import {
   usePairs,
   useDataStatus,
@@ -106,13 +107,13 @@ export function AssetSelector() {
 
   return (
     <Panel>
-      <PanelHeader title="Configuration" subtitle="Instrument, timeframe & data range." />
+      <PanelHeader title="Configuration" subtitle="Select pair, timeframe, and optional date range for the backtest." />
 
       {isLoading ? (
         <div className="h-8 animate-skeleton rounded bg-(--color-glass-hover)" />
       ) : (
         <>
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
             <div className="flex flex-1 flex-col gap-1.5">
               <label
                 className="text-[11px] font-medium tracking-[0.1em] uppercase"
@@ -150,12 +151,10 @@ export function AssetSelector() {
             </div>
 
             <div className="flex flex-1 flex-col gap-1.5">
-              <label
-                className="text-[11px] font-medium tracking-[0.1em] uppercase"
-                style={LABEL_STYLE}
-              >
-                Timeframe (base)
-              </label>
+              <TooltipLabel
+                label="Timeframe (base)"
+                tooltip="Backtester uses M30+H1+H4 for multi-timeframe features. Selecting your base timeframe determines which primary data series feeds the model."
+              />
               <select
                 value={timeframe}
                 onChange={(e) => setField("timeframe", e.target.value)}
@@ -168,9 +167,6 @@ export function AssetSelector() {
                   </option>
                 ))}
               </select>
-              <span className="mt-0.5 text-[9px] text-(--color-text-muted)">
-                Backtester uses M30+H1+H4 for MTF features
-              </span>
             </div>
 
             <div className="flex gap-3">

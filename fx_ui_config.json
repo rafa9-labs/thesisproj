@@ -1,0 +1,18 @@
+{
+  "ramLimit": 31,
+  "verboseMode": true,
+  "theme": "dark",
+  "apiUrl": "http://localhost:8002",
+  "dataDir": "",
+  "oandaApiKey": null,
+  "oandaAccountId": null,
+  "threadBudget": 4,
+  "mixedPrecision": true,
+  "sidebarCollapsed": false,
+  "terminalCollapsed": true,
+  "liveNewsBlendEnabled": false,
+  "liveNewsBlendWeight": 0.1,
+  "maxConcurrentBacktests": 4,
+  "gpuEnabled": true,
+  "maxConcurrentGpu": 1
+}

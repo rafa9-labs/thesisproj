@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
 import {
   LineChart,
   Line,
@@ -26,6 +26,7 @@ interface Props {
   models: string[];
   oosPeriods: OosPeriodResult[];
   oosEquity: { period: number; modelName: string; equity: number; bh: number }[];
+  yMode: YMode;
 }
 
 type YMode = "pct" | "raw";
@@ -36,8 +37,7 @@ interface ChartRow {
   [modelName: string]: number | string | null;
 }
 
-export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
-  const [yMode, setYMode] = useState<YMode>("pct");
+export function EquityChart({ models, oosPeriods, oosEquity, yMode }: Props) {
   const chartWrapperRef = useRef<HTMLDivElement>(null);
 
   const chartData = useMemo(() => {
@@ -74,20 +74,6 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
 
   return (
     <div className="flex h-full flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <div className="flex-1" />
-        <button
-          className="rounded border border-(--color-border) px-2 py-0.5 text-[10px] transition-colors"
-          style={{
-            color: yMode === "pct" ? "var(--color-brand)" : "var(--color-text-muted)",
-            backgroundColor: yMode === "pct" ? "rgba(59,130,246,0.08)" : "transparent",
-          }}
-          onClick={() => setYMode(yMode === "pct" ? "raw" : "pct")}
-        >
-          {yMode === "pct" ? "%" : "$"}
-        </button>
-      </div>
-
       <div ref={chartWrapperRef} className="min-h-0 w-full min-w-0 flex-1">
         {hasData ? (
           <ResponsiveContainer width="100%" height="100%">
@@ -167,6 +153,117 @@ export function EquityChart({ models, oosPeriods, oosEquity }: Props) {
           </div>
         )}
       </div>
+
+      {oosPeriods.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-[10px] font-medium uppercase tracking-[0.06em] text-(--color-text-muted)">
+            Per-Month Summary
+          </span>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse rounded-sm border border-(--color-border) overflow-hidden">
+              <thead className="bg-(--color-elevated)">
+                <tr>
+                  {["Model", "Period", "Sharpe", "Return", "Trades", "DD", "Win Rate", "Gate", "Risk"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        className={`px-2 py-1.5 text-[10px] font-medium uppercase tracking-[0.06em] text-(--color-text-muted) border-b border-(--color-border) ${h === "Model" || h === "Period" ? "text-left" : h === "Gate" || h === "Risk" ? "text-center" : "text-right"}`}
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const groups = new Map<string, OosPeriodResult[]>();
+                  for (const p of oosPeriods) {
+                    const m = p.model ?? "";
+                    if (!groups.has(m)) groups.set(m, []);
+                    groups.get(m)!.push(p);
+                  }
+                  const rows: React.ReactNode[] = [];
+                  let first = true;
+                  for (const [modelName, periods] of groups) {
+                    if (!first) {
+                      rows.push(
+                        <tr key={`sep-${modelName}`}>
+                          <td colSpan={9} className="p-0">
+                            <div className="h-1.5" />
+                          </td>
+                        </tr>,
+                      );
+                    }
+                    first = false;
+                    for (const p of periods) {
+                      rows.push(
+                        <tr
+                          key={`${modelName}-${p.period}`}
+                          className="border-b border-(--color-border-subtle)"
+                        >
+                          <td className="px-2 py-1 font-mono text-[10px] text-(--color-brand)">
+                            {modelName}
+                          </td>
+                          <td className="px-2 py-1 font-mono text-[10px] text-(--color-text-secondary)">
+                            M{p.period}
+                            {p.flat ? " (flat)" : ""}
+                          </td>
+                          <td
+                            className="px-2 py-1 text-right font-mono text-[10px] text-(--color-text-primary)"
+                            title={`Train: ${p.train_sharpe?.toFixed(2) ?? "?"} | Test: ${p.sharpe?.toFixed(2) ?? "?"} | Gap: ${(p.sharpe_gap_pct ?? 0).toFixed(0)}%`}
+                          >
+                            {p.sharpe?.toFixed(2) ?? "-"}
+                          </td>
+                          <td className="px-2 py-1 text-right font-mono text-[10px] text-(--color-text-primary)">
+                            {p.return_pct != null ? `${p.return_pct.toFixed(2)}%` : "-"}
+                          </td>
+                          <td className="px-2 py-1 text-right font-mono text-[10px] text-(--color-text-primary)">
+                            {p.trades ?? "-"}
+                          </td>
+                          <td className="px-2 py-1 text-right font-mono text-[10px] text-(--color-text-primary)">
+                            {p.drawdown?.toFixed(2) ?? "-"}
+                          </td>
+                          <td className="px-2 py-1 text-right font-mono text-[10px] text-(--color-text-primary)">
+                            {p.win_rate != null ? `${(p.win_rate * 100).toFixed(1)}%` : "-"}
+                          </td>
+                          <td
+                            className="px-2 py-1 text-center font-mono text-[10px] text-(--color-text-primary)"
+                            title={`Signals: ${p.signals_passed_gate ?? 0} passed / ${p.signals_raw ?? 0} raw`}
+                          >
+                            {(p.signals_raw ?? 0) > 0
+                              ? `${Math.round(((p.signals_passed_gate ?? 0) / (p.signals_raw ?? 1)) * 100)}%`
+                              : "-"}
+                          </td>
+                          <td className="px-2 py-1 text-center text-[10px]">
+                            {p.sharpe_gap_pct != null ? (
+                              <span
+                                className="inline-block h-2 w-2 rounded-full"
+                                style={{
+                                  backgroundColor:
+                                    p.sharpe_gap_pct > 40
+                                      ? "var(--color-accent-danger)"
+                                      : p.sharpe_gap_pct > 15
+                                        ? "var(--color-accent-warning)"
+                                        : "var(--color-accent-success)",
+                                }}
+                                title={`Train/OOS gap: ${p.sharpe_gap_pct.toFixed(0)}%`}
+                              />
+                            ) : (
+                              <span className="text-(--color-text-muted)">-</span>
+                            )}
+                          </td>
+                        </tr>,
+                      );
+                    }
+                  }
+                  return rows;
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

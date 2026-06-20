@@ -1,3 +1,5 @@
+import { TooltipIcon } from "@/components/shared/TooltipLabel";
+
 interface SelectOption {
   value: string;
   label: string;
@@ -8,20 +10,28 @@ interface ParamSelectProps {
   paramKey?: string;
   value: string;
   options: SelectOption[];
-  description?: string;
+  tooltip?: string;
   onChange: (value: string) => void;
 }
 
-export function ParamSelect({ label, value, options, description, onChange }: ParamSelectProps) {
+const SELECT_STYLE: React.CSSProperties = {
+  backgroundColor: "var(--color-glass)",
+  borderColor: "var(--color-glass-border)",
+  color: "var(--color-text-primary)",
+};
+
+export function ParamSelect({ label, value, options, tooltip, onChange }: ParamSelectProps) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[11px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
+    <div className="flex flex-col py-4">
+      <span className="flex items-center gap-1.5 text-[11px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
         {label}
+        {tooltip && <TooltipIcon text={tooltip} />}
       </span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded border border-(--color-glass-border) bg-(--color-glass) px-2.5 py-2 font-sans text-sm font-normal text-(--color-text-primary) backdrop-blur-[8px] transition-all duration-200 focus:outline-none"
+        className="mt-2 w-full rounded border px-3 py-2 font-mono text-sm backdrop-blur-[8px] transition-all duration-200 focus:outline-none"
+        style={SELECT_STYLE}
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -29,11 +39,7 @@ export function ParamSelect({ label, value, options, description, onChange }: Pa
           </option>
         ))}
       </select>
-      {description && (
-        <p className="text-[11px] leading-relaxed font-light text-(--color-text-muted)">
-          {description}
-        </p>
-      )}
+      <div className="mt-3 h-5" aria-hidden="true" />
     </div>
   );
 }

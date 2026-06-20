@@ -102,11 +102,11 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
 
   return (
     <div className="relative select-none">
-      <div className="overflow-hidden rounded-sm border border-[#2A2E39] bg-(--color-surface)">
+      <div className="overflow-hidden rounded-sm">
         {/* Header row: months */}
         <div
-          className="grid border-b border-[#2A2E39]"
-          style={{ gridTemplateColumns: "52px repeat(12, minmax(0, 1fr))" }}
+          className="grid"
+          style={{ gridTemplateColumns: "48px repeat(12, minmax(0, 1fr))" }}
         >
           <div className="p-[4px_6px]" />
           {MONTH_LABELS.map((m) => (
@@ -120,17 +120,16 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
         </div>
 
         {/* Data rows: one per year */}
-        {years.map((yr, yi) => (
+        {years.map((yr) => (
           <div
             key={yr}
             className="grid"
             style={{
-              gridTemplateColumns: "52px repeat(12, minmax(0, 1fr))",
-              borderBottom: yi < years.length - 1 ? "1px solid #131722" : "none",
+              gridTemplateColumns: "48px repeat(12, minmax(0, 1fr))",
             }}
           >
             {/* Year label */}
-            <div className="flex items-center justify-end border-r border-[#2A2E39] pr-2 font-mono text-[10px] text-(--color-text-muted)">
+            <div className="flex items-center justify-end pr-2 font-mono text-[10px] text-(--color-text-muted)">
               {yr}
             </div>
 
@@ -142,11 +141,10 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
               return (
                 <div
                   key={mo}
-                  className="flex h-[30px] cursor-default items-center justify-center font-mono text-[9px] font-semibold outline-offset-[-1px] transition-all duration-100"
+                  className="flex h-[26px] cursor-default items-center justify-center font-mono text-[9px] font-semibold outline-offset-[-1px] transition-all duration-100"
                   style={{
                     backgroundColor: bg,
                     color: tc,
-                    borderLeft: mo > 0 ? "1px solid rgba(19,23,34,0.5)" : "none",
                     outline:
                       hoveredCell?.year === yr && hoveredCell?.month === mo
                         ? "1px solid rgba(255,255,255,0.15)"
@@ -174,7 +172,7 @@ export function MonthlyReturnsChart({ monthlyResults }: MonthlyReturnsChartProps
         ))}
 
         {/* Legend */}
-        <div className="flex items-center gap-2 border-t border-[#2A2E39] px-3 py-2 font-sans text-[9px] text-(--color-text-muted)">
+        <div className="flex items-center gap-2 px-3 py-2 font-sans text-[9px] text-(--color-text-muted)" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
           <span className="tracking-[0.06em] uppercase">Return</span>
           {[
             { bg: "rgba(242,54,69,0.85)", label: "< -3%" },

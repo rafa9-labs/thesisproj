@@ -1,5 +1,4 @@
 import { useBacktestStore } from "@/stores/useBacktestStore";
-import { useSettingsStore } from "@/stores/useSettingsStore";
 import { ParamToggle } from "@/components/shared/ParamToggle";
 import { ParamSlider } from "@/components/shared/ParamSlider";
 import { ParamSelect } from "@/components/shared/ParamSelect";
@@ -21,7 +20,7 @@ const CORE_INDICATORS = [
   },
   {
     key: "useBbands" as const,
-    label: "Bollinger",
+    label: "BOLLINGER",
     description: "Bands around a moving average. Signals overbought/oversold conditions.",
   },
   {
@@ -46,12 +45,12 @@ const CORE_INDICATORS = [
   },
   {
     key: "useDonchian" as const,
-    label: "Donchian",
+    label: "DONCHIAN",
     description: "Channel breakout indicator. Highest high / lowest low over N periods.",
   },
   {
     key: "useStoch" as const,
-    label: "Stochastic",
+    label: "STOCHASTIC",
     description: "Compares closing price to its range over time. Reversal detector.",
   },
   {
@@ -70,85 +69,85 @@ const ADVANCED_TOGGLES = [
   },
   {
     key: "useMtfAlignment" as const,
-    label: "MTF Alignment",
+    label: "MTF ALIGNMENT",
     param: "use_mtf_alignment",
     description: "Confirms trend direction across multiple timeframes.",
   },
   {
     key: "useMacdAtrRatio" as const,
-    label: "MACD/ATR Ratio",
+    label: "MACD/ATR RATIO",
     param: "use_macd_atr_ratio",
     description: "Normalizes MACD momentum by volatility.",
   },
   {
     key: "useTripleConfirm" as const,
-    label: "Triple Confirm",
+    label: "TRIPLE CONFIRM",
     param: "use_triple_confirm",
     description: "Requires three independent signals before triggering a trade.",
   },
   {
     key: "useTrendConfirm" as const,
-    label: "Trend Confirm",
+    label: "TREND CONFIRM",
     param: "use_trend_confirm",
     description: "Only trade when higher-timeframe trend agrees.",
   },
   {
     key: "useVolManagedMom" as const,
-    label: "Vol-Managed Mom",
+    label: "VOL-MANAGED MOM",
     param: "use_vol_managed_mom",
     description: "Scales momentum exposure by inverse volatility.",
   },
   {
     key: "useMaSpread" as const,
-    label: "MA Spread",
+    label: "MA SPREAD",
     param: "use_ma_spread",
     description: "Distance between fast and slow MAs as a feature.",
   },
   {
     key: "useSlopeDiff" as const,
-    label: "Slope Diff",
+    label: "SLOPE DIFF",
     param: "use_slope_diff",
     description: "Difference in price slope across lookback windows.",
   },
   {
     key: "useSqueezeBreakout" as const,
-    label: "Squeeze Breakout",
+    label: "SQUEEZE BREAKOUT",
     param: "use_squeeze_breakout",
     description: "Detects Bollinger-Band compression before volatility expansion.",
   },
   {
     key: "useSqueezeExpansion" as const,
-    label: "Squeeze Expansion",
+    label: "SQUEEZE EXPANSION",
     param: "use_squeeze_expansion",
     description: "Measures volatility expansion after a squeeze period.",
   },
   {
     key: "useAtrChannelBreakout" as const,
-    label: "ATR Channel Breakout",
+    label: "ATR CHANNEL BREAKOUT",
     param: "use_atr_channel_breakout",
     description: "Price breaking ATR-derived channels.",
   },
   {
     key: "useExtAtrLowAdx" as const,
-    label: "Ext ATR Low ADX",
+    label: "EXT ATR LOW ADX",
     param: "use_ext_atr_low_adx",
     description: "Combines extreme volatility with low trend strength.",
   },
   {
     key: "useReentryMom" as const,
-    label: "Re-entry Momentum",
+    label: "RE-ENTRY MOMENTUM",
     param: "use_reentry_mom",
     description: "Signals for re-entering after a pullback within a trend.",
   },
   {
     key: "useRvFeatures" as const,
-    label: "RV Features",
+    label: "RV FEATURES",
     param: "use_rv_features",
     description: "Realized volatility estimates from intraday ranges.",
   },
   {
     key: "useIndicatorStates" as const,
-    label: "Indicator States",
+    label: "INDICATOR STATES",
     param: "use_indicator_states",
     description: "Categorical buckets for each indicator's current regime.",
   },
@@ -156,7 +155,6 @@ const ADVANCED_TOGGLES = [
 
 export function FeaturesPanel() {
   const setField = useBacktestStore((s) => s.setField);
-  const verbose = useSettingsStore((s) => s.verboseMode);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const state = useBacktestStore.getState();
@@ -166,17 +164,15 @@ export function FeaturesPanel() {
       <PanelHeader title="Feature Engineering" subtitle="Select and configure input signals." />
 
       {/* Core Indicators */}
-      <Section
-        title="Core Indicators"
-        description="Standard technical indicators that form the base signal set. Toggle each to include it in the model input vector."
-      >
-        <div className="flex flex-col gap-2.5">
+      <Section title="Core Indicators">
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 items-start">
           {CORE_INDICATORS.map(({ key, label, description }) => (
             <ParamToggle
               key={key}
               label={label}
               checked={state[key] as boolean}
-              description={verbose ? description : undefined}
+              tooltip={description}
+              compact
               onChange={(v) => setField(key, v)}
             />
           ))}
@@ -184,81 +180,73 @@ export function FeaturesPanel() {
       </Section>
 
       {/* Transformations */}
-      <Section
-        title="Transformations"
-        description="Derived features that preprocess raw price data into more informative representations."
-      >
-        <div className="flex flex-col gap-2.5">
+      <Section title="Transformations">
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 items-start">
+          <div className="flex flex-col gap-3">
+            <ParamToggle
+              label="FRACDIFF"
+              checked={state.useFracdiff}
+              tooltip="Fractional differentiation preserves long-memory while achieving stationarity."
+              compact
+              onChange={(v) => setField("useFracdiff", v)}
+            />
+            {state.useFracdiff && (
+              <div className="px-3">
+                <ParamSlider
+                  label="FRACDIFF D"
+                  value={state.fracdiffD}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  tooltip="Differentiation degree. 0 = no change, 1 = full difference."
+                  onChange={(v) => setField("fracdiffD", v)}
+                />
+              </div>
+            )}
+          </div>
           <ParamToggle
-            label="FracDiff"
-            checked={state.useFracdiff}
-            description={
-              verbose
-                ? "Fractional differentiation preserves long-memory while achieving stationarity."
-                : "Preserves memory while making series stationary."
-            }
-            onChange={(v) => setField("useFracdiff", v)}
-          />
-          {state.useFracdiff && (
-            <div className="max-w-xs">
-              <ParamSlider
-                label="FracDiff d"
-                value={state.fracdiffD}
-                min={0}
-                max={1}
-                step={0.05}
-                description="Differentiation degree. 0 = no change, 1 = full difference."
-                onChange={(v) => setField("fracdiffD", v)}
-              />
-            </div>
-          )}
-          <ParamToggle
-            label="Crossover Bins"
+            label="CROSSOVER BINS"
             checked={state.useCrossoverBins}
-            description="Categorical bins for price crossing moving averages."
+            tooltip="Categorical bins for price crossing moving averages."
+            compact
             onChange={(v) => setField("useCrossoverBins", v)}
           />
           <ParamToggle
-            label="Price-MA Z-Score"
+            label="PRICE-MA Z-SCORE"
             checked={state.usePriceMaZ}
-            description="Standardized distance from price to its moving average."
+            tooltip="Standardized distance from price to its moving average."
+            compact
             onChange={(v) => setField("usePriceMaZ", v)}
           />
         </div>
       </Section>
 
       {/* Lag Features */}
-      <Section
-        title="Lag Features"
-        description="Lookback windows that feed historical values into the model as additional dimensions."
-      >
-        <div className="grid max-w-lg grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+      <Section title="Lag Features">
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           <ParamSlider
-            label="Lags"
+            label="LAGS"
             value={state.lags}
             min={1}
             max={60}
             step={1}
-            description="Number of past bars to include as lagged features."
+            tooltip="Number of past bars to include as lagged features."
             onChange={(v) => setField("lags", v)}
           />
           <ParamSlider
-            label="Lag Depth"
+            label="LAG DEPTH"
             value={state.lagDepth}
             min={1}
             max={3}
             step={1}
-            description="Granularity step size between lagged values."
+            tooltip="Granularity step size between lagged values."
             onChange={(v) => setField("lagDepth", v)}
           />
         </div>
       </Section>
 
       {/* Advanced Toggles */}
-      <Section
-        title="Advanced Toggles"
-        description="Experimental features for power users. Each adds a specialized signal layer to the feature vector."
-      >
+      <Section title="Advanced Toggles">
         <button
           className="mb-4 flex w-full items-center gap-2 text-[11px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase transition-colors duration-200 hover:text-[var(--color-text-primary)]"
           onClick={() => setAdvancedOpen(!advancedOpen)}
@@ -271,14 +259,15 @@ export function FeaturesPanel() {
           {ADVANCED_TOGGLES.length} features {advancedOpen ? "(collapse)" : "(expand)"}
         </button>
         {advancedOpen && (
-          <div className="flex flex-col gap-2.5">
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 items-start">
             {ADVANCED_TOGGLES.map(({ key, label, param, description }) => (
               <ParamToggle
                 key={key}
                 label={label}
                 paramKey={param}
                 checked={state[key] as boolean}
-                description={verbose ? description : undefined}
+                tooltip={description}
+                compact
                 onChange={(v) => setField(key, v)}
               />
             ))}
@@ -287,35 +276,28 @@ export function FeaturesPanel() {
       </Section>
 
       {/* News & Sentiment */}
-      <Section
-        title="News & Sentiment"
-        description="External sentiment signals from RSS feeds and economic calendars. Adds a macro-awareness layer to the model."
-      >
+      <Section title="News & Sentiment">
         <div className="flex flex-col gap-2.5">
           <ParamToggle
-            label="News Features"
+            label="NEWS FEATURES"
             checked={state.useNews}
-            description={
-              verbose
-                ? "RSS + economic calendar features: sentiment scores, event flags, news volume."
-                : "Enable sentiment and event-based features."
-            }
+            tooltip="RSS + economic calendar features: sentiment scores, event flags, news volume."
             onChange={(v) => setField("useNews", v)}
           />
           {state.useNews && (
             <div className="flex flex-col gap-5 pl-2">
               <ParamToggle
-                label="Event Flags"
+                label="EVENT FLAGS"
                 checked={state.newsEventFlags}
-                description="NFP, FOMC, CPI proximity markers before/after releases."
+                tooltip="NFP, FOMC, CPI proximity markers before/after releases."
                 onChange={(v) => setField("newsEventFlags", v)}
               />
               <div className="max-w-sm">
                 <ParamSelect
-                  label="Sentiment Engine"
+                  label="SENTIMENT ENGINE"
                   value={state.newsSentimentBackend}
                   options={[...SELECT_OPTIONS.newsSentimentBackend]}
-                  description={
+                  tooltip={
                     state.newsSentimentBackend === "finbert"
                       ? "Requires HuggingFace transformers installed."
                       : "VADER = fast rule-based. finBERT = slower but more accurate."
@@ -328,19 +310,19 @@ export function FeaturesPanel() {
               {state.llmSentimentEnabled !== undefined && (
                 <div className="mt-2 flex flex-col gap-4 border-l-2 border-cyan-500/30 pl-4">
                   <ParamToggle
-                    label="LLM Sentiment"
+                    label="LLM SENTIMENT"
                     checked={state.llmSentimentEnabled}
-                    description="Use Ollama/OpenAI/Anthropic LLM to score news with directional sentiment. Falls back to VADER if unavailable."
+                    tooltip="Use Ollama/OpenAI/Anthropic LLM to score news with directional sentiment. Falls back to VADER if unavailable."
                     onChange={(v) => setField("llmSentimentEnabled", v)}
                   />
                   {state.llmSentimentEnabled && (
                     <>
                       <div className="max-w-sm">
                         <ParamSelect
-                          label="LLM Backend"
+                          label="LLM BACKEND"
                           value={state.llmBackend}
                           options={[...SELECT_OPTIONS.llmBackend]}
-                          description={
+                          tooltip={
                             state.llmBackend === "ollama"
                               ? "Free, local, private. Requires Ollama running."
                               : "Paid, cloud. Requires API key."
@@ -353,7 +335,7 @@ export function FeaturesPanel() {
                       {(state.llmBackend === "openai" || state.llmBackend === "anthropic") && (
                         <div className="max-w-sm">
                           <label className="mb-1.5 block text-[11px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
-                            API Key
+                            API KEY
                           </label>
                           <input
                             type="password"
@@ -366,7 +348,7 @@ export function FeaturesPanel() {
                       )}
                       <div className="max-w-sm">
                         <label className="mb-1.5 block text-[11px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
-                          Model
+                          MODEL
                         </label>
                         <input
                           type="text"
@@ -383,18 +365,14 @@ export function FeaturesPanel() {
                         />
                       </div>
                       <div className="max-w-sm">
-                        <label className="mb-1.5 block text-[11px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
-                          LLM Weight: {Number(state.llmWeight).toFixed(1)} vs VADER{" "}
-                          {((1 - Number(state.llmWeight)) * 100).toFixed(0)}%
-                        </label>
-                        <input
-                          type="range"
-                          min="0"
-                          max="1"
-                          step="0.1"
-                          value={state.llmWeight}
-                          onChange={(e) => setField("llmWeight", parseFloat(e.target.value))}
-                          className="w-full"
+                        <ParamSlider
+                          label="LLM WEIGHT"
+                          value={Number(state.llmWeight)}
+                          min={0}
+                          max={1}
+                          step={0.1}
+                          tooltip={`Weight of LLM sentiment vs VADER (${((1 - Number(state.llmWeight)) * 100).toFixed(0)}% VADER).`}
+                          onChange={(v) => setField("llmWeight", v)}
                         />
                       </div>
                     </>

@@ -267,7 +267,24 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
     # === Feature engineering toggles ===
     params["use_fracdiff"]     = trial.suggest_categorical("use_fracdiff", [False, True])
-    params["fracdiff_d"]       = trial.suggest_float("fracdiff_d", 0.4, 0.7, step=0.05)
+    # P4: ADF floor prevents sub-stationarity d values (de Prado AFML Ch.5)
+    if params["use_fracdiff"]:
+        d_floor = 0.4
+        if train_data is not None and hasattr(train_data, "columns"):
+            price_col = None
+            for candidate in ("mid_c", "price", "close"):
+                if candidate in train_data.columns:
+                    price_col = candidate
+                    break
+            if price_col is not None:
+                try:
+                    from pipeline.feature_utils import find_min_stationary_d
+                    d_floor = find_min_stationary_d(train_data[price_col])
+                except Exception:
+                    pass
+        params["fracdiff_d"] = trial.suggest_float("fracdiff_d", max(0.1, d_floor), 0.9, step=0.05)
+    else:
+        params["fracdiff_d"] = 0.0
     params["use_rv_features"]  = trial.suggest_categorical("use_rv_features", [False, True])
     params["rv_window_short"]  = trial.suggest_int("rv_window_short", 20, 60, step=10)
     params["rv_window_long"]   = trial.suggest_int("rv_window_long", 80, 240, step=20)

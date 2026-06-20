@@ -222,10 +222,8 @@ export const SELECT_OPTIONS = {
 } as const;
 
 export const TIMEFRAMES = [
-  { key: "M15", label: "M15" },
   { key: "M30", label: "M30" },
   { key: "H1", label: "H1" },
-  { key: "H2", label: "H2" },
   { key: "H4", label: "H4" },
 ];
 

@@ -1,14 +1,21 @@
-import { Search, Bell, HelpCircle, BookOpen, ChevronDown } from "lucide-react";
+import { Search, Bell, HelpCircle, BookOpen } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { AboutDialog } from "@/components/shared/AboutDialog";
 import { CommandPalette } from "./CommandPalette";
+import { NotificationsPopover } from "./NotificationsPopover";
+import { GuidePopover } from "./GuidePopover";
+import { useAppStore } from "@/stores/useAppStore";
+import { useJobStore } from "@/stores/useJobStore";
 
 export function TopBar() {
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
-  const unreadCount = 3;
+  const demoMode = useAppStore((s) => s.demoMode);
+  const unreadCount = useJobStore((s) => s.unreadCompletedCount);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -21,6 +28,17 @@ export function TopBar() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
+
+  // Close popovers on outside click
+  useEffect(() => {
+    if (!notifOpen && !guideOpen) return;
+    const onClick = () => {
+      setNotifOpen(false);
+      setGuideOpen(false);
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, [notifOpen, guideOpen]);
 
   return (
     <>
@@ -65,47 +83,62 @@ export function TopBar() {
 
         <div className="flex-1" />
 
+        {demoMode && (
+          <span className="rounded-full border border-[rgba(0,229,255,0.3)] bg-[rgba(0,229,255,0.06)] px-3 py-1 text-[10px] font-semibold tracking-[0.05em] text-(--color-brand) uppercase">
+            Local Data Mode
+          </span>
+        )}
+
         {/* Right: Actions */}
         <div className="flex items-center gap-2 sm:gap-4">
-          <button
-            onClick={() => setAboutOpen(true)}
-            aria-label="Library"
-            className="rounded-full border border-(--color-glass-border) p-1.5 text-(--color-text-secondary) transition hover:border-(--color-border-active) hover:text-(--color-text-primary)"
-          >
-            <BookOpen size={16} strokeWidth={1.75} />
-          </button>
+          {/* Guide */}
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setGuideOpen((v) => !v);
+                setNotifOpen(false);
+              }}
+              aria-label="Guide"
+              className="rounded-full border border-(--color-glass-border) p-1.5 text-(--color-text-secondary) transition hover:border-(--color-border-active) hover:text-(--color-text-primary)"
+            >
+              <BookOpen size={16} strokeWidth={1.75} />
+            </button>
+            {guideOpen && <GuidePopover onClose={() => setGuideOpen(false)} />}
+          </div>
 
-          <button
-            aria-label="Notifications"
-            className="relative rounded-full border border-(--color-glass-border) p-1.5 text-(--color-text-secondary) transition hover:border-(--color-border-active) hover:text-(--color-text-primary)"
-          >
-            <Bell size={16} strokeWidth={1.75} />
-            {unreadCount > 0 && (
-              <span
-                className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-(--color-brand)"
-                style={{ boxShadow: "0 0 8px rgba(0,229,255,0.6)" }}
-              />
-            )}
-          </button>
+          {/* Notifications */}
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setNotifOpen((v) => !v);
+                setGuideOpen(false);
+                if (unreadCount > 0) useJobStore.getState().clearUnreadCount();
+              }}
+              aria-label="Notifications"
+              className="relative rounded-full border border-(--color-glass-border) p-1.5 text-(--color-text-secondary) transition hover:border-(--color-border-active) hover:text-(--color-text-primary)"
+            >
+              <Bell size={16} strokeWidth={1.75} />
+              {unreadCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-(--color-brand) px-[3px] text-[8px] font-bold text-(--color-text-inverse)"
+                  style={{ boxShadow: "0 0 8px rgba(0,229,255,0.6)" }}
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+            {notifOpen && <NotificationsPopover onClose={() => setNotifOpen(false)} />}
+          </div>
 
+          {/* Help / About */}
           <button
             onClick={() => setAboutOpen(true)}
             aria-label="Help"
             className="rounded-full border border-(--color-glass-border) p-1.5 text-(--color-text-secondary) transition hover:border-(--color-border-active) hover:text-(--color-text-primary)"
           >
             <HelpCircle size={16} strokeWidth={1.75} />
-          </button>
-
-          <button className="hidden items-center gap-1.5 rounded-full border border-(--color-glass-border) py-1 pr-2 pl-1 transition hover:border-(--color-border-active) sm:flex">
-            <span
-              className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-(--color-text-inverse)"
-              style={{
-                background: "linear-gradient(135deg, var(--color-brand), #a78bfa)",
-              }}
-            >
-              KQ
-            </span>
-            <ChevronDown size={12} className="text-(--color-text-muted)" />
           </button>
         </div>
       </header>

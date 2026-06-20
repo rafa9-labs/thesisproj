@@ -51,6 +51,50 @@ def fracdiff(series: pd.Series, d: float = 0.4, max_size: int = 2000, thresh: fl
     return pd.Series(out, index=series.index, name=f"fd_{series.name}_d{d:.2f}")
 
 
+def find_min_stationary_d(
+    price: pd.Series,
+    d_range: tuple = (0.05, 0.95, 0.05),
+) -> float:
+    """Find minimum fractional differentiation order that achieves stationarity.
+
+    Per de Prado AFML Ch.5: ADF test determines the smallest d where
+    p-value < 0.05, preserving maximum memory in the differentiated series.
+    This floor prevents Optuna from selecting sub-stationarity d values
+    that produce artificially inflated backtest Sharpe from trending bias.
+
+    Parameters
+    ----------
+    price : pd.Series
+        Raw price series (e.g. mid_c).
+    d_range : tuple
+        (start, stop, step) for d grid search.
+
+    Returns
+    -------
+    float
+        Minimum stationary d, or 0.4 if ADF never passes.
+    """
+    from statsmodels.tsa.stattools import adfuller
+
+    price_clean = price.dropna().astype(np.float64)
+    if len(price_clean) < 100:
+        return 0.4
+
+    for d in np.arange(*d_range):
+        try:
+            fd = fracdiff(price_clean, d=d)
+            fd_clean = fd.dropna()
+            if len(fd_clean) < 50:
+                continue
+            _, p_value, *_ = adfuller(fd_clean.values, maxlag=int(min(30, len(fd_clean) / 4)), autolag="AIC")
+            if p_value < 0.05:
+                return round(float(d), 2)
+        except Exception:
+            continue
+
+    return 0.4
+
+
 def triple_barrier_labels(
     close: pd.Series,
     pt_mult: float = 1.5,
@@ -587,4 +631,97 @@ def _apply_per_family_budget(features: list[str], X: pd.DataFrame, y: pd.Series)
 def realized_vol(ser, window=96):
     ser = ser.astype(float).fillna(0.0)
     return ser.rolling(int(window), min_periods=max(2, int(window//4))).std(ddof=0)
+
+
+def compute_mda(
+    model,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    feature_names: list[str],
+    n_jobs: int = 1,
+) -> dict:
+    """Compute Mean Decrease Accuracy (MDA) per feature.
+
+    Per de Prado AFML Ch.8: for each feature, shuffle its values across
+    observations (destroying signal) and measure the drop in validation
+    accuracy. Features with negative MDA (accuracy improves when destroyed)
+    are pure noise and should be pruned.
+
+    Parameters
+    ----------
+    model : fitted sklearn-compatible model
+        Must have a .score(X, y) method.
+    X_train, y_train : np.ndarray
+        Training data (used only for refit if needed; typically not refit).
+    X_val, y_val : np.ndarray
+        Validation data on which MDA is measured.
+        Must be purged (no label overlap with training).
+    feature_names : list[str]
+        Names for each column in X.
+    n_jobs : int
+        Parallel workers (default 1 = sequential).
+
+    Returns
+    -------
+    dict {feature_name: mda_score}
+        Negative scores = noise (accuracy improved when shuffled).
+        Positive scores = informative features.
+        Scores are clipped to [-1.0, 1.0].
+    """
+    import numpy as np
+
+    if len(feature_names) != X_val.shape[1]:
+        raise ValueError(
+            f"feature_names length ({len(feature_names)}) != X_val columns ({X_val.shape[1]})"
+        )
+
+    # Baseline accuracy on unshuffled validation data
+    baseline_score = float(model.score(X_val, y_val))
+
+    mda_scores = {}
+    X_val_shuffled = X_val.copy()
+
+    for i, name in enumerate(feature_names):
+        # Shuffle column i across all validation observations
+        col_copy = X_val_shuffled[:, i].copy()
+        np.random.shuffle(col_copy)
+        X_val_shuffled[:, i] = col_copy
+
+        # Compute accuracy with this feature destroyed
+        shuffled_score = float(model.score(X_val_shuffled, y_val))
+
+        # MDA = baseline - shuffled (positive = feature was useful)
+        mda = baseline_score - shuffled_score
+        mda_scores[name] = float(np.clip(mda, -1.0, 1.0))
+
+        # Restore original column for next iteration
+        X_val_shuffled[:, i] = X_val[:, i]
+
+    return mda_scores
+
+
+def prune_noise_features(
+    mda_scores: dict,
+    threshold: float = 0.0,
+) -> list[str]:
+    """Return list of feature names with positive MDA (above threshold).
+
+    Parameters
+    ----------
+    mda_scores : dict
+        Output from compute_mda().
+    threshold : float
+        Minimum MDA score to keep (default 0 = drop negative MDA only).
+
+    Returns
+    -------
+    list[str] of feature names to keep.
+    """
+    return sorted(
+        [name for name, score in mda_scores.items() if score > threshold],
+        key=lambda n: mda_scores[n],
+        reverse=True,
+    )
 

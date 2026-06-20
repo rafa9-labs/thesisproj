@@ -9,10 +9,16 @@ interface SettingsState {
   oandaAccountId: string | null;
   threadBudget: number;
   mixedPrecision: boolean;
+  ramLimit: number;
   sidebarCollapsed: boolean;
   terminalCollapsed: boolean;
   liveNewsBlendEnabled: boolean;
   liveNewsBlendWeight: number;
+  maxConcurrentBacktests: number;
+  gpuEnabled: boolean;
+  maxConcurrentGpu: number;
+  notificationsEnabled: boolean;
+  notificationSound: boolean;
 }
 
 interface SettingsActions {
@@ -32,10 +38,16 @@ const DEFAULTS: SettingsState = {
   oandaAccountId: null,
   threadBudget: 4,
   mixedPrecision: true,
+  ramLimit: 32,
   sidebarCollapsed: false,
   terminalCollapsed: true,
   liveNewsBlendEnabled: false,
   liveNewsBlendWeight: 0.1,
+  maxConcurrentBacktests: 4,
+  gpuEnabled: true,
+  maxConcurrentGpu: 1,
+  notificationsEnabled: true,
+  notificationSound: true,
 };
 
 function loadSaved(): Partial<SettingsState> {
@@ -70,6 +82,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()((set, 
         apiUrl,
         threadBudget,
         mixedPrecision,
+        ramLimit,
         sidebarCollapsed,
         terminalCollapsed,
         oandaApiKey,
@@ -77,6 +90,8 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()((set, 
         dataDir,
         liveNewsBlendEnabled,
         liveNewsBlendWeight,
+        notificationsEnabled,
+        notificationSound,
       } = get();
       localStorage.setItem(
         STORAGE_KEY,
@@ -86,6 +101,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()((set, 
           apiUrl,
           threadBudget,
           mixedPrecision,
+          ramLimit,
           sidebarCollapsed,
           terminalCollapsed,
           oandaApiKey,
@@ -93,6 +109,8 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()((set, 
           dataDir,
           liveNewsBlendEnabled,
           liveNewsBlendWeight,
+          notificationsEnabled,
+          notificationSound,
         }),
       );
     } catch {

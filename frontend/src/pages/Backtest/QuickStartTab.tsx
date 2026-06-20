@@ -91,14 +91,6 @@ export function QuickStartTab() {
                       </span>
                     </div>
 
-                    {/* Stat pills */}
-                    <div className="flex flex-wrap gap-1.5">
-                      <StatPill label="train" value={`${opt.trainMonths}mo`} />
-                      <StatPill label="test" value={`${opt.testMonths}mo`} />
-                      <StatPill label="trials" value={`${opt.nTrials}`} />
-                      <StatPill label="hpo" value={opt.hpoIntensity.toUpperCase()} accent />
-                    </div>
-
                     {/* Model badges */}
                     <div className="mt-4 flex flex-wrap gap-2 border-t border-(--color-glass-border) pt-3">
                       {opt.models.slice(0, 3).map((m) => (
@@ -172,34 +164,3 @@ export function QuickStartTab() {
   );
 }
 
-// ── Stat Pill ─────────────────────────────────────────────────────────────────
-
-function StatPill({
-  label,
-  value,
-  accent = false,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded px-2 py-0.5"
-      style={{
-        backgroundColor: accent ? "rgba(0,229,255,0.08)" : "var(--color-elevated)",
-        border: `1px solid ${accent ? "rgba(0,229,255,0.2)" : "var(--color-glass-border)"}`,
-      }}
-    >
-      <span className="font-mono text-[8px] tracking-[0.1em] text-(--color-text-muted) uppercase">
-        {label}
-      </span>
-      <span
-        className="font-mono text-[10px] font-semibold tabular-nums"
-        style={{ color: accent ? "var(--color-brand)" : "var(--color-text-primary)" }}
-      >
-        {value}
-      </span>
-    </span>
-  );
-}

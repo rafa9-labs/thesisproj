@@ -21,7 +21,48 @@ export function useValidation(): ValidationResult {
     const warnings: string[] = [];
     const errors: string[] = [];
 
-    // Triple barrier
+    // ── Models ──
+    if (s.selectedModels.length === 0) {
+      errors.push("Select at least one model to run a backtest");
+    }
+    if (s.selectedModels.length > 5) {
+      errors.push("Maximum 5 models per backtest run");
+    }
+
+    // ── Walk-forward parameters ──
+    if (s.trainMonths < 6) {
+      errors.push(`Training window (${s.trainMonths}mo) is too short — minimum is 6 months`);
+    }
+    if (s.trainMonths > 60) {
+      errors.push(`Training window (${s.trainMonths}mo) exceeds maximum of 60 months`);
+    }
+    if (s.testMonths < 1) {
+      errors.push(`Test window (${s.testMonths}mo) must be at least 1 month`);
+    }
+    if (s.testMonths > 6) {
+      errors.push(`Test window (${s.testMonths}mo) exceeds maximum of 6 months`);
+    }
+    if (s.repeats < 1) {
+      errors.push("Walk-forward repeats must be at least 1");
+    }
+    if (s.repeats > 10) {
+      errors.push(`Walk-forward repeats (${s.repeats}) exceeds maximum of 10`);
+    }
+
+    // ── HPO ──
+    if (s.nTrials < 0) {
+      errors.push("HPO trials cannot be negative");
+    }
+    if (s.nTrials > 500) {
+      errors.push(`HPO trials (${s.nTrials}) exceeds maximum of 500`);
+    }
+
+    // ── Confidence threshold ──
+    if (s.confidenceThreshold < 0 || s.confidenceThreshold > 1) {
+      errors.push("Confidence threshold must be between 0 and 1");
+    }
+
+    // ── Triple barrier ──
     if (s.useTripleBarrier) {
       if (s.tbPtMult < s.tbSlMult) {
         warnings.push(
@@ -36,6 +77,7 @@ export function useValidation(): ValidationResult {
       }
     }
 
+    // ── Labels ──
     if (s.labelThreshold < 0.0002) {
       warnings.push("Label threshold < 0.0002 — may label noise as directional");
     }
@@ -43,7 +85,7 @@ export function useValidation(): ValidationResult {
       warnings.push("Label threshold > 0.001 — very few directional labels");
     }
 
-    // Features
+    // ── Features ──
     const featureCount = s.lags * s.lagDepth;
     if (featureCount > 100) {
       errors.push(`Lag feature count (${featureCount}) exceeds 100 — likely overfitting`);
@@ -63,11 +105,38 @@ export function useValidation(): ValidationResult {
     if (s.useMtfAlignment && !s.useMtfMa) {
       errors.push("MTF Alignment requires MTF MA enabled");
     }
+    if (s.useTripleConfirm && !s.useRsi && !s.useMacd && !s.useSma && !s.useEma) {
+      errors.push("Triple Confirm requires at least one of RSI, MACD, SMA, or EMA enabled");
+    }
+    if (s.useTrendConfirm && !s.useSma && !s.useEma) {
+      errors.push("Trend Confirm requires SMA or EMA enabled");
+    }
     if (s.fracdiffD < 0 || s.fracdiffD > 1) {
       errors.push("FracDiff d must be between 0.0 and 1.0");
     }
 
-    // Coverage
+    // ── Dimensionality guard (KodaQuant v2.0 — user owns feature thesis) ──
+    const enabledFeatureCount = [
+      s.useAdx, s.useAtr, s.useBbands, s.useEma, s.useSma, s.useRsi,
+      s.useMacd, s.useStoch, s.useSar, s.useDonchian,
+      s.useFracdiff, s.useCrossoverBins, s.useMaSpread, s.usePriceMaZ,
+      s.useIndicatorStates, s.useMtfMa, s.useMtfAlignment, s.useMtfAlign,
+      s.useMacdAtrRatio, s.useTripleConfirm, s.useTrendConfirm,
+      s.useVolManagedMom, s.useVmMom, s.useSqueezeBreakout,
+      s.useSqueezeExpansion, s.useAtrChannelBreakout, s.useExtAtrLowAdx,
+      s.useReentryMom, s.useSlopeDiff, s.useRvFeatures, s.useNews,
+    ].filter(Boolean).length;
+    if (enabledFeatureCount > 24) {
+      errors.push(
+        `${enabledFeatureCount} features enabled — severe overfitting risk (max 24 recommended)`,
+      );
+    } else if (enabledFeatureCount > 18) {
+      warnings.push(
+        `${enabledFeatureCount} features enabled — high dimensionality (consider reducing)`,
+      );
+    }
+
+    // ── Coverage ──
     if (Math.abs(s.targetActiveRate - s.targetCoverage) > 0.01) {
       warnings.push("Target active rate and coverage differ by > 1%");
     }
@@ -78,7 +147,7 @@ export function useValidation(): ValidationResult {
       warnings.push("Target active rate < 5% is very low");
     }
 
-    // Logistic model
+    // ── Logistic model ──
     if (s.selectedModels.includes("logistic")) {
       const incompatible: Record<string, string[]> = {
         lbfgs: ["l1", "elasticnet"],
@@ -94,7 +163,12 @@ export function useValidation(): ValidationResult {
       if (s.logitC > 10000) warnings.push("C > 10000 — very weak regularization");
     }
 
-    // Date range
+    // ── LLM sentiment ──
+    if (s.llmSentimentEnabled && s.llmBackend !== "ollama" && !s.llmApiKey) {
+      errors.push(`LLM sentiment is enabled but no API key is set for ${s.llmBackend}`);
+    }
+
+    // ── Date range ──
     if (s.startDate && dataMin && s.startDate < dataMin) {
       errors.push(`Start date (${s.startDate}) is before available data (${dataMin})`);
     }
@@ -114,14 +188,6 @@ export function useValidation(): ValidationResult {
           `Selected range (${Math.round(rangeDays / 30)}mo) may be too short for ${s.trainMonths}mo train + ${s.testMonths}mo test`,
         );
       }
-    }
-
-    // Models
-    if (s.selectedModels.length === 0) {
-      errors.push("Select at least one model");
-    }
-    if (s.selectedModels.length > 5) {
-      errors.push("Maximum 5 models per backtest run");
     }
 
     return { warnings, errors, ok: errors.length === 0 };
@@ -145,6 +211,9 @@ export function useValidation(): ValidationResult {
     s.useEma,
     s.useMtfAlignment,
     s.useMtfMa,
+    s.useTripleConfirm,
+    s.useTrendConfirm,
+    s.useRsi,
     s.fracdiffD,
     s.targetActiveRate,
     s.targetCoverage,
@@ -152,10 +221,33 @@ export function useValidation(): ValidationResult {
     s.logitSolver,
     s.logitPenalty,
     s.logitC,
-    s.startDate,
-    s.endDate,
     s.trainMonths,
     s.testMonths,
+    s.repeats,
+    s.nTrials,
+    s.confidenceThreshold,
+    s.llmSentimentEnabled,
+    s.llmBackend,
+    s.llmApiKey,
+    s.startDate,
+    s.endDate,
+    s.useAdx,
+    s.useDonchian,
+    s.useStoch,
+    s.useSar,
+    s.useFracdiff,
+    s.useCrossoverBins,
+    s.useMaSpread,
+    s.useIndicatorStates,
+    s.useMtfAlign,
+    s.useVmMom,
+    s.useAtrChannelBreakout,
+    s.useExtAtrLowAdx,
+    s.useReentryMom,
+    s.useSlopeDiff,
+    s.useRvFeatures,
+    s.useNews,
+    s.useVolManagedMom,
     dataMin,
     dataMax,
   ]);

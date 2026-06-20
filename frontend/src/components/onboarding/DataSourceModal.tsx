@@ -61,7 +61,10 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
     setLoading(true);
     setError("");
     try {
-      await demoSeed.mutateAsync({ pairs: ["EURUSD"], timeframes: ["M30", "H1", "H4"] });
+      await demoSeed.mutateAsync({
+        pairs: ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"],
+        timeframes: ["M30", "H1", "H4"],
+      });
       onStart("demo");
     } catch (err) {
       setError("Failed to load demo data. Please try again.");
@@ -308,8 +311,8 @@ export function DataSourceModal({ isOpen, onBack, onStart }: DataSourceModalProp
                 </p>
                 <div className="flex flex-col gap-2">
                   {[
-                    "Pre-loaded EUR/USD data (M30, H1, H4, 2016–2026)",
-                    "124,000+ historical candles — charts work immediately",
+                    "Pre-loaded data for 5 major pairs (M30, H1, H4, 2016–2026)",
+                    "1,000,000+ historical candles — charts work immediately",
                     "Full backtest pipeline with all model types",
                     "Paper trading pre-enabled on the Trading page",
                     "No API key required — start in seconds",

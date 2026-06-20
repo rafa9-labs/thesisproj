@@ -7,9 +7,26 @@ import {
   Info,
   ExternalLink,
   Check,
+  Lock,
+  Unlock,
+  Layers,
+  AlertTriangle,
 } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
-import { useConfig, useSaveConfig, useStoreApiKey, useStoreKv } from "@/api/queries";
+import {
+  useConfig,
+  useSaveConfig,
+  useStoreApiKey,
+  useStoreKv,
+  useHardware,
+  useLicenseStatus,
+  useActivateLicense,
+  useDeactivateLicense,
+  useExecutionSettings,
+  useSaveExecutionSettings,
+} from "@/api/queries";
+import { GpuStatusCard } from "@/components/GpuStatusCard";
+import { DataManager } from "@/components/DataManager";
 
 function SectionCard({
   icon,
@@ -124,70 +141,36 @@ function SavedBadge({ show }: { show: boolean }) {
 
 /* ─────────────────────── license sub-section ─────────────────────── */
 
-interface LicenseInfo {
-  plan: string;
-  licensed: boolean;
-  trial_active: boolean;
-  trial_days_left: number;
-  needs_activation: boolean;
-  license_key: string;
-  expires_at: string;
-  machine_id: string;
-}
-
 function LicenseSection() {
-  const [license, setLicense] = useState<LicenseInfo | null>(null);
+  const { data: license, isLoading } = useLicenseStatus();
+  const activateLicense = useActivateLicense();
+  const deactivateLicense = useDeactivateLicense();
   const [inputKey, setInputKey] = useState("");
-  const [activating, setActivating] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
-    fetch(`${apiBase}/license/status`)
-      .then((r) => r.json())
-      .then((data) => setLicense(data as LicenseInfo))
-      .catch(() => {});
-  }, []);
-
-  const handleActivate = async () => {
+  const handleActivate = () => {
     if (!inputKey.trim()) return;
-    setActivating(true);
     setError("");
-    try {
-      const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
-      const res = await fetch(`${apiBase}/license/activate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ license_key: inputKey.trim() }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        const statusRes = await fetch(`${apiBase}/license/status`);
-        setLicense(await statusRes.json());
+    activateLicense.mutate(inputKey.trim(), {
+      onSuccess: () => {
         setInputKey("");
-      } else {
-        setError(data.detail || data.error || "Activation failed");
-      }
-    } catch {
-      setError("Connection failed");
-    } finally {
-      setActivating(false);
-    }
+      },
+      onError: (err: Error) => {
+        setError(err.message || "Activation failed");
+      },
+    });
   };
 
-  const handleDeactivate = async () => {
-    try {
-      const apiBase = import.meta.env.VITE_API_URL ?? "/api/v1";
-      await fetch(`${apiBase}/license/deactivate`, { method: "POST" });
-      const statusRes = await fetch(`${apiBase}/license/status`);
-      setLicense(await statusRes.json());
-    } catch {
-      /* ignore */
-    }
+  const handleDeactivate = () => {
+    deactivateLicense.mutate();
   };
+
+  if (isLoading) {
+    return <p className="text-[11px] text-(--color-text-muted)">Checking license status…</p>;
+  }
 
   if (!license) {
-    return <p className="text-[11px] text-(--color-text-muted)">Checking license status…</p>;
+    return <p className="text-[11px] text-(--color-accent-danger)">Could not load license status</p>;
   }
 
   const planLabel: Record<string, string> = {
@@ -227,9 +210,10 @@ function LicenseSection() {
         {license.licensed && (
           <button
             onClick={handleDeactivate}
-            className="cursor-pointer rounded-md border border-(--color-glass-border) px-2.5 py-1 text-[10px] tracking-wider text-(--color-text-muted) uppercase transition-colors duration-150 hover:border-[var(--color-border-active)]"
+            disabled={deactivateLicense.isPending}
+            className="cursor-pointer rounded-md border border-(--color-glass-border) px-2.5 py-1 text-[10px] tracking-wider text-(--color-text-muted) uppercase transition-colors duration-150 hover:border-[var(--color-border-active)] disabled:opacity-50"
           >
-            Deactivate
+            {deactivateLicense.isPending ? "Deactivating…" : "Deactivate"}
           </button>
         )}
       </div>
@@ -240,14 +224,14 @@ function LicenseSection() {
             <TextInput value={inputKey} onChange={setInputKey} placeholder="XXXX-XXXX-XXXX-XXXX" />
             <button
               onClick={handleActivate}
-              disabled={activating}
+              disabled={activateLicense.isPending}
               className="flex shrink-0 items-center rounded-md bg-(--color-brand) px-3 py-1.5 text-xs font-semibold tracking-wider text-(--color-text-inverse) uppercase shadow-[0_0_10px_rgba(0,229,255,0.2)] transition-all duration-200"
               style={{
-                cursor: activating ? "not-allowed" : "pointer",
-                opacity: activating ? 0.6 : 1,
+                cursor: activateLicense.isPending ? "not-allowed" : "pointer",
+                opacity: activateLicense.isPending ? 0.6 : 1,
               }}
             >
-              {activating ? "Activating…" : "Activate"}
+              {activateLicense.isPending ? "Activating…" : "Activate"}
             </button>
           </div>
           {error && <p className="text-[10px] text-(--color-accent-danger)">{error}</p>}
@@ -269,6 +253,45 @@ function LicenseSection() {
             ? "Full feature access during trial period"
             : "All features unlocked"}
       </p>
+
+      {/* Model availability */}
+      {license.available_models.length > 0 && (
+        <div className="border-t border-(--color-glass-border) pt-3">
+          <span className="text-[10px] text-(--color-text-muted) uppercase tracking-wider">
+            Available Models ({license.available_models.length})
+          </span>
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {license.available_models.map((m) => (
+              <span
+                key={m}
+                className="flex items-center gap-1 rounded bg-(color-mix(in srgb, var(--color-accent-success) 10%, transparent)) border border-(--color-accent-success) px-1.5 py-0.5 text-[9px] font-mono text-(--color-accent-success)"
+              >
+                <Unlock size={8} />
+                {m}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {license.locked_models.length > 0 && (
+        <div className="border-t border-(--color-glass-border) pt-3">
+          <span className="text-[10px] text-(--color-text-muted) uppercase tracking-wider">
+            Locked Models ({license.locked_models.length})
+          </span>
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {license.locked_models.map((m) => (
+              <span
+                key={m}
+                className="flex items-center gap-1 rounded bg-(--color-glass-hover) border border-(--color-glass-border) px-1.5 py-0.5 text-[9px] font-mono text-(--color-text-muted) line-through"
+              >
+                <Lock size={8} />
+                {m}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -278,12 +301,17 @@ function LicenseSection() {
 export function SettingsPage() {
   const store = useSettingsStore();
   const { data: remoteConfig } = useConfig();
+  const { data: hw } = useHardware();
+  const { data: remoteExec } = useExecutionSettings();
   const saveConfig = useSaveConfig();
+  const saveExec = useSaveExecutionSettings();
   const storeApiKey = useStoreApiKey();
   const storeKv = useStoreKv();
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [accountIdSaved, setAccountIdSaved] = useState(false);
+  const [execSaved, setExecSaved] = useState(false);
   const synced = useRef(false);
+  const execSynced = useRef(false);
 
   useEffect(() => {
     if (remoteConfig && !synced.current) {
@@ -295,11 +323,40 @@ export function SettingsPage() {
       if (remoteConfig.verboseMode != null)
         store.setField("verboseMode", remoteConfig.verboseMode as boolean);
       if (remoteConfig.apiUrl != null) store.setField("apiUrl", remoteConfig.apiUrl as string);
+      if (remoteConfig.ramLimit != null) store.setField("ramLimit", remoteConfig.ramLimit as number);
     }
   }, [remoteConfig]);
 
+  useEffect(() => {
+    if (remoteExec && !execSynced.current) {
+      execSynced.current = true;
+      if (remoteExec.max_concurrent_backtests != null)
+        store.setField("maxConcurrentBacktests", remoteExec.max_concurrent_backtests);
+      if (remoteExec.gpu_enabled != null)
+        store.setField("gpuEnabled", remoteExec.gpu_enabled);
+      if (remoteExec.max_concurrent_gpu != null)
+        store.setField("maxConcurrentGpu", remoteExec.max_concurrent_gpu);
+    }
+  }, [remoteExec]);
+
   const syncToBackend = (key: string, value: unknown) => {
     saveConfig.mutate({ [key]: value, ...store });
+  };
+
+  const handleSaveExec = () => {
+    saveExec.mutate(
+      {
+        max_concurrent_backtests: store.maxConcurrentBacktests,
+        gpu_enabled: store.gpuEnabled,
+        max_concurrent_gpu: store.maxConcurrentGpu,
+      },
+      {
+        onSuccess: () => {
+          setExecSaved(true);
+          setTimeout(() => setExecSaved(false), 3000);
+        },
+      },
+    );
   };
 
   const handleOandaBlur = () => {
@@ -332,36 +389,41 @@ export function SettingsPage() {
     }
   };
 
-  const threadPct = ((store.threadBudget - 1) / 15) * 100;
-
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
       {/* ── Row 1: General + GPU & Compute ── */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <SectionCard icon={<SettingsIcon size={14} strokeWidth={1.5} />} title="General">
-          <FieldRow label="Verbose Mode" hint="Outputs detailed logs during pipeline runs">
-            <Toggle
-              value={store.verboseMode}
-              onChange={(v) => {
-                store.setField("verboseMode", v);
-                syncToBackend("verboseMode", v);
-              }}
-            />
-          </FieldRow>
-          <FieldRow label="API URL" hint="Backend service endpoint">
-            <TextInput
-              value={store.apiUrl}
-              onChange={(v) => store.setField("apiUrl", v)}
-              onBlur={() => syncToBackend("apiUrl", store.apiUrl)}
-            />
-          </FieldRow>
+          {import.meta.env.DEV && (
+            <FieldRow label="Verbose Mode" hint="Outputs detailed logs during pipeline runs">
+              <Toggle
+                value={store.verboseMode}
+                onChange={(v) => {
+                  store.setField("verboseMode", v);
+                  syncToBackend("verboseMode", v);
+                }}
+              />
+            </FieldRow>
+          )}
+          {import.meta.env.DEV && (
+            <FieldRow label="API URL" hint="Backend service endpoint">
+              <TextInput
+                value={store.apiUrl}
+                onChange={(v) => store.setField("apiUrl", v)}
+                onBlur={() => syncToBackend("apiUrl", store.apiUrl)}
+              />
+            </FieldRow>
+          )}
           <FieldRow label="Theme">
             <StaticPill>Dark (only)</StaticPill>
           </FieldRow>
         </SectionCard>
 
         <SectionCard icon={<Cpu size={14} strokeWidth={1.5} />} title="GPU & Compute">
-          <FieldRow label="Thread Budget" hint="Parallel workers for training and evaluation">
+          <FieldRow
+            label="Thread Budget"
+            hint={hw ? `Recommended: ${hw.budget.blas_threads} for your ${hw.cpu.physical_cores}-core CPU` : "Parallel workers for training and evaluation"}
+          >
             <div className="flex items-center gap-3">
               <input
                 type="range"
@@ -393,13 +455,131 @@ export function SettingsPage() {
             />
           </FieldRow>
           <FieldRow label="GPU Status">
-            <StaticPill>Detected at startup</StaticPill>
+            <GpuStatusCard />
+          </FieldRow>
+          <FieldRow
+            label="RAM Limit"
+            hint={hw ? `System RAM: ${hw.cpu.ram_total_gb} GB (recommended: ${hw.budget.ram_limit_gb} GB)` : "Maximum RAM usage for pipeline operations"}
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={2}
+                max={128}
+                step={1}
+                value={store.ramLimit}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  store.setField("ramLimit", v);
+                  syncToBackend("ramLimit", v);
+                }}
+                className="w-28"
+                style={{
+                  accentColor: "var(--color-brand)",
+                }}
+              />
+              <span className="w-10 text-right font-mono text-xs font-semibold text-(--color-brand)">
+                {store.ramLimit} GB
+              </span>
+            </div>
           </FieldRow>
         </SectionCard>
       </div>
 
+      {/* ── Row 1.5: Execution Engine ── */}
+      <SectionCard icon={<Layers size={14} strokeWidth={1.5} />} title="Execution Engine">
+        <FieldRow
+          label="Max CPU Backtests"
+          hint="Maximum number of simultaneous CPU-only backtests (1-8)"
+        >
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={1}
+              max={8}
+              value={store.maxConcurrentBacktests}
+              onChange={(e) => store.setField("maxConcurrentBacktests", Number(e.target.value))}
+              className="w-28"
+              style={{ accentColor: "var(--color-brand)" }}
+            />
+            <span className="w-5 text-right font-mono text-xs font-semibold text-(--color-brand)">
+              {store.maxConcurrentBacktests}
+            </span>
+          </div>
+        </FieldRow>
+
+        <FieldRow
+          label="Enable GPU Models"
+          hint="Run LSTM, CNN, and Transformer on GPU if available"
+        >
+          <Toggle
+            value={store.gpuEnabled}
+            onChange={(v) => store.setField("gpuEnabled", v)}
+          />
+        </FieldRow>
+
+        <FieldRow
+          label="Max GPU Backtests"
+          hint={store.gpuEnabled ? "Maximum GPU models running simultaneously (1-2)" : "GPU models disabled — turn on Enable GPU Models above"}
+        >
+          <div className={`flex items-center gap-3 ${!store.gpuEnabled ? "opacity-40 pointer-events-none" : ""}`}>
+            <input
+              type="range"
+              min={1}
+              max={2}
+              value={store.maxConcurrentGpu}
+              onChange={(e) => store.setField("maxConcurrentGpu", Number(e.target.value))}
+              disabled={!store.gpuEnabled}
+              className="w-28"
+              style={{ accentColor: "var(--color-brand)" }}
+            />
+            <span className={`w-5 text-right font-mono text-xs font-semibold ${store.gpuEnabled ? "text-(--color-brand)" : "text-(--color-text-dim)"}`}>
+              {store.gpuEnabled ? store.maxConcurrentGpu : "—"}
+            </span>
+          </div>
+        </FieldRow>
+
+        <div className="mt-4 flex items-center justify-between border-t border-(--color-glass-border) pt-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={12} className="text-(--color-accent-warning)" />
+            <span className="text-[10px] text-(--color-accent-warning)">
+              Changes will take effect upon application restart
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {execSaved && (
+              <span className="flex items-center gap-1 text-[10px] font-medium text-(--color-brand)">
+                <Check size={11} />
+                Saved
+              </span>
+            )}
+            <button
+              onClick={handleSaveExec}
+              disabled={saveExec.isPending}
+              className="rounded-md border border-(--color-brand) bg-(--color-brand-glow) px-4 py-1.5 text-[10px] font-semibold tracking-[0.08em] text-(--color-brand) uppercase transition hover:brightness-110"
+            >
+              {saveExec.isPending ? "Saving..." : "Save Execution Settings"}
+            </button>
+          </div>
+        </div>
+      </SectionCard>
+
       {/* ── Row 2: Data Sources ── */}
       <SectionCard icon={<Database size={14} strokeWidth={1.5} />} title="Data Sources">
+        <div className="rounded-md border border-(--color-accent-warning) bg-(color-mix(in srgb, var(--color-accent-warning) 8%, transparent)) px-3 py-2 mb-2">
+          <p className="text-[10px] leading-relaxed text-(--color-accent-warning)">
+            Live data requires your own OANDA API key and compliance with{" "}
+            <a
+              href="https://legal.oanda.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-(--color-brand)"
+            >
+              OANDA's API License Agreement
+            </a>
+            . You must not redistribute OANDA data to third parties.
+          </p>
+        </div>
         <FieldRow label="OANDA API Key" hint="Used for live price feeds and order routing">
           <TextInput
             value={store.oandaApiKey ?? ""}
@@ -419,9 +599,7 @@ export function SettingsPage() {
           />
           <SavedBadge show={accountIdSaved} />
         </FieldRow>
-        <FieldRow label="Data Directory" hint="Override via KODA_DATA_DIR environment variable">
-          <StaticPill>Configured via env</StaticPill>
-        </FieldRow>
+        <DataManager />
       </SectionCard>
 
       {/* ── Row 3: License + Pipeline ── */}
@@ -460,7 +638,7 @@ export function SettingsPage() {
       <SectionCard icon={<Info size={14} strokeWidth={1.5} />} title="About">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
-            { label: "Version", value: "v1.0.0-dev" },
+            { label: "Version", value: import.meta.env.DEV ? "v1.0.0-dev" : "v1.0.0" },
             { label: "Pipeline", value: "Forex ML" },
             { label: "Models", value: "10 registered" },
             { label: "Build", value: "rafa9-labs" },

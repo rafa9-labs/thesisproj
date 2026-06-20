@@ -30,13 +30,13 @@ type Widen<T> = T extends boolean
       : T;
 type BacktestState = { -readonly [K in keyof typeof DEFAULTS]: Widen<(typeof DEFAULTS)[K]> } & {
   hpoIntensity: HpoIntensity;
-  hpoManualOverride: boolean;
   parentJobId: string | null;
   activePreset: string | null;
   customPresets: Record<string, { name: string; subtitle: string; date: string }>;
 };
 type BacktestActions = {
   setField: <K extends keyof BacktestState>(key: K, value: BacktestState[K]) => void;
+  selectModel: (model: string) => void;
   toggleModel: (model: string) => void;
   resetToDefaults: () => void;
   applyPreset: (preset: {
@@ -61,12 +61,14 @@ const DEFAULT_HPO_INTENSITY: HpoIntensity = "quick";
 export const useBacktestStore = create<BacktestState & BacktestActions>()((set, get) => ({
   ...(structuredClone(DEFAULTS) as BacktestState),
   hpoIntensity: DEFAULT_HPO_INTENSITY,
-  hpoManualOverride: false,
   parentJobId: null,
   activePreset: null,
   customPresets: _loadCustomPresets(),
 
   setField: (key, value) => set({ [key]: value } as Partial<BacktestState>),
+
+  selectModel: (model) =>
+    set({ selectedModels: [model] }),
 
   toggleModel: (model) =>
     set((state) => {
@@ -83,7 +85,6 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
     set({
       ...structuredClone(DEFAULTS),
       hpoIntensity: DEFAULT_HPO_INTENSITY,
-      hpoManualOverride: false,
       parentJobId: null,
     } as Partial<BacktestState>),
 
@@ -107,7 +108,6 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       if (!p) return state;
       return {
         hpoIntensity: p.hpoIntensity,
-        hpoManualOverride: false,
         repeats: p.repeats,
         trainMonths: p.trainMonths,
         testMonths: p.testMonths,
@@ -125,13 +125,6 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
           if (opt.key === presetKey) {
             return {
               selectedModels: opt.models,
-              hpoIntensity: opt.hpoIntensity,
-              hpoManualOverride: false,
-              nTrials: opt.nTrials,
-              repeats: opt.repeats,
-              trainMonths: opt.trainMonths,
-              testMonths: opt.testMonths,
-              confidenceThreshold: opt.confidenceThreshold,
               activePreset: null,
             };
           }
@@ -244,18 +237,47 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       dynamic_hpo_trials: s.dynamicHpoTrials,
       wfo_train_periods: s.wfoTrainPeriods > 0 ? s.wfoTrainPeriods : undefined,
       wfo_test_periods: s.wfoTestPeriods > 0 ? s.wfoTestPeriods : undefined,
+      train_months: s.trainMonths,
+      test_months: s.testMonths,
+      repeats: s.repeats,
+      seed: s.seed,
+      hpo_intensity: s.hpoIntensity,
+      n_trials: s.nTrials,
+      optuna_direction: s.optunaDirection,
+      max_hpo_duration_minutes: s.maxHpoDurationMinutes,
     };
-    const stateKeys = Object.keys(s) as (keyof typeof s)[];
+    const stateKeys = Object.keys(s);
+    const hpoMinKeys = new Set<string>();
+
     for (const key of stateKeys) {
-      if (String(key).includes("__")) {
-        const val = s[key];
-        if (val !== undefined && val !== null && val !== "") {
-          configOverrides[String(key)] = val;
-        }
+      const strKey = String(key);
+      if (!strKey.includes("__")) continue;
+
+      if (strKey.endsWith("__min")) {
+        hpoMinKeys.add(strKey);
+        continue;
+      }
+      if (strKey.endsWith("__max")) continue;
+
+      const val = (s as Record<string, unknown>)[key];
+      if (val !== undefined && val !== null && val !== "") {
+        configOverrides[strKey] = val;
+      }
+    }
+
+    for (const minKey of hpoMinKeys) {
+      const base = minKey.slice(0, -5);
+      const maxKey = `${base}__max`;
+      const minVal = (s as Record<string, unknown>)[minKey];
+      const maxVal = (s as Record<string, unknown>)[maxKey];
+      if (minVal !== undefined && minVal !== null && maxVal !== undefined && maxVal !== null) {
+        configOverrides[`${base}__hpo_range`] = [Number(minVal), Number(maxVal)];
+        delete configOverrides[base];
       }
     }
     return {
       pair: s.pair,
+      timeframe: s.timeframe,
       models: s.selectedModels,
       start_date: s.startDate || undefined,
       end_date: s.endDate || undefined,
@@ -264,7 +286,7 @@ export const useBacktestStore = create<BacktestState & BacktestActions>()((set, 
       repeats: s.repeats ?? 1,
       seed: s.seed,
       hpo_intensity: s.hpoIntensity,
-      ...(s.hpoManualOverride && { n_trials: s.nTrials }),
+      n_trials: s.nTrials,
       ...(s.parentJobId && { parent_job_id: s.parentJobId }),
       config_overrides: configOverrides,
     };

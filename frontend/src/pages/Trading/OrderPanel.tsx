@@ -13,6 +13,7 @@ interface OrderPanelProps {
   deploying: boolean;
   killed: boolean;
   hasModel: boolean;
+  isCommittee: boolean;
   positionSizing: string;
   initialEquityInput: number;
   riskConfig: RiskConfig;
@@ -59,6 +60,7 @@ export function OrderPanel({
   deploying,
   killed,
   hasModel,
+  isCommittee,
   positionSizing,
   initialEquityInput,
   riskConfig,
@@ -74,7 +76,7 @@ export function OrderPanel({
   const returnPct = initialEquity > 0 ? ((equity - initialEquity) / initialEquity) * 100 : 0;
 
   return (
-    <div className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto border-t border-l-0 border-(--color-border-subtle) px-3 py-3 lg:w-[320px] lg:border-t-0 lg:border-l">
+    <div className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto border-t border-l-0 border-(--color-border-subtle) px-3 py-3 md:w-[300px] lg:w-[320px] md:border-t-0 md:border-l md:pt-0">
       {/* ── Account Equity ── */}
       <div className="rounded-sm border border-(--color-glass-border) bg-(--color-glass) p-3">
         <div className="mb-2 flex items-center justify-between">
@@ -233,7 +235,7 @@ export function OrderPanel({
 
         <button
           onClick={isRunning ? onStop : onDeploy}
-          disabled={deploying || !hasModel || killed}
+          disabled={deploying || (!isRunning && !hasModel) || killed}
           className="flex w-full items-center justify-center gap-1.5 rounded border px-4 py-2.5 text-[11px] font-bold tracking-[0.06em] uppercase transition-all duration-200 disabled:opacity-50"
           style={{
             borderColor: isRunning ? "var(--color-accent-danger)" : "var(--color-brand)",
@@ -252,7 +254,7 @@ export function OrderPanel({
               Stop
             </>
           ) : (
-            "Deploy Committee"
+            isCommittee ? "Deploy Committee" : "Deploy Model"
           )}
         </button>
       </div>

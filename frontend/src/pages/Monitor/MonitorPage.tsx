@@ -1,19 +1,27 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { Eye, FlaskConical, Square, Wifi, WifiOff, ChevronDown, ChevronUp } from "lucide-react";
-import { useActiveBacktests, useForceStopJob, useJobStatus } from "@/api/queries";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Square, Wifi, WifiOff } from "lucide-react";
+import { useActiveBacktests, useForceStopJob, useJobStatus, useFullCycleStatus, useFullCycleHistory } from "@/api/queries";
 import { useJobStore } from "@/stores/useJobStore";
-import { useBacktestWebSocket } from "@/hooks/useBacktestWebSocket";
+import { useCommitteeMonitorStore } from "@/stores/useCommitteeMonitorStore";
 import { useBacktestProgress } from "@/api/queries";
 import { JobPillStrip } from "./JobPillStrip";
 import { EquityChart } from "./EquityChart";
-import { MonthlyHeatmap } from "./MonthlyHeatmap";
-import { TradeLogFeed } from "./TradeLogFeed";
 import { HpoScatterChart } from "./HpoScatterChart";
 import { HpoTrialFeed } from "./HpoTrialFeed";
 import { ModelHealthTable } from "./ModelHealthTable";
+import { MonthlyHeatmap } from "./MonthlyHeatmap";
 import { wsManager } from "@/api/websocket";
 import type { JobSummary } from "@/api/schemas";
+import { CommitteeJobHeader } from "./committee/CommitteeJobHeader";
+import { PipelineNavigator } from "./committee/PipelineNavigator";
+import { CommitteeLogConsole } from "./committee/CommitteeLogConsole";
+import { FeatureSweepView } from "./committee/FeatureSweepView";
+import { HpoTuningView } from "./committee/HpoTuningView";
+import { AssemblyView } from "./committee/AssemblyView";
+import { ValidationView } from "./committee/ValidationView";
+import { FactoryView } from "./committee/FactoryView";
+import { FinalSnapshotView } from "./committee/FinalSnapshotView";
 
 export function MonitorPage() {
   const navigate = useNavigate();
@@ -27,15 +35,13 @@ export function MonitorPage() {
   const handleWsEvent = useJobStore((s) => s.handleWsEvent);
   const markCompleted = useJobStore((s) => s.markCompleted);
   const clearCompletedJobs = useJobStore((s) => s.clearCompletedJobs);
+  const removeJob = useJobStore((s) => s.removeJob);
   const forceStop = useForceStopJob();
   const ensureJob = useJobStore((s) => s.ensureJob);
 
   const [wsConnected, setWsConnected] = useState(false);
-  const [split, setSplit] = useState(50);
   const [hpoModelFilter, setHpoModelFilter] = useState<string | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
-  const splitDragRef = useRef({ active: false, startY: 0, startSplit: 50 });
-  const mainRef = useRef<HTMLDivElement>(null);
+  const [yMode, setYMode] = useState<"pct" | "raw">("pct");
 
   const activeList = useMemo(() => activeData?.jobs ?? [], [activeData?.jobs]);
   const runningList = useMemo(
@@ -44,9 +50,10 @@ export function MonitorPage() {
   );
 
   useEffect(() => {
+    const jobs = activeJobs instanceof Map ? activeJobs : new Map();
     for (const job of runningList) {
-      if (!activeJobs.has(job.job_id)) {
-        ensureJob(job.job_id, job.pair, job.models);
+      if (!jobs.has(job.job_id)) {
+        ensureJob(job.job_id, job.pair ?? "", job.models ?? []);
       }
     }
   }, [runningList, activeJobs, ensureJob]);
@@ -71,8 +78,30 @@ export function MonitorPage() {
     prevRunningIds.current.ids = currentIds;
   }, [runningIds, clearCompletedJobs]);
 
+  // Rehydrate sync: reconcile persisted jobs with server state.
+  // On server restart the job store (localStorage) outlives the backend.
+  // Any persisted job that is NOT in the active list is stale and should be
+  // removed entirely to avoid phantom 404 polling.
+  const rehydrateChecked = useRef(false);
+  useEffect(() => {
+    if (rehydrateChecked.current) return;
+    if (!activeData || !activeData.jobs) return;
+    rehydrateChecked.current = true;
+
+    const serverIds = new Set(activeData.jobs.map((j) => j.job_id));
+    if (activeJobs instanceof Map) {
+      for (const [id] of activeJobs) {
+        if (!serverIds.has(id)) {
+          removeJob(id);
+        }
+      }
+    }
+  }, [activeData, activeJobs, removeJob]);
+
   const completedSummaries: JobSummary[] = useMemo(() => {
     if (completedJobIds.size === 0) return [];
+    if (!(activeJobs instanceof Map)) return [];
+    if (!(completedJobIds instanceof Set)) return [];
     return [...completedJobIds]
       .filter((id) => activeJobs.has(id))
       .map((id) => {
@@ -93,11 +122,12 @@ export function MonitorPage() {
     [activeList, completedSummaries],
   );
   const visibleIds = useMemo(
-    () => new Set([...runningIds, ...completedJobIds]),
+    () => new Set([...runningIds, ...(completedJobIds instanceof Set ? completedJobIds : [])]),
     [runningIds, completedJobIds],
   );
 
   useEffect(() => {
+    if (!(activeJobs instanceof Map)) return;
     if (visibleIds.size > 0) {
       const selectedStillVisible =
         selectedJobId && visibleIds.has(selectedJobId) && activeJobs.has(selectedJobId);
@@ -112,13 +142,6 @@ export function MonitorPage() {
     }
   }, [visibleIds, selectedJobId, selectJob, setActiveTab, activeJobs, runningIds]);
 
-  const selectedJobStatus = selectedJobId ? getJob(selectedJobId)?.status : null;
-  const wsJobId =
-    selectedJobId && (selectedJobStatus === "pending" || selectedJobStatus === "running")
-      ? selectedJobId
-      : null;
-  useBacktestWebSocket(wsJobId);
-
   useEffect(() => {
     if (!selectedJobId) return;
     const check = setInterval(() => {
@@ -129,7 +152,16 @@ export function MonitorPage() {
 
   const shouldPoll = selectedJobId != null;
   useBacktestProgress(shouldPoll ? selectedJobId : null);
-  const { data: restStatus } = useJobStatus(shouldPoll ? selectedJobId : null);
+  const { data: restStatus, error: restError } = useJobStatus(shouldPoll ? selectedJobId : null);
+
+  // Clean up persisted jobs that return 404 (server restart / old data)
+  useEffect(() => {
+    if (!restError || !selectedJobId) return;
+    const status = (restError as { response?: { status?: number } })?.response?.status;
+    if (status === 404) {
+      removeJob(selectedJobId);
+    }
+  }, [restError, selectedJobId, removeJob]);
 
   useEffect(() => {
     if (!restStatus || !selectedJobId) return;
@@ -163,11 +195,53 @@ export function MonitorPage() {
   const selectedJob = selectedJobId ? getJob(selectedJobId) : undefined;
   const allOosPeriods = selectedJob?.oosPeriods ?? [];
   const allOosEquity = selectedJob?.oosEquity ?? [];
-  const models = selectedJob?.models ?? [];
-  const progress = selectedJob?.progress ?? 0;
-  const progressText = selectedJob?.progressText ?? "";
+  const models: string[] = Array.isArray(selectedJob?.models) ? selectedJob.models : [];
   const status = selectedJob?.status;
   const isDone = status === "completed" || status === "failed";
+
+  const modelPhases = selectedJob?.modelPhases;
+  const jobProgressText = selectedJob?.progressText;
+
+  /* eslint-disable react-hooks/preserve-manual-memoization */
+  const { progress, progressText, phase } = useMemo(() => {
+    const phases = modelPhases ? [...modelPhases.values()] : [];
+    if (phases.length === 0) return { progress: 0, progressText: "Initializing...", phase: "idle" as const };
+
+    let hpoTotal = 0, hpoDone = 0, wfoTotal = 0, wfoDone = 0;
+    for (const p of phases) {
+      hpoTotal += p.hpoTotalTrials;
+      hpoDone += Math.min(p.hpoTrial, p.hpoTotalTrials);
+      wfoTotal += p.simTotalMonths;
+      wfoDone += Math.min(p.simMonth, p.simTotalMonths);
+    }
+
+    const isWfo = phases.some((p) => p.phase === "simulation");
+
+    if (hpoTotal + wfoTotal === 0) {
+      return { progress: 0, progressText: "Initializing...", phase: "hpo" as const };
+    }
+
+    if (!isWfo) {
+      const pct = hpoTotal > 0 ? (hpoDone / hpoTotal) * 50 : 0;
+      return {
+        progress: Math.min(pct, 50),
+        progressText: hpoTotal > 0 ? `HPO ${hpoDone}/${hpoTotal}` : "HPO...",
+        phase: "hpo" as const,
+      };
+    }
+
+    const wfoPct = wfoTotal > 0 ? (wfoDone / wfoTotal) * 50 : 0;
+    const parts: string[] = [];
+    if (hpoTotal > 0) parts.push(`HPO ${hpoDone}/${hpoTotal}`);
+    if (wfoTotal > 0) parts.push(`WF ${wfoDone}/${wfoTotal}`);
+
+    return {
+      progress: 50 + Math.min(wfoPct, 50),
+      progressText: parts.length > 0 ? parts.join(" · ") : (jobProgressText ?? ""),
+      phase: "wfo" as const,
+    };
+  }, [modelPhases, jobProgressText]);
+  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   useEffect(() => {
     if (import.meta.env.DEV && allOosPeriods.length > 0) {
@@ -182,36 +256,127 @@ export function MonitorPage() {
     c.hpoTrials.map((t) => ({ model: c.model, trial: t })),
   );
 
-  const onSplitMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      splitDragRef.current = { active: true, startY: e.clientY, startSplit: split };
-    },
-    [split],
-  );
+  const [expandedPeriod, setExpandedPeriod] = useState<string | null>(null);
+  const periodRows = allOosPeriods
+    .filter((p) => (p.trades ?? 0) > 0)
+    .slice(-50)
+    .reverse();
 
+  // ── Committee tab state ──
+  const [searchParams] = useSearchParams();
+  const monitorTab: "backtests" | "committee" =
+    searchParams.get("tab") === "committee" ? "committee" : "backtests";
+  const switchTab = (tab: "backtests" | "committee") => {
+    navigate(tab === "committee" ? "/monitor?tab=committee" : "/monitor", { replace: true });
+  };
+  const cmJobId = useCommitteeMonitorStore((s) => s.selectedJobId);
+  const cmUpdateFromStatus = useCommitteeMonitorStore((s) => s.updateFromStatus);
+  const cmViewPhase = useCommitteeMonitorStore((s) => s.viewPhase);
+  const cmSelectJob = useCommitteeMonitorStore((s) => s.selectJob);
+  const { data: cmStatus } = useFullCycleStatus(monitorTab === "committee" ? cmJobId : null);
+  const { data: fcHistory } = useFullCycleHistory();
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      const d = splitDragRef.current;
-      if (!d.active || !mainRef.current) return;
-      const rect = mainRef.current.getBoundingClientRect();
-      const total = rect.height;
-      if (total <= 0) return;
-      const dy = e.clientY - d.startY;
-      setSplit(Math.max(20, Math.min(80, d.startSplit + (dy / total) * 100)));
-    };
-    const onUp = () => {
-      splitDragRef.current.active = false;
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    return () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-  }, []);
+    if (cmStatus) cmUpdateFromStatus(cmStatus);
+  }, [cmStatus, cmUpdateFromStatus]);
 
-  if (isLoading) {
+  // Auto-select first running committee job when entering committee tab
+  useEffect(() => {
+    if (monitorTab !== "committee" || cmJobId) return;
+    const running = (fcHistory?.entries ?? [])
+      .filter((e) =>
+        e.status !== "completed" &&
+        e.status !== "failed" &&
+        e.status !== "validation_failed" &&
+        e.status !== "cancelled" &&
+        e.status !== "orphaned" &&
+        e.status !== "unknown",
+      )
+      .sort((a, b) => b.started_at.localeCompare(a.started_at));
+    if (running.length > 0) {
+      cmSelectJob(running[0].job_id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monitorTab]);
+
+  // Deselect orphaned/cancelled/unknown committee jobs — prevents broken dead-study UI
+  const cmReset = useCommitteeMonitorStore((s) => s.reset);
+  useEffect(() => {
+    if (!cmJobId || monitorTab !== "committee") return;
+    const entry = (fcHistory?.entries ?? []).find((e) => e.job_id === cmJobId);
+    if (
+      entry &&
+      (entry.status === "orphaned" ||
+        entry.status === "cancelled" ||
+        entry.status === "unknown")
+    ) {
+      cmReset();
+    }
+  }, [cmJobId, fcHistory, monitorTab, cmReset]);
+
+  // Auto-redirect to committee tab when only committee jobs are running
+  useEffect(() => {
+    if (monitorTab !== "backtests" || isLoading || runningList.length > 0) return;
+    const hasRunningCommittee = (fcHistory?.entries ?? []).some(
+      (e) =>
+        e.status !== "completed" &&
+        e.status !== "failed" &&
+        e.status !== "validation_failed" &&
+        e.status !== "cancelled" &&
+        e.status !== "orphaned" &&
+        e.status !== "unknown",
+    );
+    if (hasRunningCommittee) {
+      navigate("/monitor?tab=committee", { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monitorTab, isLoading, runningList.length, fcHistory]);
+
+  // ── Committee tab ──
+  if (monitorTab === "committee") {
+    const cmEntry = (fcHistory?.entries ?? []).find((e) => e.job_id === cmJobId);
+    const isCmTerminal =
+      !cmEntry ||
+      cmEntry.status === "orphaned" ||
+      cmEntry.status === "cancelled" ||
+      cmEntry.status === "completed" ||
+      cmEntry.status === "failed" ||
+      cmEntry.status === "validation_failed" ||
+      cmEntry.status === "unknown";
+
+    return (
+      <div className="flex h-full flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center gap-1 pt-3 pb-2">
+          <TabButton label="Backtests" active={false} onClick={() => switchTab("backtests")} />
+          <TabButton label="Committee" active={true} onClick={() => {}} />
+        </div>
+        {cmJobId && !isCmTerminal ? (
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <CommitteeJobHeader />
+            <PipelineNavigator />
+            <div className="flex-1 overflow-y-auto pb-4 [scrollbar-width:thin]">
+              {cmViewPhase === 1 && <FeatureSweepView />}
+              {cmViewPhase === 2 && <HpoTuningView />}
+              {cmViewPhase === 3 && <AssemblyView />}
+              {cmViewPhase === 4 && <ValidationView />}
+              {cmViewPhase === 5 && <FactoryView />}
+              {cmViewPhase === 6 && <FinalSnapshotView />}
+            </div>
+            <div className="shrink-0 border-t border-(--color-glass-border)">
+              <CommitteeLogConsole />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-1 items-center justify-center">
+            <span className="text-xs text-(--color-text-muted)">
+              No active committee jobs. Click a committee pill in the running bar above.
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (monitorTab === "backtests" && isLoading) {
     return (
       <div className="flex h-full items-center justify-center bg-(--color-app)">
         <span className="text-xs text-(--color-text-muted)">Checking for backtests...</span>
@@ -219,31 +384,76 @@ export function MonitorPage() {
     );
   }
 
-  if (runningList.length === 0 && completedJobIds.size === 0) {
+  if (runningList.length === 0 && completedJobIds instanceof Set && completedJobIds.size === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 rounded-sm border border-(--color-glass-border) bg-(--color-surface) py-16">
-        <Eye size={40} strokeWidth={1} className="text-(--color-text-muted)" />
         <span className="text-sm font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
-          No Active Backtests
+          No Active Studies
         </span>
         <span className="text-xs text-(--color-text-muted)">
-          Configure and deploy one from the Backtest tab
+          Configure and deploy a backtest or committee pipeline
         </span>
-        <button
-          onClick={() => navigate("/backtest")}
-          className="flex items-center gap-1.5 rounded-md bg-(--color-brand) px-4 py-2 text-[11px] font-medium tracking-[0.06em] text-(--color-text-inverse) uppercase transition-all hover:brightness-110"
-        >
-          <FlaskConical size={14} strokeWidth={2} />
-          Go to Backtest
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate("/backtest")}
+            className="flex items-center gap-1.5 rounded-md bg-(--color-brand) px-4 py-2 text-[11px] font-medium tracking-[0.06em] text-(--color-text-inverse) uppercase transition-all hover:brightness-110"
+          >
+            Go to Backtest
+          </button>
+          <button
+            onClick={() => navigate("/committee")}
+            className="flex items-center gap-1.5 rounded-md border border-(--color-brand) bg-(--color-brand-glow) px-4 py-2 text-[11px] font-medium tracking-[0.06em] text-(--color-brand) uppercase transition-all hover:brightness-110"
+          >
+            Go to Committee
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (runningList.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 rounded-sm border border-(--color-glass-border) bg-(--color-surface) py-16">
+        <span className="text-sm font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
+          All Studies Complete
+        </span>
+        <span className="text-xs text-(--color-text-muted)">
+          View results or start a new study
+        </span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate("/backtest")}
+            className="flex items-center gap-1.5 rounded-md bg-(--color-brand) px-4 py-2 text-[11px] font-medium tracking-[0.06em] text-(--color-text-inverse) uppercase transition-all hover:brightness-110"
+          >
+            New Backtest
+          </button>
+          <button
+            onClick={() => navigate("/committee")}
+            className="flex items-center gap-1.5 rounded-md border border-(--color-brand) bg-(--color-brand-glow) px-4 py-2 text-[11px] font-medium tracking-[0.06em] text-(--color-brand) uppercase transition-all hover:brightness-110"
+          >
+            New Committee
+          </button>
+          <button
+            onClick={() => navigate("/results")}
+            className="flex items-center gap-1.5 rounded-md border border-(--color-glass-border) bg-(--color-glass) px-4 py-2 text-[11px] font-medium tracking-[0.06em] text-(--color-text-secondary) uppercase transition-all hover:brightness-110"
+          >
+            View Results
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div ref={mainRef} className="flex h-full flex-col overflow-hidden px-4 lg:px-6">
-      {/* ── Slim Header ── */}
-      <div className="flex shrink-0 items-center gap-4 border-b border-(--color-glass-border) bg-(--color-surface) py-2">
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* ── Tab bar ── */}
+      <div className="flex shrink-0 items-center gap-1 pt-3 pb-2">
+        <TabButton label="Backtests" active={true} onClick={() => {}} />
+        <TabButton label="Committee" active={false} onClick={() => switchTab("committee")} />
+      </div>
+
+      {/* ── Top Bar ── */}
+      <div className="flex flex-row shrink-0 items-center gap-4 w-full rounded-lg border border-(--color-glass-border) bg-(--color-glass) px-4 py-2.5">
         <JobPillStrip
           jobs={allJobs}
           selectedJobId={selectedJobId}
@@ -269,6 +479,11 @@ export function MonitorPage() {
         <span className="font-mono text-[10px] text-(--color-text-secondary) tabular-nums">
           {Math.round(progress)}%
         </span>
+        {progressText && (
+          <span className="shrink-0 font-mono text-[9px] text-(--color-text-dim) tabular-nums">
+            {progressText}
+          </span>
+        )}
 
         {selectedJobId && (
           <span
@@ -293,14 +508,24 @@ export function MonitorPage() {
             Force Stop
           </button>
         )}
+
+        {isDone && selectedJobId && (
+          <button
+            onClick={() => navigate(`/results/${selectedJobId}`)}
+            className="flex shrink-0 items-center gap-1 rounded border border-(--color-accent-success) px-2 py-1 text-[10px] font-semibold tracking-[0.06em] text-(--color-accent-success) uppercase transition hover:brightness-110"
+          >
+            View Results
+          </button>
+        )}
       </div>
 
       {selectedJob ? (
         <>
-          {/* ── Top Pane: Optimization Phase ── */}
-          <div className="shrink-0 overflow-hidden border-b border-(--color-glass-border)">
+          {/* ── Top Pane: HPO + Model Health (50%) ── */}
+          <div className="flex-1 min-h-0 overflow-hidden">
             <div className="grid h-full grid-cols-1 gap-4 p-4 lg:grid-cols-3">
-              <div className="flex h-full min-h-0 flex-col rounded-lg border border-(--color-glass-border) bg-(--color-glass) p-4 lg:col-span-2">
+              {/* HPO Convergence — 2/3 */}
+              <div className="flex min-h-0 flex-col rounded-lg border border-(--color-glass-border) bg-(--color-glass) p-4 lg:col-span-2">
                 <div className="mb-3 flex shrink-0 items-center gap-3">
                   <span className="text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
                     HPO Convergence
@@ -310,9 +535,7 @@ export function MonitorPage() {
                       onClick={() => setHpoModelFilter(null)}
                       className="rounded px-2 py-0.5 text-[9px] font-medium uppercase transition"
                       style={{
-                        backgroundColor: !hpoModelFilter
-                          ? "var(--color-brand-glow)"
-                          : "transparent",
+                        backgroundColor: !hpoModelFilter ? "var(--color-brand-glow)" : "transparent",
                         color: !hpoModelFilter ? "var(--color-brand)" : "var(--color-text-muted)",
                       }}
                     >
@@ -324,10 +547,8 @@ export function MonitorPage() {
                         onClick={() => setHpoModelFilter(m)}
                         className="rounded px-2 py-0.5 text-[9px] font-medium uppercase transition"
                         style={{
-                          backgroundColor:
-                            hpoModelFilter === m ? "var(--color-brand-glow)" : "transparent",
-                          color:
-                            hpoModelFilter === m ? "var(--color-brand)" : "var(--color-text-muted)",
+                          backgroundColor: hpoModelFilter === m ? "var(--color-brand-glow)" : "transparent",
+                          color: hpoModelFilter === m ? "var(--color-brand)" : "var(--color-text-muted)",
                         }}
                       >
                         {m}
@@ -336,7 +557,7 @@ export function MonitorPage() {
                   </div>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
-                  <div className="min-h-[180px]">
+                  <div className="h-[260px]">
                     <HpoScatterChart allTrials={allHpoTrials} filterModel={hpoModelFilter} />
                   </div>
                   <HpoTrialFeed
@@ -349,7 +570,8 @@ export function MonitorPage() {
                 </div>
               </div>
 
-              <div className="flex h-full min-h-0 flex-col rounded-lg border border-(--color-glass-border) bg-(--color-glass) p-4">
+              {/* Model Health — 1/3 */}
+              <div className="flex min-h-0 flex-col rounded-lg border border-(--color-glass-border) bg-(--color-glass) p-4">
                 <span className="mb-3 shrink-0 text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
                   Model Health
                 </span>
@@ -362,79 +584,42 @@ export function MonitorPage() {
                     {(() => {
                       const total = allOosPeriods.length;
                       const longCount = allOosPeriods.filter((p) => (p.return_pct ?? 0) > 0).length;
-                      const flatCount = allOosPeriods.filter(
-                        (p) => (p.return_pct ?? 0) === 0,
-                      ).length;
-                      const shortCount = allOosPeriods.filter(
-                        (p) => (p.return_pct ?? 0) < 0,
-                      ).length;
+                      const flatCount = allOosPeriods.filter((p) => (p.return_pct ?? 0) === 0).length;
+                      const shortCount = allOosPeriods.filter((p) => (p.return_pct ?? 0) < 0).length;
                       const longPct = total > 0 ? (longCount / total) * 100 : 0;
                       const flatPct = total > 0 ? (flatCount / total) * 100 : 0;
                       const shortPct = total > 0 ? (shortCount / total) * 100 : 0;
-
-                      const totalRawSignals = allOosPeriods.reduce(
-                        (s, p) => s + (p.signals_raw ?? 0),
-                        0,
-                      );
-                      const totalPassedSignals = allOosPeriods.reduce(
-                        (s, p) => s + (p.signals_passed_gate ?? 0),
-                        0,
-                      );
-                      const gateRate =
-                        totalRawSignals > 0 ? (totalPassedSignals / totalRawSignals) * 100 : 0;
+                      const totalRawSignals = allOosPeriods.reduce((s, p) => s + (p.signals_raw ?? 0), 0);
+                      const totalPassedSignals = allOosPeriods.reduce((s, p) => s + (p.signals_passed_gate ?? 0), 0);
+                      const gateRate = totalRawSignals > 0 ? (totalPassedSignals / totalRawSignals) * 100 : 0;
 
                       return (
                         <>
                           <div className="mb-1.5 flex h-5 overflow-hidden rounded-full bg-(--color-glass-hover)">
                             {longPct > 0 && (
-                              <div
-                                className="flex items-center justify-center text-[8px] font-bold text-white/80 transition-all"
-                                style={{
-                                  width: `${longPct}%`,
-                                  backgroundColor: "var(--color-accent-success)",
-                                }}
-                              >
+                              <div className="flex items-center justify-center text-[8px] font-bold text-white/80 transition-all" style={{ width: `${longPct}%`, backgroundColor: "var(--color-accent-success)" }}>
                                 {longPct >= 12 ? `${Math.round(longPct)}%` : ""}
                               </div>
                             )}
                             {flatPct > 0 && (
-                              <div
-                                className="flex items-center justify-center text-[8px] font-bold text-white/60 transition-all"
-                                style={{
-                                  width: `${flatPct}%`,
-                                  backgroundColor: "var(--color-text-dim)",
-                                }}
-                              >
+                              <div className="flex items-center justify-center text-[8px] font-bold text-white/60 transition-all" style={{ width: `${flatPct}%`, backgroundColor: "var(--color-text-dim)" }}>
                                 {flatPct >= 12 ? `${Math.round(flatPct)}%` : ""}
                               </div>
                             )}
                             {shortPct > 0 && (
-                              <div
-                                className="flex items-center justify-center text-[8px] font-bold text-white/80 transition-all"
-                                style={{
-                                  width: `${shortPct}%`,
-                                  backgroundColor: "var(--color-accent-danger)",
-                                }}
-                              >
+                              <div className="flex items-center justify-center text-[8px] font-bold text-white/80 transition-all" style={{ width: `${shortPct}%`, backgroundColor: "var(--color-accent-danger)" }}>
                                 {shortPct >= 12 ? `${Math.round(shortPct)}%` : ""}
                               </div>
                             )}
                           </div>
                           <div className="flex items-center justify-between font-mono text-[9px]">
-                            <span className="text-(--color-accent-success)">
-                              POS {Math.round(longPct)}%
-                            </span>
-                            <span className="text-(--color-text-dim)">
-                              NEUT {Math.round(flatPct)}%
-                            </span>
-                            <span className="text-(--color-accent-danger)">
-                              NEG {Math.round(shortPct)}%
-                            </span>
+                            <span className="text-(--color-accent-success)">POS {Math.round(longPct)}%</span>
+                            <span className="text-(--color-text-dim)">NEUT {Math.round(flatPct)}%</span>
+                            <span className="text-(--color-accent-danger)">NEG {Math.round(shortPct)}%</span>
                           </div>
                           {totalRawSignals > 0 && (
                             <div className="mt-2 font-mono text-[8px] text-(--color-text-dim)">
-                              Gate: {totalPassedSignals}/{totalRawSignals} signals (
-                              {Math.round(gateRate)}%)
+                              Gate: {totalPassedSignals}/{totalRawSignals} signals ({Math.round(gateRate)}%)
                             </div>
                           )}
                         </>
@@ -446,276 +631,139 @@ export function MonitorPage() {
             </div>
           </div>
 
-          {/* ── Resize Handle ── */}
-          <div className="relative flex h-1 flex-shrink-0 items-center justify-center py-1">
-            <div
-              className="absolute inset-0 cursor-row-resize bg-(--color-glass-border) transition-colors hover:bg-(--color-brand)"
-              onMouseDown={onSplitMouseDown}
-            />
-            <button
-              onClick={() => setSplit(split > 50 ? 33 : 66)}
-              className="relative z-10 flex h-5 w-5 items-center justify-center rounded-full border border-(--color-glass-border) bg-(--color-surface) text-(--color-text-muted) transition hover:border-(--color-brand) hover:text-(--color-brand)"
-              aria-label={split > 50 ? "Expand bottom pane" : "Expand top pane"}
-            >
-              {split > 50 ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
-            </button>
-          </div>
+          {/* ── Static Divider ── */}
+          <div className="shrink-0 border-t border-(--color-glass-border)" />
 
-          {/* ── Bottom Pane: Execution Phase ── */}
-          <div
-            className="overflow-hidden p-6 transition-[flex] duration-300 ease-in-out"
-            style={{ flex: `${100 - split} 0 0px`, minHeight: 350 }}
-          >
-            <div className="flex h-full flex-col gap-6 overflow-hidden lg:flex-row">
-              <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-                <div className="flex items-center justify-between pt-4 lg:pt-0">
+          {/* ── Bottom Pane: Equity + Period Results (50%) ── */}
+          <div className="flex-1 min-h-0 p-4">
+            <div className="flex h-full gap-4 overflow-hidden">
+              {/* Left 50%: Walk-Forward Equity */}
+              <div className="flex min-w-0 flex-1 flex-col rounded-lg border border-(--color-glass-border) bg-(--color-glass) p-4">
+                <div className="mb-3 flex shrink-0 items-center gap-3">
                   <span className="text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
                     Walk-Forward Equity
                   </span>
-                  <span className="font-mono text-[10px] text-(--color-text-muted)">
-                    {progressText}
-                  </span>
+                  <button
+                    onClick={() => setYMode((y) => (y === "pct" ? "raw" : "pct"))}
+                    className="rounded border border-(--color-border) px-2 py-0.5 text-[10px] transition-colors"
+                    style={{
+                      color: yMode === "pct" ? "var(--color-brand)" : "var(--color-text-muted)",
+                      backgroundColor: yMode === "pct" ? "rgba(59,130,246,0.08)" : "transparent",
+                    }}
+                  >
+                    {yMode === "pct" ? "%" : "$"}
+                  </button>
                 </div>
-                <div className="min-h-[400px] min-w-0 flex-1">
-                  {selectedJob.cycles.length === 0 ? (
+                <div className="flex-1 min-h-0">
+                  {phase === "hpo" ? (
                     <div className="flex h-full items-center justify-center">
-                      <span className="text-xs text-(--color-text-muted)">
-                        Waiting for cycles...
-                      </span>
+                      <span className="text-sm text-slate-500">Awaiting HPO convergence to calculate walk-forward equity...</span>
                     </div>
+                  ) : selectedJob.cycles.length > 0 ? (
+                    <EquityChart models={models} oosPeriods={allOosPeriods} oosEquity={allOosEquity} yMode={yMode} />
                   ) : (
-                    <EquityChart
-                      models={models}
-                      oosPeriods={allOosPeriods}
-                      oosEquity={allOosEquity}
-                    />
+                    <div className="flex h-full items-center justify-center">
+                      <span className="text-xs text-(--color-text-muted)">Waiting for cycles...</span>
+                    </div>
                   )}
                 </div>
-                {allOosPeriods.length > 0 && (
-                  <div>
+                {phase === "hpo" && allOosPeriods.length === 0 ? (
+                  <div className="mt-2 flex h-6 shrink-0 items-center justify-center rounded border border-(--color-glass-border) bg-(--color-glass-hover)">
+                    <span className="text-[9px] text-slate-500">Awaiting walk-forward periods...</span>
+                  </div>
+                ) : allOosPeriods.length > 0 ? (
+                  <div className="mt-2 shrink-0">
                     <MonthlyHeatmap periods={allOosPeriods} />
                   </div>
-                )}
+                ) : null}
               </div>
 
-              <div className="flex h-full shrink-0 flex-col overflow-hidden rounded-lg border border-(--color-glass-border) bg-(--color-glass) lg:w-[320px]">
+              {/* Right 50%: Unified Period Results + Trades */}
+              <div className="flex w-1/2 min-w-0 shrink-0 flex-col rounded-lg border border-(--color-glass-border) bg-(--color-glass)">
                 <div className="flex shrink-0 items-center gap-2 border-b border-(--color-glass-border) px-3 py-2">
                   <span className="text-[10px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
                     Period Results
                   </span>
                   <span className="font-mono text-[9px] text-(--color-text-dim)">
-                    {Math.min(allOosPeriods.filter((p) => p.trades && p.trades > 0).length, 50)}{" "}
-                    active
+                    {periodRows.length} periods
                   </span>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5 border-b border-[rgba(42,46,57,0.3)] px-3 py-1 font-mono text-[8px] tracking-[0.05em] text-(--color-text-dim) uppercase">
-                  <span className="w-12 shrink-0">Period</span>
+                <div className="flex shrink-0 items-center gap-2 border-b border-[rgba(42,46,57,0.3)] px-3 py-1 font-mono text-[8px] tracking-[0.05em] text-(--color-text-dim) uppercase">
+                  <span className="w-10 shrink-0">Month</span>
+                  <span className="w-8 shrink-0 text-right">Model</span>
+                  <span className="w-14 shrink-0 text-right">Return</span>
+                  <span className="w-14 shrink-0 text-right">Sharpe</span>
                   <span className="w-8 shrink-0 text-right">#</span>
-                  <span className="flex-1 text-right">Return</span>
-                  <span className="w-12 shrink-0 text-right">Sharpe</span>
                 </div>
-                <div className="flex-1 overflow-hidden">
-                  <TradeLogFeed periods={allOosPeriods} models={models} />
-                </div>
-              </div>
-            </div>
+                <div className="flex-1 overflow-y-auto [scrollbar-width:thin]">
+                  {periodRows.length === 0 ? (
+                    <div className="flex h-full items-center justify-center">
+                      <span className="text-[10px] text-(--color-text-muted)">No trade data yet</span>
+                    </div>
+                  ) : (
+                    periodRows.map((p) => {
+                      const key = `${p.period}-${p.model ?? ""}`;
+                      const isExpanded = expandedPeriod === key;
+                      const isPositive = (p.return_pct ?? 0) >= 0;
+                      const dirColor = isPositive ? "var(--color-accent-success)" : "var(--color-accent-danger)";
+                      const shortModel = (p.model ?? "").slice(0, 6);
 
-            <div className="shrink-0 border-t border-(--color-glass-border) pb-4">
-              <div className="mt-4 flex flex-col gap-3 overflow-hidden rounded-lg border border-(--color-glass-border) bg-(--color-glass) p-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
-                    Per-Month Summary
-                  </span>
-                  {allOosPeriods.length > 0 &&
-                    (() => {
-                      const uniqueMonths = [...new Set(allOosPeriods.map((p) => p.period))].sort(
-                        (a, b) => a - b,
-                      );
                       return (
-                        <div className="flex items-center gap-1">
+                        <div key={key} className="border-b border-[rgba(42,46,57,0.3)]">
                           <button
-                            onClick={() => setSelectedMonth(null)}
-                            className="rounded px-2 py-0.5 text-[9px] font-medium uppercase transition"
-                            style={{
-                              backgroundColor:
-                                selectedMonth === null ? "var(--color-brand-glow)" : "transparent",
-                              color:
-                                selectedMonth === null
-                                  ? "var(--color-brand)"
-                                  : "var(--color-text-dim)",
-                            }}
+                            onClick={() => setExpandedPeriod(isExpanded ? null : key)}
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-[10px] transition-colors hover:bg-(--color-glass-hover)"
                           >
-                            All
+                            <span className="w-10 shrink-0 whitespace-nowrap font-mono text-(--color-text-dim)">
+                              M{p.period}
+                            </span>
+                            <span className="w-8 shrink-0 text-right font-mono text-(--color-brand) tabular-nums">
+                              {shortModel}
+                            </span>
+                            <span className="w-14 shrink-0 text-right font-mono tabular-nums" style={{ color: dirColor }}>
+                              {isPositive ? "+" : ""}{(p.return_pct ?? 0).toFixed(2)}%
+                            </span>
+                            <span className="w-14 shrink-0 text-right font-mono tabular-nums" style={{ color: dirColor }}>
+                              {p.sharpe != null ? p.sharpe.toFixed(2) : "\u2014"}
+                            </span>
+                            <span className="w-8 shrink-0 text-right font-mono tabular-nums text-(--color-text-dim)">
+                              {p.trades ?? 0}
+                            </span>
                           </button>
-                          {uniqueMonths.map((m) => (
-                            <button
-                              key={m}
-                              onClick={() => setSelectedMonth(m)}
-                              className="rounded px-2 py-0.5 font-mono text-[9px] font-medium transition"
-                              style={{
-                                backgroundColor:
-                                  selectedMonth === m ? "var(--color-brand-glow)" : "transparent",
-                                color:
-                                  selectedMonth === m
-                                    ? "var(--color-brand)"
-                                    : "var(--color-text-dim)",
-                              }}
-                            >
-                              Month {m}
-                            </button>
-                          ))}
+                          {isExpanded && (
+                            <div className="border-t border-[rgba(42,46,57,0.2)] bg-[rgba(0,229,255,0.02)] px-3 py-2">
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-[9px]">
+                                <span className="text-(--color-text-dim)">Win Rate</span>
+                                <span className="text-right text-(--color-text-secondary)">
+                                  {p.win_rate != null ? `${(p.win_rate * 100).toFixed(1)}%` : "\u2014"}
+                                </span>
+                                <span className="text-(--color-text-dim)">Max DD</span>
+                                <span className="text-right text-(--color-accent-danger)">
+                                  {p.drawdown != null ? `${p.drawdown.toFixed(2)}%` : "\u2014"}
+                                </span>
+                                <span className="text-(--color-text-dim)">Gate Rate</span>
+                                <span className="text-right text-(--color-text-secondary)">
+                                  {(p.signals_raw ?? 0) > 0
+                                    ? `${Math.round(((p.signals_passed_gate ?? 0) / (p.signals_raw ?? 1)) * 100)}% (${p.signals_passed_gate ?? 0}/${p.signals_raw ?? 0})`
+                                    : "\u2014"}
+                                </span>
+                                <span className="text-(--color-text-dim)">Overfit Risk</span>
+                                <span className="text-right" style={{
+                                  color: (p.sharpe_gap_pct ?? 0) > 40
+                                    ? "var(--color-accent-danger)"
+                                    : (p.sharpe_gap_pct ?? 0) > 15
+                                      ? "var(--color-accent-warning)"
+                                      : "var(--color-accent-success)",
+                                }}>
+                                  {p.sharpe_gap_pct != null ? `${p.sharpe_gap_pct.toFixed(0)}% gap` : "\u2014"}
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
-                    })()}
-                </div>
-                <div className="overflow-x-auto">
-                  <div className="min-w-[640px]">
-                    <table className="w-full border-collapse overflow-hidden rounded-sm border border-(--color-glass-border)">
-                      <thead className="bg-(--color-elevated)">
-                        <tr>
-                          <th className="border-b border-(--color-glass-border) px-2 py-1.5 text-left text-[9px] font-medium tracking-[0.06em] whitespace-nowrap text-(--color-text-muted) uppercase">
-                            Model
-                          </th>
-                          <th className="border-b border-(--color-glass-border) px-2 py-1.5 text-left text-[9px] font-medium tracking-[0.06em] whitespace-nowrap text-(--color-text-muted) uppercase">
-                            Period
-                          </th>
-                          <th className="border-b border-(--color-glass-border) px-2 py-1.5 text-right text-[9px] font-medium tracking-[0.06em] whitespace-nowrap text-(--color-text-muted) uppercase">
-                            Sharpe
-                          </th>
-                          <th className="border-b border-(--color-glass-border) px-2 py-1.5 text-right text-[9px] font-medium tracking-[0.06em] whitespace-nowrap text-(--color-text-muted) uppercase">
-                            Return
-                          </th>
-                          <th className="border-b border-(--color-glass-border) px-2 py-1.5 text-right text-[9px] font-medium tracking-[0.06em] whitespace-nowrap text-(--color-text-muted) uppercase">
-                            Trades
-                          </th>
-                          <th className="border-b border-(--color-glass-border) px-2 py-1.5 text-right text-[9px] font-medium tracking-[0.06em] whitespace-nowrap text-(--color-text-muted) uppercase">
-                            DD
-                          </th>
-                          <th className="border-b border-(--color-glass-border) px-2 py-1.5 text-right text-[9px] font-medium tracking-[0.06em] whitespace-nowrap text-(--color-text-muted) uppercase">
-                            Win Rate
-                          </th>
-                          <th className="border-b border-(--color-glass-border) px-2 py-1.5 text-center text-[9px] font-medium tracking-[0.06em] whitespace-nowrap text-(--color-text-muted) uppercase">
-                            Gate
-                          </th>
-                          <th className="border-b border-(--color-glass-border) px-2 py-1.5 text-center text-[9px] font-medium tracking-[0.06em] whitespace-nowrap text-(--color-text-muted) uppercase">
-                            Risk
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {allOosPeriods.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={9}
-                              className="py-8 text-center text-[10px] text-(--color-text-muted)"
-                            >
-                              Awaiting monthly completion...
-                            </td>
-                          </tr>
-                        ) : (
-                          (() => {
-                            const filtered =
-                              selectedMonth != null
-                                ? allOosPeriods.filter((p) => p.period === selectedMonth)
-                                : allOosPeriods;
-                            const groups = new Map<string, typeof filtered>();
-                            for (const p of filtered) {
-                              const m = p.model ?? "";
-                              if (!groups.has(m)) groups.set(m, []);
-                              groups.get(m)!.push(p);
-                            }
-                            const rows: React.ReactNode[] = [];
-                            let first = true;
-                            for (const [modelName, periods] of groups) {
-                              if (!first)
-                                rows.push(
-                                  <tr key={`sep-${modelName}`}>
-                                    <td colSpan={9} className="p-0">
-                                      <div className="h-1.5" />
-                                    </td>
-                                  </tr>,
-                                );
-                              first = false;
-                              for (const p of periods) {
-                                rows.push(
-                                  <tr
-                                    key={`${modelName}-${p.period}`}
-                                    className="border-b border-[rgba(42,46,57,0.4)]"
-                                  >
-                                    <td className="px-2 py-1 font-mono text-[10px] whitespace-nowrap text-(--color-brand)">
-                                      {modelName}
-                                    </td>
-                                    <td className="px-2 py-1 font-mono text-[10px] whitespace-nowrap text-(--color-text-secondary)">
-                                      M{p.period}
-                                      {p.flat ? " (flat)" : ""}
-                                    </td>
-                                    <td
-                                      className="px-2 py-1 text-right font-mono text-[10px] whitespace-nowrap text-(--color-text-primary)"
-                                      title={`Train: ${p.train_sharpe?.toFixed(2) ?? "?"} | Test: ${p.sharpe?.toFixed(2) ?? "?"} | Gap: ${(p.sharpe_gap_pct ?? 0).toFixed(0)}%`}
-                                    >
-                                      {p.sharpe?.toFixed(2) ?? "-"}
-                                    </td>
-                                    <td className="px-2 py-1 text-right font-mono text-[10px] whitespace-nowrap text-(--color-text-primary)">
-                                      {p.return_pct != null ? `${p.return_pct.toFixed(2)}%` : "-"}
-                                    </td>
-                                    <td className="px-2 py-1 text-right font-mono text-[10px] whitespace-nowrap text-(--color-text-primary)">
-                                      {p.trades ?? "-"}
-                                    </td>
-                                    <td className="px-2 py-1 text-right font-mono text-[10px] whitespace-nowrap text-(--color-text-primary)">
-                                      {p.drawdown?.toFixed(2) ?? "-"}
-                                    </td>
-                                    <td className="px-2 py-1 text-right font-mono text-[10px] whitespace-nowrap text-(--color-text-primary)">
-                                      {p.win_rate != null
-                                        ? `${(p.win_rate * 100).toFixed(1)}%`
-                                        : "-"}
-                                    </td>
-                                    <td
-                                      className="px-2 py-1 text-center font-mono text-[10px] whitespace-nowrap text-(--color-text-primary)"
-                                      title={`Signals: ${p.signals_passed_gate ?? 0} passed / ${p.signals_raw ?? 0} raw`}
-                                    >
-                                      {(p.signals_raw ?? 0) > 0
-                                        ? `${Math.round(((p.signals_passed_gate ?? 0) / (p.signals_raw ?? 1)) * 100)}%`
-                                        : "-"}
-                                    </td>
-                                    <td className="px-2 py-1 text-center whitespace-nowrap">
-                                      {p.sharpe_gap_pct != null ? (
-                                        <span
-                                          className="inline-block h-2 w-2 rounded-full"
-                                          style={{
-                                            backgroundColor:
-                                              p.sharpe_gap_pct > 40
-                                                ? "var(--color-accent-danger)"
-                                                : p.sharpe_gap_pct > 15
-                                                  ? "var(--color-accent-warning)"
-                                                  : "var(--color-accent-success)",
-                                          }}
-                                          title={`Train/OOS gap: ${p.sharpe_gap_pct.toFixed(0)}%`}
-                                        />
-                                      ) : (
-                                        <span className="text-(--color-text-muted)">-</span>
-                                      )}
-                                    </td>
-                                  </tr>,
-                                );
-                              }
-                            }
-                            return rows.length > 0 ? (
-                              rows
-                            ) : (
-                              <tr>
-                                <td
-                                  colSpan={9}
-                                  className="py-4 text-center text-[10px] text-(--color-text-muted)"
-                                >
-                                  No data for selected month
-                                </td>
-                              </tr>
-                            );
-                          })()
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                    })
+                  )}
                 </div>
               </div>
             </div>
@@ -737,5 +785,29 @@ export function MonitorPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function TabButton({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors"
+      style={{
+        backgroundColor: active ? "var(--color-brand)" : "transparent",
+        color: active ? "white" : "var(--color-text-muted)",
+        border: active ? "1px solid var(--color-brand)" : "1px solid var(--color-border)",
+      }}
+      onClick={onClick}
+    >
+      {label}
+    </button>
   );
 }

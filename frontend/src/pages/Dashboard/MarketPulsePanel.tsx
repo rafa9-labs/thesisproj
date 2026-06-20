@@ -2,8 +2,12 @@ import { useState } from "react";
 import { useLiveSentiment, useNewsStatus } from "@/api/queries";
 import { formatPercent } from "@/lib/formatters";
 import { BullBearBar } from "@/components/shared/BullBearBar";
+import { useDashboardStore } from "@/stores/useDashboardStore";
+import { useAppStore } from "@/stores/useAppStore";
 import type { LiveSentimentPairData, LiveSentimentResponse } from "@/api/schemas";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { SENTIMENT_THRESHOLDS, BIAS_THRESHOLD } from "@/lib/sentiment-thresholds";
 
 interface ArticleItem {
   title: string;
@@ -14,6 +18,8 @@ interface ArticleItem {
   url?: string;
   body?: string;
   summary?: string;
+  llm_sentiment?: number | null;
+  llm_confidence?: number | null;
 }
 
 function formatStaleness(ageHours: number | undefined | null): string {
@@ -24,34 +30,80 @@ function formatStaleness(ageHours: number | undefined | null): string {
   return `${Math.round(ageHours / 24)}d ago`;
 }
 
+function getSourceDomain(source: string): string {
+  const map: Record<string, string> = {
+    reuters: "reuters.com",
+    bloomberg: "bloomberg.com",
+    forexlive: "forexlive.com",
+    fxstreet: "fxstreet.com",
+    dailyfx: "dailyfx.com",
+    investing: "investing.com",
+    marketwatch: "marketwatch.com",
+    cnbc: "cnbc.com",
+    financialtimes: "ft.com",
+  };
+  const key = source.toLowerCase().replace(/\s+/g, "");
+  return map[key] || `${key}.com`;
+}
+
+function getImpactLabel(score: number, magnitude?: number): { label: string; className: string } {
+  const impact = Math.abs(score) * (magnitude ?? 1);
+  if (impact >= SENTIMENT_THRESHOLDS.IMPACT_HIGH) return { label: "High", className: "bg-(--color-accent-danger) text-white" };
+  if (impact >= SENTIMENT_THRESHOLDS.IMPACT_MED) return { label: "Med", className: "bg-(--color-accent-warning) text-black" };
+  return { label: "Low", className: "bg-(--color-text-dim) text-(--color-text-primary)" };
+}
+
+function FaviconImg({ source }: { source: string }) {
+  const domain = getSourceDomain(source);
+  return (
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`}
+      alt=""
+      className="h-3.5 w-3.5 shrink-0"
+      onError={(e) => {
+        (e.target as HTMLImageElement).style.display = "none";
+      }}
+    />
+  );
+}
+
 /** Compact row showing one pair in the overview grid */
 function MiniPairRow({
   pair,
   data,
+  isActive = false,
   isOther = false,
 }: {
   pair: string;
   data: LiveSentimentPairData;
+  isActive?: boolean;
   isOther?: boolean;
 }) {
   const pos = data.recommended_position ?? 0;
   const count = data.article_count ?? 0;
   const scoreText = pos > 0 ? `+${pos.toFixed(2)}` : pos.toFixed(2);
   const scoreColor =
-    pos > 0.05
+    pos > BIAS_THRESHOLD
       ? "var(--color-accent-success)"
-      : pos < -0.05
+      : pos < -BIAS_THRESHOLD
         ? "var(--color-accent-danger)"
         : "var(--color-text-muted)";
 
   return (
     <div
-      className="flex items-center gap-2 py-1.5"
+      className={cn(
+        "flex items-center gap-2 py-1.5 transition-colors duration-150",
+        isActive
+          ? "bg-(--color-glass-hover) border-l-[3px] border-l-(--color-brand) pl-1.5"
+          : "border-l-[3px] border-l-transparent pl-1.5",
+      )}
       style={{ borderBottom: isOther ? "none" : "1px solid var(--color-glass-border)" }}
     >
       <span
-        className="w-14 shrink-0 font-mono text-[10px] tabular-nums"
-        style={{ color: isOther ? "var(--color-text-dim)" : "var(--color-text-secondary)" }}
+        className={cn(
+          "w-14 shrink-0 font-mono text-[10px] tabular-nums",
+          isOther ? "text-(--color-text-dim)" : "text-(--color-text-secondary)",
+        )}
       >
         {pair}
       </span>
@@ -82,7 +134,13 @@ function MiniPairRow({
 }
 
 /** Overview grid of all pairs' sentiment — compact, fits above the detail view */
-function SentimentOverview({ sentiment }: { sentiment: LiveSentimentResponse | undefined }) {
+function SentimentOverview({
+  sentiment,
+  activePair,
+}: {
+  sentiment: LiveSentimentResponse | undefined;
+  activePair: string;
+}) {
   if (!sentiment?.pairs) return null;
 
   const entries = Object.entries(sentiment.pairs);
@@ -94,7 +152,12 @@ function SentimentOverview({ sentiment }: { sentiment: LiveSentimentResponse | u
   return (
     <div className="-mx-1 flex flex-col">
       {majorRows.map(([pair, data]) => (
-        <MiniPairRow key={pair} pair={pair} data={data} />
+        <MiniPairRow
+          key={pair}
+          pair={pair}
+          data={data}
+          isActive={pair === activePair}
+        />
       ))}
       {otherEntry && (
         <>
@@ -137,12 +200,12 @@ function SentimentScores({
   );
 }
 
-/** Article row — clickable title, expandable body */
+/** Article row — clickable title, expandable body, impact tag, favicon */
 function ArticleRow({ article }: { article: ArticleItem }) {
   const [expanded, setExpanded] = useState(false);
   const score = article.sentiment_score;
-  const isBullish = score > 0.2;
-  const isBearish = score < -0.2;
+  const isBullish = score > SENTIMENT_THRESHOLDS.BULLISH;
+  const isBearish = score < SENTIMENT_THRESHOLDS.BEARISH;
   const borderColor = isBullish
     ? "var(--color-accent-success)"
     : isBearish
@@ -150,6 +213,7 @@ function ArticleRow({ article }: { article: ArticleItem }) {
       : "var(--color-glass-border)";
   const hasBody = !!(article.body || article.summary);
   const bodyText = article.body || article.summary || "";
+  const impact = getImpactLabel(score);
 
   const now = new Date().getTime();
   const ts = new Date(article.timestamp).getTime();
@@ -177,17 +241,22 @@ function ArticleRow({ article }: { article: ArticleItem }) {
       onClick={handleClick}
     >
       <div className="flex h-8 items-center justify-between gap-2 py-3 pr-2 pl-2">
+        <FaviconImg source={article.source} />
         <a
           href={article.url || "#"}
           target="_blank"
           rel="noopener noreferrer"
           className="min-w-0 flex-1 truncate text-[10px] leading-[1.3] text-(--color-text-primary) transition-colors hover:text-(--color-brand) hover:underline"
           onClick={(e) => e.stopPropagation()}
+          title={article.title}
         >
           {article.title}
         </a>
         <span className="shrink-0 font-mono text-[9px] whitespace-nowrap text-(--color-text-muted) uppercase tabular-nums">
           {article.source}
+        </span>
+        <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold tabular-nums", impact.className)}>
+          {impact.label}
         </span>
         <span className="shrink-0 font-mono text-[9px] whitespace-nowrap text-(--color-text-dim) tabular-nums">
           {timeStr}
@@ -204,9 +273,12 @@ function ArticleRow({ article }: { article: ArticleItem }) {
 
 /** Sentiment + bias only — used in Col 2 */
 export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
-  const { data: sentiment, isLoading: sentLoading } = useLiveSentiment(pair);
+  const activePair = useDashboardStore((s) => s.activePair);
+  const demoMode = useAppStore((s) => s.demoMode);
+  const displayPair = pair ?? activePair;
+  const { data: sentiment, isLoading: sentLoading } = useLiveSentiment(displayPair, !demoMode);
 
-  const pairData = sentiment?.pairs?.[pair] ?? sentiment?.pairs?.[pair.toUpperCase()];
+  const pairData = sentiment?.pairs?.[displayPair] ?? sentiment?.pairs?.[displayPair.toUpperCase()];
   const recommendedPosition = pairData?.recommended_position ?? 0;
   const articleCount = pairData?.article_count ?? 0;
   const cacheAge = pairData?.cache_age_hours;
@@ -233,12 +305,12 @@ export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <SentimentOverview sentiment={sentiment} />
+      <SentimentOverview sentiment={sentiment} activePair={displayPair} />
 
       <div className="border-t border-(--color-glass-border) pt-2">
         <div className="mb-2 flex items-center justify-between">
           <span className="font-mono text-[10px] font-semibold text-(--color-text-secondary)">
-            {pair}
+            {displayPair}
           </span>
           {pairData?.currencies_affected && pairData.currencies_affected.length > 0 && (
             <span className="text-[8px] text-(--color-text-dim)">
@@ -295,7 +367,10 @@ export function MarketPulsePanel({ pair = "EURUSD" }: { pair?: string }) {
 
 /** News articles only — used in Col 3 */
 export function NewsArticlesPanel({ pair = "EURUSD" }: { pair?: string }) {
-  const { data: sentiment, isLoading: sentLoading } = useLiveSentiment(pair);
+  const activePair = useDashboardStore((s) => s.activePair);
+  const demoMode = useAppStore((s) => s.demoMode);
+  const displayPair = pair ?? activePair;
+  const { data: sentiment, isLoading: sentLoading } = useLiveSentiment(displayPair, !demoMode);
   const { data: newsStatus } = useNewsStatus();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ exact: true });
 
@@ -305,7 +380,7 @@ export function NewsArticlesPanel({ pair = "EURUSD" }: { pair?: string }) {
   const tiers = [
     {
       key: "exact" as const,
-      label: `${pair} articles`,
+      label: `${displayPair} articles`,
       filter: (a: (typeof articles)[number]) => a.relevance_tier === 1,
     },
     {
@@ -353,7 +428,7 @@ export function NewsArticlesPanel({ pair = "EURUSD" }: { pair?: string }) {
               <div key={key}>
                 <button
                   onClick={() => toggle(key)}
-                  className="flex w-full items-center gap-1 py-1 text-left text-(--color-text-muted)"
+                  className="flex w-full items-center gap-1 py-1 text-left text-(--color-text-muted) hover:text-(--color-text-secondary)"
                 >
                   {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
                   <span className="text-[9px] font-medium tracking-[0.06em] uppercase">

@@ -20,7 +20,9 @@ function persistNewsCache(queryClient: QueryClient) {
         }),
       );
     }
-  } catch {}
+  } catch {
+    /* localStorage unavailable — silently skip */
+  }
 }
 
 function restoreNewsCache(queryClient: QueryClient) {
@@ -31,14 +33,16 @@ function restoreNewsCache(queryClient: QueryClient) {
     if (Date.now() - cached.timestamp < 30 * 60_000) {
       queryClient.setQueryData(["live-sentiment", "EURUSD"], cached.sentiment);
     }
-  } catch {}
+  } catch {
+    /* corrupted data or localStorage unavailable */
+  }
 }
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
-      gcTime: 30 * 60_000,
+      staleTime: 5 * 60_000,
+      gcTime: 10 * 60_000,
       retry: 2,
       refetchOnWindowFocus: false,
     },
@@ -72,6 +76,25 @@ queryClient.getQueryCache().subscribe((event) => {
     persistNewsCache(queryClient);
   }
 });
+
+function onVisibilityChange() {
+  if (document.visibilityState === "visible") {
+    queryClient.invalidateQueries({ queryKey: ["live-sentiment"] });
+    queryClient.invalidateQueries({ queryKey: ["live-prices"] });
+    queryClient.invalidateQueries({ queryKey: ["news-articles"] });
+    queryClient.invalidateQueries({ queryKey: ["news-status"] });
+  }
+}
+
+function onOnline() {
+  queryClient.invalidateQueries({ queryKey: ["live-sentiment"] });
+  queryClient.invalidateQueries({ queryKey: ["live-prices"] });
+  queryClient.invalidateQueries({ queryKey: ["news-articles"] });
+  queryClient.invalidateQueries({ queryKey: ["news-status"] });
+}
+
+document.addEventListener("visibilitychange", onVisibilityChange);
+window.addEventListener("online", onOnline);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 
 from api.config import settings
 from api.middleware import install_security_middleware
-from api.routers import backtest, committee, config, data, health, license, live, live_metrics, models, news, pairs, prices, trading, ws
+from api.routers import backtest, committee, config, data, health, hardware, license, live, live_metrics, models, news, pairs, prices, trading, ws
 
 IS_DESKTOP = os.environ.get("FX_APP_MODE", "") == "desktop"
 
@@ -24,6 +24,11 @@ async def lifespan(app: FastAPI):
     start = startup_cleanup(settings.db_full_path)
     if start:
         print(f"[Shutdown] Startup: reset {start} stale running job(s) to pending")
+    try:
+        store = get_data_store()
+        store.mark_orphaned_sessions()
+    except Exception:
+        pass
     try:
         from pipeline.model_registry_disk import scan_and_repair
         result = scan_and_repair(settings.db_full_path)
@@ -84,6 +89,7 @@ app.include_router(news.router, prefix="/api/v1")
 app.include_router(backtest.router, prefix="/api/v1")
 app.include_router(config.router, prefix="/api/v1")
 app.include_router(data.router, prefix="/api/v1")
+app.include_router(hardware.router, prefix="/api/v1")
 app.include_router(license.router, prefix="/api/v1")
 app.include_router(ws.router, prefix="/api/v1")
 app.include_router(prices.router, prefix="/api/v1")

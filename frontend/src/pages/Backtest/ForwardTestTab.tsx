@@ -144,7 +144,8 @@ export function ForwardTestTab() {
     refetchOnMount: true,
   });
 
-  const activeModels = (models ?? []).filter((m) => !m.missing_on_disk);
+  const modelsSafe = Array.isArray(models) ? models : [];
+  const activeModels = modelsSafe.filter((m) => !m.missing_on_disk);
   const selected = activeModels.find((m) => m.id === selectedModel);
 
   const handleSelect = useCallback((id: string) => {

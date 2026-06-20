@@ -1,51 +1,26 @@
-import { useModels } from "@/api/queries";
+import { useModels, useLicenseStatus } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
-import { modelCategories, modelDescriptions } from "@/lib/tokens";
-import { useSettingsStore } from "@/stores/useSettingsStore";
 import { Panel, PanelHeader } from "@/components/shared/Panel";
-import { Cpu, Network, GitBranch, Layers, Boxes, Zap } from "lucide-react";
+import { ModelCard } from "@/components/shared/ModelCard";
+import { modelCategories } from "@/lib/tokens";
 import type { ModelInfo } from "@/api/schemas";
-
-const GPU_MODELS = new Set([
-  "cnn",
-  "lstm",
-  "transformer",
-  "gru",
-  "gru_lstm",
-  "dqn",
-  "ensemble_adaptive_regime",
-  "ensemble_cnn_lstm_xgboost",
-  "meta_ensemble",
-  "stacking_ensemble",
-]);
-
-const CATEGORY_ICON: Record<string, React.ElementType> = {
-  classical: GitBranch,
-  deep: Network,
-  rl: Zap,
-  ensemble: Boxes,
-};
-
-const CATEGORY_BADGE: Record<string, string> = {
-  classical: "Classical",
-  deep: "Deep Learning",
-  rl: "Reinforcement",
-  ensemble: "Ensemble",
-};
 
 export function ModelSelector() {
   const { data: models, isLoading } = useModels();
+  const { data: license } = useLicenseStatus();
   const selected = useBacktestStore((s) => s.selectedModels);
   const toggleModel = useBacktestStore((s) => s.toggleModel);
-  const verbose = useSettingsStore((s) => s.verboseMode);
 
-  const modelsByCategory = categorizeModels(models ?? []);
+  const modelsSafe = Array.isArray(models) ? models : [];
+
+  const modelsByCategory = categorizeModels(modelsSafe);
+  const lockedModels = new Set(license?.locked_models ?? []);
 
   return (
     <Panel>
       <PanelHeader
         title="Model Architecture"
-        subtitle="Choose one or more models to train and compare."
+        subtitle="Click any model to toggle it on or off. You can select multiple models."
         accessory={
           <span className="rounded-md border border-(--color-glass-border) px-3 py-1 font-mono text-[11px] font-semibold text-(--color-text-secondary)">
             {selected.length}/5 selected
@@ -54,13 +29,13 @@ export function ModelSelector() {
       />
 
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-28 animate-skeleton rounded-sm bg-(--color-glass-hover)" />
+            <div key={i} className="h-12 animate-skeleton rounded-sm bg-(--color-glass-hover)" />
           ))}
         </div>
       ) : (
-        <div className="flex flex-col gap-7">
+        <div className="flex flex-col gap-5">
           {Object.entries(modelCategories).map(([catKey, cat]) => {
             const catModels = modelsByCategory[catKey] ?? [];
             if (catModels.length === 0) return null;
@@ -77,16 +52,16 @@ export function ModelSelector() {
                   </span>
                   <div className="h-px flex-1" style={{ backgroundColor: "#333" }} />
                 </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
                   {catModels.map((m) => (
                     <ModelCard
                       key={m.name}
                       model={m}
                       isSelected={selected.includes(m.name)}
                       isFull={selected.length >= 5 && !selected.includes(m.name)}
+                      isLocked={lockedModels.has(m.name)}
                       categoryKey={catKey}
                       categoryColor={cat.color}
-                      verbose={verbose}
                       onToggle={() => toggleModel(m.name)}
                     />
                   ))}
@@ -100,122 +75,7 @@ export function ModelSelector() {
   );
 }
 
-function ModelCard({
-  model,
-  isSelected,
-  isFull,
-  categoryKey,
-  categoryColor,
-  verbose,
-  onToggle,
-}: {
-  model: ModelInfo;
-  isSelected: boolean;
-  isFull: boolean;
-  categoryKey: string;
-  categoryColor: string;
-  verbose: boolean;
-  onToggle: () => void;
-}) {
-  const desc = modelDescriptions[model.name];
-  const needsGpu = GPU_MODELS.has(model.name);
-  const Icon = CATEGORY_ICON[categoryKey] ?? Layers;
-  const badge = CATEGORY_BADGE[categoryKey] ?? categoryKey;
 
-  return (
-    <button
-      onClick={onToggle}
-      disabled={isFull}
-      className="flex flex-col gap-3 rounded-lg border p-4 text-left transition-all duration-150"
-      style={{
-        borderColor: isSelected ? "var(--color-brand)" : "var(--color-glass-border)",
-        backgroundColor: isSelected ? "rgba(0,229,255,0.05)" : "var(--color-input-bg)",
-        opacity: isFull ? 0.35 : 1,
-        cursor: isFull ? "not-allowed" : "pointer",
-        boxShadow: isSelected ? "0 0 16px rgba(0,229,255,0.12)" : "none",
-      }}
-    >
-      {/* Top row: icon box + category badge */}
-      <div className="flex items-start justify-between">
-        <div
-          className="flex items-center justify-center rounded-lg bg-(--color-elevated)"
-          style={{
-            width: 38,
-            height: 38,
-            border: "1px solid var(--color-glass-border)",
-            color: categoryColor,
-          }}
-        >
-          <Icon size={18} strokeWidth={1.75} />
-        </div>
-        <span
-          className="rounded-full border px-2.5 py-0.5 text-[9px] font-semibold tracking-[0.08em] uppercase"
-          style={{
-            borderColor: `${categoryColor}40`,
-            color: categoryColor,
-            backgroundColor: `${categoryColor}12`,
-          }}
-        >
-          {badge}
-        </span>
-      </div>
-
-      {/* Name */}
-      <span className="text-[15px] leading-tight font-bold text-(--color-text-primary)">
-        {desc?.name ?? model.display_name}
-      </span>
-
-      {/* Description */}
-      <span
-        className="text-[12px] leading-relaxed font-light text-(--color-text-secondary)"
-        style={{
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical",
-          overflow: "hidden",
-        }}
-      >
-        {desc?.short ?? model.description}
-      </span>
-
-      {verbose && desc?.apprentice && (
-        <p className="text-[11px] leading-relaxed font-light text-(--color-text-muted)">
-          {desc.apprentice}
-        </p>
-      )}
-
-      {/* Footer: GPU flag + radio selector */}
-      <div className="mt-1 flex items-center justify-between border-t border-(--color-glass-border) pt-3">
-        {needsGpu ? (
-          <div className="flex items-center gap-1.5">
-            <Cpu size={11} strokeWidth={1.75} className="text-(--color-accent-warning)" />
-            <span className="text-[10px] font-medium tracking-[0.04em] text-(--color-accent-warning) uppercase">
-              GPU Optimized
-            </span>
-          </div>
-        ) : (
-          <span className="text-[10px] font-medium tracking-[0.06em] text-(--color-text-dim) uppercase">
-            {desc?.short ? "" : "CPU"}
-          </span>
-        )}
-
-        {/* Radio selector */}
-        <span
-          className="flex items-center justify-center rounded-full transition-all duration-150"
-          style={{
-            width: 18,
-            height: 18,
-            border: `1.5px solid ${isSelected ? "var(--color-brand)" : "var(--color-text-dim)"}`,
-          }}
-        >
-          {isSelected && (
-            <span className="rounded-full bg-(--color-brand)" style={{ width: 9, height: 9 }} />
-          )}
-        </span>
-      </div>
-    </button>
-  );
-}
 
 function categorizeModels(models: ModelInfo[]): Record<string, ModelInfo[]> {
   const result: Record<string, ModelInfo[]> = {};

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { Metrics, WsEvent, HpoTrialRow, OosPeriodResult } from "@/api/schemas";
 
 const _processedEventIds = new Map<string, Set<number>>();
@@ -53,6 +54,8 @@ interface JobStore {
   activeJobs: Map<string, JobState>;
   selectedJobId: string | null;
   completedJobIds: Set<string>;
+  unreadCompletedCount: number;
+  completedJobs: Array<{ jobId: string; models: string[]; pair: string; status: string; completedAt: Date }>;
 
   startJob: (jobId: string, pair: string, models: string[]) => void;
   ensureJob: (jobId: string, pair: string, models: string[]) => void;
@@ -63,73 +66,181 @@ interface JobStore {
   setActiveTab: (jobId: string, tab: ActiveTab) => void;
   markCompleted: (jobId: string) => void;
   clearCompletedJobs: () => void;
+  clearUnreadCount: () => void;
 }
 
-export const useJobStore = create<JobStore>()((set, get) => ({
-  activeJobs: new Map(),
-  selectedJobId: null,
-  completedJobIds: new Set(),
+const MAX_JOBS = 5;
 
-  startJob: (jobId, pair, models) =>
-    set((state) => {
-      const next = new Map(state.activeJobs);
-      next.set(jobId, {
-        jobId,
-        pair,
-        models,
-        status: "pending",
-        progress: 0,
-        progressText: "Starting...",
-        completedModels: [],
-        currentModel: null,
-        metrics: new Map(),
-        error: null,
-        createdAt: new Date(),
-        completedAt: null,
-        totalWork: 0,
-        completedWork: 0,
-        modelPhases: new Map(),
-        hpoTrials: [],
-        bestTrial: null,
-        oosPeriods: [],
-        oosEquity: [],
-        periodTotals: 0,
-        activeTab: "hpo-and-results",
-        cycles: [],
-      });
-      return { activeJobs: next, selectedJobId: jobId };
-    }),
+function _toMap<K, V>(value: unknown): Map<K, V> {
+  if (value instanceof Map) return new Map(value) as Map<K, V>;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return new Map(Object.entries(value)) as Map<K, V>;
+  }
+  return new Map<K, V>();
+}
 
-  ensureJob: (jobId, pair, models) =>
-    set((state) => {
-      if (state.activeJobs.has(jobId)) return state;
-      const next = new Map(state.activeJobs);
-      next.set(jobId, {
-        jobId,
-        pair,
-        models,
-        status: "pending",
-        progress: 0,
-        progressText: "Starting...",
-        completedModels: [],
-        currentModel: null,
-        metrics: new Map(),
-        error: null,
-        createdAt: new Date(),
-        completedAt: null,
-        totalWork: 0,
-        completedWork: 0,
-        modelPhases: new Map(),
-        hpoTrials: [],
-        bestTrial: null,
-        oosPeriods: [],
-        oosEquity: [],
-        periodTotals: 0,
-        activeTab: "hpo-and-results",
-        cycles: [],
-      });
-      return { activeJobs: next };
-    }),
+function _toSet<T>(value: unknown): Set<T> {
+  if (value instanceof Set) return new Set(value);
+  if (Array.isArray(value)) return new Set(value);
+  return new Set<T>();
+}
+
+const _serialize = (state: unknown): string => {
+  return JSON.stringify(state, (_key, value) => {
+    if (value instanceof Map) return { __zt: "Map", v: Array.from(value.entries()) };
+    if (value instanceof Set) return { __zt: "Set", v: Array.from(value) };
+    if (value instanceof Date) return { __zt: "Date", v: value.toISOString() };
+    return value;
+  });
+};
+
+const _deserialize = (str: string): unknown => {
+  const parsed = JSON.parse(str, (_key, value) => {
+    if (value && typeof value === "object" && value.__zt) {
+      if (value.__zt === "Map") return new Map(value.v);
+      if (value.__zt === "Set") return new Set(value.v);
+      if (value.__zt === "Date") return new Date(value.v);
+    }
+    return value;
+  });
+  if (parsed?.state?.activeJobs && !(parsed.state.activeJobs instanceof Map)) {
+    const raw = parsed.state.activeJobs;
+    if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+      parsed.state.activeJobs = new Map(Object.entries(raw));
+    } else {
+      parsed.state.activeJobs = new Map();
+    }
+  }
+  if (parsed?.state?.completedJobIds && !(parsed.state.completedJobIds instanceof Set)) {
+    const raw = parsed.state.completedJobIds;
+    if (Array.isArray(raw)) {
+      parsed.state.completedJobIds = new Set(raw);
+    } else if (typeof raw === "object" && raw !== null && Symbol.iterator in raw) {
+      parsed.state.completedJobIds = new Set(raw as Iterable<unknown>);
+    } else {
+      parsed.state.completedJobIds = new Set();
+    }
+  }
+  return parsed;
+};
+
+export const useJobStore = create<JobStore>()(
+  persist(
+    (set, get) => ({
+      activeJobs: new Map(),
+      selectedJobId: null,
+      completedJobIds: new Set(),
+      unreadCompletedCount: 0,
+      completedJobs: [],
+
+      startJob: (jobId, pair, models) =>
+        set((state) => {
+          const next = _toMap(state.activeJobs);
+
+          // FIFO: if at capacity, evict oldest
+          if (next.size >= MAX_JOBS) {
+            let oldestId = "";
+            let oldestDate = new Date();
+            for (const [id, j] of next) {
+              if (j.createdAt < oldestDate) {
+                oldestDate = j.createdAt;
+                oldestId = id;
+              }
+            }
+            if (oldestId) {
+              next.delete(oldestId);
+              const nextCompleted = _toSet(state.completedJobIds);
+              nextCompleted.delete(oldestId);
+              _processedEventIds.delete(oldestId);
+              state.completedJobIds = nextCompleted;
+            }
+          }
+
+          next.set(jobId, {
+            jobId,
+            pair,
+            models,
+            status: "pending",
+            progress: 0,
+            progressText: "Starting...",
+            completedModels: [],
+            currentModel: null,
+            metrics: new Map(),
+            error: null,
+            createdAt: new Date(),
+            completedAt: null,
+            totalWork: 0,
+            completedWork: 0,
+            modelPhases: new Map(),
+            hpoTrials: [],
+            bestTrial: null,
+            oosPeriods: [],
+            oosEquity: [],
+            periodTotals: 0,
+            activeTab: "hpo-and-results",
+            cycles: [],
+          });
+          return { activeJobs: next, selectedJobId: jobId };
+        }),
+
+      ensureJob: (jobId, pair, models) =>
+        set((state) => {
+          const next = _toMap(state.activeJobs);
+          const existing = next.get(jobId);
+          if (existing) {
+            const needsUpdate = existing.pair !== pair || existing.models.join(",") !== models.join(",");
+            if (needsUpdate) {
+              next.set(jobId, { ...existing, pair, models });
+              return { activeJobs: next };
+            }
+            return state;
+          }
+
+          // FIFO: if at capacity, evict oldest
+          if (next.size >= MAX_JOBS) {
+            let oldestId = "";
+            let oldestDate = new Date();
+            for (const [id, j] of next) {
+              if (j.createdAt < oldestDate) {
+                oldestDate = j.createdAt;
+                oldestId = id;
+              }
+            }
+            if (oldestId) {
+              next.delete(oldestId);
+              const nextCompleted = _toSet(state.completedJobIds);
+              nextCompleted.delete(oldestId);
+              _processedEventIds.delete(oldestId);
+              state.completedJobIds = nextCompleted;
+            }
+          }
+
+          next.set(jobId, {
+            jobId,
+            pair,
+            models,
+            status: "pending",
+            progress: 0,
+            progressText: "Starting...",
+            completedModels: [],
+            currentModel: null,
+            metrics: new Map(),
+            error: null,
+            createdAt: new Date(),
+            completedAt: null,
+            totalWork: 0,
+            completedWork: 0,
+            modelPhases: new Map(),
+            hpoTrials: [],
+            bestTrial: null,
+            oosPeriods: [],
+            oosEquity: [],
+            periodTotals: 0,
+            activeTab: "hpo-and-results",
+            cycles: [],
+          });
+          return { activeJobs: next };
+        }),
 
   handleWsEvent: (event) =>
     set((state) => {
@@ -149,7 +260,7 @@ export const useJobStore = create<JobStore>()((set, get) => ({
           e.status ?? e.phase ?? e.trial_number ?? "",
         );
       }
-      const next = new Map(state.activeJobs);
+      const next = _toMap(state.activeJobs);
       const jobId = (event as { job_id?: string }).job_id;
       if (!jobId) return state;
 
@@ -165,7 +276,34 @@ export const useJobStore = create<JobStore>()((set, get) => ({
       }
 
       const job = next.get(jobId);
-      if (!job) return state;
+      if (!job) {
+        const eventModel = (event as { model?: string }).model;
+        next.set(jobId, {
+          jobId,
+          pair: "",
+          models: eventModel ? [eventModel] : [],
+          status: "running",
+          progress: 0,
+          progressText: "Backtest running...",
+          completedModels: [],
+          currentModel: eventModel ?? null,
+          metrics: new Map(),
+          error: null,
+          createdAt: new Date(),
+          completedAt: null,
+          totalWork: (event as { total_work?: number }).total_work ?? 0,
+          completedWork: 0,
+          modelPhases: new Map(),
+          hpoTrials: [],
+          bestTrial: null,
+          oosPeriods: [],
+          oosEquity: [],
+          periodTotals: 0,
+          activeTab: "hpo-and-results",
+          cycles: [],
+        });
+        return { activeJobs: next };
+      }
 
       const updated = { ...job };
 
@@ -201,10 +339,10 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         }
         if (event.status === "complete") {
           updated.completedModels = [...updated.completedModels, event.model];
-          const nextMetrics = new Map(updated.metrics);
+          const nextMetrics = _toMap<string, Partial<Metrics>>(updated.metrics);
           nextMetrics.set(event.model, event.metrics ?? {});
           updated.metrics = nextMetrics;
-          const phaseMap = new Map(updated.modelPhases);
+          const phaseMap = _toMap<string, ModelProgress>(updated.modelPhases);
           const mp = phaseMap.get(event.model) || {
             phase: "complete" as const,
             hpoTrial: 0,
@@ -227,7 +365,7 @@ export const useJobStore = create<JobStore>()((set, get) => ({
 
       if (event.event === "model_phase") {
         const m = event.model;
-        const phaseMap = new Map(updated.modelPhases);
+        const phaseMap = _toMap<string, ModelProgress>(updated.modelPhases);
         const mp = phaseMap.get(m) || {
           phase: "pending" as const,
           hpoTrial: 0,
@@ -252,7 +390,7 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         const m = event.model;
         const trial = event.trial ?? 0;
         const totalTrials = event.total_trials ?? event.n_trials ?? 0;
-        const phaseMap = new Map(updated.modelPhases);
+        const phaseMap = _toMap<string, ModelProgress>(updated.modelPhases);
         const mp = phaseMap.get(m) || {
           phase: "hpo" as const,
           hpoTrial: 0,
@@ -316,7 +454,7 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         const m = event.model;
         const month = event.month ?? event.period ?? 0;
         const totalMonths = event.total_months ?? event.total_periods ?? 0;
-        const phaseMap = new Map(updated.modelPhases);
+        const phaseMap = _toMap<string, ModelProgress>(updated.modelPhases);
         const mp = phaseMap.get(m) || {
           phase: "simulation" as const,
           hpoTrial: 0,
@@ -428,20 +566,47 @@ export const useJobStore = create<JobStore>()((set, get) => ({
         updated.progress = 100;
         updated.progressText = "Complete";
         updated.completedAt = new Date();
-        const nextCompleted = new Set(state.completedJobIds);
+        const nextCompleted = _toSet(state.completedJobIds);
         nextCompleted.add(jobId);
+        const entry = {
+          jobId,
+          models: updated.models,
+          pair: updated.pair,
+          status: "completed",
+          completedAt: updated.completedAt,
+        };
+        const nextList = [...(state.completedJobs || []), entry].slice(-10);
         next.set(jobId, updated);
-        return { activeJobs: next, completedJobIds: nextCompleted };
+        return {
+          activeJobs: next,
+          completedJobIds: nextCompleted,
+          completedJobs: nextList,
+          unreadCompletedCount: (state.unreadCompletedCount || 0) + 1,
+        };
       }
 
       if (event.event === "job_failed") {
         updated.status = "failed";
         updated.error = event.error;
         updated.progressText = `Failed: ${event.error}`;
-        const nextCompleted = new Set(state.completedJobIds);
+        updated.completedAt = new Date();
+        const nextCompleted = _toSet(state.completedJobIds);
         nextCompleted.add(jobId);
+        const entry = {
+          jobId,
+          models: updated.models,
+          pair: updated.pair,
+          status: "failed",
+          completedAt: updated.completedAt,
+        };
+        const nextList = [...(state.completedJobs || []), entry].slice(-10);
         next.set(jobId, updated);
-        return { activeJobs: next, completedJobIds: nextCompleted };
+        return {
+          activeJobs: next,
+          completedJobIds: nextCompleted,
+          completedJobs: nextList,
+          unreadCompletedCount: (state.unreadCompletedCount || 0) + 1,
+        };
       }
 
       next.set(jobId, updated);
@@ -452,23 +617,36 @@ export const useJobStore = create<JobStore>()((set, get) => ({
 
   removeJob: (jobId) =>
     set((state) => {
-      const next = new Map(state.activeJobs);
+      const next = _toMap(state.activeJobs);
       next.delete(jobId);
-      const nextCompleted = new Set(state.completedJobIds);
+      const nextCompleted = _toSet(state.completedJobIds);
       nextCompleted.delete(jobId);
       _processedEventIds.delete(jobId);
+
+      let nextSelectedId = state.selectedJobId;
+      if (state.selectedJobId === jobId) {
+        // Fallback: pick the most recent remaining job
+        let mostRecent: { id: string; date: Date } | null = null;
+        for (const [id, j] of next) {
+          if (!mostRecent || j.createdAt > mostRecent.date) {
+            mostRecent = { id, date: j.createdAt };
+          }
+        }
+        nextSelectedId = mostRecent?.id ?? null;
+      }
+
       return {
         activeJobs: next,
         completedJobIds: nextCompleted,
-        selectedJobId: state.selectedJobId === jobId ? null : state.selectedJobId,
+        selectedJobId: nextSelectedId,
       };
     }),
 
-  getJob: (jobId) => get().activeJobs.get(jobId),
+  getJob: (jobId) => _toMap<string, JobState>(get().activeJobs).get(jobId),
 
   setActiveTab: (jobId, tab) =>
     set((state) => {
-      const next = new Map(state.activeJobs);
+      const next = _toMap(state.activeJobs);
       const job = next.get(jobId);
       if (job) {
         next.set(jobId, { ...job, activeTab: tab });
@@ -479,14 +657,14 @@ export const useJobStore = create<JobStore>()((set, get) => ({
   markCompleted: (jobId) =>
     set((state) => {
       if (state.completedJobIds.has(jobId)) return state;
-      const nextCompleted = new Set(state.completedJobIds);
+      const nextCompleted = _toSet(state.completedJobIds);
       nextCompleted.add(jobId);
       return { completedJobIds: nextCompleted };
     }),
 
   clearCompletedJobs: () =>
     set((state) => {
-      const next = new Map(state.activeJobs);
+      const next = _toMap(state.activeJobs);
       const removed: string[] = [];
       for (const [id, job] of next) {
         if (job.status === "completed" || job.status === "failed") {
@@ -496,4 +674,21 @@ export const useJobStore = create<JobStore>()((set, get) => ({
       for (const id of removed) next.delete(id);
       return { activeJobs: next, completedJobIds: new Set() };
     }),
-}));
+
+  clearUnreadCount: () => set({ unreadCompletedCount: 0 }),
+}),
+{
+  name: "kodaquant-monitor-jobs",
+  storage: createJSONStorage(() => localStorage),
+  serialize: _serialize,
+  deserialize: _deserialize,
+  partialize: (state) => ({
+    activeJobs: state.activeJobs,
+    completedJobIds: state.completedJobIds,
+    selectedJobId: state.selectedJobId,
+    completedJobs: state.completedJobs,
+    unreadCompletedCount: state.unreadCompletedCount,
+  }),
+},
+),
+);

@@ -5,7 +5,7 @@ interface Props {
 }
 
 export function ModelHealthTable({ job }: Props) {
-  const models = job.models ?? [];
+  const models: string[] = Array.isArray(job.models) ? job.models : [];
   const cycles = job.cycles ?? [];
 
   const rows = models.map((model) => {

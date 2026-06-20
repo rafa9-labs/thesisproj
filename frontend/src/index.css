@@ -11,23 +11,26 @@
   --color-brand: #00e5ff;
 
   /* Canvas — institutional dark mode */
-  --color-app: #131722;
-  --color-surface: #1e222d;
-  --color-elevated: #252934;
+  --color-app: #0F172A;
+  --color-surface: #1A2332;
+  --color-elevated: #1E293B;
 
   /* Glass */
-  --color-glass: #1e222d;
-  --color-glass-border: #2a2e39;
+  --color-glass: #1A2332;
+  --color-glass-border: #334155;
   --color-glass-hover: rgba(255, 255, 255, 0.04);
 
   /* Input */
-  --color-input-bg: #0f1825;
+  --color-input-bg: #0F172A;
 
   /* Borders */
-  --color-border: #2a2e39;
-  --color-border-subtle: #1e222d;
+  --color-border: #334155;
+  --color-border-subtle: #1A2332;
   --color-border-active: rgba(0, 229, 255, 0.25);
-  --color-card-border: #1e2a3a;
+  --color-card-border: #1E293B;
+
+  /* Selection */
+  --color-selected-border: #10B981;
 
   /* Typography */
   --color-text-primary: #e8ecf1;
@@ -43,8 +46,8 @@
 
   /* Semantic */
   --color-accent: #00e5ff;
-  --color-accent-success: #089981;
-  --color-accent-danger: #f23645;
+  --color-accent-success: #10B981;
+  --color-accent-danger: #F43F5E;
   --color-accent-warning: #f59e0b;
   --color-accent-info: #00e5ff;
   --color-accent-classical: #22d3ee;
@@ -56,6 +59,11 @@
   --color-event-high: #ef4444;
   --color-event-medium: #f59e0b;
   --color-event-low: #00e5ff;
+
+  /* Stepper states */
+  --color-stepper-active: var(--color-brand);
+  --color-stepper-completed: #1E5A6E;
+  --color-stepper-upcoming: #334155;
 
   /* Animations — Tailwind v4 auto-generates animate-* classes */
   --animate-skeleton: pulse-skeleton 1.5s ease-in-out infinite;
@@ -91,27 +99,76 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #334155 transparent;
+  }
+
+  *:hover {
+    scrollbar-color: #475569 #1a2332;
+  }
+
+  /* Chromium + Safari */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
 
   ::-webkit-scrollbar-track {
-    background: var(--color-app);
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 3px;
+    background: #334155;
+    border-radius: 10px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-border-active);
+    background: #475569;
   }
 
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button {
-    opacity: 1;
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  .slider-thumb::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(0,229,255,0.25);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .slider-thumb::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+    box-shadow: 0 0 14px rgba(0,229,255,0.45);
+  }
+  .slider-thumb::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(0,229,255,0.25);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .slider-thumb::-moz-range-thumb:hover {
+    transform: scale(1.15);
+    box-shadow: 0 0 14px rgba(0,229,255,0.45);
   }
 
   select option {

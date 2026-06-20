@@ -18,14 +18,6 @@ const PHASE_LABEL: Record<string, string> = {
   phase4_factory: "Phase 5: Iterative Optimization",
 };
 
-const PHASE_COLORS: Record<number, string> = {
-  1: "#089981",
-  2: "#2962FF",
-  3: "#E5A014",
-  4: "#A78BFA",
-  5: "#F23645",
-};
-
 const PHASE_DESC: Record<string, string> = {
   feature_sweep:
     "Grid-expand indicators, BorutaSHAP shadow-feature validation with Purged K-Fold CV",
@@ -284,8 +276,8 @@ export function FullCycleProgress({ jobId, onCancel }: Props) {
                     {phaseChanged && (
                       <div
                         style={{
-                          color: PHASE_COLORS[e.phase_number] || "var(--color-text-dim)",
-                          borderTop: `1px solid ${PHASE_COLORS[e.phase_number]}22`,
+                          color: "var(--color-stepper-active)",
+                          borderTop: `1px solid rgba(0,229,255,0.13)`,
                         }}
                         className="mt-[4px] pt-[6px] pb-[2px] text-[11px] font-bold tracking-[0.04em]"
                       >
@@ -310,7 +302,7 @@ export function FullCycleProgress({ jobId, onCancel }: Props) {
                           <span
                             className="mr-[4px] inline-block rounded-[2px] px-[5px] text-[9px] font-semibold text-[#fff]"
                             style={{
-                              background: PHASE_COLORS[e.phase_number] || "var(--color-text-dim)",
+                              background: "var(--color-stepper-active)",
                             }}
                           >
                             P{e.phase_number}

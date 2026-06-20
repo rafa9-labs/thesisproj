@@ -1,5 +1,5 @@
 import { HorizontalBarChart } from "@/components/charts/SimpleCharts";
-import type { HpoParamImportance, HpoTrial } from "@/api/schemas";
+import type { HpoParamImportance, HpoTrial, BestStudy } from "@/api/schemas";
 
 interface HpoDiagnosticsProps {
   paramImportance: HpoParamImportance[] | null;
@@ -113,7 +113,7 @@ export function HpoDiagnostics({ paramImportance, trials }: HpoDiagnosticsProps)
 
   if (importance.length === 0 && trialData.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-sm border border-(--color-border) bg-(--color-surface) p-8 text-(--color-text-muted)">
+      <div className="flex items-center justify-center rounded-sm border border-(--color-glass-border) bg-(--color-surface) p-8 text-(--color-text-muted)">
         <span className="font-mono text-sm">No HPO diagnostics available</span>
       </div>
     );
@@ -130,13 +130,13 @@ export function HpoDiagnostics({ paramImportance, trials }: HpoDiagnosticsProps)
         HPO Diagnostics
       </h3>
       <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-sm border border-(--color-border) bg-(--color-surface) p-3">
+        <div className="rounded-sm border border-(--color-glass-border) bg-(--color-surface) p-3">
           <span className="mb-2 block text-[10px] font-semibold tracking-wide text-(--color-text-muted) uppercase">
             Param Importance
           </span>
           <HorizontalBarChart data={barData} barColor="var(--color-accent-success)" />
         </div>
-        <div className="rounded-sm border border-(--color-border) bg-(--color-surface) p-3">
+        <div className="rounded-sm border border-(--color-glass-border) bg-(--color-surface) p-3">
           <span className="mb-2 block text-[10px] font-semibold tracking-wide text-(--color-text-muted) uppercase">
             Optimization Trace — {trialData.length} trials
           </span>
@@ -146,6 +146,63 @@ export function HpoDiagnostics({ paramImportance, trials }: HpoDiagnosticsProps)
             <span className="text-xs text-(--color-text-muted)">No trial data</span>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+export function BestStudyCard({ bestStudy }: { bestStudy: BestStudy | null }) {
+  if (!bestStudy) return null;
+
+  const params = Object.entries(bestStudy.best_params ?? {});
+  if (params.length === 0 && bestStudy.best_value == null) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-xs font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
+        Best Study
+      </h3>
+      <div className="rounded-sm border border-(--color-accent-success) bg-(--color-surface) p-4">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+          <div>
+            <span className="block text-[10px] font-semibold tracking-wide text-(--color-text-muted) uppercase">
+              Best Trial
+            </span>
+            <span className="font-mono text-sm text-(--color-text-primary)">
+              #{bestStudy.best_trial}
+            </span>
+          </div>
+          <div>
+            <span className="block text-[10px] font-semibold tracking-wide text-(--color-text-muted) uppercase">
+              Best Value
+            </span>
+            <span className="font-mono text-sm text-(--color-accent-success)">
+              {bestStudy.best_value != null ? bestStudy.best_value.toFixed(4) : "—"}
+            </span>
+          </div>
+        </div>
+        {params.length > 0 && (
+          <div className="mt-3">
+            <span className="block text-[10px] font-semibold tracking-wide text-(--color-text-muted) uppercase mb-1.5">
+              Best Parameters
+            </span>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              {params.slice(0, 12).map(([k, v]) => (
+                <div key={k} className="flex justify-between text-xs">
+                  <span className="truncate text-(--color-text-muted)">{k}</span>
+                  <span className="ml-2 shrink-0 font-mono text-(--color-text-primary) tabular-nums">
+                    {typeof v === "number" ? v.toFixed(4) : String(v)}
+                  </span>
+                </div>
+              ))}
+              {params.length > 12 && (
+                <span className="text-xs text-(--color-text-muted)">
+                  +{params.length - 12} more
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

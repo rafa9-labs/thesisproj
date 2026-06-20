@@ -96,7 +96,7 @@ export function CommitteeConfigPanel() {
 
       {/* Regime Cards */}
       <div
-        className="grid gap-4"
+        className="grid items-start gap-4"
         style={{
           gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
         }}
@@ -140,8 +140,10 @@ export function CommitteeConfigPanel() {
                     max={100}
                     value={Math.round(assignment.weights[idx] * 100)}
                     onChange={(e) => changeWeight(regimeName, idx, Number(e.target.value) / 100)}
-                    className="h-1 flex-1"
-                    style={{ accentColor: "var(--color-brand)" }}
+                    className="slider-thumb h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-slate-800 outline-none"
+                    style={{
+                      background: `linear-gradient(to right, var(--color-brand) 0%, var(--color-brand) ${Math.round(assignment.weights[idx] * 100)}%, #1e293b ${Math.round(assignment.weights[idx] * 100)}%, #1e293b 100%)`,
+                    }}
                   />
                   <span className="w-10 text-right font-mono text-[11px] text-(--color-text-secondary)">
                     {(assignment.weights[idx] * 100).toFixed(0)}%

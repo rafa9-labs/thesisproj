@@ -1,11 +1,21 @@
 import { useLivePrices } from "@/api/queries";
 import { useNavigate } from "react-router-dom";
+import { useDashboardStore } from "@/stores/useDashboardStore";
+import { useAppStore } from "@/stores/useAppStore";
 import { Settings } from "lucide-react";
 import type { LivePrice } from "@/api/schemas";
+import { cn } from "@/lib/utils";
 
 function Sparkline({ points }: { points: { t: number; v: number }[] }) {
-  if (!points || points.length < 2)
-    return <div className="h-[26px] w-full bg-(--color-glass-hover)" />;
+  if (!points || points.length < 2) {
+    return (
+      <div className="flex h-[26px] w-full items-center justify-center border border-dashed border-(--color-glass-border) rounded-sm bg-(--color-glass-hover)">
+        <span className="text-[8px] text-(--color-text-dim)" title="Insufficient price history">
+          No history
+        </span>
+      </div>
+    );
+  }
 
   const values = points.map((p) => p.v);
   const min = Math.min(...values);
@@ -37,19 +47,45 @@ function Sparkline({ points }: { points: { t: number; v: number }[] }) {
   );
 }
 
-function PriceCard({ price }: { price: LivePrice }) {
+function PriceCard({
+  price,
+  isActive,
+  onSelect,
+}: {
+  price: LivePrice;
+  isActive: boolean;
+  onSelect: () => void;
+}) {
   const isUp = (price.change_pct ?? 0) >= 0;
   const changeColor = isUp ? "var(--color-accent-success)" : "var(--color-accent-danger)";
   const arrow = isUp ? "▲" : "▼";
 
   return (
-    <div className="min-w-0 flex-1 rounded-sm border border-(--color-glass-border) bg-(--color-glass) px-3 py-2.5 backdrop-blur-[12px]">
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={isActive}
+      aria-label={`Select ${price.symbol}`}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className={cn(
+        "min-w-0 flex-1 rounded-sm border border-(--color-glass-border) bg-(--color-glass) px-3 py-2.5 backdrop-blur-[12px] transition-colors duration-150",
+        isActive
+          ? "border-l-[3px] border-l-(--color-selected-border) shadow-[inset_0_0_16px_rgba(16,185,129,0.06)]"
+          : "cursor-pointer hover:bg-(--color-glass-hover) focus:outline-none focus:ring-1 focus:ring-(--color-brand)",
+      )}
+    >
       <div className="mb-1.5 flex items-center justify-between">
         <span className="font-mono text-[12px] font-semibold text-(--color-text-primary)">
           {price.symbol}
         </span>
         {price.change_pct != null && (
-          <span className="font-mono text-[10px] font-medium" style={{ color: changeColor }}>
+          <span className="font-mono text-[10px] font-medium tabular-nums" style={{ color: changeColor }}>
             {arrow} {price.change_pct > 0 ? "+" : ""}
             {price.change_pct.toFixed(2)}%
           </span>
@@ -59,21 +95,21 @@ function PriceCard({ price }: { price: LivePrice }) {
       <div className="mb-2 flex items-baseline gap-2">
         <div className="flex flex-col">
           <span className="text-[8px] leading-none text-(--color-text-muted)">BID</span>
-          <span className="font-mono text-base leading-none font-bold text-(--color-accent-danger)">
+          <span className="font-mono text-base leading-none font-bold text-(--color-accent-danger) tabular-nums">
             {price.bid != null ? price.bid.toFixed(5) : "—"}
           </span>
         </div>
         <div className="flex flex-col">
           <span className="text-[8px] leading-none text-(--color-text-muted)">ASK</span>
-          <span className="font-mono text-base leading-none font-bold text-(--color-accent-success)">
+          <span className="font-mono text-base leading-none font-bold text-(--color-accent-success) tabular-nums">
             {price.ask != null ? price.ask.toFixed(5) : "—"}
           </span>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 text-[8px] text-(--color-text-muted)">
+      <div className="flex items-center gap-1 text-[8px] text-(--color-text-muted) font-mono tabular-nums">
         <span>S: {price.spread_pips != null ? `${price.spread_pips}p` : "—"}</span>
-        <span className="font-mono">M: {price.mid != null ? price.mid.toFixed(5) : "—"}</span>
+        <span>M: {price.mid != null ? price.mid.toFixed(5) : "—"}</span>
       </div>
 
       {price.sparkline && (
@@ -99,10 +135,12 @@ function SkeletonCard() {
   );
 }
 
-export function PriceTicker({ pairs }: { pairs: string[] }) {
+export function PriceTicker({ pairs, activePair }: { pairs: string[]; activePair: string }) {
   const navigate = useNavigate();
+  const setActivePair = useDashboardStore((s) => s.setActivePair);
+  const demoMode = useAppStore((s) => s.demoMode);
   const displayPairs = (pairs ?? []).slice(0, 3);
-  const { data, isLoading } = useLivePrices(displayPairs);
+  const { data, isLoading } = useLivePrices(displayPairs, 50, !demoMode);
 
   if (!pairs || pairs.length === 0) return null;
 
@@ -147,7 +185,14 @@ export function PriceTicker({ pairs }: { pairs: string[] }) {
               timestamp: "",
               sparkline: [],
             }))
-          ).map((price) => <PriceCard key={price.symbol} price={price} />)}
+          ).map((price) => (
+            <PriceCard
+              key={price.symbol}
+              price={price}
+              isActive={price.symbol === activePair}
+              onSelect={() => setActivePair(price.symbol)}
+            />
+          ))}
     </div>
   );
 }

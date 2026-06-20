@@ -105,7 +105,7 @@ export function HpoScatterChart({ allTrials, filterModel }: Props) {
           tick={{ fontSize: 9, fontFamily: "JetBrains Mono", fill: "#64748b" }}
           axisLine={false}
           tickLine={false}
-          domain={[0, "auto"]}
+                domain={["auto", "auto"]}
         />
         <ZAxis range={[14, 14]} />
         <Tooltip content={<CustomTooltip />} />

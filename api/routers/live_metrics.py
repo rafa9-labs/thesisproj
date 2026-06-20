@@ -17,10 +17,10 @@ router = APIRouter(tags=["live_metrics"])
 
 
 def _get_committee_session(session_id: str) -> dict | None:
-    """Import active_sessions from live.py — avoids circular imports."""
-    from api.routers.live import active_sessions
+    """Import live_sessions from trading.py — avoids circular imports."""
+    from api.routers.trading import live_sessions
 
-    return active_sessions.get(session_id)
+    return live_sessions.get(session_id)
 
 
 @router.get("/live/committee/{session_id}/metrics")
@@ -30,7 +30,7 @@ async def get_committee_metrics(session_id: str):
     if not session:
         raise HTTPException(404, f"Session {session_id} not found")
 
-    from api.routers.live import build_committee_metrics_snapshot
+    from api.routers.trading import build_committee_metrics_snapshot
 
     try:
         metrics = build_committee_metrics_snapshot(session)
@@ -55,7 +55,7 @@ async def metrics_stream(websocket: WebSocket, session_id: str):
         await websocket.close()
         return
 
-    from api.routers.live import build_committee_metrics_snapshot
+    from api.routers.trading import build_committee_metrics_snapshot
 
     try:
         while session.get("status") == "running":

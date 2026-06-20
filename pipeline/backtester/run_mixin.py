@@ -23,6 +23,17 @@ def _check_throttle():
         pass
 
 
+def purge_train_set(train_data, val_start_iloc, label_horizon_bars):
+    """Remove training observations whose forward label window overlaps validation.
+    Per de Prado AFML Ch.7. Both operands are in train_data's iloc space.
+    """
+    import numpy as np
+    if label_horizon_bars <= 0 or len(train_data) == 0:
+        return train_data
+    keep_mask = np.arange(len(train_data)) + label_horizon_bars < val_start_iloc
+    return train_data.iloc[keep_mask]
+
+
 class RunMixin:
     """
     run_strategy (HPO loop)
@@ -1297,12 +1308,16 @@ class RunMixin:
                             except Exception:
                                 ts = te = vs = ve = 0
                             tr  = train_data.iloc[int(ts):int(te)]
+                            tr  = purge_train_set(tr, val_start_iloc=int(vs),
+                                                  label_horizon_bars=embargo_bars_eff)
                             val = train_data.iloc[int(vs):int(ve)]
                             split = int(vs)  # for logging/penalty context below
                         else:
                             split = fold
                             tr_end_idx = max(0, split - embargo_bars)
                             tr         = train_data.iloc[:tr_end_idx]
+                            tr         = purge_train_set(tr, val_start_iloc=split,
+                                                         label_horizon_bars=embargo_bars)
                             val        = train_data.iloc[split : split + val_window_local]
 
                         # record rows + val_end ts

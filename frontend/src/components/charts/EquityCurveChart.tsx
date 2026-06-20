@@ -2,6 +2,8 @@ import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import {
   createChart,
   type IChartApi,
+  type UTCTimestamp,
+  type SeriesMarker,
   ColorType,
   LineSeries,
   HistogramSeries,
@@ -12,6 +14,7 @@ interface EquityCurveChartProps {
   buyHoldData?: { time: number; value: number }[];
   drawdownData?: { time: number; value: number }[];
   eventMarkers?: { time: number; event: string; impact: string }[];
+  seriesMarkers?: SeriesMarker<UTCTimestamp>[];
   height?: number;
 }
 
@@ -20,7 +23,7 @@ export interface EquityCurveChartHandle {
 }
 
 export const EquityCurveChart = forwardRef<EquityCurveChartHandle, EquityCurveChartProps>(
-  function EquityCurveChart({ data, buyHoldData, drawdownData, eventMarkers, height = 480 }, ref) {
+  function EquityCurveChart({ data, buyHoldData, drawdownData, eventMarkers, seriesMarkers, height = 480 }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
 
@@ -124,20 +127,24 @@ export const EquityCurveChart = forwardRef<EquityCurveChartHandle, EquityCurveCh
           medium: "var(--color-accent-warning)",
           low: "var(--color-text-muted)",
         };
-        const markers = eventMarkers
+        const markers: SeriesMarker<UTCTimestamp>[] = eventMarkers
           .filter(
             (m) =>
               data.some((d) => d.time === m.time) ||
               data.some((d) => Math.abs(d.time - m.time) < 86400),
           )
           .map((m) => ({
-            time: m.time as unknown as import("lightweight-charts").UTCTimestamp,
+            time: m.time as unknown as UTCTimestamp,
             position: "belowBar" as const,
             color: IMPACT_COLORS[m.impact] ?? "var(--color-text-muted)",
             shape: "arrowUp" as const,
             text: m.event,
           }));
-        equitySeries.setMarkers(markers as any);
+        equitySeries.setMarkers(markers);
+      }
+
+      if (seriesMarkers && seriesMarkers.length > 0) {
+        equitySeries.setMarkers(seriesMarkers);
       }
 
       chart.timeScale().fitContent();
@@ -156,7 +163,7 @@ export const EquityCurveChart = forwardRef<EquityCurveChartHandle, EquityCurveCh
           chartRef.current = null;
         }
       };
-    }, [data, buyHoldData, drawdownData, eventMarkers, height]);
+    }, [data, buyHoldData, drawdownData, eventMarkers, seriesMarkers, height]);
 
     if (data.length === 0) {
       return (

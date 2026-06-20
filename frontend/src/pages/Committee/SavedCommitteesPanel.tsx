@@ -186,7 +186,7 @@ export function SavedCommitteesPanel() {
                           {regime.replace(/_/g, " ")}
                         </span>
                         <span className="text-(--color-text-dim)">
-                          {(assignment.models ?? [])
+                          {(Array.isArray(assignment.models) ? assignment.models : [])
                             .map(
                               (m: string, i: number) =>
                                 `${m} ${((assignment.weights?.[i] ?? 0) * 100).toFixed(0)}%`,

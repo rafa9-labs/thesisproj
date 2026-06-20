@@ -259,7 +259,23 @@ async def _paper_signal_loop(session_id: str):
                     signal_result or {"direction": "FLAT", "confidence": 50.0},
                     bid=bid, ask=ask, mid=mid_price,
                 )
+                if not candles.empty:
+                    last = candles.iloc[-1]
+                    result["candle"] = {
+                        "time": int(last["time"].timestamp()),
+                        "open": float(last["mid_open"]),
+                        "high": float(last["mid_high"]),
+                        "low": float(last["mid_low"]),
+                        "close": float(last["mid_close"]),
+                    }
+                result["live_price"] = mid_price
                 _broadcast_ws(session, result)
+                try:
+                    eq = result.get("equity")
+                    if eq is not None:
+                        store.update_session_equity(session_id, float(eq), result.get("position", "FLAT"))
+                except Exception:
+                    pass
 
         except Exception:
             logger.exception("Paper signal loop error for session %s", session_id)
@@ -311,7 +327,23 @@ async def _live_signal_loop(session_id: str):
                     oanda_client=oanda._get_client(),
                 )
                 engine.heartbeat()
+                if not candles.empty:
+                    last = candles.iloc[-1]
+                    result["candle"] = {
+                        "time": int(last["time"].timestamp()),
+                        "open": float(last["mid_open"]),
+                        "high": float(last["mid_high"]),
+                        "low": float(last["mid_low"]),
+                        "close": float(last["mid_close"]),
+                    }
+                result["live_price"] = mid_price
                 _broadcast_ws(session, result)
+                try:
+                    eq = result.get("equity")
+                    if eq is not None:
+                        store.update_session_equity(session_id, float(eq), result.get("position", "FLAT"))
+                except Exception:
+                    pass
 
             if result.get("event") == "kill":
                 session["_kill_event"].set()
@@ -391,7 +423,7 @@ async def start_paper_session(req: DeployPaperRequest):
     pair = req.pair.upper().strip()
     token, account_id = _get_oanda_credentials()
     if not token or not account_id:
-        raise HTTPException(403, "OANDA API key not configured")
+        logger.warning("OANDA credentials not configured — paper trading will use SQLite candles for prices")
 
     model_obj, bt, actual_model_type = _load_model_for_paper(
         req.model_id, req.model_type, pair, req.timeframe
@@ -423,6 +455,20 @@ async def start_paper_session(req: DeployPaperRequest):
     active_sessions[session_id] = session
     task = asyncio.create_task(_paper_signal_loop(session_id))
     session["_task"] = task
+
+    try:
+        store = get_data_store()
+        store.save_trading_session({
+            "id": session_id, "mode": "paper", "pair": pair,
+            "model_type": actual_model_type, "timeframe": req.timeframe,
+            "status": "running", "initial_equity": req.initial_equity,
+            "equity": req.initial_equity, "position": "FLAT",
+            "model_id": req.model_id or "", "committee_name": "",
+            "created_at": session["created_at"],
+            "updated_at": session["created_at"],
+        })
+    except Exception:
+        logger.exception("Failed to persist paper session %s", session_id)
 
     pstate = engine.get_portfolio_state()
     return PaperSessionInfo(
@@ -497,6 +543,14 @@ async def stop_paper_session(session_id: str):
         except Exception:
             pass
 
+    try:
+        s = engine.get_summary()
+        eq = float(s.get("equity", 0))
+        store = get_data_store()
+        store.update_session_status(session_id, "stopped", eq)
+    except Exception:
+        logger.exception("Failed to persist stop for session %s", session_id)
+
     return {
         "session_id": session_id, "status": "stopped",
         "summary": engine.get_summary(),
@@ -548,11 +602,27 @@ async def get_paper_summary(session_id: str):
 
 @router.get("/sessions")
 async def list_paper_sessions():
-    return [
+    memory = [
         {"session_id": s["session_id"], "pair": s["pair"], "model_type": s["model_type"],
-         "timeframe": s["timeframe"], "status": s["status"], "created_at": s["created_at"]}
+         "timeframe": s["timeframe"], "status": s["status"], "created_at": s["created_at"],
+         "initial_equity": s.get("initial_equity", 10000)}
         for s in active_sessions.values()
     ]
+    try:
+        store = get_data_store()
+        db = store.list_trading_sessions("paper")
+        seen = {s["session_id"] for s in memory}
+        for row in db:
+            if row["id"] not in seen:
+                memory.append({
+                    "session_id": row["id"], "pair": row["pair"],
+                    "model_type": row["model_type"], "timeframe": row["timeframe"],
+                    "status": row["status"], "created_at": row["created_at"],
+                    "initial_equity": row["initial_equity"],
+                })
+    except Exception:
+        pass
+    return memory
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -615,6 +685,20 @@ async def start_live_session(req: DeployLiveRequest):
     live_sessions[session_id] = session
     task = asyncio.create_task(_live_signal_loop(session_id))
     session["_task"] = task
+
+    try:
+        store = get_data_store()
+        store.save_trading_session({
+            "id": session_id, "mode": "live", "pair": pair,
+            "model_type": actual_model_type, "timeframe": req.timeframe,
+            "status": "running", "initial_equity": state["equity"],
+            "equity": state["equity"], "position": state["position"],
+            "model_id": req.model_id or "", "committee_name": "",
+            "created_at": session["created_at"],
+            "updated_at": session["created_at"],
+        })
+    except Exception:
+        logger.exception("Failed to persist live session %s", session_id)
 
     return LiveSessionInfo(
         session_id=session_id, pair=pair, model_type=actual_model_type,
@@ -679,6 +763,11 @@ async def stop_live_session(session_id: str):
             pass
 
     state = engine.get_session_state()
+    try:
+        store = get_data_store()
+        store.update_session_status(session_id, "stopped", float(state["equity"]))
+    except Exception:
+        logger.exception("Failed to persist stop for session %s", session_id)
     return {
         "session_id": session_id, "status": "stopped",
         "equity": state["equity"],
@@ -764,7 +853,7 @@ async def get_live_attribution(session_id: str):
 
 @live_router.get("/sessions")
 async def list_live_sessions():
-    return [
+    memory = [
         {
             "session_id": s["session_id"], "pair": s["pair"],
             "model_type": s["model_type"], "timeframe": s["timeframe"],
@@ -773,6 +862,72 @@ async def list_live_sessions():
         }
         for s in live_sessions.values()
     ]
+    try:
+        store = get_data_store()
+        db = store.list_trading_sessions("live")
+        seen = {s["session_id"] for s in memory}
+        for row in db:
+            if row["id"] not in seen:
+                memory.append({
+                    "session_id": row["id"], "pair": row["pair"],
+                    "model_type": row["model_type"], "timeframe": row["timeframe"],
+                    "mode": row["mode"], "status": row["status"],
+                    "killed": row["status"] == "killed", "created_at": row["created_at"],
+                })
+    except Exception:
+        pass
+    return memory
+
+
+def build_committee_metrics_snapshot(session: dict) -> dict:
+    """Build full metrics snapshot from a committee session for API/WS broadcast."""
+    runner = session.get("runner")
+    if not runner:
+        return {"error": "no runner", "session_id": session.get("session_id", "")}
+
+    health = runner.get_health_summary()
+    regimes = runner.get_recent_regimes(100)
+    regime_dist: Dict[str, float] = {}
+    for r in regimes:
+        regime_dist[r] = regime_dist.get(r, 0) + 1
+    total_r = len(regimes)
+    if total_r > 0:
+        for r in regime_dist:
+            regime_dist[r] = round(regime_dist[r] / total_r, 4)
+
+    trust_data = session.get("trust_score") or {}
+
+    return {
+        "session_id": session["session_id"],
+        "uptime_seconds": round(time.time() - runner._start_time.timestamp(),
+                                1) if runner._start_time else 0,
+        "bar_count": runner._bar_count,
+        "signal_count": len(runner._signal_history),
+        "non_zero_signals": sum(1 for s in runner._signal_history if s.signal != 0),
+        "committee_healthy": runner._check_health(),
+        "current_regime": regimes[-1] if regimes else "unknown",
+        "regime_distribution": regime_dist,
+        "trust_score": trust_data.get("trust_score"),
+        "trust_multiplier": session.get("trust_multiplier", 1.0),
+        "effective_multiplier": session.get("effective_multiplier", 1.0),
+        "throttle_summary": session["regime_throttle"].to_dict() if session.get("regime_throttle") else {},
+        "per_model_health": {
+            m: {
+                "rolling_sharpe": h["rolling_sharpe"],
+                "rolling_hit_rate": h["rolling_hit_rate"],
+                "total_signals": h["total_signals"],
+                "wins": h["wins"],
+                "losses": h["losses"],
+                "status": (
+                    "insufficient_data" if h.get("total_signals", 0) < 3
+                    else "healthy" if h.get("is_healthy", True)
+                    else "unhealthy"
+                ),
+            }
+            for m, h in health.items()
+        },
+        "recent_signals": [s.to_dict() for s in runner.get_recent_signals(5)],
+    }
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -842,6 +997,12 @@ async def _committee_trading_signal_loop(session_id: str):
                 )
                 engine.heartbeat()
                 _broadcast_ws(session, result)
+                try:
+                    eq = result.get("equity")
+                    if eq is not None:
+                        store.update_session_equity(session_id, float(eq), result.get("position", "FLAT"))
+                except Exception:
+                    pass
 
                 if result.get("event") == "kill":
                     session["_kill_event"].set()
@@ -981,16 +1142,38 @@ async def start_committee_session(req: DeployCommitteeRequest):
     if not trained_models:
         raise HTTPException(500, "Failed to obtain committee models")
 
-    # 7. Load meta-learner
-    meta_learner = None
+    # 7. CommitteeMetaLearner retired — P1 MetaLabeler now handles trade filtering.
+    #    The old meta-learner flipped signal direction (Long→Short), violating
+    #    separation of concerns. A secondary model should never reverse the
+    #    primary model's direction — only suppress to flat (which MetaLabeler does).
+
+    # 7b. Load P1-P3 pipeline artifacts
+    meta_labeler = None
+    hmm_detector = None
+    conviction_sizer = None
     if parent_job_dir:
-        meta_path = parent_job_dir / "committee_snapshot" / "meta" / "meta_model.joblib"
-        if meta_path.exists():
+        # P1: MetaLabeler
+        ml_path = parent_job_dir / "meta_labeler.joblib"
+        if ml_path.exists():
             try:
-                from pipeline.committee_meta import CommitteeMetaLearner
-                meta_learner = CommitteeMetaLearner.load(str(meta_path))
-                if not meta_learner.is_trained:
-                    meta_learner = None
+                from pipeline.meta_labeler import MetaLabeler
+                meta_labeler = MetaLabeler.load(str(ml_path))
+            except Exception:
+                pass
+        # P2: HMMRegimeDetector
+        hmm_path = parent_job_dir / "hmm_detector.joblib"
+        if hmm_path.exists():
+            try:
+                from pipeline.hmm_regime import HMMRegimeDetector
+                hmm_detector = HMMRegimeDetector.load(str(hmm_path))
+            except Exception:
+                pass
+        # P3: ConvictionSizer
+        cs_path = parent_job_dir / "conviction_sizer.json"
+        if cs_path.exists():
+            try:
+                from pipeline.conviction_sizer import ConvictionSizer
+                conviction_sizer = ConvictionSizer.load(str(cs_path))
             except Exception:
                 pass
 
@@ -1005,7 +1188,9 @@ async def start_committee_session(req: DeployCommitteeRequest):
         regime_cfg=RegimeConfig(),
         confidence_threshold=req.confidence_threshold,
         lookback_bars=req.lookback_bars,
-        meta_learner=meta_learner,
+        meta_labeler=meta_labeler,
+        hmm_detector=hmm_detector,
+        conviction_sizer=conviction_sizer,
     )
     runner.start()
 
@@ -1061,6 +1246,20 @@ async def start_committee_session(req: DeployCommitteeRequest):
     live_sessions[session_id] = session
     task = asyncio.create_task(_committee_trading_signal_loop(session_id))
     session["_task"] = task
+
+    try:
+        store = get_data_store()
+        store.save_trading_session({
+            "id": session_id, "mode": "committee", "pair": pair,
+            "model_type": "committee", "timeframe": timeframe,
+            "status": "running", "initial_equity": req.initial_equity,
+            "equity": req.initial_equity, "position": "FLAT",
+            "model_id": "", "committee_name": committee_name or "",
+            "created_at": session["created_at"],
+            "updated_at": session["created_at"],
+        })
+    except Exception:
+        logger.exception("Failed to persist committee session %s", session_id)
 
     state = engine.get_portfolio_state()
     return {

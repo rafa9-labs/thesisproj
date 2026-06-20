@@ -7,13 +7,13 @@ export function ConfigSummaryBar() {
   const s = useBacktestStore();
   const pair = s.pair ?? "EURUSD";
   const tf = s.timeframe ?? "H1";
-  const models = s.selectedModels ?? [];
+  const models: string[] = Array.isArray(s.selectedModels) ? (s.selectedModels as string[]) : [];
   const activePreset = s.activePreset;
   const presetInfo = activePreset
     ? STUDY_PRESETS[activePreset as keyof typeof STUDY_PRESETS]
     : null;
   const hpoIntensity = s.hpoIntensity ?? "quick";
-  const nTrials = s.nTrials ?? 10;
+  const nTrials = s.nTrials;
   const repeats = s.repeats ?? 1;
   const trainMonths = s.trainMonths ?? 36;
   const testMonths = s.testMonths ?? 1;

@@ -222,7 +222,7 @@ describe("useJobStore", () => {
     expect(job!.error).toBe("OOM");
   });
 
-  it("ignores events for unknown jobs", () => {
+  it("auto-creates job from events for unknown jobs", () => {
     useJobStore.getState().startJob("job-1", "EURUSD", ["xgboost"]);
     useJobStore.getState().handleWsEvent({
       event: "job_started",
@@ -231,7 +231,11 @@ describe("useJobStore", () => {
       models: ["xgboost"],
       total_work: 0,
     });
-    expect(useJobStore.getState().getJob("unknown-job")).toBeUndefined();
+    const created = useJobStore.getState().getJob("unknown-job");
+    expect(created).toBeDefined();
+    expect(created!.status).toBe("running");
+    expect(created!.pair).toBe("");
+    expect(created!.models).toEqual([]);
   });
 
   it("removes a job", () => {

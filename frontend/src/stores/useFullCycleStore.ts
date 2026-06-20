@@ -33,6 +33,8 @@ export const ALL_MODELS = [
 interface FullCycleState {
   pair: string;
   timeframe: string;
+  startDate: string;
+  endDate: string;
   selectedModels: string[];
   trainMonths: number;
   testMonths: number;
@@ -74,7 +76,11 @@ interface FullCycleState {
 interface FullCycleActions {
   setPair: (v: string) => void;
   setTimeframe: (v: string) => void;
+  setStartDate: (v: string) => void;
+  setEndDate: (v: string) => void;
+  setDateRange: (start: string, end: string) => void;
   toggleModel: (m: string) => void;
+  selectModel: (m: string) => void;
   setSelectedModels: (v: string[]) => void;
   setTrainMonths: (v: number) => void;
   setTestMonths: (v: number) => void;
@@ -115,6 +121,8 @@ interface FullCycleActions {
 export const useFullCycleStore = create<FullCycleState & FullCycleActions>()((set) => ({
   pair: "EURUSD",
   timeframe: "H1",
+  startDate: "",
+  endDate: "",
   selectedModels: [...CORE_MODELS],
   trainMonths: 36,
   testMonths: 1,
@@ -154,6 +162,9 @@ export const useFullCycleStore = create<FullCycleState & FullCycleActions>()((se
 
   setPair: (v) => set({ pair: v }),
   setTimeframe: (v) => set({ timeframe: v }),
+  setStartDate: (v) => set({ startDate: v }),
+  setEndDate: (v) => set({ endDate: v }),
+  setDateRange: (start, end) => set({ startDate: start, endDate: end }),
 
   toggleModel: (m) =>
     set((s) => ({
@@ -162,6 +173,8 @@ export const useFullCycleStore = create<FullCycleState & FullCycleActions>()((se
         : [...s.selectedModels, m],
       activePreset: null,
     })),
+
+  selectModel: (m) => set({ selectedModels: [m], activePreset: null }),
 
   setSelectedModels: (v) => set({ selectedModels: v }),
 
@@ -211,14 +224,6 @@ export const useFullCycleStore = create<FullCycleState & FullCycleActions>()((se
     set({
       activePreset: key,
       ...(cfg.selectedModels !== undefined && { selectedModels: cfg.selectedModels as string[] }),
-      ...(cfg.trainMonths !== undefined && { trainMonths: cfg.trainMonths as number }),
-      ...(cfg.maxIterations !== undefined && { maxIterations: cfg.maxIterations as number }),
-      ...(cfg.proposer !== undefined && { proposer: cfg.proposer as string }),
-      ...(cfg.llmBackend !== undefined && { llmBackend: cfg.llmBackend as string }),
-      ...(cfg.skipFeatureSweep !== undefined && {
-        skipFeatureSweep: cfg.skipFeatureSweep as boolean,
-      }),
-      ...(cfg.debugMode !== undefined && { debugMode: cfg.debugMode as boolean }),
     });
   },
 }));

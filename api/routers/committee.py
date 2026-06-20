@@ -398,6 +398,41 @@ def _read_json(path: Path) -> dict:
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return {}
 
+
+def _save_pipeline_artifacts(job_dir: Path, bt, log_info, job_id: str):
+    """Save P1-P3 pipeline artifacts from the backtester to disk.
+
+    - P1 MetaLabeler: binary model predicting P(trade_is_winner)
+    - P2 HMMRegimeDetector: probabilistic regime detection
+    - P3 ConvictionSizer: continuous sigmoid conviction sizing
+    """
+    # P1: MetaLabeler
+    try:
+        ml = bt.get_meta_labeler()
+        if ml is not None and ml.is_trained:
+            ml.save(str(job_dir / "meta_labeler.joblib"))
+            log_info(job_id, f"MetaLabeler: saved (accuracy={ml.accuracy:.3f})")
+    except Exception as e:
+        log_info(job_id, f"MetaLabeler: save failed ({e})")
+
+    # P2: HMMRegimeDetector
+    try:
+        hmm = getattr(bt, "_hmm_detector", None)
+        if hmm is not None and hmm.is_fitted:
+            hmm.save(str(job_dir / "hmm_detector.joblib"))
+            log_info(job_id, f"HMMRegimeDetector: saved ({hmm.selected_n_states} states, BIC={hmm.bic:.1f})")
+    except Exception as e:
+        log_info(job_id, f"HMMRegimeDetector: save failed ({e})")
+
+    # P3: ConvictionSizer
+    try:
+        cs = bt.get_conviction_sizer()
+        if cs is not None and cs.fitted:
+            cs.save(str(job_dir / "conviction_sizer.json"))
+            log_info(job_id, f"ConvictionSizer: saved (L={cs.L:.3f} k={cs.k:.1f} c={cs.c:.3f})")
+    except Exception as e:
+        log_info(job_id, f"ConvictionSizer: save failed ({e})")
+
 # ══════════════════════════════════════════════════════════════════════
 # Full Cycle: Racecar (B→C→D) + Factory (optimization) in one shot
 # ══════════════════════════════════════════════════════════════════════
@@ -578,7 +613,7 @@ def get_full_cycle_history():
 
         raw_status = status_data.get("phase", "unknown")
 
-        if raw_status not in _TERMINAL_PHASES and raw_status != "unknown":
+        if raw_status not in _TERMINAL_PHASES:
             try:
                 mtime = status_path.stat().st_mtime
                 if now - mtime > _STALE_THRESHOLD_S:
@@ -760,7 +795,7 @@ def get_full_cycle_studies(
             continue
 
         raw_status = status_data.get("phase", "unknown")
-        if raw_status not in _TERMINAL_PHASES and raw_status != "unknown":
+        if raw_status not in _TERMINAL_PHASES:
             try:
                 mtime = status_path.stat().st_mtime
                 if now - mtime > _STALE_THRESHOLD_S:
@@ -1293,6 +1328,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                     model_params=hpo_model_params,
                     cancel_check=_cancel,
                 )
+                bt._enable_mda_pruning = True  # P5
                 sig = get_throttle_signal()
                 if sig and sig.delay > 0:
                     import time
@@ -1404,6 +1440,9 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                     except Exception as e:
                         log_warn(job_id, f"Meta-learner training failed: {e} — continuing without meta-learner")
 
+                # Save P1-P3 artifacts from the backtester
+                _save_pipeline_artifacts(job_dir, bt, log_info, job_id)
+
                 if hasattr(bt_result, "folds") and bt_result.folds:
                     n_folds = len(bt_result.folds)
                     trades = [f.trades for f in bt_result.folds]
@@ -1429,6 +1468,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                         seed=seed,
                         cancel_check=_cancel,
                     )
+                    alt_bt._enable_mda_pruning = True  # P5
                     alt_r = alt_bt.run_wfo(
                         df, train_months=req.train_months, test_months=req.test_months,
                         verbose=False,
@@ -1575,6 +1615,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                     model_params=hpo_model_params,
                     cancel_check=_cancel,
                 )
+                final_bt._enable_mda_pruning = True  # P5
                 final_result = final_bt.run_wfo(
                     df, train_months=req.train_months, test_months=req.test_months,
                     verbose=False,
@@ -1601,6 +1642,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                         model_params=hpo_model_params,
                         cancel_check=_cancel,
                     )
+                    fbt._enable_mda_pruning = True  # P5
                     fr = fbt.run_wfo(
                         df, train_months=req.train_months, test_months=req.test_months,
                         verbose=False,

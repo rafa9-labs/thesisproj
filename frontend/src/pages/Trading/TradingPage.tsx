@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ShieldOff, X, ChevronDown, ChevronUp } from "lucide-react";
+import { useAppStore } from "@/stores/useAppStore";
 import {
   usePairs,
   useLivePrices,
@@ -15,7 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/api/client";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";
 import type { OverlayLine } from "@/components/charts/CandlestickChart";
-import type { PaperSignalEvent, LiveSignalEvent, PaperSummary } from "@/api/schemas";
+import type { PaperSignalEvent, LiveSignalEvent, PaperSummary, CandleBar } from "@/api/schemas";
 
 import type { TradingMode } from "./SessionControls";
 import type { SignalDirection } from "./PositionMonitor";
@@ -46,6 +47,7 @@ interface LiveState {
   deploying: boolean;
   sessionId: string | null;
   mode: TradingMode;
+  isCommittee: boolean;
   position: SignalDirection;
   equity: number;
   unrealizedPnl: number;
@@ -60,11 +62,21 @@ interface LiveState {
   riskBlockedReason: string | null;
 }
 
+export interface ChartMarker {
+  time: number;
+  position: "aboveBar" | "belowBar" | "inBar";
+  color: string;
+  shape: "arrowUp" | "arrowDown" | "circle";
+  text: string;
+  size?: number;
+}
+
 const INITIAL_LIVE_STATE: LiveState = {
   running: false,
   deploying: false,
   sessionId: null,
   mode: "paper",
+  isCommittee: false,
   position: "FLAT",
   equity: 10000,
   unrealizedPnl: 0,
@@ -150,6 +162,7 @@ function StopResultModal({ summary, onClose }: { summary: PaperSummary; onClose:
 export default function TradingPage() {
   const navigate = useNavigate();
   const { data: pairs } = usePairs();
+  const demoMode = useAppStore((s) => s.demoMode);
   const deployPaper = useDeployPaperSession();
   const stopPaper = useStopPaperSession();
   const deployLive = useDeployLiveSession();
@@ -194,25 +207,81 @@ export default function TradingPage() {
   });
 
   const [selectedPair, setSelectedPair] = useState("EURUSD");
+  const [deployType, setDeployType] = useState<"model" | "committee">("model");
   const [selectedCommittee, setSelectedCommittee] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState("M30");
+  const [searchParams] = useSearchParams();
 
-  // Auto-select the global active model when data loads
+  // Pre-select model from URL param (e.g. /trading?modelId=abc123)
   useEffect(() => {
-    if (!deployedModels) return;
-    const active = deployedModels.find((m) => m.status === "active");
-    if (active) setSelectedModelId(active.id);
-  }, [deployedModels]);
+    const mid = searchParams.get("modelId");
+    if (mid && deployedModels?.some((m) => m.id === mid)) {
+      setSelectedModelId(mid);
+    }
+  }, [searchParams, deployedModels]);
   const [positionSizing, setPositionSizing] = useState("fixed");
   const [initialEquity, setInitialEquity] = useState(10000);
   const [tradingMode, setTradingMode] = useState<TradingMode>("paper");
   const [riskConfig, setRiskConfig] = useState(RISK_DEFAULTS);
   const [confirmLive, setConfirmLive] = useState(false);
   const [live, setLive] = useState<LiveState>(INITIAL_LIVE_STATE);
+  const [liveCandle, setLiveCandle] = useState<CandleBar | null>(null);
+  const [chartMarkers, setChartMarkers] = useState<ChartMarker[]>([]);
 
   const { data: committeeData } = useSavedCommittees();
   const committeeList = committeeData?.committees?.map((c) => c.name) ?? [];
+
+  useEffect(() => {
+    if (committeeList.length === 0 && deployType === "committee") {
+      setDeployType("model");
+      setSelectedCommittee("");
+    }
+  }, [committeeList, deployType]);
+
+  const recoverRef = useRef(false);
+  useEffect(() => {
+    if (recoverRef.current) return;
+    recoverRef.current = true;
+    const recover = async () => {
+      try {
+        const [liveRes, paperRes] = await Promise.all([
+          apiClient.get("/trading/live/sessions").catch(() => ({ data: [] })),
+          apiClient.get("/trading/paper/sessions").catch(() => ({ data: [] })),
+        ]);
+        const liveSessions: Array<Record<string, unknown>> = Array.isArray(liveRes.data)
+          ? liveRes.data
+          : [];
+        const paperSessions: Array<Record<string, unknown>> = Array.isArray(paperRes.data)
+          ? paperRes.data
+          : [];
+        const allSessions = [
+          ...liveSessions.map((s: Record<string, unknown>) => ({ ...s, _isCommittee: s.model_type === "committee" })),
+          ...paperSessions.map((s: Record<string, unknown>) => ({ ...s, mode: "paper", _isCommittee: false })),
+        ];
+        if (allSessions.length === 0) return;
+        const running = allSessions.find(
+          (s: Record<string, unknown>) => s.status === "running",
+        );
+        if (running) {
+          const initEq = Number(running.initial_equity) || 10000;
+          setInitialEquity(initEq);
+          setLive((prev) => ({
+            ...prev,
+            running: true,
+            sessionId: running.session_id as string,
+            mode: (running.mode as TradingMode) || "paper",
+            isCommittee: !!running._isCommittee,
+            equity: initEq,
+            initialEquity: initEq,
+          }));
+        }
+      } catch {
+        /* ignore recovery errors */
+      }
+    };
+    recover();
+  }, []);
 
   const [chartFraction, setChartFraction] = useState(0.7);
   const [tableMinimized, setTableMinimized] = useState(false);
@@ -250,8 +319,12 @@ export default function TradingPage() {
   }, []);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const { data: priceData } = useLivePrices([selectedPair], 50);
-  const wsPrefix = tradingMode === "paper" ? "trading/paper" : "trading/live";
+  const { data: priceData } = useLivePrices([selectedPair], 50, !demoMode);
+  const wsPrefix = live.isCommittee
+    ? "trading/live"
+    : tradingMode === "paper"
+      ? "trading/paper"
+      : "trading/live";
 
   useEffect(() => {
     if (!live.sessionId) return;
@@ -281,6 +354,32 @@ export default function TradingPage() {
     };
   }, [live.sessionId, wsPrefix, tradingMode]);
 
+  const signalMarker = (time: number, direction?: string, confidence?: number): ChartMarker => ({
+    time,
+    position: direction === "SHORT" ? "aboveBar" : "belowBar",
+    color: direction === "LONG" ? "#22c55e" : direction === "SHORT" ? "#ef4444" : "#6b7280",
+    shape: direction === "LONG" ? "arrowUp" : direction === "SHORT" ? "arrowDown" : "circle",
+    text: direction === "FLAT" ? "FLAT" : `${Math.round(confidence ?? 0)}%`,
+  });
+
+  const tradeEntryMarker = (time: number, _price: number, direction?: string): ChartMarker => ({
+    time,
+    position: direction === "SHORT" ? "aboveBar" : "belowBar",
+    color: direction === "LONG" ? "#16a34a" : "#dc2626",
+    shape: direction === "LONG" ? "arrowUp" : "arrowDown",
+    text: "ENTRY",
+    size: 2,
+  });
+
+  const tradeExitMarker = (time: number, _price: number, pnl: number, direction?: string): ChartMarker => ({
+    time,
+    position: "inBar",
+    color: pnl >= 0 ? "#22c55e" : "#ef4444",
+    shape: "circle",
+    text: pnl >= 0 ? `+${pnl.toFixed(1)}` : pnl.toFixed(1),
+    size: 2,
+  });
+
   function paperTradeFromEvent(e: PaperSignalEvent): TradeRecord {
     return {
       trade_id: e.trade_id ?? "",
@@ -302,16 +401,28 @@ export default function TradingPage() {
           trades: [...prev.trades, paperTradeFromEvent(sub)].slice(-200),
           position: "FLAT",
         }));
+        if (sub.exit_price && sub.time) {
+          setChartMarkers((prev) =>
+            [...prev, tradeExitMarker(sub.time, sub.exit_price, sub.pnl ?? 0, sub.direction)].slice(-200),
+          );
+        }
       } else if (sub.event === "trade_opened") {
         setLive((prev) => ({
           ...prev,
           position: (sub.direction as SignalDirection) || prev.position,
         }));
+        if (sub.entry_price && sub.time) {
+          setChartMarkers((prev) =>
+            [...prev, tradeEntryMarker(sub.time, sub.entry_price, sub.direction)].slice(-200),
+          );
+        }
       }
     }
   }
 
   function handlePaperWSEvent(msg: PaperSignalEvent) {
+    if (msg.candle) setLiveCandle(msg.candle);
+
     if (msg.event === "signal" || msg.event === "hold") {
       setLive((prev) => {
         const eq = msg.equity ?? prev.equity;
@@ -325,6 +436,11 @@ export default function TradingPage() {
           stopResult: null,
         };
       });
+      if (msg.time) {
+        setChartMarkers((prev) =>
+          [...prev, signalMarker(msg.time, msg.direction, msg.confidence)].slice(-500),
+        );
+      }
       if (msg.sub_events) handlePaperSubEvents(msg.sub_events);
     } else if (msg.event === "trade_closed") {
       setLive((prev) => ({
@@ -332,12 +448,19 @@ export default function TradingPage() {
         trades: [...prev.trades, paperTradeFromEvent(msg)].slice(-200),
         position: "FLAT",
       }));
+      if (msg.exit_price && msg.time) {
+        setChartMarkers((prev) =>
+          [...prev, tradeExitMarker(msg.time, msg.exit_price, msg.pnl ?? 0, msg.direction)].slice(-200),
+        );
+      }
     } else if (msg.event === "stopped") {
       setLive((prev) => ({ ...prev, running: false }));
     }
   }
 
   function handleLiveWSEvent(msg: LiveSignalEvent) {
+    if (msg.candle) setLiveCandle(msg.candle);
+
     if (msg.event === "signal" || msg.event === "hold") {
       setLive((prev) => {
         const eq = msg.equity ?? prev.equity;
@@ -350,6 +473,11 @@ export default function TradingPage() {
           equityCurve: [...prev.equityCurve, { time: now, value: eq }].slice(-500),
         };
       });
+      if (msg.time) {
+        setChartMarkers((prev) =>
+          [...prev, signalMarker(msg.time, msg.direction, msg.confidence)].slice(-500),
+        );
+      }
       if (msg.sub_events) for (const sub of msg.sub_events) handleLiveWSEvent(sub);
     } else if (msg.event === "risk_blocked") {
       setLive((prev) => ({ ...prev, riskBlockedReason: msg.reason ?? "risk_blocked" }));
@@ -367,6 +495,11 @@ export default function TradingPage() {
         oanda_order_id: msg.oanda_order_id,
       };
       setLive((prev) => ({ ...prev, trades: [...prev.trades, newTrade].slice(-200) }));
+      if (msg.price && msg.time) {
+        setChartMarkers((prev) =>
+          [...prev, tradeEntryMarker(msg.time, msg.price, msg.direction)].slice(-200),
+        );
+      }
     } else if (msg.event === "trade_closed") {
       const newTrade: TradeRecord = {
         trade_id: `close_${Date.now()}`,
@@ -383,6 +516,11 @@ export default function TradingPage() {
         trades: [...prev.trades, newTrade].slice(-200),
         position: "FLAT",
       }));
+      if (msg.price && msg.time) {
+        setChartMarkers((prev) =>
+          [...prev, tradeExitMarker(msg.time, msg.price, msg.pnl ?? 0, msg.direction)].slice(-200),
+        );
+      }
     } else if (msg.event === "kill") {
       setLive((prev) => ({
         ...prev,
@@ -417,7 +555,7 @@ export default function TradingPage() {
       killLevel: "",
     }));
     try {
-      let result: { session_id: string };
+      let result: { session_id: string; equity?: number };
       if (isCommitteeDeploy) {
         const res = await apiClient.post("/trading/live/committee/start", {
           pair: selectedPair,
@@ -451,17 +589,19 @@ export default function TradingPage() {
           });
         }
       }
+      const engineEquity = result.equity ?? initialEquity;
       setLive({
         running: true,
         deploying: false,
         mode: tradingMode,
+        isCommittee: isCommitteeDeploy,
         sessionId: result.session_id,
         position: "FLAT",
-        equity: initialEquity,
+        equity: engineEquity,
         unrealizedPnl: 0,
-        initialEquity,
+        initialEquity: engineEquity,
         trades: [],
-        equityCurve: [{ time: Math.floor(Date.now() / 1000), value: initialEquity }],
+        equityCurve: [{ time: Math.floor(Date.now() / 1000), value: engineEquity }],
         error: null,
         stopResult: null,
         killed: false,
@@ -492,7 +632,14 @@ export default function TradingPage() {
   const handleStop = useCallback(async () => {
     if (!live.sessionId) return;
     try {
-      if (tradingMode === "paper") {
+      if (live.isCommittee || tradingMode !== "paper") {
+        const r = await stopLive.mutateAsync(live.sessionId);
+        if (wsRef.current) {
+          wsRef.current.close();
+          wsRef.current = null;
+        }
+        setLive((prev) => ({ ...prev, running: false, killed: r.killed }));
+      } else {
         const r = await stopPaper.mutateAsync(live.sessionId);
         if (wsRef.current) {
           wsRef.current.close();
@@ -503,18 +650,11 @@ export default function TradingPage() {
           running: false,
           stopResult: (r as unknown as { summary: PaperSummary }).summary,
         }));
-      } else {
-        const r = await stopLive.mutateAsync(live.sessionId);
-        if (wsRef.current) {
-          wsRef.current.close();
-          wsRef.current = null;
-        }
-        setLive((prev) => ({ ...prev, running: false, killed: r.killed }));
       }
     } catch {
       setLive((prev) => ({ ...prev, running: false }));
     }
-  }, [live.sessionId, stopPaper, stopLive, tradingMode]);
+  }, [live.sessionId, live.isCommittee, stopPaper, stopLive, tradingMode]);
 
   const handleEmergency = useCallback(async () => {
     if (!live.sessionId) return;
@@ -547,6 +687,7 @@ export default function TradingPage() {
   const isRunning = live.running;
   const hasModel =
     selectedModelId != null || (selectedCommittee != null && selectedCommittee !== "");
+  const isCommitteeSelected = selectedCommittee != null && selectedCommittee !== "";
 
   if (priceData?.source === "key_required") {
     return (
@@ -649,13 +790,25 @@ export default function TradingPage() {
         selectedPair={selectedPair}
         pairList={pairList}
         onPairChange={setSelectedPair}
+        deployType={deployType}
+        onDeployTypeChange={(type) => {
+          setDeployType(type);
+          if (type === "model") setSelectedCommittee("");
+          else setSelectedModelId(null);
+        }}
         selectedCommittee={selectedCommittee}
         committeeList={committeeList}
-        onCommitteeChange={setSelectedCommittee}
+        onCommitteeChange={(c) => {
+          setSelectedCommittee(c);
+          if (c) setSelectedModelId(null);
+        }}
         selectedModelId={selectedModelId}
         deployedModels={deployedModels}
         loadingDeployed={loadingDeployed}
-        onModelChange={setSelectedModelId}
+        onModelChange={(id) => {
+          setSelectedModelId(id);
+          if (id) setSelectedCommittee("");
+        }}
         timeframe={timeframe}
         onTimeframeChange={setTimeframe}
         midPrice={midPrice}
@@ -665,10 +818,10 @@ export default function TradingPage() {
         deploying={live.deploying}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div ref={leftColRef} className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <div
-            className="min-h-[200px] overflow-hidden"
+            className="min-h-[180px] sm:min-h-[200px] md:min-h-[250px] overflow-hidden"
             style={
               tableMinimized ? { flex: 1 } : { flex: `${Math.round(chartFraction * 100)} 1 0px` }
             }
@@ -679,6 +832,9 @@ export default function TradingPage() {
               limit={300}
               overlayLines={equityOverlay}
               showToolbar={false}
+              liveCandle={liveCandle}
+              chartMarkers={chartMarkers}
+              livePrice={!isRunning ? midPrice : null}
             />
           </div>
 
@@ -719,6 +875,7 @@ export default function TradingPage() {
           deploying={live.deploying}
           killed={live.killed}
           hasModel={hasModel}
+          isCommittee={isCommitteeSelected}
           positionSizing={positionSizing}
           initialEquityInput={initialEquity}
           riskConfig={riskConfig as unknown as RiskConfig}

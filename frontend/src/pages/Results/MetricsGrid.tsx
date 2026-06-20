@@ -86,6 +86,57 @@ export function MetricsGrid({
         subType: getSubType(metrics.sharpe, [1, 0.5]),
       },
       {
+        key: "cagr",
+        label: "CAGR",
+        value: formatPercent(metrics.cagr),
+        sub: null,
+        subType: (metrics.cagr ?? 0) >= 0 ? "positive" : "negative",
+      },
+      {
+        key: "psr",
+        label: "PSR",
+        value: metrics.overfitting?.psr != null
+          ? formatPercent(metrics.overfitting.psr, 1)
+          : "—",
+        sub:
+          metrics.overfitting?.psr != null
+            ? metrics.overfitting.psr >= 0.95
+              ? "Significant"
+              : metrics.overfitting.psr >= 0.80
+                ? "Likely"
+                : "Uncertain"
+            : null,
+        subType: getSubType(metrics.overfitting?.psr ?? null, [0.95, 0.80]),
+      },
+      {
+        key: "profit_factor",
+        label: "Profit Factor",
+        value: formatMetric(metrics.profit_factor),
+        sub:
+          metrics.profit_factor !== null
+            ? metrics.profit_factor >= 2
+              ? "Strong"
+              : metrics.profit_factor >= 1.5
+                ? "Good"
+                : "Weak"
+            : null,
+        subType: getSubType(metrics.profit_factor, [2, 1.5]),
+      },
+      {
+        key: "sortino",
+        label: "Sortino",
+        value: formatMetric(metrics.sortino),
+        sub: null,
+        subType: getSubType(metrics.sortino, [1.5, 0.8]),
+      },
+      {
+        key: "calmar",
+        label: "Calmar",
+        value: formatMetric(metrics.calmar_ratio),
+        sub: null,
+        subType: getSubType(metrics.calmar_ratio, [3, 1]),
+      },
+      {
         key: "total_return",
         label: "Total Return",
         value: formatPercent(metrics.total_return_pct),
@@ -114,13 +165,6 @@ export function MetricsGrid({
             : "muted",
       },
       {
-        key: "cagr",
-        label: "CAGR",
-        value: formatPercent(metrics.cagr),
-        sub: null,
-        subType: (metrics.cagr ?? 0) >= 0 ? "positive" : "negative",
-      },
-      {
         key: "win_rate",
         label: "Win Rate",
         value: formatPercent(metrics.win_rate, 1),
@@ -135,39 +179,11 @@ export function MetricsGrid({
         subType: getSubType(metrics.win_rate, [0.55, 0.5]),
       },
       {
-        key: "profit_factor",
-        label: "Profit Factor",
-        value: formatMetric(metrics.profit_factor),
-        sub:
-          metrics.profit_factor !== null
-            ? metrics.profit_factor >= 2
-              ? "Strong"
-              : metrics.profit_factor >= 1.5
-                ? "Good"
-                : "Weak"
-            : null,
-        subType: getSubType(metrics.profit_factor, [2, 1.5]),
-      },
-      {
         key: "total_trades",
         label: "Trades",
         value: formatInt(metrics.total_trades),
         sub: null,
         subType: "muted",
-      },
-      {
-        key: "sortino",
-        label: "Sortino",
-        value: formatMetric(metrics.sortino),
-        sub: null,
-        subType: getSubType(metrics.sortino, [1.5, 0.8]),
-      },
-      {
-        key: "calmar",
-        label: "Calmar",
-        value: formatMetric(metrics.calmar_ratio),
-        sub: null,
-        subType: getSubType(metrics.calmar_ratio, [3, 1]),
       },
       {
         key: "active_rate",
@@ -200,7 +216,7 @@ export function MetricsGrid({
   );
 
   return (
-    <div className="flex flex-col gap-0 rounded-[8px] border border-(--color-glass-border) bg-(--color-surface)">
+    <div className="flex flex-col gap-0 rounded-sm border border-(--color-glass-border) bg-(--color-surface)">
       {/* Header row */}
       <div className="flex items-center justify-between border-b border-(--color-glass-border) px-4 py-2">
         <div className="flex items-center gap-3">
@@ -251,15 +267,17 @@ export function MetricsGrid({
       </div>
 
       {/* KPI ticker tape */}
-      <div
-        className="grid"
-        style={{
-          gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-        }}
-      >
+      <div className="overflow-x-auto">
+        <div
+          className="grid min-w-[780px]"
+          style={{
+            gridTemplateColumns: "repeat(13, minmax(0, 1fr))",
+          }}
+        >
         {kpis.map((kpi) => (
           <KpiCell key={kpi.key} kpi={kpi} />
         ))}
+        </div>
       </div>
     </div>
   );

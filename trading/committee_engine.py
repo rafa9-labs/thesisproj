@@ -529,6 +529,8 @@ class CommitteeTradingEngine:
         confidence = float(getattr(signal, "confidence", 0.5))
         conviction_multiplier = float(getattr(signal, "conviction_multiplier", 1.0) or 1.0)
         meta_override = bool(getattr(signal, "meta_override", False))
+        meta_filtered = bool(getattr(signal, "meta_filtered", False))
+        meta_win_prob = float(getattr(signal, "meta_win_prob", 0.5) or 0.5)
         is_healthy = bool(getattr(signal, "is_healthy", True))
 
         models_detail = []
@@ -554,6 +556,8 @@ class CommitteeTradingEngine:
             "conviction_multiplier": round(conviction_multiplier, 2),
             "meta_learner_active": False,
             "meta_learner_override": "overrode_committee" if meta_override else None,
+            "meta_labeler_filtered": meta_filtered,
+            "meta_labeler_win_prob": round(meta_win_prob, 4),
             "is_healthy": is_healthy,
         }
 

@@ -31,7 +31,7 @@ export function OverfittingPanel({ overfitting, walkforwardPeriods }: Props) {
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-semibold tracking-[0.1em] text-(--color-text-muted) uppercase">
-          Score
+          Overfit Score
         </span>
         <div className="flex items-center gap-2">
           <div
@@ -51,6 +51,31 @@ export function OverfittingPanel({ overfitting, walkforwardPeriods }: Props) {
         </div>
       </div>
 
+      {overfitting.dsr_value != null && (
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-semibold tracking-[0.1em] text-(--color-text-muted) uppercase">
+            DSR
+          </span>
+          <span
+            className="font-mono text-sm font-bold"
+            style={{
+              color:
+                overfitting.dsr_value >= 0.95
+                  ? "var(--color-accent-success)"
+                  : overfitting.dsr_value >= 0.90
+                    ? "var(--color-accent-warning)"
+                    : "var(--color-accent-danger)",
+            }}
+          >
+            {overfitting.dsr_value >= 0.995
+              ? ">0.995"
+              : overfitting.dsr_value <= 0.001
+                ? "<0.001"
+                : overfitting.dsr_value.toFixed(4)}
+          </span>
+        </div>
+      )}
+
       {overfitting.dsr_min_sharpe != null && (
         <div className="mb-4 rounded border border-[rgba(99,102,241,0.15)] bg-[rgba(99,102,241,0.06)] px-2 py-1 font-mono text-[10px] text-(--color-text-secondary)">
           Significance threshold: Sharpe &ge; {overfitting.dsr_min_sharpe.toFixed(2)} required for
@@ -61,7 +86,7 @@ export function OverfittingPanel({ overfitting, walkforwardPeriods }: Props) {
 
       <div className="grid grid-cols-2 gap-4">
         {/* Left: CI bars */}
-        <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 rounded-sm border border-(--color-glass-border) bg-(--color-elevated) p-3">
           {overfitting.sharpe_ci?.mean != null && (
             <CiBarRow label="Sharpe" ci={overfitting.sharpe_ci} format="number" />
           )}

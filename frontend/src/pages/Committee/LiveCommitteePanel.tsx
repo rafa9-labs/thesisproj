@@ -111,7 +111,12 @@ export function LiveCommitteePanel({ sessionId }: Props) {
               <select
                 value={store.executionMode}
                 onChange={(e) => store.setExecutionMode(e.target.value)}
-                className="rounded-[4px] border border-(--color-glass-border) bg-(--color-input-bg) px-[10px] py-[7px] font-mono text-[10px] text-(--color-text-primary)"
+                className="rounded border px-3 py-2 font-mono text-sm backdrop-blur-[8px] transition-all duration-200 focus:outline-none"
+                style={{
+                  backgroundColor: "var(--color-glass)",
+                  borderColor: "var(--color-glass-border)",
+                  color: "var(--color-text-primary)",
+                }}
               >
                 <option value="paper">Paper Sim</option>
                 <option value="oanda">OANDA Direct</option>

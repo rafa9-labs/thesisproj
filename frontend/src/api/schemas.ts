@@ -52,12 +52,53 @@ export interface OverfittingReportData {
   is_mean_sharpe: number | null;
   oos_mean_sharpe: number | null;
   dsr_min_sharpe: number | null;
+  dsr_value: number | null;
+  psr: number | null;
   interaction_effects: Array<{
     param: string;
     main_pct: number;
     interaction_pct: number;
     total_pct: number;
   }> | null;
+}
+
+export interface DeployedModelDetail {
+  id: string;
+  model_type: string;
+  snapshot_path: string;
+  best_sharpe: number | null;
+  best_return: number | null;
+  created_at: string;
+  status: string;
+  tags: string[];
+  parent_job_id: string | null;
+  missing_on_disk: boolean;
+  win_rate: number | null;
+  max_drawdown: number | null;
+  total_trades: number | null;
+  sortino: number | null;
+  calmar_ratio: number | null;
+  profit_factor: number | null;
+  cagr: number | null;
+  overfit_score: number | null;
+  risk_level: string | null;
+  train_start: string | null;
+  train_end: string | null;
+  feature_count: number | null;
+  seed: number | null;
+  calibrate_method: string | null;
+  pair: string | null;
+  timeframe: string | null;
+  best_params: Record<string, unknown>;
+  feature_names: string[];
+  coverage_conf_thr: number | null;
+  input_shape: number[] | null;
+  pip_freeze: string | null;
+  schema_version: number | null;
+  directional_accuracy: number | null;
+  active_rate: number | null;
+  avg_trade: number | null;
+  overfitting: OverfittingReportData | null;
 }
 
 export interface WalkForwardPeriod {
@@ -167,6 +208,7 @@ export interface Metrics {
   trades: TradeRecord[] | null;
   hpo_param_importance: HpoParamImportance[] | null;
   hpo_trials: HpoTrial[] | null;
+  best_study: BestStudy | null;
   overfitting: OverfittingReportData | null;
   walkforward_periods: WalkForwardPeriod[] | null;
   diagnostics: TrainingDiagnostics | null;
@@ -203,6 +245,7 @@ export interface LlmAnalysisResponse {
 
 export interface BacktestRequest {
   pair: string;
+  timeframe: string;
   models: string[];
   start_date?: string;
   end_date?: string;
@@ -249,6 +292,7 @@ export interface RuntimeEstimateRequest {
   models: string[];
   months: number;
   hpo_intensity: HpoIntensity;
+  n_trials?: number;
 }
 
 export interface RuntimeEstimateResponse {
@@ -299,9 +343,9 @@ export interface TradeRecord {
   entry_date: string;
   exit_date: string;
   direction: "BUY" | "SELL";
-  entry_price: number;
-  exit_price: number;
-  pips: number;
+  entry_price: number | null;
+  exit_price: number | null;
+  pips: number | null;
   return_pct: number;
   duration_bars: number;
   barrier_hit?: string | null;
@@ -329,6 +373,12 @@ export interface HpoTrial {
   trial_number: number;
   value: number;
   params: Record<string, unknown>;
+}
+
+export interface BestStudy {
+  best_trial: number;
+  best_value: number | null;
+  best_params: Record<string, unknown>;
 }
 
 export interface FullJobResults {
@@ -587,17 +637,29 @@ export type HyperparamRange = {
   step?: number;
   log_scale: boolean;
   default?: number;
+  tier: number;
+  display_name: string;
+  ui_control: string;
+  description: string;
 };
 
 export type HyperparamChoice = {
   type: "choice";
   values: (string | number)[];
   default?: string | number;
+  tier: number;
+  display_name: string;
+  ui_control: string;
+  description: string;
 };
 
 export type HyperparamFixed = {
   type: "fixed";
   value: string | number | boolean | null;
+  tier: number;
+  display_name: string;
+  ui_control: string;
+  description: string;
 };
 
 export type HyperparamSpec = HyperparamRange | HyperparamChoice | HyperparamFixed;
@@ -801,6 +863,16 @@ export interface PaperSignalEvent {
   exit_reason?: string;
   message?: string;
   sub_events?: PaperSignalEvent[];
+  candle?: CandleBar;
+  live_price?: number;
+}
+
+export interface CandleBar {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
 }
 
 export interface LiveSessionInfo {
@@ -914,6 +986,8 @@ export interface LiveSignalEvent {
   error?: string;
   message?: string;
   sub_events?: LiveSignalEvent[];
+  candle?: CandleBar;
+  live_price?: number;
 }
 
 export interface SeedDemoTimeframe {
@@ -988,11 +1062,19 @@ export interface SavedCommitteeOut {
   id: string;
   name: string;
   full_cycle_job_id: string | null;
+  full_cycle_status: string | null;
   pair: string;
   timeframe: string;
   config_json: Record<string, unknown>;
   trust_score: number | null;
   avg_sharpe: number | null;
+  avg_return: number | null;
+  win_rate: number | null;
+  max_drawdown: number | null;
+  total_trades: number | null;
+  sortino: number | null;
+  regime_count: number;
+  consensus_model_count: number;
   is_active: boolean;
   tags: string[];
   created_at: string;
@@ -1005,16 +1087,22 @@ export interface SavedCommitteeListResponse {
 }
 
 // ════════════════════════════════════════════════════════════════════
-export interface FactoryIterationRecord {
-  iteration: number;
-  action_type: string;
+export interface FactoryIterationAction {
+  type: string;
   regime: string;
   model_add: string;
   model_remove: string;
+  rationale?: string;
+}
+
+export interface FactoryIterationRecord {
+  iteration: number;
+  action: FactoryIterationAction;
   before_sharpe: number;
   after_sharpe: number;
-  delta_sharpe: number;
   accepted: boolean;
+  per_regime_delta: Record<string, number>;
+  timestamp: string;
   rationale: string;
 }
 
@@ -1026,6 +1114,8 @@ export interface FullCycleRequest {
   models: string[];
   pair?: string;
   timeframe?: string;
+  start_date?: string;
+  end_date?: string;
   sweep_n_estimators?: number;
   sweep_max_depth?: number;
   skip_feature_sweep?: boolean;
@@ -1072,6 +1162,36 @@ export interface FullCycleStatusResponse {
   error: string;
   surviving_models: string[];
   locked_features_count: number;
+  hpo_model_scores: Record<string, number | null>;
+  phase_timings: Record<string, number>;
+  // Phase 1
+  feature_names_locked?: string[];
+  feature_names_pruned?: string[];
+  pruned_count?: number;
+  // Phase 2
+  hpo_status?: Record<string, string>;
+  // Phase 3
+  committee_config?: Record<string, unknown>;
+  // Phase 4
+  fold_consistency_cv?: number | null;
+  phase4_pbo?: number | null;
+  phase4_dsr?: number | null;
+  trust_score?: TrustScoreResult;
+  regime_coverage?: Record<string, { sharpe: number; trades: number; folds_active: number; covered: boolean }>;
+  seed_sharpes?: number[];
+  seed_avg_sharpe?: number | null;
+  seed_pass?: boolean | null;
+  // Phase 5
+  factory_accepted_count?: number;
+  factory_last_delta?: number | null;
+  factory_last_action?: string;
+  factory_last_regime?: string;
+  factory_last_accepted?: boolean | null;
+  // Phase 4 WFO live progress
+  wfo_fold_progress?: string;
+  wfo_fold_sharpes?: number[];
+  wfo_fold_trades?: number[];
+  wfo_running_avg_sharpe?: number | null;
 }
 
 export interface TrustScoreResult {
@@ -1098,11 +1218,54 @@ export interface FullCycleResultsResponse {
   locked_features_count: number;
   pruned_features_count: number;
   top_importance_feature: string;
+  locked_features_list?: string[];
   phase0_pruned: string[];
   phase0_survivors: string[];
   racecar_profile_matrix?: Record<string, unknown>;
   racecar_committee_config?: Record<string, unknown>;
-  racecar_backtest?: Record<string, unknown>;
+  racecar_backtest?: {
+    models?: string[];
+    folds?: number;
+    folds_detail?: Array<{
+      fold_idx: number;
+      sharpe: number;
+      trades: number;
+      return_val: number;
+      drawdown: number;
+      win_rate: number;
+      active_rate: number;
+    }>;
+    avg_sharpe?: number;
+    avg_trades?: number;
+    avg_return?: number;
+    avg_win_rate?: number;
+    avg_active_rate?: number;
+    avg_drawdown?: number;
+    per_regime_summary?: Record<string, { sharpe: number; trades: number; folds_active: number }>;
+    equity_curve?: Array<{ bar_index: number; value: number }>;
+    diagnostics?: {
+      prediction_histogram?: Array<{ bin_start: number; bin_end: number; bin_center: number; count: number }>;
+      total_predictions?: number;
+      active_signals?: number;
+      active_rate?: number;
+      vote_agreement?: Record<string, { count: number; pct: number; win_rate: number; avg_return: number }>;
+      model_contributions?: Array<{ model: string; delta_sharpe: number; active_pct: number }>;
+      model_agreement?: { models: string[]; kappa_matrix: number[][] };
+    };
+    trades?: Array<{
+      entry_time: string;
+      exit_time: string;
+      direction: string;
+      regime: string;
+      return_pct: number;
+      duration_bars: number;
+    }>;
+    fold_consistency_cv?: number;
+    fold_consistency_pass?: boolean;
+  };
+  drawdown_curve?: Array<{ bar_index: number; value: number }>;
+  buy_hold_curve?: Array<{ bar_index: number; value: number }>;
+  monthly_returns?: Array<{ month: number; return_pct: number }>;
   phase3_fold_consistency_cv: number;
   phase3_regime_coverage?: Record<string, unknown>;
   phase3_seed_robustness_sharpe: number;
@@ -1112,6 +1275,7 @@ export interface FullCycleResultsResponse {
   pbo: number;
   dsr: number;
   hpo_status?: Record<string, string>;
+  hpo_trial_summaries?: Record<string, { model_type: string; status: string; best_score?: number; committee_size?: number; consensus_pool_size?: number }>;
   hpo_model_params_count?: number;
   snapshot_dir?: string;
   final_fold_consistency_cv: number;
@@ -1127,6 +1291,7 @@ export interface FullCycleResultsResponse {
   factory_history: FactoryIterationRecord[];
   factory_stop_reason: string;
   total_time_s: number;
+  phase_timings?: Record<string, number>;
 }
 
 export interface FullCycleHistoryEntry {
@@ -1145,6 +1310,10 @@ export interface FullCycleHistoryEntry {
 export interface FullCycleHistoryResponse {
   entries: FullCycleHistoryEntry[];
   total_runs: number;
+}
+
+export interface CancelFullCycleResponse {
+  status: string;
 }
 
 export interface LogEntry {

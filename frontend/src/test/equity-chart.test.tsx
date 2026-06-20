@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { EquityChart } from "@/pages/Monitor/EquityChart";
 
 vi.mock("recharts", () => {
@@ -45,16 +45,9 @@ const sampleOosPeriods = [
 ];
 
 describe("EquityChart", () => {
-  it("renders title", () => {
-    render(
-      <EquityChart models={["logistic"]} oosPeriods={emptyOosPeriods} oosEquity={emptyOosEquity} />,
-    );
-    expect(screen.getByText("Walk-Forward Equity")).toBeInTheDocument();
-  });
-
   it("shows waiting message when no data", () => {
     render(
-      <EquityChart models={["logistic"]} oosPeriods={emptyOosPeriods} oosEquity={emptyOosEquity} />,
+      <EquityChart models={["logistic"]} oosPeriods={emptyOosPeriods} oosEquity={emptyOosEquity} yMode="pct" />,
     );
     expect(screen.getByText("Waiting for simulation data...")).toBeInTheDocument();
   });
@@ -65,46 +58,11 @@ describe("EquityChart", () => {
         models={["logistic"]}
         oosPeriods={sampleOosPeriods}
         oosEquity={sampleOosEquity}
+        yMode="pct"
       />,
     );
     expect(screen.getByTestId("responsive-container")).toBeInTheDocument();
     expect(screen.getByTestId("line-chart")).toBeInTheDocument();
-  });
-
-  it("renders per-month summary table when oosPeriods present", () => {
-    render(
-      <EquityChart
-        models={["logistic"]}
-        oosPeriods={sampleOosPeriods}
-        oosEquity={sampleOosEquity}
-      />,
-    );
-    expect(screen.getByText("Per-Month Summary")).toBeInTheDocument();
-  });
-
-  it("does not render per-month summary when oosPeriods empty", () => {
-    render(
-      <EquityChart
-        models={["logistic"]}
-        oosPeriods={emptyOosPeriods}
-        oosEquity={sampleOosEquity}
-      />,
-    );
-    expect(screen.queryByText("Per-Month Summary")).not.toBeInTheDocument();
-  });
-
-  it("toggles y-axis mode on button click", () => {
-    render(
-      <EquityChart
-        models={["logistic"]}
-        oosPeriods={sampleOosPeriods}
-        oosEquity={sampleOosEquity}
-      />,
-    );
-    const btn = screen.getByRole("button", { name: "%" });
-    expect(btn).toBeInTheDocument();
-    fireEvent.click(btn);
-    expect(screen.getByRole("button", { name: "$" })).toBeInTheDocument();
   });
 
   it("renders multiple model lines", () => {
@@ -113,6 +71,7 @@ describe("EquityChart", () => {
         models={["logistic", "xgboost"]}
         oosPeriods={sampleOosPeriods}
         oosEquity={sampleOosEquity}
+        yMode="pct"
       />,
     );
     const lines = screen.getAllByTestId("line");

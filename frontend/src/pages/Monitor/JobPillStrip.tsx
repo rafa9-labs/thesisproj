@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import type { JobSummary } from "@/api/schemas";
 import { useJobStore } from "@/stores/useJobStore";
 
@@ -19,12 +19,13 @@ const STATUS_COLORS: Record<string, string> = {
 export function JobPillStrip({ jobs, selectedJobId, onSelect }: Props) {
   const navigate = useNavigate();
   const jobStore = useJobStore((s) => s.activeJobs);
+  const removeJob = useJobStore((s) => s.removeJob);
 
   if (jobs.length === 0) return null;
 
   return (
     <div
-      className="flex items-center gap-2 overflow-x-auto pb-2"
+      className="flex items-center gap-2 overflow-x-auto"
       style={{ scrollbarWidth: "none" }}
     >
       {jobs.map((j) => {
@@ -53,8 +54,8 @@ export function JobPillStrip({ jobs, selectedJobId, onSelect }: Props) {
                 color: isSelected ? "var(--color-text-primary)" : "var(--color-text-secondary)",
               }}
             >
-              {(j.models ?? []).slice(0, 2).join("+")}
-              {(j.models?.length ?? 0) > 2 ? "..." : ""}
+              {(Array.isArray(j.models) ? j.models : []).slice(0, 2).join("+")}
+              {((Array.isArray(j.models) ? j.models.length : 0) > 2 ? "..." : "")}
             </span>
             {!isDone && (
               <span className="min-w-[28px] text-right font-mono text-[10px] text-(--color-brand)">
@@ -62,24 +63,37 @@ export function JobPillStrip({ jobs, selectedJobId, onSelect }: Props) {
               </span>
             )}
             {isDone && (
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/results/${j.job_id}`);
-                }}
-                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors hover:brightness-110"
-                style={{
-                  backgroundColor:
-                    j.status === "completed" ? "rgba(34,197,94,0.12)" : "rgba(242,54,69,0.12)",
-                  color:
-                    j.status === "completed"
-                      ? "var(--color-accent-success)"
-                      : "var(--color-accent-danger)",
-                }}
-              >
-                Results
-                <ChevronRight size={10} strokeWidth={2} />
-              </span>
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeJob(j.job_id);
+                  }}
+                  title="Dismiss"
+                  aria-label="Dismiss job"
+                  className="flex items-center justify-center rounded p-0.5 text-(--color-text-dim) transition-colors hover:bg-[rgba(242,54,69,0.12)] hover:text-(--color-accent-danger)"
+                >
+                  <X size={12} strokeWidth={2} />
+                </button>
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/results/${j.job_id}`);
+                  }}
+                  className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors hover:brightness-110"
+                  style={{
+                    backgroundColor:
+                      j.status === "completed" ? "rgba(34,197,94,0.12)" : "rgba(242,54,69,0.12)",
+                    color:
+                      j.status === "completed"
+                        ? "var(--color-accent-success)"
+                        : "var(--color-accent-danger)",
+                  }}
+                >
+                  Results
+                  <ChevronRight size={10} strokeWidth={2} />
+                </span>
+              </>
             )}
           </button>
         );

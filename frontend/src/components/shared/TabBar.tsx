@@ -11,9 +11,11 @@ interface Props {
 }
 
 export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
+  const activeIndex = tabs.findIndex((t) => t.key === activeTab);
+
   return (
     <nav
-      className="grid grid-cols-3 gap-x-2 gap-y-4 border-b border-(--color-glass-border) pb-px xl:flex xl:flex-row xl:gap-8"
+      className="flex flex-row gap-0.5 border-b border-(--color-glass-border) px-2 sm:px-6"
       role="tablist"
     >
       {tabs.map((tab) => {
@@ -29,7 +31,7 @@ export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
             id={`tab-${tab.key}`}
             aria-selected={isActive}
             aria-controls={`tabpanel-${tab.key}`}
-            className="relative flex items-center justify-center px-0 pt-2 pb-2 text-[10px] font-semibold tracking-[0.06em] whitespace-nowrap uppercase transition-colors duration-150 md:text-xs"
+            className="relative flex flex-1 min-w-0 items-center justify-center px-1 pt-2.5 pb-2 text-[9px] font-semibold tracking-[0.05em] uppercase transition-colors duration-150 sm:text-[10px] md:px-2"
             style={{
               background: "transparent",
               border: "none",
@@ -43,7 +45,7 @@ export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
               outline: "none",
             }}
           >
-            {tab.label}
+            <span className="truncate">{tab.label}</span>
             {isActive && (
               <span
                 className="absolute right-0 bottom-0 left-0 h-0.5 bg-(--color-brand)"
@@ -53,6 +55,11 @@ export function TabBar({ tabs, activeTab, onTabChange, disabledTabs }: Props) {
           </button>
         );
       })}
+
+      {/* Compact step indicator on small screens */}
+      <span className="ml-2 hidden max-[480px]:inline-flex items-center text-[9px] text-(--color-text-muted)/50 font-mono shrink-0">
+        {activeIndex + 1}/{tabs.length}
+      </span>
     </nav>
   );
 }

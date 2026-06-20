@@ -16,67 +16,60 @@ export function ExecutionPanel() {
       />
 
       {/* ── General ── */}
-      <Section
-        title="General"
-        description="Base account and margin settings that apply to every execution model."
-      >
-        <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+      <Section title="General">
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           <ParamSlider
-            label="Initial Equity"
+            label="INITIAL EQUITY"
             value={s.initialEquity}
             min={RANGES.initialEquity.min}
             max={RANGES.initialEquity.max}
             step={RANGES.initialEquity.step}
-            description="Starting account balance in base currency."
+            tooltip="Starting account balance in base currency."
             onChange={(v) => setField("initialEquity", v)}
           />
           <ParamSlider
-            label="Max Leverage"
+            label="MAX LEVERAGE"
             value={s.maxLeverage}
             min={RANGES.maxLeverage.min}
             max={RANGES.maxLeverage.max}
             step={RANGES.maxLeverage.step}
-            description="Highest leverage allowed per position. Affects margin requirements and drawdown magnitude."
+            tooltip="Highest leverage allowed per position. Affects margin requirements and drawdown magnitude."
             onChange={(v) => setField("maxLeverage", v)}
           />
         </div>
       </Section>
 
       {/* ── Position Sizing ── */}
-      <Section
-        title="Position Sizing"
-        accent="var(--color-accent-classical)"
-        description="Determines how large each trade should be relative to account equity. Different methods balance growth vs. risk of ruin."
-      >
+      <Section title="Position Sizing" accent="var(--color-accent-classical)">
         <div className="flex flex-col gap-6">
           <div className="max-w-sm">
             <ParamSelect
-              label="Method"
+              label="METHOD"
               value={s.sizingMethod}
               options={[...SELECT_OPTIONS.sizingMethod]}
-              description="Fixed Lot = constant size. Kelly = optimal growth. Fixed Fractional = risk %. ATR = volatility-adjusted."
+              tooltip="Fixed Lot = constant size. Kelly = optimal growth. Fixed Fractional = risk %. ATR = volatility-adjusted."
               onChange={(v) => setField("sizingMethod", v as typeof s.sizingMethod)}
             />
           </div>
 
           {s.sizingMethod === "kelly" && (
-            <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+            <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               <ParamSlider
-                label="Kelly Fraction"
+                label="KELLY FRACTION"
                 value={s.kellyFraction}
                 min={RANGES.kellyFraction.min}
                 max={RANGES.kellyFraction.max}
                 step={RANGES.kellyFraction.step}
-                description="Fraction of full Kelly to use. 0.5 = Half-Kelly, safer but slower growth."
+                tooltip="Fraction of full Kelly to use. 0.5 = Half-Kelly, safer but slower growth."
                 onChange={(v) => setField("kellyFraction", v)}
               />
               <ParamSlider
-                label="Min Trades"
+                label="MIN TRADES"
                 value={s.kellyMinTrades}
                 min={RANGES.kellyMinTrades.min}
                 max={RANGES.kellyMinTrades.max}
                 step={RANGES.kellyMinTrades.step}
-                description="Minimum trade history before Kelly sizing activates. Prevents erratic early sizing."
+                tooltip="Minimum trade history before Kelly sizing activates. Prevents erratic early sizing."
                 onChange={(v) => setField("kellyMinTrades", v)}
               />
             </div>
@@ -85,35 +78,35 @@ export function ExecutionPanel() {
           {s.sizingMethod === "fixed_fractional" && (
             <div className="max-w-sm">
               <ParamSlider
-                label="Risk Fraction"
+                label="RISK FRACTION"
                 value={s.riskFraction}
                 min={RANGES.riskFraction.min}
                 max={RANGES.riskFraction.max}
                 step={RANGES.riskFraction.step}
-                description="Percentage of equity risked on each trade. 2% = standard conservative sizing."
+                tooltip="Percentage of equity risked on each trade. 2% = standard conservative sizing."
                 onChange={(v) => setField("riskFraction", v)}
               />
             </div>
           )}
 
           {s.sizingMethod === "atr" && (
-            <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+            <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               <ParamSlider
-                label="ATR Risk %"
+                label="ATR RISK %"
                 value={s.atrRiskPct}
                 min={RANGES.atrRiskPct.min}
                 max={RANGES.atrRiskPct.max}
                 step={RANGES.atrRiskPct.step}
-                description="Equity percentage risked, scaled by current ATR volatility."
+                tooltip="Equity percentage risked, scaled by current ATR volatility."
                 onChange={(v) => setField("atrRiskPct", v)}
               />
               <ParamSlider
-                label="ATR SL Mult"
+                label="ATR SL MULT"
                 value={s.atrSlMult}
                 min={RANGES.atrSlMult.min}
                 max={RANGES.atrSlMult.max}
                 step={RANGES.atrSlMult.step}
-                description="Stop-loss distance as a multiple of ATR. Higher = wider stops, fewer whipsaws."
+                tooltip="Stop-loss distance as a multiple of ATR. Higher = wider stops, fewer whipsaws."
                 onChange={(v) => setField("atrSlMult", v)}
               />
             </div>
@@ -122,30 +115,26 @@ export function ExecutionPanel() {
       </Section>
 
       {/* ── Trailing Stops ── */}
-      <Section
-        title="Trailing Stops"
-        accent="var(--color-accent-deep)"
-        description="Automatically moves the stop-loss in favor of the trade as price progresses, locking in profits while allowing runners."
-      >
+      <Section title="Trailing Stops">
         <div className="flex flex-col gap-6">
           <div className="max-w-sm">
             <ParamSelect
-              label="Method"
+              label="METHOD"
               value={s.trailingMethod}
               options={[...SELECT_OPTIONS.trailingMethod]}
-              description="None = no trailing. Standard = fixed pip step. ATR = volatility-adjusted step. Chandelier = highest high / lowest low minus ATR multiple."
+              tooltip="None = no trailing. Standard = fixed pip step. ATR = volatility-adjusted step. Chandelier = highest high / lowest low minus ATR multiple."
               onChange={(v) => setField("trailingMethod", v as typeof s.trailingMethod)}
             />
           </div>
           {s.trailingMethod !== "none" && (
             <div className="max-w-sm">
               <ParamSlider
-                label="Activation"
+                label="ACTIVATION"
                 value={s.trailingActivation}
                 min={RANGES.trailingActivation.min}
                 max={RANGES.trailingActivation.max}
                 step={RANGES.trailingActivation.step}
-                description="Profit threshold (as a fraction of price) that must be reached before the trailing stop begins to move."
+                tooltip="Profit threshold (as a fraction of price) that must be reached before the trailing stop begins to move."
                 onChange={(v) => setField("trailingActivation", v)}
               />
             </div>
@@ -154,40 +143,36 @@ export function ExecutionPanel() {
       </Section>
 
       {/* ── Risk Management ── */}
-      <Section
-        title="Risk Management"
-        accent="var(--color-accent-danger)"
-        description="Circuit breakers and drawdown controls that halt trading when conditions become unfavorable. Essential for live deployment."
-      >
+      <Section title="Risk Management">
         <div className="flex flex-col gap-6">
           <div className="max-w-sm">
             <ParamSlider
-              label="Max Drawdown"
+              label="MAX DRAWDOWN"
               value={s.maxDrawdownPct}
               min={RANGES.maxDrawdownPct.min}
               max={RANGES.maxDrawdownPct.max}
               step={RANGES.maxDrawdownPct.step}
-              description="Peak-to-trough equity drop that triggers a full trading halt. 15% = common institutional limit."
+              tooltip="Peak-to-trough equity drop that triggers a full trading halt. 15% = common institutional limit."
               onChange={(v) => setField("maxDrawdownPct", v)}
             />
           </div>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             <ParamSlider
-              label="Max Consec. Losses"
+              label="MAX CONSEC. LOSSES"
               value={s.maxConsecutiveLosses}
               min={RANGES.maxConsecutiveLosses.min}
               max={RANGES.maxConsecutiveLosses.max}
               step={RANGES.maxConsecutiveLosses.step}
-              description="Halt after this many consecutive losing trades. Prevents revenge-trading spirals."
+              tooltip="Halt after this many consecutive losing trades. Prevents revenge-trading spirals."
               onChange={(v) => setField("maxConsecutiveLosses", v)}
             />
             <ParamSlider
-              label="Daily Loss Limit"
+              label="DAILY LOSS LIMIT"
               value={s.dailyLossLimitPct}
               min={RANGES.dailyLossLimitPct.min}
               max={RANGES.dailyLossLimitPct.max}
               step={RANGES.dailyLossLimitPct.step}
-              description="Maximum daily equity loss before pausing until the next session."
+              tooltip="Maximum daily equity loss before pausing until the next session."
               onChange={(v) => setField("dailyLossLimitPct", v)}
             />
           </div>

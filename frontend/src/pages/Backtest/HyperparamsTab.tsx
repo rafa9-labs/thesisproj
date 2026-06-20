@@ -1,6 +1,5 @@
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { ModelHyperparamsPanel } from "./ModelHyperparamsPanel";
-import { ParameterGuideInline } from "./ParameterGuide";
 import { Panel, PanelHeader } from "@/components/shared/Panel";
 
 export function HyperparamsTab() {
@@ -29,9 +28,6 @@ export function HyperparamsTab() {
 
       {/* Model-specific hyperparameter controls */}
       <ModelHyperparamsPanel />
-
-      {/* Parameter guidance per model */}
-      <ParameterGuideInline />
     </Panel>
   );
 }

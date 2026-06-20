@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import {
   useLiveSentiment,
   useNewsArticles,
@@ -6,13 +6,12 @@ import {
   useNewsStatus,
   usePairs,
 } from "@/api/queries";
-import { useNewsWebSocket } from "@/hooks/useNewsWebSocket";
 import type { NewsArticleFull, LiveSentimentArticle } from "@/api/schemas";
 import { BullBearBar } from "@/components/shared/BullBearBar";
+import { SENTIMENT_THRESHOLDS } from "@/lib/sentiment-thresholds";
 import {
   TrendingUp,
   Activity,
-  BarChart3,
   ExternalLink,
   ChevronDown,
   ChevronUp,
@@ -24,8 +23,6 @@ const PAIRS_FALLBACK = [
   "USDJPY",
   "AUDUSD",
   "USDCAD",
-  "NZDUSD",
-  "USDCHF",
 ] as const;
 
 function formatRelativeTime(timestamp: string) {
@@ -48,102 +45,248 @@ function formatTimestamp(timestamp: string) {
   }
 }
 
-function truncateAtSentence(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  const cut = text.slice(0, maxLen);
-  const lastPeriod = cut.lastIndexOf(".");
-  if (lastPeriod > maxLen * 0.6) return text.slice(0, lastPeriod + 1);
-  const lastSpace = cut.lastIndexOf(" ");
-  if (lastSpace > maxLen * 0.6) return cut.slice(0, lastSpace) + "\u2026";
-  return cut + "\u2026";
-}
-
 /* ── Helpers ── */
 
-function formatImpactLabel(label: string): string {
-  const map: Record<string, string> = {
-    strong_bullish: "Strong Bullish",
-    bullish: "Bullish",
-    neutral: "Neutral",
-    bearish: "Bearish",
-    strong_bearish: "Strong Bearish",
-  };
-  return map[label] ?? "Neutral";
+/* ── Title/Body Deduplication ── */
+
+function stripTitleFromBody(title: string, body: string): string {
+  if (!title || !body) return body;
+  const normalizedTitle = title.trim().replace(/\.+$/, "");
+  const normalizedBodyStart = body.trim().slice(0, normalizedTitle.length);
+  if (normalizedBodyStart.toLowerCase() === normalizedTitle.toLowerCase()) {
+    const remainder = body.trim().slice(normalizedTitle.length);
+    return remainder.replace(/^[\s\.,;:!?]+/, "").trim() || body;
+  }
+  return body;
 }
 
-function impactPillDynamicStyle(score: number): string {
-  const intensity = Math.abs(score);
+/* ── Contextual Phrase Highlighting ── */
 
-  if (intensity < 0.2) {
-    return "bg-slate-800 text-slate-400 border border-slate-700";
-  }
+// ── Multi-word phrase patterns (matched as complete context blocks) ──
+const phrasePatterns = [
+  // Bullish phrases
+  { regex: /(?:dollar|euro|yen|pound|franc|loonie|aussie|kiwi)\s+(?:rall(?:y|ied|ies)|surge[ds]?|soar[eds]?|climb[edins]*|jump[eds]*|gain[eds]*|strengthen[eds]*|advance[ds]?|rise[s]?|rose)\s*\w*/gi, bullish: true },
+  { regex: /(?:sharply|significantly|strongly|firmly)\s+(?:higher|rall(?:y|ied)|surge[ds]?|gain[eds]*|rose?)/gi, bullish: true },
+  { regex: /\b(?:strong|solid|robust|resilient)\s+(?:growth|demand|recovery|data|jobs|employment|GDP|earnings)\b/gi, bullish: true },
+  { regex: /\b(?:beat|exceeded|topped|outpaced)\s+(?:expectations|forecasts?|estimates?)\b/gi, bullish: true },
+  { regex: /\b(?:upward|positive|bullish|optimistic)\s+(?:trend|momentum|outlook|sentiment|bias)\b/gi, bullish: true },
+  { regex: /\b(?:dovish|easing|accommodative)\s+(?:tone|stance|bias|outlook|policy)\b/gi, bullish: true },
+  { regex: /\b(?:record|all-time|multi-year|fresh)\s+highs?\b/gi, bullish: true },
+  { regex: /\b(?:robust|rosy|upbeat)\s+(?:outlook|forecast|guidance)\b/gi, bullish: true },
+  // ── Single-word bullish
+  { regex: /\brall(?:y|ied|ies)\b/gi, bullish: true },
+  { regex: /\bsurge[ds]?\b(?!\s*(?:protect|risk))?/gi, bullish: true },
+  { regex: /\bsoar[eds]?\b/gi, bullish: true },
+  { regex: /\brebound[sedin]*\b/gi, bullish: true },
+  { regex: /\bstrengthen[eds]*\b/gi, bullish: true },
+  { regex: /\boutperform[sedin]*\b/gi, bullish: true },
+  { regex: /\bbullish\b/gi, bullish: true },
+  { regex: /\boptimis(?:m|tic)\b/gi, bullish: true },
+  { regex: /\b(?:gains?|upside)\b/gi, bullish: true },
+  // Bearish phrases
+  { regex: /(?:dollar|euro|yen|pound|franc|loonie|aussie|kiwi)\s+(?:plung[eds]?|tumble[ds]?|slump[sed]*|decline[ds]?|drop[ped]*|fall[sen]*|weaken[eds]*|sli[dp]\s*\w*)/gi, bullish: false },
+  { regex: /(?:sharply|significantly|steeply|heavily)\s+(?:lower|fell|dropped|declined|plunged)/gi, bullish: false },
+  { regex: /\b(?:weak|sluggish|tepid|soft|dismal)\s+(?:growth|demand|recovery|data|jobs|employment|GDP|earnings)\b/gi, bullish: false },
+  { regex: /\b(?:missed|fell short of|trailed|lagged)\s+(?:expectations|forecasts?|estimates?)\b/gi, bullish: false },
+  { regex: /\b(?:downward|negative|bearish|pessimistic)\s+(?:trend|momentum|outlook|sentiment|bias)\b/gi, bullish: false },
+  { regex: /\b(?:hawkish|tightening|aggressive)\s+(?:tone|stance|bias|outlook|policy|rate hike)\b/gi, bullish: false },
+  { regex: /\b(?:risk-off|risk off|sell-off|selloff)\s*(?:sentiment|mode|environment)?\b/gi, bullish: false },
+  { regex: /\b(?:recession|downturn|contraction|stagflation)\s+(?:fears?|worries?|risks?|concerns?)\b/gi, bullish: false },
+  // ── Single-word bearish
+  { regex: /\bplung[eds]?\b/gi, bullish: false },
+  { regex: /\btumble[ds]?\b/gi, bullish: false },
+  { regex: /\bslump[se]?d?\b/gi, bullish: false },
+  { regex: /\bdecline[ds]?\b/gi, bullish: false },
+  { regex: /\bdrop[ped]*\b/gi, bullish: false },
+  { regex: /\b(sell-off|selloff)\b/gi, bullish: false },
+  { regex: /\bdownturn\b/gi, bullish: false },
+  { regex: /\brecession\b/gi, bullish: false },
+  { regex: /\bweaken[eds]*\b/gi, bullish: false },
+  { regex: /\bdeteriorat[edsin]*\b/gi, bullish: false },
+  { regex: /\bunderperform[edsin]*\b/gi, bullish: false },
+  { regex: /\b(?:downside|bearish|pessimis(?:m|tic))\b/gi, bullish: false },
+  { regex: /\b(?:losses?|turmoil|crisis|volatil(?:e|ity))\b/gi, bullish: false },
+];
 
-  if (score > 0) {
-    if (intensity <= 0.5) {
-      return "bg-emerald-900/30 text-emerald-400/70 border border-emerald-900/50";
-    }
-    return "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.2)]";
-  }
-
-  if (intensity <= 0.5) {
-    return "bg-rose-900/30 text-rose-400/70 border border-rose-900/50";
-  }
-  return "bg-rose-500/20 text-rose-400 border border-rose-500/50 shadow-[0_0_10px_rgba(244,63,94,0.2)]";
+interface PhraseMatch {
+  start: number;
+  end: number;
+  bullish: boolean;
+  text: string;
 }
 
-/* ── Shared structured body renderer ── */
+function findPhraseMatches(text: string): PhraseMatch[] {
+  const matches: PhraseMatch[] = [];
 
-function StructuredArticleBody({
-  fallback,
-}: {
-  fallback: string;
-}) {
-  // Phase 2: Bulletproof paragraph chunking.
-  // 1. Attempt standard newline split.
-  let paragraphs = fallback.split(/\n+/).filter((p) => p.trim() !== "");
-
-  // 2. FORCED FALLBACK: If there's only 1 paragraph and it's long, force chunk it by sentences.
-  if (paragraphs.length <= 1 && fallback.length > 400) {
-    const sentences = fallback.match(/[^.!?]+[.!?]+/g) || [fallback];
-    paragraphs = [];
-    for (let i = 0; i < sentences.length; i += 4) {
-      paragraphs.push(sentences.slice(i, i + 4).join(" ").trim());
+  for (const { regex, bullish } of phrasePatterns) {
+    // Reset regex for global matching
+    regex.lastIndex = 0;
+    let m;
+    while ((m = regex.exec(text)) !== null) {
+      if (m[0].length === 0) break;
+      matches.push({ start: m.index, end: m.index + m[0].length, bullish, text: m[0] });
     }
   }
 
-  const overviewSentence =
-    paragraphs.length > 0 ? paragraphs[0].split(".")[0] + "." : "";
+  return matches.sort((a, b) => a.start - b.start);
+}
 
-  // Short fallback with no usable chunks.
-  if (paragraphs.length === 0) {
+/** Merge overlapping matches into unified spans. */
+function mergeOverlapping(matches: PhraseMatch[]): PhraseMatch[] {
+  if (matches.length <= 1) return matches;
+  const result: PhraseMatch[] = [matches[0]];
+  for (let i = 1; i < matches.length; i++) {
+    const prev = result[result.length - 1];
+    if (matches[i].start <= prev.end) {
+      const longer = matches[i].end > prev.end
+        ? { ...matches[i], start: prev.start }
+        : prev;
+      result[result.length - 1] = longer;
+    } else {
+      result.push(matches[i]);
+    }
+  }
+  return result;
+}
+
+/** Merge nearby (<= 40 chars apart) matches into phrase blocks for unified highlighting. */
+function mergeNearby(matches: PhraseMatch[], sourceText: string, maxGap: number = 40): PhraseMatch[] {
+  if (matches.length <= 1) return matches;
+
+  // First pass: merge overlapping
+  const merged = mergeOverlapping(matches);
+
+  // Second pass: merge adjacent matches within maxGap
+  const blocks: PhraseMatch[] = [merged[0]];
+  for (let i = 1; i < merged.length; i++) {
+    const prev = blocks[blocks.length - 1];
+    const gap = merged[i].start - prev.end;
+    if (gap <= maxGap && merged[i].bullish === prev.bullish) {
+      blocks[blocks.length - 1] = {
+        start: prev.start,
+        end: merged[i].end,
+        bullish: prev.bullish,
+        text: sourceText.slice(prev.start, merged[i].end),
+      };
+    } else {
+      blocks.push(merged[i]);
+    }
+  }
+  return blocks;
+}
+
+function highlightPhrases(text: string): string {
+  const matches = findPhraseMatches(text);
+  if (matches.length === 0) return escapeHtml(text);
+
+  const blocks = mergeNearby(matches, text, 40);
+  const parts: string[] = [];
+  let cursor = 0;
+
+  for (const m of blocks) {
+    if (m.start > cursor) {
+      parts.push(escapeHtml(text.slice(cursor, m.start)));
+    }
+    const spanClass = m.bullish
+      ? "text-emerald-400 font-medium"
+      : "text-rose-400 font-medium";
+    parts.push(`<span class="${spanClass}">${escapeHtml(m.text)}</span>`);
+    cursor = m.end;
+  }
+
+  if (cursor < text.length) {
+    parts.push(escapeHtml(text.slice(cursor)));
+  }
+
+  return parts.join("");
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/* ── Universal body parser ── */
+
+/** Strip all HTML tags from text, returning clean plaintext. */
+function stripHtml(text: string): string {
+  return text.replace(/<[^>]*>?/gm, "");
+}
+
+/** Split raw article text into clean paragraph segments. */
+function formatNewsBody(text: string): string[] {
+  return stripHtml(text)
+    .split(/\n+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 1);
+}
+
+/** Render raw article text as properly spaced, highlighted paragraphs. */
+function NewsParagraphs({ text, preHighlighted }: { text: string; preHighlighted?: boolean }) {
+  if (preHighlighted) {
+    const paragraphs = text.split(/\n+/).filter((s) => s.trim().length > 1);
+    if (paragraphs.length === 0) {
+      return (
+        <p className="text-sm text-slate-400 leading-relaxed italic">
+          No body text available.
+        </p>
+      );
+    }
     return (
-      <p className="text-[13px] leading-relaxed tracking-wide text-slate-200">
-        {truncateAtSentence(fallback, 800)}
-      </p>
+      <div className="flex flex-col gap-2.5">
+        {paragraphs.map((p, i) => (
+          <p key={i} className="text-sm text-slate-400 leading-relaxed" dangerouslySetInnerHTML={{ __html: p }} />
+        ))}
+      </div>
     );
   }
 
+  const paragraphs = formatNewsBody(text);
+  if (paragraphs.length === 0) {
+    return (
+      <p className="text-sm text-slate-400 leading-relaxed italic">
+        No body text available.
+      </p>
+    );
+  }
   return (
-    <>
-      {/* Node A: Overview box — single most impactful sentence only */}
-      <div className="border border-yellow-500/30 p-4">
-        <p className="text-[13px] leading-relaxed text-slate-200">
-          {overviewSentence}
-        </p>
-      </div>
+    <div className="flex flex-col gap-4 text-sm text-slate-400 leading-relaxed">
+      {paragraphs.map((para, i) => (
+        <p
+          key={i}
+          dangerouslySetInnerHTML={{ __html: highlightPhrases(para) }}
+        />
+      ))}
+    </div>
+  );
+}
 
-      {/* Node B: Article body — chunked paragraphs */}
-      <div className="mt-6 px-2">
-        {paragraphs.map((para, idx) => (
-          <p
-            key={idx}
-            className="mb-4 text-[13px] text-slate-300 leading-relaxed tracking-wide text-justify"
-          >
-            {para}
-          </p>
-        ))}
-      </div>
-    </>
+/* ── Common Sentiment Badge ── */
+
+function sentimentLabel(score: number): string {
+  if (score > SENTIMENT_THRESHOLDS.BADGE_BULLISH) return "Bullish";
+  if (score < SENTIMENT_THRESHOLDS.BADGE_BEARISH) return "Bearish";
+  return "Neutral";
+}
+
+function SentimentBadge({ score }: { score: number }) {
+  const label = sentimentLabel(score);
+  const colorClass =
+    score > SENTIMENT_THRESHOLDS.BADGE_BULLISH
+      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50"
+      : score < SENTIMENT_THRESHOLDS.BADGE_BEARISH
+        ? "bg-rose-500/20 text-rose-400 border border-rose-500/50"
+        : "bg-slate-800 text-slate-400 border border-slate-700";
+  return (
+    <span
+      className={`shrink-0 self-start rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold tabular-nums leading-none ${colorClass}`}
+    >
+      {score > 0 ? "+" : ""}{score.toFixed(2)} {label}
+    </span>
   );
 }
 
@@ -152,11 +295,9 @@ function StructuredArticleBody({
 function ScoredArticleRow({ article }: { article: LiveSentimentArticle }) {
   const [expanded, setExpanded] = useState(false);
   const score = article.sentiment_score;
-  const isBullish = score > 0.05;
-  const isBearish = score < -0.05;
+  const isBullish = score > SENTIMENT_THRESHOLDS.BULLISH;
+  const isBearish = score < SENTIMENT_THRESHOLDS.BEARISH;
   const impactScore = article.market_impact_score ?? score;
-  const impactLabel = article.impact_label ?? "neutral";
-  const pillClass = impactPillDynamicStyle(impactScore);
   const borderColor = isBullish
     ? "var(--color-accent-success)"
     : isBearish
@@ -164,6 +305,7 @@ function ScoredArticleRow({ article }: { article: LiveSentimentArticle }) {
       : "var(--color-glass-border)";
   const hasBody = !!(article.body || article.summary);
   const bodyText = article.body || article.summary || "";
+  const hlBody = article.highlighted_body || null;
 
   return (
     <div
@@ -171,30 +313,24 @@ function ScoredArticleRow({ article }: { article: LiveSentimentArticle }) {
       style={{ borderLeftColor: borderColor }}
     >
       <div className="flex items-start gap-3 px-3 py-2.5">
-        {/* Content */}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          {/* Title + Impact Pill */}
           <div className="flex items-start gap-2">
             <a
               href={article.url || "#"}
               target="_blank"
               rel="noopener noreferrer"
-              className="min-w-0 flex-1 truncate text-[11px] leading-snug font-medium text-(--color-text-primary) transition-colors hover:text-(--color-brand) hover:underline"
+              className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-200 transition-colors hover:text-(--color-brand) hover:underline"
               title={article.url ? "Open source" : undefined}
               onClick={(e) => e.stopPropagation()}
             >
               {article.title}
             </a>
-            <span
-              className={`shrink-0 self-start rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold tabular-nums leading-none ${pillClass}`}
-            >
-              {impactScore > 0 ? "+" : ""}{impactScore.toFixed(2)} {formatImpactLabel(impactLabel)}
-            </span>
+            <SentimentBadge score={impactScore} />
           </div>
 
           {!expanded && hasBody && (
-            <p className="line-clamp-2 text-[10px] leading-relaxed text-(--color-text-dim)">
-              {bodyText}
+            <p className="line-clamp-2 text-xs text-slate-400 leading-snug">
+              {stripTitleFromBody(article.title, bodyText)}
             </p>
           )}
 
@@ -214,17 +350,16 @@ function ScoredArticleRow({ article }: { article: LiveSentimentArticle }) {
               </span>
             )}
             {article.llm_confidence != null && (
-              <span className="font-mono text-[10px] text-(--color-text-dim) tabular-nums">
+              <span className="font-mono text-[10px] text-slate-500 tabular-nums">
                 CONF: {(article.llm_confidence * 100).toFixed(0)}%
               </span>
             )}
-            <span className="text-[9px] text-(--color-text-muted)">
+            <span className="text-xs text-slate-500">
               {article.source} &middot; {formatRelativeTime(article.timestamp)}
             </span>
           </div>
         </div>
 
-        {/* Action buttons */}
         <div className="flex shrink-0 items-center gap-1">
           {article.url && (
             <a
@@ -250,82 +385,92 @@ function ScoredArticleRow({ article }: { article: LiveSentimentArticle }) {
         </div>
       </div>
 
-      {/* Expanded — structured body with overview + paragraph chunks */}
       {expanded && hasBody && (
-        <div className="px-3 pb-3">
-          <div className="mt-2 rounded-md bg-slate-900/80 p-5">
-            <StructuredArticleBody fallback={bodyText} />
-          </div>
+        <div className="pl-4 border-l-2 border-slate-700 ml-2 mt-3 max-h-64 overflow-y-auto">
+          <NewsParagraphs text={hlBody ?? stripTitleFromBody(article.title, bodyText)} preHighlighted={!!hlBody} />
         </div>
       )}
     </div>
   );
 }
 
-/* ── Macro Feed Row (Right Panel Top) ── */
+/* ── Macro Feed Row (Right Panel) ── */
 
 function MacroFeedRow({ article }: { article: NewsArticleFull }) {
   const [expanded, setExpanded] = useState(false);
   const hasBody = !!(article.body || article.summary);
   const bodyText = article.body || article.summary || "";
   const hlBody = article.highlighted_body || null;
+  const score = article.sentiment_score ?? 0;
+  const isBullish = score > SENTIMENT_THRESHOLDS.BULLISH;
+  const isBearish = score < SENTIMENT_THRESHOLDS.BEARISH;
+  const borderColor = isBullish
+    ? "var(--color-accent-success)"
+    : isBearish
+      ? "var(--color-accent-danger)"
+      : "var(--color-glass-border)";
 
   return (
-    <div className="flex flex-col border-b border-slate-800 transition-colors hover:bg-slate-900/30">
-      <div className="flex items-center gap-2 px-3 py-2">
-        <span className="shrink-0 font-mono text-[9px] text-slate-500 tabular-nums">
-          {formatTimestamp(article.timestamp)}
-        </span>
-        <a
-          href={article.url || "#"}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="min-w-0 flex-1 truncate text-[11px] leading-snug text-slate-300 transition-colors hover:text-cyan-400 hover:underline"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {article.title}
-        </a>
-        <span className="shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[8px] font-medium text-slate-500 uppercase">
-          {article.source}
-        </span>
-        <div className="flex shrink-0 items-center gap-0.5">
+    <div
+      className="flex flex-col border-l-2 transition-colors hover:bg-(--color-glass-hover)"
+      style={{ borderLeftColor: borderColor }}
+    >
+      <div className="flex items-start gap-3 px-3 py-2.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex items-start gap-2">
+            <a
+              href={article.url || "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-200 transition-colors hover:text-(--color-brand) hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {article.title}
+            </a>
+            <SentimentBadge score={score} />
+          </div>
+
+          {!expanded && hasBody && (
+            <p className="line-clamp-2 text-xs text-slate-400 leading-snug">
+              {stripTitleFromBody(article.title, bodyText)}
+            </p>
+          )}
+
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">
+              {article.source} &middot; {formatRelativeTime(article.timestamp)}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
           {article.url && (
             <a
               href={article.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex h-5 w-5 items-center justify-center rounded text-slate-500 hover:text-cyan-400"
-              title="Open article"
+              className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition-colors hover:text-cyan-400"
+              title="Open article in new tab"
               onClick={(e) => e.stopPropagation()}
             >
-              <ExternalLink size={11} />
+              <ExternalLink size={13} />
             </a>
           )}
           {hasBody && (
             <button
               onClick={() => setExpanded(!expanded)}
-              className="flex h-5 w-5 items-center justify-center rounded text-slate-500 hover:text-cyan-400"
+              className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition-colors hover:text-cyan-400"
               title={expanded ? "Collapse" : "Expand"}
             >
-              {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
           )}
         </div>
       </div>
+
       {expanded && hasBody && (
-        <div className="px-3 pb-2">
-          <div className="rounded-md bg-slate-900/60 p-3">
-            {hlBody ? (
-              <p
-                className="text-[10px] leading-relaxed text-slate-300"
-                dangerouslySetInnerHTML={{ __html: hlBody }}
-              />
-            ) : (
-              <p className="text-[10px] leading-relaxed text-slate-400">
-                {truncateAtSentence(bodyText, 600)}
-              </p>
-            )}
-          </div>
+        <div className="pl-4 border-l-2 border-slate-700 ml-2 mt-3 max-h-64 overflow-y-auto">
+          <NewsParagraphs text={hlBody ?? stripTitleFromBody(article.title, bodyText)} preHighlighted={!!hlBody} />
         </div>
       )}
     </div>
@@ -358,9 +503,6 @@ function EconomicCalendarWidget({
 }) {
   return (
     <div className="flex flex-col gap-0.5 px-3 py-2">
-      <div className="mb-1.5 text-[9px] font-medium tracking-[0.08em] text-slate-500 uppercase">
-        Upcoming ({eventsData?.length ?? 0} events)
-      </div>
       {eventsData && eventsData.length > 0 ? (
         eventsData.slice(0, 5).map((ev, i) => (
           <div
@@ -392,12 +534,14 @@ function EconomicCalendarWidget({
 
 export function NewsPage() {
   const [pair, setPair] = useState("EURUSD");
+  const [econExpanded, setEconExpanded] = useState(false);
+
+  const toggleEconCalendar = () => setEconExpanded((p) => !p);
 
   const { data: sentiment, isLoading: sentLoading } = useLiveSentiment(pair);
   const { data: articlesData, isLoading: articlesLoading } = useNewsArticles(undefined, 30);
   const { data: newsStatus } = useNewsStatus();
   const { data: apiPairs } = usePairs();
-  useNewsWebSocket(pair);
 
   const availablePairs = useMemo(() => {
     const symbols = (apiPairs ?? []).map((p) => p.pair?.symbol ?? "").filter((s) => s !== "");
@@ -413,7 +557,6 @@ export function NewsPage() {
   const articleCount = pairData?.article_count ?? 0;
   const llmAvailable = sentiment?.llm_available ?? false;
 
-  /* Deduplicate scored articles by URL */
   const scoredArticles = useMemo(() => {
     const seen = new Set<string>();
     const filtered: LiveSentimentArticle[] = [];
@@ -428,7 +571,6 @@ export function NewsPage() {
     return filtered.slice(0, 15);
   }, [sentiment?.top_articles, pair]);
 
-  /* All articles deduped by URL */
   const allArticles = useMemo(() => {
     const seen = new Set<string>();
     return (articlesData?.articles ?? []).filter((a) => {
@@ -443,11 +585,10 @@ export function NewsPage() {
   const baseCurrency = pairUpper.slice(0, 3);
   const quoteCurrency = pairUpper.slice(3);
 
-  /* Global Macro articles: exclude pair-specific ones */
   const globalArticles = useMemo(
     () =>
       allArticles.filter((a) => {
-        const tags = a.pair_tags.map((t) => t.toUpperCase());
+        const tags = (a.pair_tags ?? []).map((t) => t.toUpperCase());
         return (
           !tags.includes(pairUpper) && !tags.includes(baseCurrency) && !tags.includes(quoteCurrency)
         );
@@ -455,70 +596,74 @@ export function NewsPage() {
     [allArticles, pairUpper, baseCurrency, quoteCurrency],
   );
 
-  const handlePairChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setPair(e.target.value);
-  }, []);
-
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* ── Trading Context Band ── */}
-      <div className="flex shrink-0 items-center gap-4 border-b border-(--color-glass-border) bg-(--color-glass) px-6 py-2">
-        <div className="flex items-center gap-2">
-          <Activity size={12} className="text-(--color-accent-success)" />
-          <span className="text-[10px] font-medium text-(--color-text-primary)">{pair}</span>
-          <span
-            className="font-mono text-[10px] tabular-nums"
-            style={{
-              color:
-                recommendedPosition >= 0.05
-                  ? "var(--color-accent-success)"
-                  : recommendedPosition <= -0.05
-                    ? "var(--color-accent-danger)"
-                    : "var(--color-text-muted)",
-            }}
-          >
-            {recommendedPosition > 0 ? "+" : ""}
-            {recommendedPosition.toFixed(2)}
-          </span>
+      <div className="flex shrink-0 flex-col gap-2 rounded-lg border border-(--color-glass-border) bg-(--color-glass) px-4 py-2.5 mx-6 mt-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Activity size={12} className="text-(--color-accent-success)" />
+            <span
+              className="font-mono text-[11px] font-semibold tabular-nums"
+              style={{
+                color:
+                  recommendedPosition >= 0.05
+                    ? "var(--color-accent-success)"
+                    : recommendedPosition <= -0.05
+                      ? "var(--color-accent-danger)"
+                      : "var(--color-text-muted)",
+              }}
+            >
+              {recommendedPosition > 0 ? "+" : ""}
+              {recommendedPosition.toFixed(2)}
+            </span>
+            <span className="text-[10px] text-(--color-text-muted)">
+              {recommendedPosition >= 0.05
+                ? "Bullish"
+                : recommendedPosition <= -0.05
+                  ? "Bearish"
+                  : "Neutral"}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-(--color-text-muted)">
+            <span className="font-mono">{articleCount} articles</span>
+            <span className="opacity-30">|</span>
+            <span>{availablePairs.length} pairs</span>
+            <span className="opacity-30">|</span>
+            {llmAvailable ? (
+              <span className="text-(--color-accent-success)">LLM active</span>
+            ) : (
+              <span className="text-(--color-accent-warning)">LLM offline</span>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-(--color-text-muted)">
-          <span className="font-mono">{articleCount} articles</span>
-          <span className="opacity-30">|</span>
-          <span>{availablePairs.length} pairs tracked</span>
-          <span className="opacity-30">|</span>
-          {llmAvailable ? (
-            <span className="text-(--color-accent-success)">LLM scoring active</span>
-          ) : (
-            <span className="text-(--color-accent-warning)">LLM offline</span>
-          )}
-        </div>
-        <div className="ml-auto flex items-center gap-2 text-[10px]">
-          <BarChart3 size={11} className="text-(--color-text-dim)" />
-          <span className="text-(--color-text-dim)">
-            News &rarr; Features &rarr; ML Model &rarr; Signals
-          </span>
+        <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
+          {availablePairs.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPair(p)}
+              className={`shrink-0 rounded-md px-2.5 py-1 font-mono text-[10px] font-medium transition-all ${
+                p === pair
+                  ? "bg-(--color-brand)/15 text-(--color-brand) ring-1 ring-(--color-brand)/30"
+                  : "text-(--color-text-muted) hover:bg-(--color-glass-hover) hover:text-(--color-text-secondary)"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* ── Main Content Grid ── */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="grid flex-1 grid-cols-1 overflow-hidden p-6 xl:grid-cols-12 xl:gap-8">
-          {/* ── COL A: Scored Pair Feed (span-6) ── */}
-          <div className="flex flex-col overflow-hidden rounded-lg border border-(--color-glass-border) bg-(--color-glass) xl:col-span-6">
+        <div className="grid flex-1 grid-cols-1 overflow-hidden p-6 lg:grid-cols-2 gap-4">
+          {/* ── COL A: Scored Pair Feed ── */}
+          <div className="flex flex-col overflow-hidden rounded-lg border border-(--color-glass-border) bg-(--color-glass)">
             <div className="shrink-0 border-b border-(--color-glass-border) px-4 py-3">
               <div className="flex items-center gap-3">
-                <select
-                  value={pair}
-                  onChange={handlePairChange}
-                  aria-label="Select news pair"
-                  className="h-7 shrink-0 rounded border border-(--color-glass-border) bg-(--color-elevated) px-2.5 font-mono text-[11px] text-(--color-text-primary) transition focus:outline-none"
-                >
-                  {availablePairs.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
+                <span className="text-[11px] font-semibold text-(--color-text-primary)">
+                  {pair}
+                </span>
                 <span className="font-mono text-[10px] text-(--color-text-muted) tabular-nums">
                   {articleCount} articles
                 </span>
@@ -580,57 +725,66 @@ export function NewsPage() {
             </div>
           </div>
 
-          {/* ── COL B: Global Macro + Economic Calendar (span-6) ── */}
-          <div className="flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-900/40 xl:col-span-6">
-            <div className="flex h-full flex-col gap-0 divide-y divide-slate-800">
-              {/* Top 70%: Global Macro Feed */}
-              <div className="flex flex-col" style={{ flex: "70 0 0px" }}>
-                <div className="shrink-0 border-b border-slate-800 px-4 py-2.5">
-                  <span className="text-[10px] font-semibold tracking-[0.08em] text-slate-300 uppercase">
-                    Global Macro
-                  </span>
-                  <span className="ml-2 font-mono text-[9px] text-slate-500">
-                    {globalArticles.length} articles
-                  </span>
+          {/* ── COL B: Global Macro ── */}
+          <div className="flex flex-col overflow-hidden rounded-lg border border-(--color-glass-border) bg-(--color-glass)">
+            <div className="shrink-0 border-b border-(--color-glass-border) px-4 py-2.5">
+              <span className="text-[10px] font-semibold tracking-[0.08em] text-slate-300 uppercase">
+                Global Macro
+              </span>
+              <span className="ml-2 font-mono text-[9px] text-slate-500">
+                {globalArticles.length} articles
+              </span>
+            </div>
+            <div className="flex-1 overflow-y-auto [scrollbar-width:thin]">
+              {articlesLoading ? (
+                <div className="flex flex-col gap-0">
+                  {Array.from({ length: 8 }, (_, i) => (
+                    <div
+                      key={i}
+                      className="mx-3 my-1 h-9 animate-skeleton rounded bg-(--color-glass-hover)"
+                    />
+                  ))}
                 </div>
-                <div className="flex-1 overflow-y-auto [scrollbar-width:thin]">
-                  {articlesLoading ? (
-                    <div className="flex flex-col gap-0">
-                      {Array.from({ length: 8 }, (_, i) => (
-                        <div
-                          key={i}
-                          className="mx-3 my-1 h-9 animate-skeleton rounded bg-slate-800"
-                        />
-                      ))}
-                    </div>
-                  ) : globalArticles.length > 0 ? (
-                    globalArticles.map((a, i) => (
-                      <MacroFeedRow key={a.url || `${a.title}-${a.source}-${i}`} article={a} />
-                    ))
-                  ) : (
-                    <div className="flex flex-col items-center gap-2 py-12">
-                      <TrendingUp size={28} strokeWidth={1} className="text-slate-600" />
-                      <span className="text-[11px] text-slate-500">No global macro articles</span>
-                    </div>
-                  )}
+              ) : globalArticles.length > 0 ? (
+                globalArticles.map((a, i) => (
+                  <MacroFeedRow key={a.url || `${a.title}-${a.source}-${i}`} article={a} />
+                ))
+              ) : (
+                <div className="flex flex-col items-center gap-2 py-12">
+                  <TrendingUp size={28} strokeWidth={1} className="text-(--color-text-muted) opacity-40" />
+                  <span className="text-[11px] text-(--color-text-muted)">No global macro articles</span>
                 </div>
-              </div>
-
-              {/* Bottom 30%: Economic Calendar */}
-              <div className="flex flex-col" style={{ flex: "30 0 0px" }}>
-                <div className="shrink-0 bg-slate-900/60 px-4 py-2.5">
-                  <span className="text-[10px] font-semibold tracking-[0.08em] text-slate-300 uppercase">
-                    Economic Calendar
-                  </span>
-                </div>
-                <div className="flex-1 overflow-y-auto [scrollbar-width:thin]">
-                  <EconomicCalendarWidget eventsData={eventsData} />
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* ── Economic Calendar ── */}
+      {eventsData && eventsData.length > 0 && (
+        <div className="shrink-0 mx-4 mb-3 rounded-lg border border-(--color-glass-border) bg-(--color-glass) overflow-hidden">
+          <button
+            type="button"
+            onClick={toggleEconCalendar}
+            className="flex w-full items-center justify-between px-4 py-2.5 transition-colors hover:bg-(--color-glass-hover)"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-300 uppercase">
+                Economic Calendar
+              </span>
+              <span className="font-mono text-[10px] text-(--color-text-muted)">
+                {eventsData.length} events
+              </span>
+            </div>
+            {econExpanded ? <ChevronUp size={14} className="text-(--color-text-muted)" /> : <ChevronDown size={14} className="text-(--color-text-muted)" />}
+          </button>
+          {econExpanded && (
+            <div className="max-h-64 overflow-y-auto [scrollbar-width:thin] border-t border-(--color-glass-border)">
+              <EconomicCalendarWidget eventsData={eventsData} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Status Footer ── */}
       {newsStatus && (

@@ -4,7 +4,6 @@ import { useBacktestStore } from "@/stores/useBacktestStore";
 import { useJobStore } from "@/stores/useJobStore";
 import { useValidation } from "@/hooks/useValidation";
 import { useSubmitBacktest } from "@/api/queries";
-import { ConfigSummaryBar } from "@/components/shared/ConfigSummaryBar";
 import { TabBar } from "@/components/shared/TabBar";
 import { ValidationBar } from "@/components/shared/ValidationBar";
 import { AssetSelector } from "./AssetSelector";
@@ -35,6 +34,7 @@ export function BacktestPage() {
   const submit = useSubmitBacktest();
 
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryMode, setSummaryMode] = useState<"summary" | "deploy">("summary");
   const [activeTab, setActiveTab] = useState("asset");
 
   const [presetName, setPresetName] = useState("");
@@ -42,7 +42,13 @@ export function BacktestPage() {
 
   const isSubmitting = submit.isPending;
   const hasModels = selectedModels.length > 0;
-  const canDeploy = hasModels && ok;
+  const runningCount = useJobStore(
+    (s) => {
+      const jobs = s.activeJobs instanceof Map ? s.activeJobs : new Map();
+      return [...jobs.values()].filter((j) => j.status === "pending" || j.status === "running").length;
+    },
+  );
+  const canDeploy = hasModels && ok && runningCount < 4;
 
   const handleDeploy = async () => {
     try {
@@ -63,13 +69,15 @@ export function BacktestPage() {
     setShowSavePreset(false);
   };
 
+  const openSummary = (mode: "summary" | "deploy") => {
+    setSummaryMode(mode);
+    setSummaryOpen(true);
+  };
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Status strip */}
-      <ConfigSummaryBar />
-
-      {/* 24px gap between status strip and tab nav */}
-      <div className="mt-6">
+      {/* Tab nav */}
+      <div className="pt-1">
         <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
 
@@ -77,61 +85,45 @@ export function BacktestPage() {
       <div className="h-6 shrink-0" />
 
       {/* Content area — scrollable, bottom padding for sticky footer clearance */}
-      <div className="flex flex-1 flex-col overflow-y-auto pb-6">
+      <div className="flex-1 overflow-y-auto pt-4 pb-20">
         {/* Asset & Timeframe */}
-        {activeTab === "asset" && (
-          <div className="flex flex-col gap-5 pt-4">
-            <AssetSelector />
-          </div>
-        )}
+        {activeTab === "asset" && <AssetSelector />}
 
         {/* Models */}
-        {activeTab === "models" && (
-          <div className="flex flex-col gap-5 pt-4">
-            <ModelSelector />
-          </div>
-        )}
+        {activeTab === "models" && <ModelSelector />}
 
         {/* Study & HPO */}
-        {activeTab === "study" && (
-          <div className="flex flex-col gap-5 pt-4">
-            <HpoPanel />
-          </div>
-        )}
+        {activeTab === "study" && <HpoPanel />}
 
         {/* Features */}
         {activeTab === "features" && (
-          <div className="flex flex-col gap-5 pt-4">
+          <div className="flex flex-col gap-6">
             <FeaturesPanel />
             <LabelsPanel />
           </div>
         )}
 
         {/* Hyperparameters */}
-        {activeTab === "hyperparams" && (
-          <div className="flex flex-col gap-5 pt-4">
-            <HyperparamsTab />
-          </div>
-        )}
+        {activeTab === "hyperparams" && <HyperparamsTab />}
 
         {/* Execution */}
-        {activeTab === "execution" && (
-          <div className="flex flex-col gap-5 pt-4">
-            <ExecutionPanel defaultOpen={true} />
-          </div>
-        )}
+        {activeTab === "execution" && <ExecutionPanel defaultOpen={true} />}
       </div>
 
       {/* Validation bar — sticky footer */}
       <ValidationBar
         warnings={warnings.length}
         errors={errors.length}
+        errorMessages={errors}
+        warningMessages={warnings}
         canDeploy={canDeploy}
         isSubmitting={isSubmitting}
         hasModels={hasModels}
         hasPair={true}
         hasDates={true}
-        onDeploy={() => setSummaryOpen(true)}
+        runningCount={runningCount}
+        onDeploy={() => openSummary("deploy")}
+        onViewSummary={() => openSummary("summary")}
         onSavePreset={hasModels ? () => setShowSavePreset(true) : undefined}
       />
 
@@ -186,6 +178,7 @@ export function BacktestPage() {
 
       <RunSummary
         open={summaryOpen}
+        mode={summaryMode}
         onClose={() => setSummaryOpen(false)}
         onDeploy={handleDeploy}
         warnings={warnings.length}

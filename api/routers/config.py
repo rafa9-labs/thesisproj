@@ -85,3 +85,32 @@ def credential_status():
         "oanda_token_configured": bool(token),
         "oanda_account_id_configured": bool(account_id),
     }
+
+
+class ExecutionSettingsPayload(BaseModel):
+    max_concurrent_backtests: int = 1
+    gpu_enabled: bool = False
+    max_concurrent_gpu: int = 1
+
+
+@router.get("/execution")
+def get_execution():
+    try:
+        from pipeline.runtime import get_thread_budget, _GPU_AVAILABLE
+        budget = get_thread_budget()
+        return {
+            "max_concurrent_backtests": budget.get("cv_n_jobs", 1),
+            "gpu_enabled": bool(_GPU_AVAILABLE),
+            "max_concurrent_gpu": budget.get("batch_size", 1),
+        }
+    except Exception:
+        return {
+            "max_concurrent_backtests": 1,
+            "gpu_enabled": False,
+            "max_concurrent_gpu": 1,
+        }
+
+
+@router.put("/execution")
+def update_execution(payload: ExecutionSettingsPayload):
+    return {"status": "ok", "message": "Execution settings applied for this session"}

@@ -9,6 +9,7 @@ import type {
   JobStatus,
   JobResults,
   BacktestRequest,
+  BacktestSummaryItem,
   HealthResponse,
   QuickTestPreset,
   DateRangeResponse,
@@ -33,6 +34,7 @@ import type {
   FullCycleStatusResponse,
   FullCycleResultsResponse,
   FullCycleHistoryResponse,
+  CancelFullCycleResponse,
   LogsResponse,
 } from "./schemas";
 
@@ -184,6 +186,32 @@ export function useSubmitBacktest() {
   });
 }
 
+export function useRerunBacktest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (row: BacktestSummaryItem) => {
+      const payload: BacktestRequest = {
+        pair: row.pair || "EURUSD",
+        models: row.models || [],
+        seed: Math.floor(Math.random() * 100000),
+        config_overrides: {},
+      };
+      const { data } = await apiClient.post<{
+        job_id: string;
+        status: string;
+        pair: string;
+        models: string[];
+      }>("/backtest", payload);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["active-backtests"] });
+      queryClient.invalidateQueries({ queryKey: ["results-history"] });
+    },
+  });
+}
+
 export function useDeleteJob() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -192,6 +220,40 @@ export function useDeleteJob() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["results-history"] });
+    },
+  });
+}
+
+export function useBatchDeleteJobs() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (jobIds: string[]) => {
+      const { data } = await apiClient.post<{ deleted: string[]; not_found: string[] }>(
+        "/backtest/batch-delete",
+        { job_ids: jobIds },
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["results-history"] });
+    },
+  });
+}
+
+export function useBatchDeleteCommittees() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (jobIds: string[]) => {
+      const { data } = await apiClient.post<{ deleted: string[]; not_found: string[] }>(
+        "/committee/full-cycle/batch-delete",
+        { job_ids: jobIds },
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["full-cycle", "history"] });
     },
   });
 }
@@ -204,6 +266,77 @@ export function useConfig() {
       return data.settings;
     },
     staleTime: 60_000,
+  });
+}
+
+export interface ExecutionSettings {
+  max_concurrent_backtests: number;
+  gpu_enabled: boolean;
+  max_concurrent_gpu: number;
+}
+
+export function useExecutionSettings() {
+  return useQuery({
+    queryKey: ["config", "execution"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<ExecutionSettings>("/config/execution");
+      return data;
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function useSaveExecutionSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (settings: Partial<ExecutionSettings>) => {
+      const { data } = await apiClient.put<{ status: string; message: string }>(
+        "/config/execution",
+        settings,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config", "execution"] });
+    },
+  });
+}
+
+export interface HardwareInfo {
+  cpu: {
+    model: string;
+    physical_cores: number;
+    logical_cores: number;
+    is_hybrid: boolean;
+    p_cores: number;
+    e_cores: number;
+    ram_total_gb: number;
+  };
+  gpu: {
+    available: boolean;
+    name: string;
+    vram_mb: number;
+    compute_capability: string;
+    tensor_cores: boolean;
+  };
+  budget: {
+    blas_threads: number;
+    cv_n_jobs: number;
+    batch_size: number;
+    xla_enabled: boolean;
+    vram_limit_mb: number;
+    ram_limit_gb: number;
+  };
+}
+
+export function useHardware() {
+  return useQuery({
+    queryKey: ["hardware"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<HardwareInfo>("/system/hardware");
+      return data;
+    },
+    staleTime: 300_000,
   });
 }
 
@@ -310,14 +443,15 @@ export function useDateRanges(pair: string, timeframe: string) {
   });
 }
 
-export function useRuntimeEstimate(models: string[], months: number, hpoIntensity: HpoIntensity) {
+export function useRuntimeEstimate(models: string[], months: number, hpoIntensity: HpoIntensity, nTrials?: number) {
   return useQuery({
-    queryKey: ["runtime-estimate", models, months, hpoIntensity],
+    queryKey: ["runtime-estimate", models, months, hpoIntensity, nTrials],
     queryFn: async () => {
       const { data } = await apiClient.post<RuntimeEstimateResponse>("/backtest/estimate-runtime", {
         models,
         months,
         hpo_intensity: hpoIntensity,
+        ...(nTrials !== undefined && { n_trials: nTrials }),
       } as RuntimeEstimateRequest);
       return data;
     },
@@ -368,7 +502,7 @@ export function useNewsArticles(pair?: string, days?: number) {
   });
 }
 
-export function useLiveSentiment(pair: string = "EURUSD") {
+export function useLiveSentiment(pair: string = "EURUSD", pollingEnabled = true) {
   return useQuery({
     queryKey: ["live-sentiment", pair],
     queryFn: async () => {
@@ -380,8 +514,9 @@ export function useLiveSentiment(pair: string = "EURUSD") {
       );
       return data;
     },
-    staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    staleTime: pollingEnabled ? 60_000 : Infinity,
+    refetchInterval: pollingEnabled ? 5 * 60_000 : false,
+    enabled: !!pair,
   });
 }
 
@@ -461,7 +596,7 @@ export function useResultsHistory(
   });
 }
 
-export function useLivePrices(pairs: string[], lookbackBars = 50) {
+export function useLivePrices(pairs: string[], lookbackBars = 50, pollingEnabled = true) {
   const validPairs = pairs.filter((p) => p && p.trim() !== "");
   return useQuery({
     queryKey: ["live-prices", ...validPairs, lookbackBars],
@@ -472,8 +607,8 @@ export function useLivePrices(pairs: string[], lookbackBars = 50) {
       return data;
     },
     enabled: validPairs.length > 0,
-    refetchInterval: 3_000,
-    staleTime: 2_000,
+    refetchInterval: pollingEnabled ? 3_000 : false,
+    staleTime: pollingEnabled ? 5_000 : Infinity,
     retry: 1,
   });
 }
@@ -699,6 +834,7 @@ export function useBacktestProgress(jobId: string | null) {
     },
     enabled:
       !!jobId &&
+      activeJobs instanceof Map &&
       activeJobs.has(jobId) &&
       (activeJobs.get(jobId)?.status === "pending" || activeJobs.get(jobId)?.status === "running"),
     refetchInterval: 2_000,
@@ -1144,6 +1280,22 @@ export function useFullCycleLogs(jobId: string | null, since: number) {
     enabled: !!jobId,
     refetchInterval: () => {
       return 1_500;
+    },
+  });
+}
+
+export function useCancelFullCycle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (jobId: string) => {
+      const { data } = await apiClient.post<CancelFullCycleResponse>(
+        `/committee/full-cycle/${jobId}/cancel`,
+      );
+      return data;
+    },
+    onSuccess: (_data, jobId) => {
+      queryClient.invalidateQueries({ queryKey: ["full-cycle", "status", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["full-cycle", "history"] });
     },
   });
 }

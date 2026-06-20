@@ -45,6 +45,8 @@ class LiveSignal:
     model_weights: List[float]        # blending weights used
     is_healthy: bool = True           # False if models are underperforming
     meta_override: bool = False       # True if meta-learner overrode committee
+    meta_filtered: bool = False       # P1: True if meta-labeler suppressed trade
+    meta_win_prob: float = 0.5        # P1: P(trade_is_winner) from meta-labeler
     throttle_level: str = "full"      # "full", "half", "observe"
     conviction_multiplier: float = 1.0  # 0.5 explorer / 1.0 standard / 1.5 conviction
 
@@ -60,6 +62,8 @@ class LiveSignal:
             "model_weights": [round(w, 3) for w in self.model_weights],
             "is_healthy": self.is_healthy,
             "meta_override": self.meta_override,
+            "meta_filtered": self.meta_filtered,
+            "meta_win_prob": round(self.meta_win_prob, 4),
             "throttle_level": self.throttle_level,
             "conviction_multiplier": round(self.conviction_multiplier, 2),
         }
@@ -135,6 +139,9 @@ class LiveCommitteeRunner:
         rotation_sharpe_threshold: float = -0.5,
         rotation_hitrate_threshold: float = 0.35,
         meta_learner=None,
+        meta_labeler=None,
+        hmm_detector=None,
+        conviction_sizer=None,
     ):
         self.config = config
         self.models = models
@@ -146,6 +153,9 @@ class LiveCommitteeRunner:
         self.rotation_sharpe_threshold = rotation_sharpe_threshold
         self.rotation_hitrate_threshold = rotation_hitrate_threshold
         self._meta_learner = meta_learner
+        self._meta_labeler = meta_labeler  # P1
+        self._hmm_detector = hmm_detector  # P2
+        self._conviction_sizer = conviction_sizer  # P3
 
         # Internal state
         self._bar_buffer: Deque[Dict[str, float]] = deque(maxlen=lookback_bars)
@@ -235,15 +245,34 @@ class LiveCommitteeRunner:
             elif max_class == 0:
                 signal = -1
 
-        # 5b. Compute conviction multiplier (consensus-scaled sizing)
+        # 5a. Meta-labeler gate (P1: binary P(win) filter)
+        meta_filtered = False
+        meta_win_prob = 0.5
+        if signal != 0 and self._meta_labeler is not None:
+            try:
+                primary_probs = (float(blended[0]), float(blended[1]), float(blended[2]))
+                should_trade, meta_win_prob = self._meta_labeler.should_trade(
+                    signal, primary_probs, regime_id=int(regime_id),
+                )
+                if not should_trade:
+                    meta_filtered = True
+                    signal = 0
+            except Exception:
+                pass
+
+        # 5b. Compute conviction multiplier (P3: sigmoid sizing, fallback to tiers)
         conviction_multiplier = 1.0
         if signal != 0:
-            if max_prob >= 0.80:
-                conviction_multiplier = 1.5
-            elif max_prob >= 0.65:
-                conviction_multiplier = 1.0
-            elif max_prob >= 0.55:
-                conviction_multiplier = 0.5
+            if self._conviction_sizer is not None:
+                conviction_multiplier = self._conviction_sizer.get_multiplier(max_prob)
+            else:
+                # Fallback: original 3-tier logic
+                if max_prob >= 0.80:
+                    conviction_multiplier = 1.5
+                elif max_prob >= 0.65:
+                    conviction_multiplier = 1.0
+                elif max_prob >= 0.55:
+                    conviction_multiplier = 0.5
 
         # 6. Check health
         is_healthy = self._check_health()
@@ -251,29 +280,11 @@ class LiveCommitteeRunner:
             signal = 0  # suppress trades when unhealthy
             conviction_multiplier = 1.0  # no sizing effect for suppressed signal
 
-        # 7. Apply meta-learner gate (learns when to override committee)
+        # 7. Meta-learner retired — P1 MetaLabeler now handles trade filtering.
+        #    The old CommitteeMetaLearner flipped signal direction (Long→Short),
+        #    violating separation of concerns. A secondary model should never
+        #    reverse the primary model's direction — only suppress to flat.
         meta_override = False
-        if self._meta_learner is not None:
-            try:
-                prev_sig = 0
-                if self._signal_history:
-                    prev_sig = self._signal_history[-1].signal
-                meta_signal, meta_conf, meta_override = self._meta_learner.predict(
-                    committee_signal=signal,
-                    committee_confidence=max_prob,
-                    prob_short=float(blended[0]),
-                    prob_flat=float(blended[1]),
-                    prob_long=float(blended[2]),
-                    regime_id=regime_id,
-                    prev_signal=prev_sig,
-                )
-                if meta_override:
-                    signal = meta_signal
-                    # Downgrade conviction if meta-learner disagrees
-                    if signal != 0 and max_prob < 0.80:
-                        conviction_multiplier = max(0.5, conviction_multiplier * 0.5)
-            except Exception:
-                pass
 
         live_signal = LiveSignal(
             timestamp=bar.get("timestamp", self._bar_count),
@@ -290,6 +301,8 @@ class LiveCommitteeRunner:
             model_weights=used_weights,
             is_healthy=is_healthy,
             meta_override=meta_override,
+            meta_filtered=meta_filtered,
+            meta_win_prob=meta_win_prob,
             conviction_multiplier=conviction_multiplier,
         )
         self._signal_history.append(live_signal)
@@ -333,12 +346,26 @@ class LiveCommitteeRunner:
     def _classify_regime(self) -> Tuple[int, Dict[int, float], Dict[str, float]]:
         """Classify current bar into a 7-class regime.
 
-        Uses rule-based logic (fast, no ML model needed).
+        Uses HMM when available (P2), falls back to rule-based ADX/EMA/ATR.
         Returns (regime_id, {regime_id: probability}, {regime_name: probability}).
-
-        Named dict (3rd element) enables fuzzy multi-regime blending in Phase 4.
         """
         df = pd.DataFrame(list(self._bar_buffer)[-50:])
+
+        # ── HMM path (P2) ──
+        if self._hmm_detector is not None and self._hmm_detector.is_fitted:
+            try:
+                regime_ids, _ = self._hmm_detector.predict(df)
+                regime_probs_arr = self._hmm_detector.predict_regime_probs(df)
+                if len(regime_ids) > 0 and len(regime_probs_arr) > 0:
+                    regime = int(regime_ids[-1])
+                    probs_arr = regime_probs_arr[-1]
+                    probs = {int(i): float(probs_arr[i]) for i in range(7)}
+                    named = {_REGIME_NAMES.get(i, f"regime_{i}"): probs[i] for i in range(7)}
+                    return regime, probs, named
+            except Exception:
+                pass  # fall through to rule-based
+
+        # ── Rule-based fallback (existing logic) ──
         cfg = self.regime_cfg
 
         # Default

@@ -220,6 +220,45 @@ class DataStore:
                     """)
                 except sqlite3.OperationalError:
                     pass
+                try:
+                    cur.executescript("""
+                        CREATE TABLE IF NOT EXISTS saved_committees (
+                            id                TEXT PRIMARY KEY,
+                            name              TEXT    NOT NULL,
+                            full_cycle_job_id TEXT,
+                            pair              TEXT    DEFAULT 'EURUSD',
+                            timeframe         TEXT    DEFAULT 'H1',
+                            config_json       TEXT    NOT NULL,
+                            trust_score       REAL,
+                            avg_sharpe        REAL,
+                            is_active         INTEGER NOT NULL DEFAULT 0,
+                            tags              TEXT    DEFAULT '[]',
+                            created_at        TEXT    NOT NULL,
+                            updated_at        TEXT    NOT NULL
+                        );
+                    """)
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    cur.executescript("""
+                        CREATE TABLE IF NOT EXISTS trading_sessions (
+                            id              TEXT PRIMARY KEY,
+                            mode            TEXT    NOT NULL,
+                            pair            TEXT    NOT NULL,
+                            model_type      TEXT    DEFAULT '',
+                            timeframe       TEXT    NOT NULL,
+                            status          TEXT    NOT NULL DEFAULT 'running',
+                            initial_equity  REAL    DEFAULT 10000.0,
+                            equity          REAL    DEFAULT 10000.0,
+                            position        TEXT    DEFAULT 'FLAT',
+                            model_id        TEXT    DEFAULT '',
+                            committee_name  TEXT    DEFAULT '',
+                            created_at      TEXT    NOT NULL,
+                            updated_at      TEXT    NOT NULL
+                        );
+                    """)
+                except sqlite3.OperationalError:
+                    pass
             conn.commit()
 
     def _normalize_ts(self, ts: str) -> str:
@@ -439,3 +478,67 @@ class DataStore:
             cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
             cur.execute("DELETE FROM job_events WHERE created_at < ?", (cutoff,))
             return cur.rowcount
+
+    def save_trading_session(self, session_data: dict):
+        with self._cursor() as (conn, cur):
+            cur.execute(
+                """INSERT OR REPLACE INTO trading_sessions
+                   (id, mode, pair, model_type, timeframe, status, initial_equity, equity,
+                    position, model_id, committee_name, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    session_data["id"], session_data.get("mode", "paper"),
+                    session_data.get("pair", ""), session_data.get("model_type", ""),
+                    session_data.get("timeframe", ""), session_data.get("status", "running"),
+                    session_data.get("initial_equity", 10000.0), session_data.get("equity", 10000.0),
+                    session_data.get("position", "FLAT"), session_data.get("model_id", ""),
+                    session_data.get("committee_name", ""),
+                    session_data.get("created_at", ""), session_data.get("updated_at", ""),
+                ),
+            )
+
+    def update_session_status(self, session_id: str, status: str, equity: float | None = None):
+        with self._cursor() as (conn, cur):
+            now = datetime.utcnow().isoformat()
+            if equity is not None:
+                cur.execute(
+                    "UPDATE trading_sessions SET status=?, equity=?, updated_at=? WHERE id=?",
+                    (status, equity, now, session_id),
+                )
+            else:
+                cur.execute(
+                    "UPDATE trading_sessions SET status=?, updated_at=? WHERE id=?",
+                    (status, now, session_id),
+                )
+
+    def update_session_equity(self, session_id: str, equity: float, position: str):
+        with self._cursor() as (conn, cur):
+            cur.execute(
+                "UPDATE trading_sessions SET equity=?, position=?, updated_at=? WHERE id=?",
+                (equity, position, datetime.utcnow().isoformat(), session_id),
+            )
+
+    def list_trading_sessions(self, mode: str | None = None) -> list[dict]:
+        with self._cursor() as (conn, cur):
+            if mode:
+                cur.execute(
+                    "SELECT id, mode, pair, model_type, timeframe, status, initial_equity, "
+                    "equity, position, model_id, committee_name, created_at, updated_at "
+                    "FROM trading_sessions WHERE mode=? ORDER BY created_at DESC LIMIT 100",
+                    (mode,),
+                )
+            else:
+                cur.execute(
+                    "SELECT id, mode, pair, model_type, timeframe, status, initial_equity, "
+                    "equity, position, model_id, committee_name, created_at, updated_at "
+                    "FROM trading_sessions ORDER BY created_at DESC LIMIT 100",
+                )
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    def mark_orphaned_sessions(self):
+        with self._cursor() as (conn, cur):
+            cur.execute(
+                "UPDATE trading_sessions SET status='orphaned', updated_at=? WHERE status='running'",
+                (datetime.utcnow().isoformat(),),
+            )

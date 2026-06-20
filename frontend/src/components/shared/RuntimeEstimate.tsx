@@ -5,11 +5,13 @@ export function RuntimeEstimate() {
   const selectedModels = useBacktestStore((s) => s.selectedModels);
   const testMonths = useBacktestStore((s) => s.testMonths);
   const hpoIntensity = useBacktestStore((s) => s.hpoIntensity);
+  const nTrials = useBacktestStore((s) => s.nTrials);
 
   const { data, isLoading, isError } = useRuntimeEstimate(
     selectedModels as string[],
     testMonths as number,
     hpoIntensity,
+    nTrials,
   );
 
   if (selectedModels.length === 0) return null;

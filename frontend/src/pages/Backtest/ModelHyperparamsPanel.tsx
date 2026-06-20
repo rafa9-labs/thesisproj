@@ -1,10 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { useModelHyperparams } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
-import { ParamSlider } from "@/components/shared/ParamSlider";
-import { ParamSelect } from "@/components/shared/ParamSelect";
 import { Section } from "@/components/shared/Panel";
-import type { HyperparamSpec, HyperparamRange, HyperparamFixed } from "@/api/schemas";
+import { Tier1Slider } from "@/components/shared/Tier1Slider";
+import { Tier2Dropdown } from "@/components/shared/Tier2Dropdown";
+import { Tier3Accordion } from "@/components/shared/Tier3Accordion";
+import type { Tier3Param } from "@/components/shared/Tier3Accordion";
+import type { HyperparamSpec, HyperparamRange, HyperparamChoice, HyperparamFixed, ModelHyperparams } from "@/api/schemas";
 
 const MODEL_COLORS: Record<string, string> = {
   classical: "var(--color-accent-classical, #22d3ee)",
@@ -13,80 +15,37 @@ const MODEL_COLORS: Record<string, string> = {
   ensemble: "#ec4899",
 };
 
-function formatParamLabel(key: string): string {
-  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 function getStoreKey(model: string, param: string): string {
   return `${model}__${param}`;
 }
 
-function HyperparamField({
-  model,
-  param,
-  spec,
-  value,
-  onChange,
-}: {
-  model: string;
-  param: string;
-  spec: HyperparamSpec;
-  value: number | string | undefined;
-  onChange: (v: number | string) => void;
-}) {
-  if (spec.type === "fixed") {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[11px] font-medium tracking-[0.1em] text-(--color-text-muted) uppercase">
-          {formatParamLabel(param)}
-        </span>
-        <span className="font-mono text-xs text-(--color-text-muted)">
-          {String(spec.value)} <span className="text-[9px]">(fixed)</span>
-        </span>
-      </div>
-    );
+function initParamDefaults(
+  models: ModelHyperparams[],
+  store: ReturnType<typeof useBacktestStore.getState>,
+) {
+  let changed = false;
+  const updates: Record<string, unknown> = {};
+
+  for (const m of models) {
+    for (const [paramKey, spec] of Object.entries(m.params)) {
+      if (spec.tier === 3) continue;
+      const storeKey = getStoreKey(m.model, paramKey);
+      if ((store as Record<string, unknown>)[storeKey] !== undefined) continue;
+
+      if (spec.type === "choice") {
+        updates[storeKey] = spec.default ?? (spec as HyperparamChoice).values[0];
+      } else if (spec.type !== "fixed") {
+        updates[storeKey] = (spec as HyperparamRange).default ?? (spec as HyperparamRange).low;
+      }
+      changed = true;
+    }
   }
 
-  if (spec.type === "choice") {
-    const options = spec.values.map((v) => ({
-      value: String(v),
-      label: String(v) === "None" ? "None (unlimited)" : String(v),
-    }));
-    return (
-      <ParamSelect
-        label={formatParamLabel(param)}
-        value={value != null ? String(value) : String(spec.default ?? spec.values[0])}
-        options={options}
-        description={`Choose ${formatParamLabel(param).toLowerCase()} for ${model}.`}
-        onChange={(v) => {
-          const numVal = Number(v);
-          onChange(isNaN(numVal) || v === "None" ? v : numVal);
-        }}
-      />
-    );
+  if (changed) {
+    for (const [key, value] of Object.entries(updates)) {
+      store.setField(key as keyof typeof store, value as never);
+    }
   }
-
-  const range = spec as HyperparamRange;
-  const numVal = typeof value === "number" ? value : (range.default ?? range.low);
-  const step =
-    range.step ??
-    (range.log_scale
-      ? Math.max(1e-6, (range.high - range.low) / 200)
-      : range.type === "int_range"
-        ? 1
-        : Math.max(0.001, (range.high - range.low) / 200));
-
-  return (
-    <ParamSlider
-      label={formatParamLabel(param)}
-      value={numVal}
-      min={range.low}
-      max={range.high}
-      step={step}
-      description={`${formatParamLabel(param).toLowerCase()} ${range.log_scale ? "(log scale)" : ""}. Range: [${range.low}, ${range.high}]`}
-      onChange={onChange}
-    />
-  );
 }
 
 export function ModelHyperparamsPanel() {
@@ -98,6 +57,12 @@ export function ModelHyperparamsPanel() {
     if (!hyperparams) return [];
     return hyperparams.filter((m) => selectedModels.includes(m.model));
   }, [hyperparams, selectedModels]);
+
+  useEffect(() => {
+    if (hyperparams && hyperparams.length > 0) {
+      initParamDefaults(hyperparams, useBacktestStore.getState());
+    }
+  }, [hyperparams]);
 
   if (isLoading) {
     return (
@@ -111,70 +76,159 @@ export function ModelHyperparamsPanel() {
     return null;
   }
 
-  const tunableModels = relevantModels.filter((m) => m.tunable);
-  const nonTunableModels = relevantModels.filter((m) => !m.tunable);
-  const setField = store.setField;
-
   return (
-    <div className="flex flex-col gap-4">
-      {tunableModels.map((m) => {
+    <div className="flex min-w-0 flex-col gap-4">
+      {relevantModels.map((m) => {
         const accent = MODEL_COLORS[m.category] ?? "var(--color-brand)";
-        const tunableParams = Object.entries(m.params).filter(([, s]) => s.type !== "fixed");
-        const fixedParams = Object.entries(m.params).filter(([, s]) => s.type === "fixed");
+
+        const tier1 = Object.entries(m.params).filter(([, s]) => s.tier === 1);
+        const tier2 = Object.entries(m.params).filter(([, s]) => s.tier === 2);
+        const tier3 = Object.entries(m.params).filter(([, s]) => s.tier === 3);
+
+        const tier3Params: Tier3Param[] = tier3.map(([, spec]) => {
+          const fixed = spec as HyperparamFixed;
+          return {
+            displayName: spec.display_name,
+            value: String(fixed.value ?? ""),
+            description: spec.description ?? "",
+          };
+        });
+
+        const hasTier1 = tier1.length > 0;
+        const hasTier2 = tier2.length > 0;
+        const hasTier3 = tier3.length > 0;
 
         return (
           <Section
             key={m.model}
-            title={`${m.display_name} — Hyperparameters`}
+            title={`${m.display_name}`}
             accent={accent}
-            description={`Fine-tune ${m.display_name}. Overrides take priority over HPO search — set a value to fix it, or leave default to let the optimizer explore.`}
           >
-            {tunableParams.length > 0 && (
-              <div className="mb-4 grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
-                {tunableParams.map(([param, spec]) => {
-                  const storeKey = getStoreKey(m.model, param);
-                  const currentValue = (store as Record<string, unknown>)[storeKey];
-                  return (
-                    <HyperparamField
+            {hasTier1 && (
+              <div className="mb-3 min-w-0">
+                <h5 className="mb-2 text-[10px] font-bold tracking-[0.12em] text-(--color-text-muted)/70 uppercase">
+                  Core Alpha Drivers
+                </h5>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                  {tier1.map(([param, spec]) => (
+                    <Tier1Field
                       key={param}
                       model={m.model}
                       param={param}
                       spec={spec}
-                      value={currentValue as number | string | undefined}
-                      onChange={(v) => setField(storeKey as keyof typeof store, v as never)}
+                      store={store}
                     />
-                  );
-                })}
+                  ))}
+                </div>
               </div>
             )}
 
-            {fixedParams.length > 0 && (
-              <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-                {fixedParams.map(([param, spec]) => (
-                  <HyperparamField
-                    key={param}
-                    model={m.model}
-                    param={param}
-                    spec={spec}
-                    value={(spec as HyperparamFixed).value as number | string}
-                    onChange={() => {}}
-                  />
-                ))}
+            {hasTier2 && (
+              <div className="mb-3 min-w-0">
+                <h5 className="mb-2 text-[10px] font-bold tracking-[0.12em] text-(--color-text-muted)/70 uppercase">
+                  Structural Settings
+                </h5>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                  {tier2.map(([param, spec]) => (
+                    <Tier2Field
+                      key={param}
+                      model={m.model}
+                      param={param}
+                      spec={spec}
+                      store={store}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {hasTier3 && (
+              <Tier3Accordion params={tier3Params} />
+            )}
+
+            {!hasTier1 && !hasTier2 && (
+              <div className="text-[10px] text-(--color-text-muted)">
+                All parameters are fixed at safe defaults. See Advanced Parameters for details.
               </div>
             )}
           </Section>
         );
       })}
-
-      {nonTunableModels.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          {nonTunableModels.map((m) => (
-            <span key={m.model} className="text-[10px] text-(--color-text-muted)">
-              {m.display_name}: no tunable hyperparameters (uses built-in defaults)
-            </span>
-          ))}
-        </div>
-      )}
     </div>
+  );
+}
+
+function Tier1Field({
+  model, param, spec, store,
+}: {
+  model: string;
+  param: string;
+  spec: HyperparamSpec;
+  store: ReturnType<typeof useBacktestStore.getState>;
+}) {
+  const range = spec as HyperparamRange;
+  const storeKey = getStoreKey(model, param);
+  const minKey = `${storeKey}__min`;
+  const maxKey = `${storeKey}__max`;
+  const s = store as Record<string, unknown>;
+
+  const currentValue = (s[storeKey] as number) ?? range.default ?? range.low;
+  const hpoMin = s[minKey] as number | undefined;
+  const hpoMax = s[maxKey] as number | undefined;
+
+  const step =
+    range.step ??
+    (range.log_scale ? Math.max(1e-6, (range.high - range.low) / 200) : 1);
+
+  return (
+    <Tier1Slider
+      label={spec.display_name || param}
+      description={spec.description ?? ""}
+      value={currentValue}
+      min={range.low}
+      max={range.high}
+      step={step}
+      hpoMin={hpoMin}
+      hpoMax={hpoMax}
+      onChange={(v) => store.setField(storeKey as keyof typeof store, v as never)}
+      onHpoToggle={(enabled, minVal, maxVal) => {
+        if (enabled) {
+          store.setField(minKey as keyof typeof store, minVal as never);
+          store.setField(maxKey as keyof typeof store, maxVal as never);
+        } else {
+          store.setField(minKey as keyof typeof store, undefined as never);
+          store.setField(maxKey as keyof typeof store, undefined as never);
+        }
+      }}
+    />
+  );
+}
+
+function Tier2Field({
+  model, param, spec, store,
+}: {
+  model: string;
+  param: string;
+  spec: HyperparamSpec;
+  store: ReturnType<typeof useBacktestStore.getState>;
+}) {
+  const choice = spec as HyperparamChoice;
+  const storeKey = getStoreKey(model, param);
+  const s = store as Record<string, unknown>;
+
+  const currentValue = String(s[storeKey] ?? choice.default ?? choice.values[0] ?? "");
+  const options = choice.values.map((v) => String(v));
+
+  return (
+    <Tier2Dropdown
+      label={spec.display_name || param}
+      description={spec.description ?? ""}
+      value={currentValue}
+      options={options}
+      onChange={(v) => {
+        const numVal = Number(v);
+        store.setField(storeKey as keyof typeof store, (isNaN(numVal) || v === "None" ? v : numVal) as never);
+      }}
+    />
   );
 }

@@ -23,7 +23,7 @@ export function CrossPairSection() {
   const [curves, setCurves] = useState<PairCurve[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const models = heatmapData?.models ?? [];
+  const models: string[] = Array.isArray(heatmapData?.models) ? heatmapData.models : [];
   const pairs = heatmapData?.pairs ?? [];
   const effectiveModel = selectedModel || models[0] || "";
 

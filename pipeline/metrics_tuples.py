@@ -504,7 +504,7 @@ CLASS_DEFAULTS = {
         "cv_blocks": 3,
         "cv_min_train_frac": 0.75,
         "cv_val_frac": 0.05,
-        "cv_embargo_bars": 0,
+        "cv_embargo_bars": 48,  # P0: matches tb_max_holding default
         "cv_embargo_frac": 0.01,
         "cv_fit_blocks_exact": True,
         "cv_tail_anchor": True,
