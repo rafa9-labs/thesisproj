@@ -651,8 +651,8 @@ def _build_ensemble_cnn_lstm_xgboost(*, seed=None, use_proba=True, **params):
     xgb_config = {k: params[k] for k in ("xgb_max_depth", "xgb_learning_rate",
                   "xgb_n_estimators", "xgb_subsample", "xgb_colsample_bytree",
                   "xgb_min_child_weight", "xgb_gamma", "xgb_reg_alpha", "xgb_reg_lambda",
-                  "use_logit_meta", "calibrate_base_temps", "use_oof_meta",
-                  "oof_splits") if k in params}
+                   "use_logit_meta", "calibrate_base_temps", "use_oof_meta",
+                   "oof_splits", "oof_purge_bars") if k in params}
 
     return EnsembleCNNLSTMXGBoost(
         cnn_config=cnn_config,

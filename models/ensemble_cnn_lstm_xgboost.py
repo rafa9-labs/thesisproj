@@ -63,6 +63,42 @@ def _apply_temp(probs: _np.ndarray, T: float) -> _np.ndarray:
     e = _np.exp(z)
     return (e / (e.sum(axis=1, keepdims=True) + 1e-12)).astype(_np.float32)
 
+def _purged_sequential_oof_splits(n, y, n_splits, purge_bars=12):
+    """Purged expanding-window chronological splits for OOF prediction.
+
+    Replaces shuffled KFold/StratifiedKFold with strictly time-ordered folds.
+    Each fold trains on all data up to (val_block_start - purge_bars) and
+    validates on the next consecutive block. Yields n_splits-1 folds.
+
+    Parameters
+    ----------
+    n : int
+        Total number of samples (chronologically ordered).
+    y : np.ndarray
+        Labels (unused; accepted for API compatibility).
+    n_splits : int
+        Requested number of folds (yields at most n_splits-1 valid folds).
+    purge_bars : int
+        Purge window between train end and validation start.
+
+    Yields
+    ------
+    (train_indices, val_indices) : tuple of np.ndarray
+    """
+    if n < n_splits * 2 or n_splits < 2:
+        return
+    block_size = n // n_splits
+    if block_size < 1:
+        return
+    for i in range(1, n_splits):
+        val_start = i * block_size
+        val_end = min((i + 1) * block_size, n) if i < n_splits - 1 else n
+        train_end = max(0, val_start - purge_bars)
+        if train_end < block_size:
+            continue
+        yield _np.arange(0, train_end, dtype=int), _np.arange(val_start, val_end, dtype=int)
+
+
 def _learn_temperature(probs: _np.ndarray, y: _np.ndarray, iters: int = 200) -> float:
     """Guo et al. (ICML'17) temperature scaling: optimize T on val NLL."""
     y = y.astype(int)
@@ -439,7 +475,7 @@ class EnsembleCNNLSTMXGBoost:
         # Merge config with fast, safe defaults (overridden by user config)
         xgb_params = dict(self.xgb_config or {})
         for _k in ("config","xgb_eval_fraction","eval_fraction","xgb_early_stopping_rounds",
-           "early_stopping_rounds","oof_splits","use_oof_meta","es_val_fraction"):
+           "early_stopping_rounds","oof_splits","use_oof_meta","es_val_fraction","oof_purge_bars"):
             xgb_params.pop(_k, None)
         xgb_params.pop("config", None)
         
@@ -523,7 +559,6 @@ class EnsembleCNNLSTMXGBoost:
         )
 
         import numpy as _np, inspect as _inspect, xgboost as _xgb
-        from sklearn.model_selection import StratifiedKFold, train_test_split as _tts
         from sklearn.preprocessing import StandardScaler
         from keras.callbacks import EarlyStopping
 
@@ -549,20 +584,14 @@ class EnsembleCNNLSTMXGBoost:
         oof_cnn = _np.zeros((n, 3), dtype=_np.float32)
         oof_lstm = _np.zeros((n, 3), dtype=_np.float32)
 
-        # Choose stratified OOF only if classes support it; otherwise fall back to KFold.
-        _u_y, _c_y = _np.unique(y, return_counts=True)
-        _min_count = int(_c_y.min()) if len(_c_y) else 0
+        # Purged chronological OOF splits (no shuffle — preserves temporal structure)
         _n_splits_eff = int(max(2, n_splits))
-
-        if len(_u_y) >= 2 and _min_count >= 2:
-            # StratifiedKFold requires n_splits <= min_class_count
-            _n_splits_eff = min(_n_splits_eff, _min_count)
-            skf = StratifiedKFold(n_splits=_n_splits_eff, shuffle=True, random_state=random_state)
-        else:
-            print("[Ensemble] Warning: cannot use StratifiedKFold (class counts too small); "
-                "falling back to KFold. class_counts=", dict(zip(_u_y, _c_y)))
-            from sklearn.model_selection import KFold
-            skf = KFold(n_splits=_n_splits_eff, shuffle=True, random_state=random_state)
+        _purge = int(self.xgb_config.get("oof_purge_bars", 12))
+        fold_iter = list(_purged_sequential_oof_splits(n, y, _n_splits_eff, purge_bars=_purge))
+        if not fold_iter:
+            print("[Ensemble] Warning: purged OOF produced 0 folds (n={}, n_splits={}, purge={}). "
+                  "Skipping OOF meta-training.", n, _n_splits_eff, _purge)
+            return self
 
         # --- callbacks/time limits ---
         _cnn_pat = int(self.cnn_config.get("cnn_patience", 8))
@@ -572,7 +601,7 @@ class EnsembleCNNLSTMXGBoost:
         _cnn_val_split = float(self.cnn_config.get("cnn_val_split", getattr(self, "cnn_val_split", 0.10)))
         _lstm_val_split = float(self.lstm_config.get("lstm_val_split", getattr(self, "lstm_val_split", 0.10)))
 
-        for tr_idx, val_idx in skf.split(_np.zeros(n), y):
+        for tr_idx, val_idx in fold_iter:
             cnn = build_cnn(self.input_shape, config=self.cnn_config)
             lstm = build_lstm(self.input_shape, config=self.lstm_config)
 
@@ -700,7 +729,7 @@ class EnsembleCNNLSTMXGBoost:
         xgb_params = dict(self.xgb_config or {})
         for _k in ("config", "xgb_eval_fraction", "eval_fraction", "xgb_early_stopping_rounds",
                 "early_stopping_rounds", "oof_splits", "use_oof_meta", "es_val_fraction",
-                "predictor", "tree_method"):
+                "oof_purge_bars", "predictor", "tree_method"):
             xgb_params.pop(_k, None)
 
         # IMPORTANT: force multiclass config (still need dummy rows above!)

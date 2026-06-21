@@ -944,6 +944,7 @@ class EnsembleMixin:
                 xgb_cfg.setdefault("xgb_early_stopping_rounds", int(xgb_cfg.get("xgb_early_stopping_rounds", 50)))
                 xgb_cfg.setdefault("use_oof_meta", False)
                 xgb_cfg.setdefault("oof_splits", 3)
+                xgb_cfg.setdefault("oof_purge_bars", 12)
 
                 # Auto-detect GPU for XGBoost; env var XGB_USE_GPU can override
                 _xgb_env_gpu = os.environ.get("XGB_USE_GPU")
@@ -972,6 +973,7 @@ class EnsembleMixin:
                 # [*] Force OOF ON here regardless of tuned value
                 xgb_cfg.setdefault("use_oof_meta", False)
                 xgb_cfg.setdefault("oof_splits", 3)
+                xgb_cfg.setdefault("oof_purge_bars", 12)
                 use_gpu = (os.environ.get("XGB_USE_GPU", "0") == "1")
                 xgb_cfg.setdefault("tree_method", "hist")
                 xgb_cfg.pop("predictor", None)
