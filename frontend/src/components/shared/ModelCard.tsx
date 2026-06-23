@@ -1,6 +1,6 @@
 import { TooltipIcon } from "@/components/shared/TooltipLabel";
 import { modelDescriptions } from "@/lib/tokens";
-import { Cpu, Network, GitBranch, Layers, Boxes, Zap, Lock } from "lucide-react";
+import { Cpu, Network, GitBranch, Layers, Boxes, Zap } from "lucide-react";
 import type { ModelInfo } from "@/api/schemas";
 
 export const GPU_MODELS = new Set([
@@ -34,7 +34,6 @@ export interface ModelCardProps {
   model: ModelInfo;
   isSelected: boolean;
   isFull?: boolean;
-  isLocked?: boolean;
   categoryKey: string;
   categoryColor: string;
   onToggle: (e: React.MouseEvent) => void;
@@ -44,7 +43,6 @@ export function ModelCard({
   model,
   isSelected,
   isFull = false,
-  isLocked = false,
   categoryKey,
   categoryColor,
   onToggle,
@@ -53,7 +51,7 @@ export function ModelCard({
   const needsGpu = GPU_MODELS.has(model.name);
   const Icon = CATEGORY_ICON[categoryKey] ?? Layers;
   const badge = CATEGORY_BADGE[categoryKey] ?? categoryKey;
-  const disabled = isFull || isLocked;
+  const disabled = isFull;
 
   return (
     <button
@@ -67,7 +65,6 @@ export function ModelCard({
         cursor: disabled ? "not-allowed" : "pointer",
         boxShadow: isSelected ? "0 0 16px rgba(0,229,255,0.12)" : "none",
       }}
-      title={isLocked ? "Requires Pro license" : undefined}
     >
       <div
         className="flex shrink-0 items-center justify-center rounded-lg"
@@ -93,12 +90,6 @@ export function ModelCard({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
-        {isLocked && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-(--color-accent-warning) bg-(color-mix(in srgb, var(--color-accent-warning) 10%, transparent)) px-1.5 py-0.5 text-[8px] font-semibold text-(--color-accent-warning)">
-            <Lock size={8} />
-            PRO
-          </span>
-        )}
         <span
           className="inline-flex rounded-full border px-1.5 py-0.5 text-[8px] font-semibold tracking-[0.06em] uppercase"
           style={{

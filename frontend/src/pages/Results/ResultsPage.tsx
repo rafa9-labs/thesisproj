@@ -18,7 +18,13 @@ import { MonthlyReturnsChart } from "@/components/charts/MonthlyReturnsChart";
 import { MetricsGrid } from "./MetricsGrid";
 import { UnifiedAnalytics, type UnifiedAnalyticsHandle } from "./UnifiedAnalytics";
 import { TradeLogTable } from "./TradeLogTable";
-import { HpoDiagnostics, BestStudyCard } from "./HpoDiagnostics";
+import {
+  HpoDiagnostics,
+  BestStudyCard,
+  StudyMetaCard,
+  LearningSummaryCard,
+  SensitivityChart,
+} from "./HpoDiagnostics";
 import { OverfittingPanel } from "./OverfittingPanel";
 import { ValidationScorecard } from "./ValidationScorecard";
 import { WalkForwardPanel } from "./WalkForwardPanel";
@@ -529,7 +535,10 @@ export function ResultsPage() {
                     paramImportance={diagnosticsMetric?.hpo_param_importance ?? null}
                     trials={diagnosticsMetric?.hpo_trials ?? null}
                   />
+                  <StudyMetaCard meta={diagnosticsMetric?.hpo_study_meta ?? null} />
                   <BestStudyCard bestStudy={diagnosticsMetric?.best_study ?? null} />
+                  <LearningSummaryCard summary={diagnosticsMetric?.hpo_learning_summary ?? null} />
+                  <SensitivityChart sensitivity={diagnosticsMetric?.hpo_sensitivity ?? null} />
                   <ParameterSensitivityChart trials={diagnosticsMetric?.hpo_trials ?? null} />
                   {diagnosticsMetric?.overfitting && (
                     <OverfittingPanel

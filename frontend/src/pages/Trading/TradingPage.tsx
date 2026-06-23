@@ -11,6 +11,7 @@ import {
   useStopLiveSession,
   useEmergencyKillSession,
   useSavedCommittees,
+  useRetrainCommittee,
 } from "@/api/queries";
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/api/client";
@@ -45,6 +46,7 @@ const RISK_DEFAULTS = {
 interface LiveState {
   running: boolean;
   deploying: boolean;
+  retraining: boolean;
   sessionId: string | null;
   mode: TradingMode;
   isCommittee: boolean;
@@ -74,6 +76,7 @@ export interface ChartMarker {
 const INITIAL_LIVE_STATE: LiveState = {
   running: false,
   deploying: false,
+  retraining: false,
   sessionId: null,
   mode: "paper",
   isCommittee: false,
@@ -168,6 +171,7 @@ export default function TradingPage() {
   const deployLive = useDeployLiveSession();
   const stopLive = useStopLiveSession();
   const emergencyKill = useEmergencyKillSession();
+  const retrainCommittee = useRetrainCommittee();
 
   const availablePairs = useMemo(
     () => (pairs ?? []).map((p) => p.pair?.symbol ?? "").filter((s) => s !== ""),
@@ -337,6 +341,10 @@ export default function TradingPage() {
     ws.onmessage = (event) => {
       try {
         const raw = JSON.parse(event.data);
+        if (raw.event === "price_tick") {
+          if (raw.forming_candle) setLiveCandle(raw.forming_candle as CandleBar);
+          return;
+        }
         if (tradingMode === "paper") handlePaperWSEvent(raw as PaperSignalEvent);
         else handleLiveWSEvent(raw as LiveSignalEvent);
       } catch {
@@ -531,6 +539,12 @@ export default function TradingPage() {
       }));
     } else if (msg.event === "stopped") {
       setLive((prev) => ({ ...prev, running: false }));
+    } else if (msg.event === "retrain_complete") {
+      setLive((prev) => ({ ...prev, retraining: false }));
+      console.log("[Retrain] Complete — models refitted:", (msg as any).models_refitted);
+    } else if (msg.event === "retrain_failed") {
+      setLive((prev) => ({ ...prev, retraining: false }));
+      console.error("[Retrain] Failed:", (msg as any).error);
     }
   }
 
@@ -675,6 +689,16 @@ export default function TradingPage() {
       /* ignore */
     }
   }, [live.sessionId, emergencyKill]);
+
+  const handleRetrain = useCallback(async () => {
+    if (!live.sessionId) return;
+    setLive((prev) => ({ ...prev, retraining: true }));
+    try {
+      await retrainCommittee.mutateAsync({ sessionId: live.sessionId });
+    } catch {
+      setLive((prev) => ({ ...prev, retraining: false }));
+    }
+  }, [live.sessionId, retrainCommittee]);
 
   const priceDisplay = priceData?.prices?.[0];
   const midPrice = priceDisplay?.mid;
@@ -885,6 +909,8 @@ export default function TradingPage() {
           onDeploy={handleDeploy}
           onStop={handleStop}
           onEmergency={handleEmergency}
+          onRetrain={isCommitteeSelected ? handleRetrain : undefined}
+          isRetraining={live.retraining}
           onChangeRisk={(update) => setRiskConfig((prev) => ({ ...prev, ...update }))}
         />
       </div>

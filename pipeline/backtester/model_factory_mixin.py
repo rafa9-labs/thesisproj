@@ -43,13 +43,17 @@ class ModelFactoryMixin:
             print(f"[THREAD] Threads[{tag}] env={envs} pools={pools}")
 
 
-    def get_model(self, model_type, use_proba: bool = True, **params):
+    def get_model(self, model_type, use_proba: bool = True, warm_start_from=None, **params):
         """
         Construct and return an instance of the specified model.
         Trials stay serialized; each fit uses many threads/GPU.
 
         Tries the model registry first; falls back to the legacy
         inline if/elif chain for backwards compatibility.
+
+        warm_start_from: for deep models, a path to a .weights.h5 file to
+        load_weights() from after construction. For tree models, the previous
+        model object is passed directly to .fit() -- no change here.
         """
         self._print_thread_budget(tag=model_type)  # show effective threads for this build
 
@@ -66,6 +70,13 @@ class ModelFactoryMixin:
             params.setdefault("seed", seed)
             model = _build(model_type, use_proba=use_proba, **params)
             if model is not None:
+                if warm_start_from and hasattr(model, 'load_weights'):
+                    import os as _os
+                    if _os.path.exists(str(warm_start_from)):
+                        try:
+                            model.load_weights(str(warm_start_from))
+                        except Exception:
+                            pass
                 return model
         except Exception:
             pass  # fall through to legacy path
@@ -472,6 +483,13 @@ class ModelFactoryMixin:
 
         if model is None:
             raise ValueError(f"Model creation failed for type {model_type}")
+        if warm_start_from and hasattr(model, 'load_weights'):
+            import os as _os
+            if _os.path.exists(str(warm_start_from)):
+                try:
+                    model.load_weights(str(warm_start_from))
+                except Exception:
+                    pass
         return model
 
 

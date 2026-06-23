@@ -237,19 +237,47 @@ async def _paper_signal_loop(session_id: str):
     store = get_data_store()
     lock: asyncio.Lock = session["_lock"]
 
-    tf_seconds = {"M15": 900, "M30": 1800, "H1": 3600, "H2": 7200, "H4": 14400}
-    poll_interval = min(tf_seconds.get(timeframe, 1800) // 4, 60)
+    from api.routers.price_stream import PriceStreamManager
+    psm = PriceStreamManager.get()
 
-    while not session["_kill_event"].is_set():
-        try:
-            raw_prices, source = await _fetch_prices_async(pair)
-            mid_price = _extract_mid(raw_prices, source, pair, timeframe, store)
-            if mid_price <= 0:
-                await asyncio.sleep(poll_interval)
+    await psm.ensure_stream(pair)
+
+    price_queue: asyncio.Queue = asyncio.Queue()
+    psm.subscribe(pair, price_queue)
+
+    async def _forward_price_ticks():
+        while not session["_kill_event"].is_set():
+            try:
+                msg = await asyncio.wait_for(price_queue.get(), timeout=30.0)
+            except asyncio.TimeoutError:
+                continue
+            _broadcast_ws(session, msg)
+
+    forward_task = asyncio.create_task(_forward_price_ticks())
+
+    try:
+        while not session["_kill_event"].is_set():
+            new_bar_event = psm.get_new_bar_event(pair, timeframe)
+            if new_bar_event is None:
+                await asyncio.sleep(60)
+                continue
+
+            try:
+                await asyncio.wait_for(new_bar_event.wait(), timeout=120.0)
+            except asyncio.TimeoutError:
+                logger.warning("No new bar for %s %s in 120s", pair, timeframe)
                 continue
 
             candles = store.get_latest_candles(pair, timeframe, 60)
+            if candles.empty:
+                continue
+
             signal_result = await _async_predict_signal(session, candles)
+
+            mid_price = float(candles.iloc[-1]["mid_close"])
+            raw_prices, source = await _fetch_prices_async(pair)
+            if source == "oanda" and raw_prices:
+                mid_price = _extract_mid(raw_prices, source, pair, timeframe, store)
             bid, ask = _resolve_bid_ask(raw_prices, source, mid_price)
 
             async with lock:
@@ -259,15 +287,14 @@ async def _paper_signal_loop(session_id: str):
                     signal_result or {"direction": "FLAT", "confidence": 50.0},
                     bid=bid, ask=ask, mid=mid_price,
                 )
-                if not candles.empty:
-                    last = candles.iloc[-1]
-                    result["candle"] = {
-                        "time": int(last["time"].timestamp()),
-                        "open": float(last["mid_open"]),
-                        "high": float(last["mid_high"]),
-                        "low": float(last["mid_low"]),
-                        "close": float(last["mid_close"]),
-                    }
+                last = candles.iloc[-1]
+                result["candle"] = {
+                    "time": int(last["time"].timestamp()),
+                    "open": float(last["mid_open"]),
+                    "high": float(last["mid_high"]),
+                    "low": float(last["mid_low"]),
+                    "close": float(last["mid_close"]),
+                }
                 result["live_price"] = mid_price
                 _broadcast_ws(session, result)
                 try:
@@ -277,10 +304,16 @@ async def _paper_signal_loop(session_id: str):
                 except Exception:
                     pass
 
-        except Exception:
-            logger.exception("Paper signal loop error for session %s", session_id)
-
-        await asyncio.sleep(poll_interval)
+    except Exception:
+        logger.exception("Paper signal loop error for session %s", session_id)
+    finally:
+        forward_task.cancel()
+        try:
+            await forward_task
+        except asyncio.CancelledError:
+            pass
+        psm.unsubscribe(pair, price_queue)
+        await psm.release_stream(pair)
 
     async with lock:
         session["status"] = "stopped"
@@ -303,19 +336,47 @@ async def _live_signal_loop(session_id: str):
     store = get_data_store()
     lock: asyncio.Lock = session["_lock"]
 
-    tf_seconds = {"M15": 900, "M30": 1800, "H1": 3600, "H2": 7200, "H4": 14400}
-    poll_interval = min(tf_seconds.get(timeframe, 1800) // 4, 60)
+    from api.routers.price_stream import PriceStreamManager
+    psm = PriceStreamManager.get()
 
-    while not session["_kill_event"].is_set():
-        try:
-            raw_prices, source = await _fetch_prices_async(pair)
-            mid_price = _extract_mid(raw_prices, source, pair, timeframe, store)
-            if mid_price <= 0:
-                await asyncio.sleep(poll_interval)
+    await psm.ensure_stream(pair)
+
+    price_queue: asyncio.Queue = asyncio.Queue()
+    psm.subscribe(pair, price_queue)
+
+    async def _forward_price_ticks():
+        while not session["_kill_event"].is_set():
+            try:
+                msg = await asyncio.wait_for(price_queue.get(), timeout=30.0)
+            except asyncio.TimeoutError:
+                continue
+            _broadcast_ws(session, msg)
+
+    forward_task = asyncio.create_task(_forward_price_ticks())
+
+    try:
+        while not session["_kill_event"].is_set():
+            new_bar_event = psm.get_new_bar_event(pair, timeframe)
+            if new_bar_event is None:
+                await asyncio.sleep(60)
+                continue
+
+            try:
+                await asyncio.wait_for(new_bar_event.wait(), timeout=120.0)
+            except asyncio.TimeoutError:
+                logger.warning("No new bar for %s %s in 120s", pair, timeframe)
                 continue
 
             candles = store.get_latest_candles(pair, timeframe, 60)
+            if candles.empty:
+                continue
+
             signal_result = await _async_predict_signal(session, candles)
+
+            mid_price = float(candles.iloc[-1]["mid_close"])
+            raw_prices, source = await _fetch_prices_async(pair)
+            if source == "oanda" and raw_prices:
+                mid_price = _extract_mid(raw_prices, source, pair, timeframe, store)
             bid, ask = _resolve_bid_ask(raw_prices, source, mid_price)
 
             async with lock:
@@ -327,15 +388,14 @@ async def _live_signal_loop(session_id: str):
                     oanda_client=oanda._get_client(),
                 )
                 engine.heartbeat()
-                if not candles.empty:
-                    last = candles.iloc[-1]
-                    result["candle"] = {
-                        "time": int(last["time"].timestamp()),
-                        "open": float(last["mid_open"]),
-                        "high": float(last["mid_high"]),
-                        "low": float(last["mid_low"]),
-                        "close": float(last["mid_close"]),
-                    }
+                last = candles.iloc[-1]
+                result["candle"] = {
+                    "time": int(last["time"].timestamp()),
+                    "open": float(last["mid_open"]),
+                    "high": float(last["mid_high"]),
+                    "low": float(last["mid_low"]),
+                    "close": float(last["mid_close"]),
+                }
                 result["live_price"] = mid_price
                 _broadcast_ws(session, result)
                 try:
@@ -348,10 +408,16 @@ async def _live_signal_loop(session_id: str):
             if result.get("event") == "kill":
                 session["_kill_event"].set()
 
-        except Exception:
-            logger.exception("Live signal loop error for session %s", session_id)
-
-        await asyncio.sleep(poll_interval)
+    except Exception:
+        logger.exception("Live signal loop error for session %s", session_id)
+    finally:
+        forward_task.cancel()
+        try:
+            await forward_task
+        except asyncio.CancelledError:
+            pass
+        psm.unsubscribe(pair, price_queue)
+        await psm.release_stream(pair)
 
     async with lock:
         session["status"] = "stopped"
@@ -1241,6 +1307,9 @@ async def start_committee_session(req: DeployCommitteeRequest):
         "trust_multiplier": trust_multiplier,
         "live_news_blend_enabled": req.live_news_blend_enabled,
         "live_news_blend_weight": req.live_news_blend_weight,
+        "_config_path": str(config_path),
+        "_parent_job_dir": str(parent_job_dir) if parent_job_dir else None,
+        "_retrain_task": None,
     }
 
     live_sessions[session_id] = session
@@ -1278,6 +1347,227 @@ async def start_committee_session(req: DeployCommitteeRequest):
         "snapshot_loaded": snapshot_loaded,
         "model_params_count": len(model_params),
     }
+
+
+# ── Fast Retrain endpoint (Fast Loop rolling refit) ──────────────
+
+class RetrainRequest(BaseModel):
+    lookback_bars: int = 20000
+    oos_frac: float = 0.10
+
+
+class RetrainStatusResponse(BaseModel):
+    session_id: str
+    status: str  # "idle" | "running" | "complete" | "failed"
+    progress: float = 0.0
+    current_phase: str = ""
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    models_refitted: List[str] = []
+    models_skipped: List[str] = []
+    meta_labeler_refitted: bool = False
+    meta_accuracy: Optional[float] = None
+    elapsed_seconds: Optional[float] = None
+    error: Optional[str] = None
+
+
+@live_router.post("/committee/{session_id}/retrain")
+async def retrain_committee(session_id: str, req: RetrainRequest):
+    session = live_sessions.get(session_id)
+    if session is None:
+        raise HTTPException(404, f"Session {session_id} not found")
+    if session.get("model_type") != "committee":
+        raise HTTPException(400, "Retrain only available for committee sessions")
+    if session["status"] != "running":
+        raise HTTPException(400, f"Cannot retrain: session status is '{session['status']}'")
+
+    existing_task = session.get("_retrain_task")
+    if existing_task and not existing_task.done():
+        raise HTTPException(409, "A retrain is already in progress")
+
+    config_path = session.get("_config_path")
+    if not config_path or not Path(config_path).exists():
+        raise HTTPException(400, "Committee config path not available")
+
+    parent_job_dir = session.get("_parent_job_dir")
+    hmm_path = None
+    meta_path = None
+    if parent_job_dir:
+        pjd = Path(parent_job_dir)
+        hmm_candidate = pjd / "hmm_detector.joblib"
+        if hmm_candidate.exists():
+            hmm_path = str(hmm_candidate)
+        meta_candidate = pjd / "meta_labeler.joblib"
+        if meta_candidate.exists():
+            meta_path = str(meta_candidate)
+
+    if not hmm_path:
+        raise HTTPException(400, "HMM artifact not found — cannot retrain")
+
+    session["_retrain_status"] = {
+        "status": "running",
+        "progress": 0.0,
+        "current_phase": "starting",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+        "models_refitted": [],
+        "models_skipped": [],
+        "error": None,
+    }
+
+    loop = asyncio.get_running_loop()
+
+    def _retrain_sync():
+        from pipeline.fast_retrain import FastRetrainer
+        import shutil
+
+        status = session["_retrain_status"]
+        output_dir = Path("artifacts") / f"retrain_{session_id}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+
+        try:
+            status["current_phase"] = "loading"
+            _broadcast_ws(session, {
+                "event": "retrain_progress",
+                "phase": "loading",
+                "progress": 0.05,
+            })
+
+            retrainer = FastRetrainer(
+                config_path=config_path,
+                hmm_path=hmm_path,
+                meta_path=meta_path,
+                symbol=session["pair"],
+                base_timeframe=session["timeframe"],
+                lookback_bars=req.lookback_bars,
+                oos_frac=req.oos_frac,
+                output_dir=str(output_dir),
+                seed=42,
+            )
+            retrainer._set_random_seed(42)
+
+            status["current_phase"] = "loading_data"
+            retrainer.load_data()
+
+            status["current_phase"] = "computing_features"
+            status["progress"] = 0.15
+            _broadcast_ws(session, {
+                "event": "retrain_progress", "phase": "features", "progress": 0.15,
+            })
+            X_full = retrainer.compute_features()
+            retrainer.scale_features(X_full)
+            retrainer.generate_labels()
+            retrainer.tag_regimes()
+
+            status["current_phase"] = "refitting_models"
+            status["progress"] = 0.30
+            _broadcast_ws(session, {
+                "event": "retrain_progress", "phase": "refitting", "progress": 0.30,
+            })
+            refitted = retrainer.refit_primary_models()
+
+            status["progress"] = 0.70
+            _broadcast_ws(session, {
+                "event": "retrain_progress", "phase": "meta_labeler", "progress": 0.70,
+            })
+            retrainer.refit_meta_labeler(refitted)
+
+            status["current_phase"] = "saving"
+            status["progress"] = 0.90
+            retrainer.save_artifacts()
+
+            manifest = retrainer.manifest
+
+            # Hot-swap: update session models under lock
+            async def _hot_swap():
+                async with session["_lock"]:
+                    new_models = {}
+                    for key, path in refitted.items():
+                        import joblib
+                        try:
+                            model = joblib.load(path)
+                            model_name = key.split("/")[-1]
+                            new_models[model_name] = model
+                        except Exception as e:
+                            logger.warning("Failed to load %s: %s", path, e)
+
+                    if new_models:
+                        session["trained_models"].update(new_models)
+                        runner = session["runner"]
+                        for name, model in new_models.items():
+                            runner.rotate_model(name, name, model)
+
+                    ml_path = output_dir / "meta_labeler.joblib"
+                    if ml_path.exists() and manifest.get("meta_labeler_refitted"):
+                        try:
+                            from pipeline.meta_labeler import MetaLabeler
+                            new_meta = MetaLabeler.load(str(ml_path))
+                            session["runner"]._meta_labeler = new_meta
+                        except Exception as e:
+                            logger.warning("Failed to load new MetaLabeler: %s", e)
+
+            asyncio.run_coroutine_threadsafe(_hot_swap(), loop)
+
+            status["status"] = "complete"
+            status["progress"] = 1.0
+            status["completed_at"] = datetime.now(timezone.utc).isoformat()
+            status["models_refitted"] = manifest.get("models_refitted", [])
+            status["models_skipped"] = list(manifest.get("models_skipped", {}).keys())
+            status["meta_labeler_refitted"] = manifest.get("meta_labeler_refitted", False)
+            status["meta_accuracy"] = manifest.get("meta_labeler_accuracy")
+            status["elapsed_seconds"] = manifest.get("elapsed_seconds")
+
+            _broadcast_ws(session, {
+                "event": "retrain_complete",
+                "models_refitted": status["models_refitted"],
+                "models_skipped": status["models_skipped"],
+                "meta_accuracy": status.get("meta_accuracy"),
+                "elapsed_seconds": status.get("elapsed_seconds"),
+            })
+
+        except Exception as e:
+            logger.exception("Retrain failed for session %s", session_id)
+            status["status"] = "failed"
+            status["error"] = str(e)
+            status["completed_at"] = datetime.now(timezone.utc).isoformat()
+            _broadcast_ws(session, {
+                "event": "retrain_failed",
+                "error": str(e),
+            })
+
+    task = asyncio.get_running_loop().run_in_executor(None, _retrain_sync)
+    session["_retrain_task"] = task
+
+    return {
+        "session_id": session_id,
+        "status": "retraining",
+        "started_at": session["_retrain_status"]["started_at"],
+    }
+
+
+@live_router.get("/committee/{session_id}/retrain/status")
+async def retrain_status(session_id: str):
+    session = live_sessions.get(session_id)
+    if session is None:
+        raise HTTPException(404, f"Session {session_id} not found")
+
+    status = session.get("_retrain_status")
+    if status is None:
+        return RetrainStatusResponse(session_id=session_id, status="idle")
+
+    return RetrainStatusResponse(
+        session_id=session_id,
+        status=status.get("status", "idle"),
+        progress=status.get("progress", 0.0),
+        current_phase=status.get("current_phase", ""),
+        started_at=status.get("started_at"),
+        completed_at=status.get("completed_at"),
+        models_refitted=status.get("models_refitted", []),
+        models_skipped=status.get("models_skipped", []),
+        meta_labeler_refitted=status.get("meta_labeler_refitted", False),
+        meta_accuracy=status.get("meta_accuracy"),
+        elapsed_seconds=status.get("elapsed_seconds"),
+        error=status.get("error"),
+    )
 
 
 # ── Committee model training helper ───────────────────────────

@@ -45,6 +45,10 @@ export function useBacktestWebSocket(jobIds: string[]) {
         wsManager.connect(id);
         const unsub = wsManager.subscribe(id, (event: unknown) => {
           handlerRef.current(event as WsEvent);
+          const ev = event as { event?: string };
+          if (ev.event === "job_failed" || ev.event === "job_complete") {
+            wsManager.markTerminal(id);
+          }
         });
         unsubs.push(unsub);
       }

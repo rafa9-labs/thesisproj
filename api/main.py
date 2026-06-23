@@ -21,6 +21,27 @@ async def lifespan(app: FastAPI):
     get_data_store()
     from api.config import settings
     from api.shutdown import startup_cleanup, wal_checkpoint
+
+    try:
+        from api.hardware import discover_gpu_vram
+        vram = discover_gpu_vram()
+        if vram > 0:
+            settings.gpu_total_vram_mb = vram
+            print(f"[Hardware] GPU VRAM detected: {vram} MB")
+            settings.gpu_enabled = True
+        else:
+            print("[Hardware] No GPU detected — VRAM gate disabled")
+    except Exception:
+        pass
+
+    try:
+        from api.process_manager import get_process_manager
+        pm = get_process_manager()
+        if not getattr(pm, "_initialized", False):
+            pm.initialize()
+    except Exception as exc:
+        print(f"[ProcessManager] Init failed: {exc}")
+
     start = startup_cleanup(settings.db_full_path)
     if start:
         print(f"[Shutdown] Startup: reset {start} stale running job(s) to pending")
@@ -47,9 +68,37 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
+    _candle_syncer = None
+    try:
+        from pipeline.candle_syncer import CandleSyncer
+        pairs = settings.sync_pairs
+        if pairs:
+            _candle_syncer = CandleSyncer(store, active_pairs=pairs)
+            await _candle_syncer.start()
+    except Exception:
+        print("[CandleSyncer] Failed to start — sync disabled")
+
+    from api.routers.price_stream import PriceStreamManager
+    PriceStreamManager.get()
+
     yield
+
+    try:
+        await PriceStreamManager.get().shutdown()
+    except Exception:
+        pass
+    if _candle_syncer is not None:
+        try:
+            await _candle_syncer.stop()
+        except Exception:
+            pass
     from api.shutdown import shutdown_cleanup
     shutdown_cleanup(settings.db_full_path)
+    try:
+        from api.process_manager import get_process_manager
+        get_process_manager().shutdown()
+    except Exception:
+        pass
     if _stop_wal_timer and not _stop_wal_timer.done():
         _stop_wal_timer.cancel()
     print("[Shutdown] Graceful shutdown complete")

@@ -196,6 +196,61 @@ def deactivate_deployed_model(model_id: str):
     return {"status": "ok"}
 
 
+@router.get("/deployed/{model_id}")
+def get_deployed_model_detail(model_id: str):
+    from api.config import settings
+    from pipeline.model_registry_disk import get_all_deployed
+
+    rows = get_all_deployed(settings.db_full_path)
+    found = None
+    for r in rows:
+        if r.get("id") == model_id:
+            found = r
+            break
+    if not found:
+        raise HTTPException(404, f"Model {model_id} not found")
+
+    out = dict(found)
+    sp = found.get("snapshot_path", "")
+    if sp and os.path.isdir(sp):
+        meta_path = os.path.join(sp, "metadata.json")
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path) as fh:
+                    meta = json.load(fh)
+                m = meta.get("metrics", {})
+                out["win_rate"] = m.get("win_rate")
+                out["max_drawdown"] = m.get("max_drawdown")
+                out["total_trades"] = m.get("total_trades")
+                out["sortino"] = m.get("sortino")
+                out["calmar_ratio"] = m.get("calmar_ratio")
+                out["profit_factor"] = m.get("profit_factor")
+                out["cagr"] = m.get("cagr")
+                out["overfit_score"] = m.get("overfit_score")
+                out["risk_level"] = m.get("risk_level")
+                out["directional_accuracy"] = m.get("directional_accuracy")
+                out["active_rate"] = m.get("active_rate")
+                out["avg_trade"] = m.get("avg_trade")
+                out["train_start"] = meta.get("train_start")
+                out["train_end"] = meta.get("train_end")
+                out["feature_count"] = len(meta.get("feature_names") or []) or None
+                out["seed"] = meta.get("seed")
+                out["calibrate_method"] = meta.get("calibrate_method")
+                out["pair"] = meta.get("pair")
+                out["timeframe"] = meta.get("timeframe")
+                out["best_params"] = meta.get("best_params", {})
+                out["feature_names"] = meta.get("feature_names", [])
+                out["coverage_conf_thr"] = meta.get("coverage_conf_thr")
+                out["input_shape"] = meta.get("input_shape")
+                out["pip_freeze"] = meta.get("pip_freeze")
+                out["schema_version"] = meta.get("schema_version")
+                if meta.get("overfitting"):
+                    out["overfitting"] = meta["overfitting"]
+            except (json.JSONDecodeError, OSError, KeyError, TypeError):
+                pass
+    return out
+
+
 @router.delete("/deployed/{model_id}")
 def delete_deployed_model(model_id: str):
     from api.config import settings

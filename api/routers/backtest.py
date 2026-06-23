@@ -191,28 +191,53 @@ def submit_backtest(req: BacktestRequest):
         "trading_costs": req.trading_costs,
         "config_overrides": req.config_overrides,
     }
+    from pipeline.resource_budget import get_resource_budget
+    from pipeline.runtime import GPU_RECOMMENDED_MODELS
+    from api.process_manager import get_process_manager
+    has_gpu = any(m.lower() in GPU_RECOMMENDED_MODELS for m in req.models)
+    pm = get_process_manager()
+    if has_gpu:
+        config["thread_budget"] = 1
+    else:
+        try:
+            budget = get_resource_budget()
+            effective = budget.effective_cores
+        except Exception:
+            import os
+            effective = max(2, (os.cpu_count() or 8) // 2)
+        limit = max(1, settings.max_concurrent_backtests)
+        config["thread_budget"] = max(2, effective // limit)
+
+    vram_budget_mb = 0
+    env_vars: dict[str, str] = {}
+    if has_gpu and settings.gpu_enabled and settings.gpu_total_vram_mb > 0:
+        per_gpu = max(2048, settings.gpu_total_vram_mb // max(1, settings.max_concurrent_gpu))
+        vram_budget_mb = min(per_gpu, settings.gpu_total_vram_mb)
+        if not pm.allocate_vram(vram_budget_mb):
+            raise HTTPException(
+                status_code=409,
+                detail=f"GPU VRAM full ({pm.gpu_vram_available_mb} MB available, need {vram_budget_mb} MB). "
+                       f"Wait for active GPU jobs to complete.",
+            )
+        env_vars["CUDA_VRAM_LIMIT_MB"] = str(vram_budget_mb)
+    env_vars["MLB_THREADS"] = str(config["thread_budget"])
+    env_vars["BLAS_THREADS_PER_TRIAL"] = str(config["thread_budget"])
 
     try:
         jm.create_job_atomic(job_id, "backtest", config, max_active=settings.max_concurrent_backtests)
     except RuntimeError:
+        if vram_budget_mb > 0:
+            pm.release_vram(vram_budget_mb)
         raise HTTPException(status_code=409, detail="A backtest is already running. Please wait for completion.")
 
     if IS_DESKTOP:
-        import threading
-        from api.tasks import _cancellation_events
+        try:
+            pm.submit(job_id, config, env_vars=env_vars, vram_budget_mb=vram_budget_mb)
+        except Exception:
+            if vram_budget_mb > 0:
+                pm.release_vram(vram_budget_mb)
+            raise HTTPException(status_code=500, detail="Failed to dispatch backtest process.")
 
-        def _run_desktop():
-            evt = threading.Event()
-            _cancellation_events[job_id] = evt
-            try:
-                run_backtest_task._func(job_id, config)
-            except Exception as exc:
-                import traceback
-                traceback.print_exc()
-            finally:
-                _cancellation_events.pop(job_id, None)
-
-        threading.Thread(target=_run_desktop, daemon=True).start()
         return BacktestSubmitResponse(
             job_id=job_id,
             status="pending",
@@ -220,7 +245,11 @@ def submit_backtest(req: BacktestRequest):
             models=req.models,
         )
     else:
-        run_backtest_task.delay(job_id, config)
+        celery_result = run_backtest_task.delay(job_id, config)
+        try:
+            jm.set_task_id(job_id, celery_result.id)
+        except Exception:
+            pass
 
     return BacktestSubmitResponse(
         job_id=job_id,
@@ -267,15 +296,15 @@ def get_heatmap():
     for job in jobs:
         if job.get("status") != "completed":
             continue
-        result = job.get("result", {})
-        cfg = job.get("config", {})
-        pair = result.get("pair") or cfg.get("pair", "")
+        result = job.get("result") or {}
+        cfg = job.get("config") or {}
+        pair = (result.get("pair") or cfg.get("pair", "")) if isinstance(result, dict) else ""
         job_id = job.get("id", "")
 
         if not pair or not pair:
             continue
 
-        raw_metrics = result.get("metrics", [])
+        raw_metrics = (result.get("metrics", [])) if isinstance(result, dict) else []
         for m in raw_metrics:
             model_name = m.get("model", "")
             if not model_name:
@@ -319,14 +348,14 @@ def get_cross_pair_curves(
     for job in jobs:
         if job.get("status") != "completed":
             continue
-        result = job.get("result", {})
-        cfg = job.get("config", {})
-        job_pair = result.get("pair") or cfg.get("pair", "")
+        result = job.get("result") or {}
+        cfg = job.get("config") or {}
+        job_pair = (result.get("pair") or cfg.get("pair", "")) if isinstance(result, dict) else ""
 
         if job_pair not in pair_list:
             continue
 
-        raw_metrics = result.get("metrics", [])
+        raw_metrics = (result.get("metrics", [])) if isinstance(result, dict) else []
         for m in raw_metrics:
             if m.get("model") != model:
                 continue
@@ -378,10 +407,10 @@ def get_results_summary(
         else:
             if job_status != "completed":
                 continue
-        result = job.get("result", {})
-        cfg = job.get("config", {})
-        job_pair = result.get("pair") or cfg.get("pair", "")
-        job_models = result.get("models") or cfg.get("models", [])
+        result = job.get("result") or {}
+        cfg = job.get("config") or {}
+        job_pair = (result.get("pair") or cfg.get("pair", "")) if isinstance(result, dict) else ""
+        job_models = (result.get("models") or cfg.get("models", [])) if isinstance(result, dict) else []
         job_error = job.get("error")
 
         if pair and job_pair != pair:
@@ -389,7 +418,7 @@ def get_results_summary(
         if model and model not in job_models:
             continue
 
-        raw_metrics = result.get("metrics", [])
+        raw_metrics = (result.get("metrics", [])) if isinstance(result, dict) else []
         _study_meta = job.get("study_meta")
         _study_meta_obj = None
         if _study_meta and isinstance(_study_meta, dict):
@@ -510,10 +539,18 @@ def get_backtest_status(job_id: str):
 @router.get("/{job_id}/events")
 def get_backtest_events(job_id: str, after: int = 0):
     from api.tasks import get_job_events
+    from api.config import settings
+    from pipeline.data_sqlite import DataStore
     import logging as _logging
     events = get_job_events(job_id, after=after)
-    _logging.info(f"[EVENTS-API] job={job_id[:8]} after={after} returned={len(events)} total={after + len(events)}")
-    return {"events": events, "total": after + len(events)}
+    # Return actual total event count, not after+len (enables skip-to-latest)
+    try:
+        store = DataStore(settings.db_full_path)
+        actual_total = store.get_job_event_count(job_id)
+    except Exception:
+        actual_total = after + len(events)
+    _logging.info(f"[EVENTS-API] job={job_id[:8]} after={after} returned={len(events)} total={actual_total}")
+    return {"events": events, "total": actual_total}
 
 
 def _coerce_curve(raw):
@@ -621,6 +658,8 @@ def get_backtest_results(job_id: str):
                 is_mean_sharpe=overfit_data.get("is_mean_sharpe"),
                 oos_mean_sharpe=overfit_data.get("oos_mean_sharpe"),
                 dsr_min_sharpe=overfit_data.get("dsr_min_sharpe"),
+                psr=overfit_data.get("psr"),
+                dsr_value=overfit_data.get("dsr_value"),
                 interaction_effects=overfit_data.get("interaction_effects"),
             )
 
@@ -1032,10 +1071,10 @@ def get_studies(
     for job in all_jobs:
         if job.get("status") != "completed":
             continue
-        result = job.get("result", {})
-        cfg = job.get("config", {})
-        job_pair = result.get("pair") or cfg.get("pair", "")
-        job_models = result.get("models") or cfg.get("models", [])
+        result = job.get("result") or {}
+        cfg = job.get("config") or {}
+        job_pair = (result.get("pair") or cfg.get("pair", "")) if isinstance(result, dict) else ""
+        job_models = (result.get("models") or cfg.get("models", [])) if isinstance(result, dict) else []
 
         if pair and job_pair != pair:
             continue
@@ -1056,7 +1095,8 @@ def get_studies(
             if search.lower() not in _dn:
                 continue
 
-        raw_metrics = result.get("metrics", [])
+
+        raw_metrics = (result.get("metrics", [])) if isinstance(result, dict) else []
         for m in raw_metrics:
             results.append(StudySummaryItem(
                 job_id=job["id"],

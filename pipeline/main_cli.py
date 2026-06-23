@@ -346,6 +346,14 @@ def main() ->  None:
                     use_oof=("ensemble" in model_type),
                 )
 
+                # Wire progress callback for WSL GPU bridge
+                _wsl_progress_job_id = os.environ.get("WSL_PROGRESS_JOB_ID", "")
+                if _wsl_progress_job_id:
+                    def _wsl_cb(phase, model, detail=None):
+                        payload = json.dumps({"p": phase, "m": model, "d": detail or {}})
+                        print(f"[WSL_CB:{_wsl_progress_job_id}:{payload}]", flush=True)
+                    bt._progress_callback = _wsl_cb
+
                 try:
                     df_sim = bt.real_trading_simulation(
                         deepcopy(base_config),

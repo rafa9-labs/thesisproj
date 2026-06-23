@@ -1,4 +1,4 @@
-import { Loader2, ShieldOff, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Loader2, ShieldOff, TrendingUp, TrendingDown, Minus, RefreshCw } from "lucide-react";
 import type { TradingMode } from "./SessionControls";
 import type { SignalDirection } from "./PositionMonitor";
 
@@ -23,6 +23,8 @@ interface OrderPanelProps {
   onDeploy: () => void;
   onStop: () => void;
   onEmergency: () => void;
+  onRetrain?: () => void;
+  isRetraining?: boolean;
   onChangeRisk: (update: Partial<RiskConfig>) => void;
 }
 
@@ -70,6 +72,8 @@ export function OrderPanel({
   onDeploy,
   onStop,
   onEmergency,
+  onRetrain,
+  isRetraining,
   onChangeRisk,
 }: OrderPanelProps) {
   const disabled = isRunning || deploying;
@@ -258,6 +262,32 @@ export function OrderPanel({
           )}
         </button>
       </div>
+
+      {/* ── Fast Loop Retrain (committee only) ── */}
+      {isRunning && isCommittee && onRetrain && (
+        <button
+          onClick={onRetrain}
+          disabled={isRetraining}
+          className="flex w-full items-center justify-center gap-1.5 rounded border px-3 py-2 text-[10px] font-bold uppercase transition-all duration-200 disabled:opacity-50"
+          style={{
+            borderColor: "var(--color-accent-warning, #F59E0B)",
+            backgroundColor: "rgba(245,158,11,0.08)",
+            color: "var(--color-accent-warning, #F59E0B)",
+          }}
+        >
+          {isRetraining ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              Refitting...
+            </>
+          ) : (
+            <>
+              <RefreshCw size={14} />
+              Refit Committee
+            </>
+          )}
+        </button>
+      )}
 
       {/* ── Current Position ── */}
       <div className="rounded-sm border border-(--color-glass-border) bg-(--color-glass) p-3">

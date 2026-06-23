@@ -71,11 +71,8 @@ class StrategyMixin:
                 os.environ.setdefault(k, str(_threads))
 
             try:
-                for _gpu in tf.config.list_physical_devices("GPU"):
-                    try:
-                        tf.config.experimental.set_memory_growth(_gpu, True)
-                    except Exception:
-                        pass
+                from pipeline.runtime import apply_vram_lock
+                apply_vram_lock()
                 tf.config.set_soft_device_placement(True)
             except Exception:
                 pass
@@ -980,7 +977,10 @@ class StrategyMixin:
                             y_seq_train = y_seq_train[-max_train_windows:]
 
                         params["input_shape"] = (X_seq_train.shape[1], X_seq_train.shape[2])
-                        self.model = self.get_model(model_type, **params)
+                        _ws = getattr(self, "_warm_start_prev_deep_weights_path", None)
+                        self.model = self.get_model(model_type, warm_start_from=_ws, **params)
+                        if _ws:
+                            self._warm_start_deep_post_create(self.model, model_type, params)
                         # Tag for per-model CV caps (used in _fit_keras_with_cv_controls).
                         setattr(self.model, "_mlb_model_tag", "transformer")
 
@@ -1087,7 +1087,10 @@ class StrategyMixin:
                         params.setdefault("lstm_use_early_stopping", True)
                         params["input_shape"] = (X_seq_train.shape[1], X_seq_train.shape[2])
 
-                        self.model = self.get_model(model_type, **params)
+                        _ws = getattr(self, "_warm_start_prev_deep_weights_path", None)
+                        self.model = self.get_model(model_type, warm_start_from=_ws, **params)
+                        if _ws:
+                            self._warm_start_deep_post_create(self.model, model_type, params)
                         # Tag for per-model CV caps.
                         setattr(self.model, "_mlb_model_tag", "lstm")
                         cb = getattr(self.model, "early_stop_callback", None)
@@ -1148,7 +1151,10 @@ class StrategyMixin:
                     # ---------------------------------------------
                     else:
                         params["input_shape"] = (X_train.shape[1], 1)
-                        self.model = self.get_model(model_type, **params)
+                        _ws = getattr(self, "_warm_start_prev_deep_weights_path", None)
+                        self.model = self.get_model(model_type, warm_start_from=_ws, **params)
+                        if _ws:
+                            self._warm_start_deep_post_create(self.model, model_type, params)
                         setattr(self.model, "_mlb_model_tag", "lstm")
 
                         max_train_windows = int(params.get("deep_max_train_windows", 10000))
@@ -1281,7 +1287,10 @@ class StrategyMixin:
                             y_seq_train = y_seq_train[-max_train_windows:]
 
                         params["input_shape"] = (X_seq_train.shape[1], X_seq_train.shape[2])
-                        self.model = self.get_model(model_type, **params)
+                        _ws = getattr(self, "_warm_start_prev_deep_weights_path", None)
+                        self.model = self.get_model(model_type, warm_start_from=_ws, **params)
+                        if _ws:
+                            self._warm_start_deep_post_create(self.model, model_type, params)
                         # Tag for per-model CV caps.
                         setattr(self.model, "_mlb_model_tag", "cnn")
 
@@ -1320,7 +1329,10 @@ class StrategyMixin:
                     else:
                         # ---- 3D "image-like" feed path ----
                         params["input_shape"] = (X_train.shape[1], 1)
-                        self.model = self.get_model(model_type, **params)
+                        _ws = getattr(self, "_warm_start_prev_deep_weights_path", None)
+                        self.model = self.get_model(model_type, warm_start_from=_ws, **params)
+                        if _ws:
+                            self._warm_start_deep_post_create(self.model, model_type, params)
 
                         # Preserve exact rows vs old path: (X_train[::stride] then tail-slice)
                         _si = _start_idx_for_last_stride_rows(X_train.shape[0], train_stride, max_train_windows)
@@ -1413,10 +1425,53 @@ class StrategyMixin:
             else:
             
                 # Classical ML (logistic/logistic_ovr/svm/rf/xgb/...)
+                in_cv = bool(getattr(self, "_in_cv", False) or getattr(self, "_in_optuna_cv", False))
+                cfg = getattr(self, "features_config", {}) or {}
+                ws_enabled = bool(cfg.get("warm_start", False)) and (not in_cv) and (model_type in {"xgboost", "lightgbm", "catboost"})
+                ws_prev_path = getattr(self, "_warm_start_prev_tree_model_path", None)
+                ws_prev = None
+                if ws_enabled and ws_prev_path:
+                    import os as _os
+                    try:
+                        if _os.path.exists(ws_prev_path):
+                            import joblib as _jl
+                            ws_prev = _jl.load(ws_prev_path)
+                            if hasattr(ws_prev, 'classes_') and y_train is not None:
+                                prev_cls = set(int(c) for c in ws_prev.classes_)
+                                new_cls = set(int(c) for c in (np.unique(y_train) if hasattr(y_train, '__iter__') else []))
+                                if not prev_cls.issubset(new_cls):
+                                    log_print(f"[WARM-START] Class mismatch prev={prev_cls} new={new_cls}. Cold restart.", level="COMPACT")
+                                    ws_prev = None
+                    except Exception:
+                        ws_prev = None
+
                 self.model = self.get_model(model_type, **params)
             
                 # Fit FIRST (required for sklearn Pipelines / predict_proba).
-                self.model.fit(X_train, y_train)
+                if ws_enabled and ws_prev is not None:
+                    if model_type == "xgboost":
+                        self.model.fit(X_train, y_train, xgb_model=ws_prev)
+                    elif model_type == "lightgbm":
+                        self.model.fit(X_train, y_train, init_model=ws_prev)
+                    elif model_type == "catboost":
+                        self.model.fit(X_train, y_train, init_model=ws_prev)
+                    else:
+                        self.model.fit(X_train, y_train)
+                else:
+                    self.model.fit(X_train, y_train)
+
+                if ws_enabled and not in_cv:
+                    try:
+                        import tempfile, joblib as _jl2
+                        from pathlib import Path as _P
+                        _tmp = _P(tempfile.gettempdir()) / "kodatree_warm"
+                        _tmp.mkdir(parents=True, exist_ok=True)
+                        _idx = int(getattr(self, "_rt_month_idx", 0))
+                        _path = str(_tmp / f"{model_type}_month{_idx}.joblib")
+                        _jl2.dump(self.model, _path)
+                        self._warm_start_prev_tree_model_path = _path
+                    except Exception:
+                        pass
 
                 # --- S16.3: Capture feature importance for classical models ---
                 try:
@@ -3152,7 +3207,14 @@ class StrategyMixin:
 
                     # --- Store confidence stats for aggregated diagnostics ---
                     self._last_conf_stats_label = str(model_type)
-                    self._last_conf_stats_max_conf = np.asarray(max_conf, dtype=np.float32)
+                    try:
+                        _em = np.asarray(eval_mask, dtype=bool) if eval_mask is not None else None
+                        if _em is not None and _em.size == max_conf.size:
+                            self._last_conf_stats_max_conf = np.asarray(max_conf[_em], dtype=np.float32)
+                        else:
+                            self._last_conf_stats_max_conf = np.asarray(max_conf, dtype=np.float32)
+                    except Exception:
+                        self._last_conf_stats_max_conf = np.asarray(max_conf, dtype=np.float32)
 
                     # Print concise confidence summary (unchanged behaviour)
                     _in_cv = bool(getattr(self, "_in_optuna_cv", False) or getattr(self, "_in_cv", False))
@@ -3348,6 +3410,16 @@ class StrategyMixin:
                     try:
                         if getattr(self, "model", None) is not None:
                             self._last_trained_model = self.model
+                            in_cv = bool(getattr(self, "_in_cv", False) or getattr(self, "_in_optuna_cv", False))
+                            cfg = getattr(self, "features_config", {}) or {}
+                            ws_enabled = bool(cfg.get("warm_start", False)) and (not in_cv)
+                            if ws_enabled:
+                                try:
+                                    _idx = int(getattr(self, "_rt_month_idx", 0))
+                                    _path = self._serialize_deep_weights(self.model, model_type, _idx)
+                                    self._warm_start_prev_deep_weights_path = _path
+                                except Exception:
+                                    pass
                             self.model = None
                     except Exception:
                         pass

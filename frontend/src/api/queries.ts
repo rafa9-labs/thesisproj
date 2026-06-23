@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "./client";
 import { useJobStore } from "@/stores/useJobStore";
@@ -36,6 +37,9 @@ import type {
   FullCycleHistoryResponse,
   CancelFullCycleResponse,
   LogsResponse,
+  RetrainRequest,
+  RetrainStartedResponse,
+  RetrainStatus,
 } from "./schemas";
 
 export function useHealth() {
@@ -119,7 +123,8 @@ export function useJobStatus(jobId: string | null) {
 
 export function useJobResults(jobId: string | null) {
   const { data: statusData } = useJobStatus(jobId);
-  const isDone = statusData?.status === "completed" || statusData?.status === "failed";
+  const isDone = statusData?.status === "completed";
+  const isFailed = statusData?.status === "failed";
 
   return useQuery({
     queryKey: ["job-results", jobId],
@@ -128,7 +133,7 @@ export function useJobResults(jobId: string | null) {
       return data;
     },
     enabled: !!jobId && isDone,
-    refetchInterval: isDone ? false : 3_000,
+    refetchInterval: isDone || isFailed ? false : 3_000,
   });
 }
 
@@ -614,6 +619,16 @@ export function useLivePrices(pairs: string[], lookbackBars = 50, pollingEnabled
 }
 
 export function useCandles(pair: string, timeframe: string, limit = 200) {
+  const refetchMs = useMemo(() => {
+    const t = timeframe.toUpperCase();
+    if (t === "M1") return 15_000;
+    if (t === "M5") return 30_000;
+    if (t === "M15" || t === "M30") return 60_000;
+    if (t === "H1") return 120_000;
+    if (t === "H4") return 300_000;
+    return 300_000;
+  }, [timeframe]);
+
   return useQuery({
     queryKey: ["candles", pair, timeframe, limit],
     queryFn: async () => {
@@ -626,6 +641,7 @@ export function useCandles(pair: string, timeframe: string, limit = 200) {
       return data;
     },
     staleTime: 15_000,
+    refetchInterval: refetchMs,
     enabled: !!pair && !!timeframe,
   });
 }
@@ -800,7 +816,7 @@ export function useDownloadJobStatus(jobId: string | null) {
   });
 }
 
-const _progressCursors = new Map<string, number>();
+export const _progressCursors = new Map<string, number>();
 
 export function useBacktestProgress(jobId: string | null) {
   const handleWsEvent = useJobStore((s) => s.handleWsEvent);
@@ -872,6 +888,7 @@ export function useSaveModelFromJob() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deployed-models"] });
+      queryClient.invalidateQueries({ queryKey: ["deployed-models-for-live"] });
     },
   });
 }
@@ -888,6 +905,7 @@ export function useBulkDeleteModels() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deployed-models"] });
+      queryClient.invalidateQueries({ queryKey: ["deployed-models-for-live"] });
     },
   });
 }
@@ -904,6 +922,7 @@ export function useBulkActivateModels() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deployed-models"] });
+      queryClient.invalidateQueries({ queryKey: ["deployed-models-for-live"] });
     },
   });
 }
@@ -1195,6 +1214,43 @@ export function useCommitteeMetrics(sessionId: string | null) {
     },
     refetchInterval: 15_000,
     enabled: !!sessionId,
+  });
+}
+
+// ── Fast Loop Retrain ──────────────────────────────────────────
+
+export function useRetrainCommittee() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ sessionId, ...req }: { sessionId: string } & RetrainRequest) => {
+      const { data } = await apiClient.post<RetrainStartedResponse>(
+        `/trading/live/committee/${sessionId}/retrain`,
+        req,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["live", "committee", "metrics"] });
+    },
+  });
+}
+
+export function useRetrainStatus(sessionId: string | null) {
+  return useQuery({
+    queryKey: ["live", "committee", "retrain", sessionId],
+    queryFn: async () => {
+      if (!sessionId) return null;
+      const { data } = await apiClient.get<RetrainStatus>(
+        `/trading/live/committee/${sessionId}/retrain/status`,
+      );
+      return data;
+    },
+    enabled: !!sessionId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === "complete" || status === "failed" || status === "idle") return false;
+      return 2_000;
+    },
   });
 }
 

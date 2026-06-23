@@ -265,6 +265,7 @@ class EnsembleMixin:
             "_cv_last_eval_df", "_cv_fold_eval_frames",
             "_ensemble_win_cache", "_seq_cache",
             "_optuna_best_for_wfo", "_optuna_top5_for_wfo", "_optuna_consensus_pool_for_wfo",
+            "_optuna_study",
 
         ):
             try:
@@ -2016,6 +2017,15 @@ class EnsembleMixin:
             self.results = result_df.copy() if result_df is not None else None
             self.results_full = self.results
             self._cv_last_eval_df = None
+            try:
+                if result_df is not None and "max_conf" in result_df.columns:
+                    self._last_conf_stats_max_conf = result_df["max_conf"].to_numpy(dtype=np.float32, copy=False)
+                elif result_df is not None and "pred" in result_df.columns:
+                    _p = result_df["pred"].fillna(0).values
+                    _mc = np.maximum(np.abs(_p), 1.0 - np.abs(_p))
+                    self._last_conf_stats_max_conf = np.asarray(_mc, dtype=np.float32)
+            except Exception:
+                pass
 
 
         # Best-effort TF/GC cleanup between runs (non-invasive)

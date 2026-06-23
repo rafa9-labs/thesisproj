@@ -40,6 +40,8 @@ interface JobState {
   completedAt: Date | null;
   totalWork: number;
   completedWork: number;
+  elapsedSec: number;
+  etaSec: number | null;
   modelPhases: Map<string, ModelProgress>;
   hpoTrials: HpoTrialRow[];
   bestTrial: HpoTrialRow | null;
@@ -70,6 +72,30 @@ interface JobStore {
 }
 
 const MAX_JOBS = 5;
+
+function _evictOldest(next: Map<string, JobState>, completedJobIds: Set<string>): string | null {
+  let oldestCompletedId = "";
+  let oldestCompletedDate = new Date("2099-12-31");
+  let oldestAnyId = "";
+  let oldestAnyDate = new Date();
+  for (const [id, j] of next) {
+    if (j.createdAt < oldestAnyDate) {
+      oldestAnyDate = j.createdAt;
+      oldestAnyId = id;
+    }
+    if ((j.status === "completed" || j.status === "failed") && j.createdAt < oldestCompletedDate) {
+      oldestCompletedDate = j.createdAt;
+      oldestCompletedId = id;
+    }
+  }
+  const evictId = oldestCompletedId || oldestAnyId;
+  if (evictId) {
+    next.delete(evictId);
+    completedJobIds.delete(evictId);
+    _processedEventIds.delete(evictId);
+  }
+  return evictId;
+}
 
 function _toMap<K, V>(value: unknown): Map<K, V> {
   if (value instanceof Map) return new Map(value) as Map<K, V>;
@@ -136,24 +162,11 @@ export const useJobStore = create<JobStore>()(
       startJob: (jobId, pair, models) =>
         set((state) => {
           const next = _toMap(state.activeJobs);
+          const nextCompleted = _toSet(state.completedJobIds);
 
-          // FIFO: if at capacity, evict oldest
+          // FIFO: if at capacity, evict oldest completed, then oldest any
           if (next.size >= MAX_JOBS) {
-            let oldestId = "";
-            let oldestDate = new Date();
-            for (const [id, j] of next) {
-              if (j.createdAt < oldestDate) {
-                oldestDate = j.createdAt;
-                oldestId = id;
-              }
-            }
-            if (oldestId) {
-              next.delete(oldestId);
-              const nextCompleted = _toSet(state.completedJobIds);
-              nextCompleted.delete(oldestId);
-              _processedEventIds.delete(oldestId);
-              state.completedJobIds = nextCompleted;
-            }
+            _evictOldest(next, nextCompleted);
           }
 
           next.set(jobId, {
@@ -171,6 +184,8 @@ export const useJobStore = create<JobStore>()(
             completedAt: null,
             totalWork: 0,
             completedWork: 0,
+            elapsedSec: 0,
+            etaSec: null,
             modelPhases: new Map(),
             hpoTrials: [],
             bestTrial: null,
@@ -188,6 +203,16 @@ export const useJobStore = create<JobStore>()(
           const next = _toMap(state.activeJobs);
           const existing = next.get(jobId);
           if (existing) {
+            if (existing.status === "stale") {
+              next.set(jobId, {
+                ...existing,
+                status: "running",
+                pair: pair || existing.pair,
+                models: models.length > 0 ? models : existing.models,
+                progressText: existing.progressText || "Reconnecting...",
+              });
+              return { activeJobs: next };
+            }
             const needsUpdate = existing.pair !== pair || existing.models.join(",") !== models.join(",");
             if (needsUpdate) {
               next.set(jobId, { ...existing, pair, models });
@@ -196,23 +221,11 @@ export const useJobStore = create<JobStore>()(
             return state;
           }
 
-          // FIFO: if at capacity, evict oldest
+          // FIFO: if at capacity, evict oldest completed, then oldest any
           if (next.size >= MAX_JOBS) {
-            let oldestId = "";
-            let oldestDate = new Date();
-            for (const [id, j] of next) {
-              if (j.createdAt < oldestDate) {
-                oldestDate = j.createdAt;
-                oldestId = id;
-              }
-            }
-            if (oldestId) {
-              next.delete(oldestId);
-              const nextCompleted = _toSet(state.completedJobIds);
-              nextCompleted.delete(oldestId);
-              _processedEventIds.delete(oldestId);
-              state.completedJobIds = nextCompleted;
-            }
+            const nextCompleted = _toSet(state.completedJobIds);
+            _evictOldest(next, nextCompleted);
+            state.completedJobIds = nextCompleted;
           }
 
           next.set(jobId, {
@@ -230,6 +243,8 @@ export const useJobStore = create<JobStore>()(
             completedAt: null,
             totalWork: 0,
             completedWork: 0,
+            elapsedSec: 0,
+            etaSec: null,
             modelPhases: new Map(),
             hpoTrials: [],
             bestTrial: null,
@@ -278,7 +293,7 @@ export const useJobStore = create<JobStore>()(
       const job = next.get(jobId);
       if (!job) {
         const eventModel = (event as { model?: string }).model;
-        next.set(jobId, {
+        const newJob: JobState = {
           jobId,
           pair: "",
           models: eventModel ? [eventModel] : [],
@@ -300,12 +315,30 @@ export const useJobStore = create<JobStore>()(
           oosEquity: [],
           periodTotals: 0,
           activeTab: "hpo-and-results",
-          cycles: [],
-        });
+          cycles: eventModel ? [{
+            model: eventModel,
+            cycleNumber: 1,
+            phase: "hpo" as const,
+            hpoTrials: [],
+            bestTrial: null,
+            hpoTrialCurrent: 0,
+            hpoTrialTotal: 0,
+            testMonths: [],
+          }] : [],
+        };
+        next.set(jobId, newJob);
+        if (event.event === "cycle_started" || event.event === "job_started" ||
+            event.event === "hpo_progress") {
+          return { activeJobs: next };
+        }
+      }
+
+      const entry = next.get(jobId);
+      if (!entry) {
         return { activeJobs: next };
       }
 
-      const updated = { ...job };
+      const updated = { ...entry };
 
       if (event.event === "job_started") {
         updated.status = "running";
@@ -315,6 +348,7 @@ export const useJobStore = create<JobStore>()(
       }
 
       if (event.event === "cycle_started") {
+        const existingIdx = updated.cycles.findIndex((c) => c.model === event.model);
         const cycle: CycleState = {
           model: event.model,
           cycleNumber: event.cycle_number ?? updated.cycles.length + 1,
@@ -325,7 +359,14 @@ export const useJobStore = create<JobStore>()(
           hpoTrialTotal: 0,
           testMonths: [],
         };
-        updated.cycles = [...updated.cycles, cycle];
+        if (existingIdx >= 0) {
+          const existing = updated.cycles[existingIdx];
+          updated.cycles = updated.cycles.map((c, i) => i === existingIdx
+            ? { ...existing, ...cycle, hpoTrials: existing.hpoTrials, bestTrial: existing.bestTrial }
+            : c);
+        } else {
+          updated.cycles = [...updated.cycles, cycle];
+        }
         updated.currentModel = event.model;
         updated.progressText = `Cycle ${cycle.cycleNumber}: ${event.model} started`;
         updated.activeTab = "hpo-and-results";
@@ -403,6 +444,8 @@ export const useJobStore = create<JobStore>()(
         updated.completedWork = event.completed_work ?? updated.completedWork;
         updated.totalWork = event.total_work ?? updated.totalWork;
         updated.progress = event.progress_pct ?? updated.progress;
+        updated.elapsedSec = event.elapsed_seconds ?? updated.elapsedSec;
+        updated.etaSec = event.eta_seconds ?? updated.etaSec;
         updated.progressText = `HPO: trial ${trial}/${totalTrials} (${m})`;
         updated.cycles = updated.cycles.map((c) => {
           if (c.model === m) {
@@ -447,6 +490,19 @@ export const useJobStore = create<JobStore>()(
             }
             return c;
           });
+          const hasMatchingCycle = updated.cycles.some((c) => c.model === modelName);
+          if (!hasMatchingCycle) {
+            updated.cycles = [...updated.cycles, {
+              model: modelName,
+              cycleNumber: updated.cycles.length + 1,
+              phase: "hpo" as const,
+              hpoTrials: [row],
+              bestTrial: row.score != null ? row : null,
+              hpoTrialCurrent: row.trial_number,
+              hpoTrialTotal: row.trial_number,
+              testMonths: [],
+            }];
+          }
         }
       }
 
@@ -472,6 +528,8 @@ export const useJobStore = create<JobStore>()(
         updated.completedWork = event.completed_work ?? updated.completedWork;
         updated.totalWork = event.total_work ?? updated.totalWork;
         updated.progress = event.progress_pct ?? updated.progress;
+        updated.elapsedSec = event.elapsed_seconds ?? updated.elapsedSec;
+        updated.etaSec = event.eta_seconds ?? updated.etaSec;
         updated.progressText = `${m}: month ${month}/${totalMonths}`;
       }
 
@@ -524,6 +582,11 @@ export const useJobStore = create<JobStore>()(
           sharpe_gap_pct: event.sharpe_gap_pct,
           signals_raw: event.signals_raw,
           signals_passed_gate: event.signals_passed_gate,
+          directional_accuracy: event.directional_accuracy,
+          active_rate: event.active_rate,
+          signal_coverage: event.signal_coverage,
+          profit_per_hit: event.profit_per_hit,
+          outperformance: event.outperformance,
         };
         updated.oosPeriods = [...updated.oosPeriods, periodResult];
         if (event.equity != null && event.equity_bh != null) {
@@ -685,10 +748,20 @@ export const useJobStore = create<JobStore>()(
   partialize: (state) => ({
     activeJobs: state.activeJobs,
     completedJobIds: state.completedJobIds,
-    selectedJobId: state.selectedJobId,
+    selectedJobId: state.selectedJobId ?? null,
     completedJobs: state.completedJobs,
     unreadCompletedCount: state.unreadCompletedCount,
   }),
+  onRehydrateStorage: () => (state) => {
+    if (state && state.activeJobs instanceof Map) {
+      state.activeJobs.forEach((job) => {
+        if (job.status === "pending" || job.status === "running") {
+          job.status = "stale";
+        }
+      });
+      state.selectedJobId = null;
+    }
+  },
 },
 ),
 );

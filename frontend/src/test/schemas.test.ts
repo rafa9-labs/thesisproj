@@ -32,6 +32,14 @@ describe("API Schema types — runtime shape validation", () => {
       trades: null,
       hpo_param_importance: null,
       hpo_trials: null,
+      best_study: null,
+      hpo_study_meta: null,
+      hpo_learning_summary: null,
+      hpo_sensitivity: null,
+      overfitting: null,
+      walkforward_periods: null,
+      diagnostics: null,
+      summary_text: null,
     };
     expect(m.model).toBe("xgboost");
     expect(m.sharpe).toBeCloseTo(1.47);
@@ -61,6 +69,14 @@ describe("API Schema types — runtime shape validation", () => {
       trades: null,
       hpo_param_importance: null,
       hpo_trials: null,
+      best_study: null,
+      hpo_study_meta: null,
+      hpo_learning_summary: null,
+      hpo_sensitivity: null,
+      overfitting: null,
+      walkforward_periods: null,
+      diagnostics: null,
+      summary_text: null,
     };
     expect(m.sharpe).toBeNull();
     expect(m.total_trades).toBeNull();

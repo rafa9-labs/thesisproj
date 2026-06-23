@@ -14,6 +14,19 @@ import { useCandles } from "@/api/queries";
 import { TIMEFRAMES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
+const TF_SECONDS: Record<string, number> = {
+  M15: 900,
+  M30: 1800,
+  H1: 3600,
+  H2: 7200,
+  H4: 14400,
+};
+
+function clockBarStartEpoch(tsEpoch: number, timeframe: string): number {
+  const seconds = TF_SECONDS[timeframe] || 60;
+  return Math.floor(tsEpoch / seconds) * seconds;
+}
+
 export interface OverlayLine {
   data: { time: number; value: number }[];
   color: string;
@@ -64,6 +77,7 @@ export function CandlestickChart({
   const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<number> | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const markersRef = useRef<ChartMarker[]>([]);
+  const lastBarTimeRef = useRef<number | null>(null);
 
   const { data, isLoading } = useCandles(pair, timeframe, limit);
   const candles = useMemo(() => data?.candles ?? [], [data]);
@@ -156,23 +170,37 @@ export function CandlestickChart({
     const candleSeries = candleSeriesRef.current;
     if (!candleSeries) return;
 
-    candleSeries.setData(
-      candles.map((c) => ({
+    const seen = new Set<number>();
+    const mapped = candles
+      .map((c) => ({
         time: c.t as number,
         open: c.o,
         high: c.h,
         low: c.l,
         close: c.c,
-      })),
-    );
+      }))
+      .filter((c) => {
+        if (seen.has(c.time)) return false;
+        seen.add(c.time);
+        return true;
+      });
+    candleSeries.setData(mapped);
+    if (mapped.length > 0) lastBarTimeRef.current = mapped[mapped.length - 1].time;
 
     if (showVolume && volSeriesRef.current) {
+      const volSeen = new Set<number>();
       volSeriesRef.current.setData(
-        candles.map((c) => ({
-          time: c.t as number,
-          value: c.volume || 0,
-          color: c.c >= c.o ? "#10B98140" : "#F43F5E40",
-        })),
+        candles
+          .map((c) => ({
+            time: c.t as number,
+            value: c.volume || 0,
+            color: c.c >= c.o ? "#10B98140" : "#F43F5E40",
+          }))
+          .filter((v) => {
+            if (volSeen.has(v.time)) return false;
+            volSeen.add(v.time);
+            return true;
+          }),
       );
     }
 
@@ -210,22 +238,40 @@ export function CandlestickChart({
   }, [data, isLoading, pair, overlayLines, showVolume, candles]);
 
   useEffect(() => {
-    if (!candleSeriesRef.current) return;
-    if (liveCandle) {
-      candleSeriesRef.current.update(liveCandle);
-      return;
-    }
-    if (livePrice != null && candles.length > 0) {
-      const last = candles[candles.length - 1];
+    if (!candleSeriesRef.current || !liveCandle) return;
+    candleSeriesRef.current.update(liveCandle);
+    lastBarTimeRef.current = liveCandle.time;
+  }, [liveCandle, candles]);
+
+  useEffect(() => {
+    if (!candleSeriesRef.current || livePrice == null || candles.length === 0) return;
+
+    const nowEpoch = Math.floor(Date.now() / 1000);
+    const barStartEpoch = clockBarStartEpoch(nowEpoch, timeframe);
+
+    const lastCandle = candles[candles.length - 1];
+    const lastTime = lastCandle.t as number;
+
+    if (barStartEpoch === lastTime) {
       candleSeriesRef.current.update({
-        time: last.t as number,
-        open: last.o,
-        high: Math.max(last.h, livePrice),
-        low: Math.min(last.l, livePrice),
+        time: barStartEpoch,
+        open: lastCandle.o,
+        high: Math.max(lastCandle.h, livePrice),
+        low: Math.min(lastCandle.l, livePrice),
+        close: livePrice,
+      });
+    } else if (barStartEpoch > lastTime) {
+      candleSeriesRef.current.update({
+        time: barStartEpoch,
+        open: livePrice,
+        high: livePrice,
+        low: livePrice,
         close: livePrice,
       });
     }
-  }, [liveCandle, livePrice, candles]);
+
+    lastBarTimeRef.current = barStartEpoch;
+  }, [livePrice, candles, timeframe]);
 
   useEffect(() => {
     if (!chartMarkers) return;

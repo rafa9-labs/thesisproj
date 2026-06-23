@@ -16,6 +16,12 @@ const STATUS_COLORS: Record<string, string> = {
   failed: "var(--color-accent-danger)",
 };
 
+function _safeGet(store: unknown, id: string) {
+  if (store instanceof Map) return store.get(id);
+  if (store && typeof store === "object") return (store as Record<string, unknown>)[id];
+  return undefined;
+}
+
 export function JobPillStrip({ jobs, selectedJobId, onSelect }: Props) {
   const navigate = useNavigate();
   const jobStore = useJobStore((s) => s.activeJobs);
@@ -30,7 +36,7 @@ export function JobPillStrip({ jobs, selectedJobId, onSelect }: Props) {
     >
       {jobs.map((j) => {
         const isSelected = j.job_id === selectedJobId;
-        const local = jobStore.get(j.job_id);
+        const local = _safeGet(jobStore, j.job_id) as { progress?: number } | undefined;
         const progress = local?.progress ?? 0;
         const isDone = j.status === "completed" || j.status === "failed";
 
@@ -64,17 +70,26 @@ export function JobPillStrip({ jobs, selectedJobId, onSelect }: Props) {
             )}
             {isDone && (
               <>
-                <button
+                <span
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => {
                     e.stopPropagation();
                     removeJob(j.job_id);
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      removeJob(j.job_id);
+                    }
+                  }}
                   title="Dismiss"
                   aria-label="Dismiss job"
-                  className="flex items-center justify-center rounded p-0.5 text-(--color-text-dim) transition-colors hover:bg-[rgba(242,54,69,0.12)] hover:text-(--color-accent-danger)"
+                  className="flex cursor-pointer items-center justify-center rounded p-0.5 text-(--color-text-dim) transition-colors hover:bg-[rgba(242,54,69,0.12)] hover:text-(--color-accent-danger)"
                 >
                   <X size={12} strokeWidth={2} />
-                </button>
+                </span>
                 <span
                   onClick={(e) => {
                     e.stopPropagation();

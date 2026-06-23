@@ -1,4 +1,4 @@
-import { useModels, useLicenseStatus } from "@/api/queries";
+import { useModels } from "@/api/queries";
 import { useBacktestStore } from "@/stores/useBacktestStore";
 import { Panel, PanelHeader } from "@/components/shared/Panel";
 import { ModelCard } from "@/components/shared/ModelCard";
@@ -7,14 +7,12 @@ import type { ModelInfo } from "@/api/schemas";
 
 export function ModelSelector() {
   const { data: models, isLoading } = useModels();
-  const { data: license } = useLicenseStatus();
   const selected = useBacktestStore((s) => s.selectedModels);
   const toggleModel = useBacktestStore((s) => s.toggleModel);
 
   const modelsSafe = Array.isArray(models) ? models : [];
 
   const modelsByCategory = categorizeModels(modelsSafe);
-  const lockedModels = new Set(license?.locked_models ?? []);
 
   return (
     <Panel>
@@ -59,7 +57,6 @@ export function ModelSelector() {
                       model={m}
                       isSelected={selected.includes(m.name)}
                       isFull={selected.length >= 5 && !selected.includes(m.name)}
-                      isLocked={lockedModels.has(m.name)}
                       categoryKey={catKey}
                       categoryColor={cat.color}
                       onToggle={() => toggleModel(m.name)}

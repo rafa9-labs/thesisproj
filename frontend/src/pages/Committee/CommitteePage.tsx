@@ -50,7 +50,7 @@ export function CommitteePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.selectedHistoryJobId]);
 
-  const { data: status } = useFullCycleStatus(jobId);
+  const { data: status, isLoading: statusLoading } = useFullCycleStatus(jobId);
   const terminalPhases = new Set([
     "completed",
     "failed",
@@ -139,7 +139,7 @@ export function CommitteePage() {
   const hasModels = store.selectedModels.length > 0;
   const canDeploy = hasModels && !startMutation.isPending;
 
-  const showMonitor = isRunning || isDone;
+  const showMonitor = isRunning || isDone || (statusLoading && !!jobId);
   const tabs = useMemo(
     () => (showMonitor ? [...CONFIG_TABS, MONITOR_TAB] : CONFIG_TABS),
     [showMonitor],
@@ -162,6 +162,11 @@ export function CommitteePage() {
         {/* Monitor tab — shows progress when running, progress + results when done */}
         {activeTab === "monitor" && (
           <div className="flex flex-col gap-4">
+            {statusLoading && !status && (
+              <div className="p-[28px] text-center text-[11px] text-(--color-text-muted)">
+                Loading status...
+              </div>
+            )}
             {isRunning && (
               <FullCycleProgress jobId={jobId!} onCancel={() => cancelMutation.mutate()} />
             )}

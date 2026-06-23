@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import json
-import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from pipeline.data_sqlite import DataStore
+
+_STALE_TIMEOUT_MINUTES = 90
 
 
 class JobManager:
@@ -15,6 +16,51 @@ class JobManager:
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _stale_threshold(self) -> str:
+        return (datetime.now(timezone.utc) - timedelta(minutes=_STALE_TIMEOUT_MINUTES)).isoformat()
+
+    def _cleanup_stale_jobs(self) -> int:
+        """Mark stale pending/running jobs as failed. Returns count cleaned.
+        
+        Before marking 'running' jobs as failed, checks Celery task state
+        to avoid killing jobs whose worker is still active but hasn't
+        updated updated_at recently (e.g. during long HPO runs).
+        """
+        threshold = self._stale_threshold()
+        now = self._now()
+        # Fetch stale jobs to inspect task state
+        with self.store._cursor() as (conn, cur):
+            cur.execute(
+                "SELECT id, status, task_id FROM jobs "
+                "WHERE status IN ('pending', 'running') AND updated_at < ?",
+                (threshold,),
+            )
+            stale_rows = cur.fetchall()
+        stale_ids = []
+        for row in stale_rows:
+            job_id, status, task_id = row
+            if status == "running" and task_id:
+                try:
+                    from celery.result import AsyncResult
+                    ar = AsyncResult(task_id)
+                    if ar.state in ("STARTED", "RETRY"):
+                        continue
+                except Exception:
+                    pass
+            stale_ids.append(job_id)
+        if not stale_ids:
+            return 0
+        count = 0
+        with self.store._cursor() as (conn, cur):
+            for jid in stale_ids:
+                cur.execute(
+                    "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'running')",
+                    ("failed", f"Job orphaned -- no update for {_STALE_TIMEOUT_MINUTES}+ min", now, jid),
+                )
+                count += cur.rowcount
+            conn.commit()
+        return count
 
     def create_job(self, job_id: str, job_type: str, config: Dict[str, Any]) -> Dict:
         """Backward-compatible wrapper that bypasses the concurrency limit."""
@@ -29,6 +75,7 @@ class JobManager:
     def create_job_atomic(self, job_id: str, job_type: str, config: Dict[str, Any], max_active: int = 1) -> Dict:
         now = self._now()
         with self.store._cursor() as (conn, cur):
+            self._cleanup_stale_jobs()
             cur.execute(
                 "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running')",
                 (job_type,),
@@ -36,6 +83,21 @@ class JobManager:
             active_count = cur.fetchone()[0]
             if active_count >= max_active:
                 raise RuntimeError("Maximum concurrent backtest jobs reached")
+            # Per-model dedup: reject identical model+pair combo
+            pair = str(config.get("pair", "")).upper()
+            models_key = ",".join(sorted(config.get("models", [])))
+            cur.execute(
+                "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running') "
+                "AND json_extract(config, '$.pair') = ? "
+                "AND json_extract(config, '$.models') = ?",
+                (job_type, pair, json.dumps(config.get("models", []))),
+            )
+            dup_count = cur.fetchone()[0]
+            if dup_count > 0:
+                raise RuntimeError(
+                    f"A backtest for {models_key} on {pair} is already running or pending. "
+                    f"Wait for it to complete before submitting an identical run."
+                )
             cur.execute(
                 "INSERT INTO jobs (id, type, status, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (job_id, job_type, "pending", json.dumps(config), now, now),
@@ -43,6 +105,7 @@ class JobManager:
         return {"id": job_id, "type": job_type, "status": "pending", "created_at": now}
 
     def get_active_jobs(self, job_type: Optional[str] = None) -> List[Dict]:
+        self._cleanup_stale_jobs()
         sql = "SELECT * FROM jobs WHERE status IN ('pending', 'running')"
         params: list = []
         if job_type:
@@ -83,6 +146,47 @@ class JobManager:
             count = cur.rowcount
             conn.commit()
             return count
+
+    def touch_job(self, job_id: str) -> bool:
+        """Update updated_at to prevent stale-timeout kills during long execution."""
+        now = self._now()
+        with self.store._cursor() as (conn, cur):
+            cur.execute(
+                "UPDATE jobs SET updated_at = ? WHERE id = ?",
+                (now, job_id),
+            )
+            return cur.rowcount > 0
+
+    def set_task_id(self, job_id: str, task_id: str) -> bool:
+        """Store the Celery task ID for cross-worker revocation."""
+        now = self._now()
+        with self.store._cursor() as (conn, cur):
+            cur.execute(
+                "UPDATE jobs SET task_id = ?, updated_at = ? WHERE id = ?",
+                (task_id, now, job_id),
+            )
+            return cur.rowcount > 0
+
+    def get_task_id(self, job_id: str) -> Optional[str]:
+        """Retrieve the stored Celery task ID."""
+        with self.store._cursor() as (conn, cur):
+            cur.execute("SELECT task_id FROM jobs WHERE id = ?", (job_id,))
+            row = cur.fetchone()
+            return row[0] if row and row[0] else None
+
+    def ensure_job_exists(self, job_id: str, job_type: str = "backtest", config: Optional[Dict] = None) -> bool:
+        """Insert a job row if it doesn't exist (e.g. after a race-condition delete).
+        Returns True if inserted, False if already existed."""
+        now = self._now()
+        with self.store._cursor() as (conn, cur):
+            cur.execute("SELECT COUNT(1) FROM jobs WHERE id = ?", (job_id,))
+            if cur.fetchone()[0] > 0:
+                return False
+            cur.execute(
+                "INSERT INTO jobs (id, type, status, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (job_id, job_type, "running", json.dumps(config) if config else "{}", now, now),
+            )
+            return True
 
     def update_status(self, job_id: str, status: str, result: Optional[Dict] = None, error: Optional[str] = None):
         now = self._now()

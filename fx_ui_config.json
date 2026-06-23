@@ -4,8 +4,8 @@
   "theme": "dark",
   "apiUrl": "http://localhost:8002",
   "dataDir": "",
-  "oandaApiKey": null,
-  "oandaAccountId": null,
+  "oandaApiKey": "a27fa1061e489e2410ad1d3ebe139744-b67dc0ccaf1ecb0418c7d1bcee4a6ae2",
+  "oandaAccountId": "101-011-31377208-002",
   "threadBudget": 4,
   "mixedPrecision": true,
   "sidebarCollapsed": false,
@@ -14,5 +14,7 @@
   "liveNewsBlendWeight": 0.1,
   "maxConcurrentBacktests": 4,
   "gpuEnabled": true,
-  "maxConcurrentGpu": 1
+  "maxConcurrentGpu": 1,
+  "notificationsEnabled": true,
+  "notificationSound": true
 }

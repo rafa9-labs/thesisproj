@@ -77,6 +77,7 @@ def main():
     os.environ["TRADING_COSTS"] = "1" if trading_costs else "0"
     os.environ["SMOKE_TEST"] = "0"
     os.environ["MLB_THREADS"] = "1"
+    os.environ["WSL_PROGRESS_JOB_ID"] = _wsl_job_id
 
     _wsl_results_path = os.path.join(job_config.get("results_dir", "."),
                                      f"wsl_result_{_wsl_job_id}.json")

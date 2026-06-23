@@ -8,6 +8,7 @@ import {
   useDeleteSavedCommittee,
 } from "@/api/queries";
 import { Box, Trash2, Play, Pencil, Star, Search } from "lucide-react";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 interface DeployedModel {
   id: string;
@@ -78,6 +79,12 @@ export function DeployedModelsPage() {
   const [customNames, setCustomNames] = useState<Record<string, string>>({});
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ open: false, title: "", message: "", onConfirm: () => {} });
   const navigate = useNavigate();
 
   const modelsFromCommittees: DeployedModel[] = useMemo(() => {
@@ -199,10 +206,16 @@ export function DeployedModelsPage() {
   function handleBulkDelete() {
     const ids = [...checkedIds];
     if (ids.length === 0) return;
-    if (!confirm(`Delete ${ids.length} model(s)?`)) return;
-    bulkDelete.mutate(ids, {
-      onSuccess: () => clearChecks(),
-      onError: (e: unknown) => setBulkError((e as Error).message),
+    setConfirmState({
+      open: true,
+      title: "Delete Models",
+      message: `Are you sure you want to permanently delete ${ids.length} selected model(s)?\n\nThis action cannot be undone.`,
+      onConfirm: () => {
+        bulkDelete.mutate(ids, {
+          onSuccess: () => { clearChecks(); setConfirmState((p) => ({ ...p, open: false })); },
+          onError: (e: unknown) => setBulkError((e as Error).message),
+        });
+      },
     });
   }
 
@@ -416,9 +429,16 @@ export function DeployedModelsPage() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (confirm(`Delete Consensus +${m.consensus_model_count} (${m.id.slice(0, 8)}...)?`)) {
-                  deleteCommittee.mutate(m.id);
-                }
+                const name = `Consensus +${m.consensus_model_count} (${m.id.slice(0, 8)})`;
+                setConfirmState({
+                  open: true,
+                  title: "Delete Committee",
+                  message: `Are you sure you want to permanently delete "${name}"?\n\nThis action cannot be undone.`,
+                  onConfirm: () => {
+                    deleteCommittee.mutate(m.id);
+                    setConfirmState((p) => ({ ...p, open: false }));
+                  },
+                });
               }}
               className="flex items-center gap-1 rounded-md border border-(--color-glass-border) bg-(--color-glass) px-3 py-1.5 text-[10px] font-semibold tracking-[0.04em] text-rose-400 uppercase transition-all hover:brightness-110"
             >
@@ -438,9 +458,16 @@ export function DeployedModelsPage() {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (confirm(`Delete model ${m.model_type} (${m.id.slice(0, 8)}...)?`)) {
-                    deleteModel.mutate(m.id);
-                  }
+                  const name = getDisplayName(m);
+                  setConfirmState({
+                    open: true,
+                    title: "Delete Model",
+                    message: `Are you sure you want to permanently delete "${name}" (${m.id.slice(0, 8)}...)?\n\nThis action cannot be undone.`,
+                    onConfirm: () => {
+                      deleteModel.mutate(m.id);
+                      setConfirmState((p) => ({ ...p, open: false }));
+                    },
+                  });
                 }}
                 className="flex items-center gap-1 rounded-md border border-(--color-glass-border) bg-(--color-glass) px-2 py-1.5 text-[10px] font-semibold tracking-[0.04em] text-rose-400 uppercase transition-all hover:brightness-110"
               >
@@ -586,6 +613,17 @@ export function DeployedModelsPage() {
       <div className="flex flex-col gap-2">
         {filtered.map(renderRow)}
       </div>
+
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmLabel="Delete"
+        variant="danger"
+        isLoading={deleteModel.isPending || bulkDelete.isPending || deleteCommittee.isPending}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((p) => ({ ...p, open: false }))}
+      />
     </div>
   );
 }

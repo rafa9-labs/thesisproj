@@ -179,11 +179,16 @@ def build_trade_log_from_df(df, bar_minutes=None, price_col="close", pip_multipl
         "entry_price",
         "exit_price",
         "pips",
+        "barrier_hit",
     ]
 
-    _price_available = price_col is not None and price_col in df.columns
-    if _price_available:
-        prices = pd.to_numeric(df[price_col]).values.astype(float)
+    _available_prices = None
+    for _try_col in (price_col, "close", "Close", "mid_close", "price"):
+        if _try_col is not None and _try_col in df.columns:
+            _available_prices = pd.to_numeric(df[_try_col]).values.astype(float)
+            break
+    if _available_prices is not None:
+        prices = _available_prices
     else:
         prices = None
 
@@ -223,7 +228,7 @@ def build_trade_log_from_df(df, bar_minutes=None, price_col="close", pip_multipl
     current_side = 0.0
     entry_i = None
 
-    def close_trade(exit_i: int):
+    def close_trade(exit_i: int, reason: str = "signal"):
         nonlocal current_side, entry_i
         if entry_i is None:
             return
@@ -264,6 +269,7 @@ def build_trade_log_from_df(df, bar_minutes=None, price_col="close", pip_multipl
                 "entry_price": entry_price,
                 "exit_price": exit_price,
                 "pips": pips,
+                "barrier_hit": reason,
             }
         )
         current_side = 0.0
@@ -278,10 +284,10 @@ def build_trade_log_from_df(df, bar_minutes=None, price_col="close", pip_multipl
         elif current_side != 0.0:
             if side == 0.0:
                 # Closing into flat -> close using this bar
-                close_trade(i)
+                close_trade(i, "signal")
             elif side != current_side:
                 # Flip: close old trade at i-1, open new one at i
-                close_trade(i - 1)
+                close_trade(i - 1, "signal")
                 current_side = side
                 entry_i = i
             else:
@@ -290,7 +296,7 @@ def build_trade_log_from_df(df, bar_minutes=None, price_col="close", pip_multipl
 
     # If still in a trade at the end, close at the last bar
     if current_side != 0.0 and entry_i is not None:
-        close_trade(len(df) - 1)
+        close_trade(len(df) - 1, "eod")
 
     if not trades:
         return pd.DataFrame(columns=cols)

@@ -372,14 +372,8 @@ class DeepMixin:
 
         try:
             import tensorflow as tf
-            try:
-                for _gpu in tf.config.list_physical_devices("GPU"):
-                    try:
-                        tf.config.experimental.set_memory_growth(_gpu, True)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+            from pipeline.runtime import apply_vram_lock
+            apply_vram_lock()
             try:
                 tf.config.set_soft_device_placement(True)
             except Exception:
@@ -612,6 +606,64 @@ class DeepMixin:
                 self._maybe_tf_cleanup()
             except Exception:
                 pass
+
+    @staticmethod
+    def _serialize_deep_weights(model, model_type: str, period_idx: int) -> str:
+        """Save Keras weights to temp dir before clear_session(); return path for reload.
+
+        The Serialize-and-Reload pattern: save weights, then clear_session().
+        On the next fold, build a fresh architecture and load_weights() from the
+        returned path.  The temp dir is NOT /dev/shm (Linux) -- on Windows we use
+        ``tempfile.gettempdir()`` which resides on the system drive (typically SSD).
+        """
+        import tempfile
+        from pathlib import Path
+
+        tmp = Path(tempfile.gettempdir()) / "kodadeep_warm"
+        tmp.mkdir(parents=True, exist_ok=True)
+        path = tmp / f"{model_type}_month{period_idx}.weights.h5"
+        model.save_weights(str(path))
+        return str(path)
+
+    @staticmethod
+    def _load_deep_weights(model, weights_path: str) -> bool:
+        """Load Keras weights from a previously serialized path.  Returns True on success."""
+        import os
+        if not weights_path or not os.path.exists(weights_path):
+            return False
+        try:
+            model.load_weights(weights_path)
+            return True
+        except Exception:
+            return False
+
+    def _warm_start_deep_post_create(self, model, model_type: str, params: dict):
+        """After deep model creation: if warm-starting, recompile with reduced LR.
+
+        Uses the formula:  eta_warm = max(eta_HPO * gamma_decay, eta_floor)
+        where eta_floor is hardcoded to 1e-6 and gamma_decay defaults to 0.1.
+
+        Only applies during real-trading simulation (skipped during CV).
+        """
+        in_cv = bool(getattr(self, "_in_cv", False) or getattr(self, "_in_optuna_cv", False))
+        if in_cv:
+            return
+        cfg = getattr(self, "features_config", {}) or {}
+        ws_enabled = bool(cfg.get("warm_start", False))
+        if not ws_enabled:
+            return
+        ws_path = getattr(self, "_warm_start_prev_deep_weights_path", None)
+        if not ws_path:
+            return
+        try:
+            hpo_lr = float(params.get("learning_rate", 1e-3))
+            gamma = float(cfg.get("warm_start_lr_multiplier", 0.1))
+            eta_floor = float(cfg.get("warm_start_lr_floor", 1e-6))
+            eta_warm = max(hpo_lr * gamma, eta_floor)
+            opt = model.optimizer
+            opt.learning_rate.assign(eta_warm)
+        except Exception:
+            pass
 
     def _maybe_tf_cleanup(self):
         """Best-effort memory cleanup hook (primarily for Optuna CV)."""

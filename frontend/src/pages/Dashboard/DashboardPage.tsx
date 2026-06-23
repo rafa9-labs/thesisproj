@@ -5,6 +5,7 @@ import { useAppStore } from "@/stores/useAppStore";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import apiClient from "@/api/client";
 import { useDashboardWaterfall } from "@/hooks/useDashboardWaterfall";
+import { useLivePrices } from "@/api/queries";
 import { AlgoPerformancePanel } from "./AlgoPerformancePanel";
 import { SentimentNewsWidget } from "./SentimentNewsWidget";
 import { PriceTicker } from "./PriceTicker";
@@ -81,6 +82,19 @@ export function DashboardPage() {
     committeeKpis,
     isCommitteesLoading,
   } = useDashboardWaterfall(activePair, !demoMode);
+
+  const { data: livePricesData } = useLivePrices(
+    activePair ? [activePair] : [],
+    50,
+    !demoMode,
+  );
+  const liveMid = useMemo(() => {
+    if (!livePricesData?.prices) return null;
+    const p = livePricesData.prices.find(
+      (lp) => lp.symbol?.toUpperCase() === activePair?.toUpperCase(),
+    );
+    return p?.mid ?? null;
+  }, [livePricesData, activePair]);
 
   const availablePairs = useMemo(
     () => pairs.map((p) => p.pair?.symbol ?? "").filter((s) => s !== ""),
@@ -202,6 +216,7 @@ export function DashboardPage() {
                 timeframe={activeTimeframe}
                 limit={150}
                 height={440}
+                livePrice={liveMid}
                 onTimeframeChange={setActiveTimeframe}
               />
             </ErrorBoundary>

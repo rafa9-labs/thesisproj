@@ -16,6 +16,10 @@ const nullExtra = {
   trades: null,
   hpo_param_importance: null,
   hpo_trials: null,
+  best_study: null,
+  hpo_study_meta: null,
+  hpo_learning_summary: null,
+  hpo_sensitivity: null,
 };
 
 const makeResults = (overrides: Partial<JobResults> = {}): JobResults => ({

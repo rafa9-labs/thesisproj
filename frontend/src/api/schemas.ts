@@ -209,6 +209,9 @@ export interface Metrics {
   hpo_param_importance: HpoParamImportance[] | null;
   hpo_trials: HpoTrial[] | null;
   best_study: BestStudy | null;
+  hpo_study_meta: HpoStudyMeta | null;
+  hpo_learning_summary: HpoLearningSummary | null;
+  hpo_sensitivity: HpoSensitivityEntry[] | null;
   overfitting: OverfittingReportData | null;
   walkforward_periods: WalkForwardPeriod[] | null;
   diagnostics: TrainingDiagnostics | null;
@@ -373,12 +376,45 @@ export interface HpoTrial {
   trial_number: number;
   value: number;
   params: Record<string, unknown>;
+  state?: string | null;
+  duration_sec?: number | null;
+  user_attrs?: Record<string, unknown>;
 }
 
 export interface BestStudy {
   best_trial: number;
   best_value: number | null;
   best_params: Record<string, unknown>;
+}
+
+export interface HpoStudyMeta {
+  study_name?: string | null;
+  direction?: string | null;
+  n_trials: number;
+  n_completed: number;
+  n_pruned: number;
+  n_failed: number;
+  sampler_type?: string | null;
+  total_duration_sec?: number | null;
+}
+
+export interface HpoLearningSummary {
+  cliff_delta?: number | null;
+  delta_interpretation?: string | null;
+  startup_median_score?: number | null;
+  post_startup_median_score?: number | null;
+  share_beating_startup?: number | null;
+  best_uplift_pct?: number | null;
+  startup_trials: number;
+  post_startup_trials: number;
+}
+
+export interface HpoSensitivityEntry {
+  param: string;
+  index: number;
+  std_at_best?: number | null;
+  range_at_best?: number | null;
+  perturbation_direction?: string | null;
 }
 
 export interface FullJobResults {
@@ -432,6 +468,8 @@ export type WsEvent =
       completed_work: number;
       total_work: number;
       progress_pct: number;
+      elapsed_seconds?: number;
+      eta_seconds?: number | null;
     }
   | {
       event: "hpo_trial_result";
@@ -456,6 +494,8 @@ export type WsEvent =
       completed_work: number;
       total_work: number;
       progress_pct: number;
+      elapsed_seconds?: number;
+      eta_seconds?: number | null;
     }
   | {
       event: "oos_result";
@@ -479,6 +519,9 @@ export type WsEvent =
       sharpe_gap_pct?: number | null;
       signals_raw?: number;
       signals_passed_gate?: number;
+      signal_coverage?: number | null;
+      profit_per_hit?: number | null;
+      outperformance?: number | null;
     }
   | { event: "job_complete"; job_id: string; metrics: Partial<Metrics>[] }
   | { event: "job_failed"; job_id: string; error: string }
@@ -526,6 +569,11 @@ export interface OosPeriodResult {
   sharpe_gap_pct?: number | null;
   signals_raw?: number;
   signals_passed_gate?: number;
+  directional_accuracy?: number | null;
+  active_rate?: number | null;
+  signal_coverage?: number | null;
+  profit_per_hit?: number | null;
+  outperformance?: number | null;
 }
 
 export interface HealthResponse {
@@ -1331,4 +1379,53 @@ export interface LogEntry {
 export interface LogsResponse {
   entries: LogEntry[];
   next_index: number;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Fast Loop Retrain (committee weight refit)
+// ════════════════════════════════════════════════════════════════════
+
+export interface RetrainRequest {
+  lookback_bars?: number;
+  oos_frac?: number;
+}
+
+export interface RetrainStartedResponse {
+  session_id: string;
+  status: string;
+  started_at: string;
+}
+
+export interface RetrainStatus {
+  session_id: string;
+  status: "idle" | "running" | "complete" | "failed";
+  progress: number;
+  current_phase: string;
+  started_at: string | null;
+  completed_at: string | null;
+  models_refitted: string[];
+  models_skipped: string[];
+  meta_labeler_refitted: boolean;
+  meta_accuracy: number | null;
+  elapsed_seconds: number | null;
+  error: string | null;
+}
+
+export interface RetrainProgressEvent {
+  event: "retrain_progress";
+  phase: string;
+  progress: number;
+}
+
+export interface RetrainCompleteEvent {
+  event: "retrain_complete";
+  models_refitted: string[];
+  models_skipped: string[];
+  meta_accuracy: number | null;
+  elapsed_seconds: number | null;
+}
+
+export interface RetrainFailedEvent {
+  event: "retrain_failed";
+  error: string;
 }

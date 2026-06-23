@@ -113,4 +113,8 @@ def get_execution():
 
 @router.put("/execution")
 def update_execution(payload: ExecutionSettingsPayload):
+    from api.config import settings
+    settings.max_concurrent_backtests = payload.max_concurrent_backtests
+    settings.gpu_enabled = payload.gpu_enabled
+    settings.max_concurrent_gpu = payload.max_concurrent_gpu
     return {"status": "ok", "message": "Execution settings applied for this session"}

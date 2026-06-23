@@ -77,6 +77,7 @@ class BacktestRequest(BaseModel):
     hpo_intensity: HPOIntensity = "quick"
     n_trials: Optional[int] = None
     parent_job_id: Optional[str] = None
+    window_type: Literal["rolling", "expanding"] = "rolling"
     config_overrides: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -234,6 +235,8 @@ class OverfittingReport(BaseModel):
     is_mean_sharpe: Optional[float] = None
     oos_mean_sharpe: Optional[float] = None
     dsr_min_sharpe: Optional[float] = None
+    psr: Optional[float] = None
+    dsr_value: Optional[float] = None
     interaction_effects: Optional[List[Dict[str, Any]]] = None
 
 
@@ -291,6 +294,51 @@ class TrainingDiagnostics(BaseModel):
     vif_warnings: Optional[List[Dict[str, Any]]] = None
 
 
+class HpoBestStudy(BaseModel):
+    best_trial: int = 0
+    best_value: Optional[float] = None
+    best_params: Dict[str, Any] = Field(default_factory=dict)
+
+
+class HpoTrialEnriched(BaseModel):
+    trial_number: int
+    value: Optional[float] = None
+    params: Dict[str, Any] = Field(default_factory=dict)
+    state: Optional[str] = None
+    duration_sec: Optional[float] = None
+    user_attrs: Dict[str, Any] = Field(default_factory=dict)
+
+
+class HpoStudyMeta(BaseModel):
+    study_name: Optional[str] = None
+    direction: Optional[str] = None
+    n_trials: int = 0
+    n_completed: int = 0
+    n_pruned: int = 0
+    n_failed: int = 0
+    sampler_type: Optional[str] = None
+    total_duration_sec: Optional[float] = None
+
+
+class HpoLearningSummary(BaseModel):
+    cliff_delta: Optional[float] = None
+    delta_interpretation: Optional[str] = None
+    startup_median_score: Optional[float] = None
+    post_startup_median_score: Optional[float] = None
+    share_beating_startup: Optional[float] = None
+    best_uplift_pct: Optional[float] = None
+    startup_trials: int = 0
+    post_startup_trials: int = 0
+
+
+class HpoSensitivityEntry(BaseModel):
+    param: str
+    index: float
+    std_at_best: Optional[float] = None
+    range_at_best: Optional[float] = None
+    perturbation_direction: Optional[str] = None
+
+
 class BacktestResultMetrics(BaseModel):
     model: str
     sharpe: Optional[float] = None
@@ -314,6 +362,10 @@ class BacktestResultMetrics(BaseModel):
     trades: Optional[List[Dict[str, Any]]] = None
     hpo_param_importance: Optional[List[Dict[str, Any]]] = None
     hpo_trials: Optional[List[Dict[str, Any]]] = None
+    best_study: Optional[HpoBestStudy] = None
+    hpo_study_meta: Optional[HpoStudyMeta] = None
+    hpo_learning_summary: Optional[HpoLearningSummary] = None
+    hpo_sensitivity: Optional[List[HpoSensitivityEntry]] = None
     overfitting: Optional[OverfittingReport] = None
     walkforward_periods: Optional[List[WalkForwardPeriod]] = None
     diagnostics: Optional[TrainingDiagnostics] = None

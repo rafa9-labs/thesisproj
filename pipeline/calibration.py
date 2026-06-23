@@ -3,8 +3,9 @@
 Phase 4.3 -- probability calibration, temperature scaling, conformal prediction.
 Backported from utilsNoWFO.py.
 """
-from __future__ import annotations
 
+import logging
+import warnings
 import numpy as np
 import pandas as pd
 from typing import Optional, Tuple
@@ -14,31 +15,41 @@ try:
 except ImportError:
     CalibratedClassifierCV = None
 
+try:
+    from sklearn.model_selection import TimeSeriesSplit
+except ImportError:
+    TimeSeriesSplit = None
+
+try:
+    from scipy.optimize import minimize_scalar
+except ImportError:
+    minimize_scalar = None
+
+_log = logging.getLogger(__name__)
+
 
 class RollingStandardizer:
     """
     Rolling standardizer fit on train (no leakage).
     - fit_transform(X_train): scales train with rolling mean/std (per-column)
-    - transform(X_test): scales test using the *last* (mean,std) from train
+    - transform(X_test): applies expanding-window stats using train baseline
     """
     window: int = 200
     min_periods: int = 50
 
     def fit_transform(self, X_train: pd.DataFrame) -> Tuple[pd.DataFrame, dict]:
-        # Single copy to avoid mutating caller's DataFrame; operate in-place on it
-        X = X_train.astype(float).copy()
+        X: pd.DataFrame = X_train.astype(float).copy()
 
         mu_roll = X.rolling(self.window, min_periods=self.min_periods).mean()
-        sd_roll = (
-            X.rolling(self.window, min_periods=self.min_periods)
-              .std()
-              .replace(0, np.nan)
-        )
+        sd_roll = X.rolling(self.window, min_periods=self.min_periods).std()
+        sd_roll = sd_roll.replace(0, np.nan)
 
-        # Only keep the last rolling stats for test-time scaling
-        stats = {"mu_last": mu_roll.iloc[-1], "sd_last": sd_roll.iloc[-1]}
+        stats = {
+            "mu_last": mu_roll.iloc[-1].copy(),
+            "sd_last": sd_roll.iloc[-1].copy(),  # type: ignore[union-attr]
+            "train_len": len(X),
+        }
 
-        # In-place standardization on X to avoid allocating X_scaled
         X -= mu_roll
         X /= sd_roll
 
@@ -49,23 +60,60 @@ class RollingStandardizer:
         sd_last = stats["sd_last"].replace(0, np.nan)
         return (X_test - mu_last) / sd_last
 
+    def transform_rolling(
+        self, X_test: pd.DataFrame, stats: dict,
+    ) -> pd.DataFrame:
+        """Transform X_test with rolling stats that continue from train."""
+        mu_last = stats["mu_last"]
+        sd_last = stats["sd_last"].replace(0, np.nan)
+
+        X: pd.DataFrame = X_test.astype(float).copy()
+        n_test = len(X)
+
+        if n_test <= self.window:
+            return (X - mu_last) / sd_last
+
+        mu_rolling = X.rolling(self.window, min_periods=1).mean()
+        sd_rolling = X.rolling(self.window, min_periods=1).std()
+        sd_rolling = sd_rolling.replace(0, np.nan)
+
+        result: pd.DataFrame = (X - mu_last) / sd_last
+        roll_valid = ~sd_rolling.iloc[:, 0].isna()  # type: ignore[union-attr]
+        roll_idx = roll_valid[roll_valid].index
+        if len(roll_idx) > 0:
+            result.loc[roll_idx] = (  # type: ignore[index]
+                (X.loc[roll_idx] - mu_rolling.loc[roll_idx])
+                / sd_rolling.loc[roll_idx]
+            )
+
+        return result
+
 
 def calibrate_prefit_and_predict_proba(
     base_estimator, X_train: np.ndarray, y_train: np.ndarray, X_pred: np.ndarray, method: str = "isotonic"
 ) -> Tuple[np.ndarray, Optional[object]]:
-    """Calibrate probabilities without using the deprecated cv='prefit' path."""
+    """Calibrate probabilities using TimeSeriesSplit to prevent lookahead bias."""
     if CalibratedClassifierCV is None:
         return base_estimator.predict_proba(X_pred), None
     try:
         from sklearn.base import clone
-        # Fresh, unfitted copy -- we calibrate with k-fold CV on the train window
+
         est = clone(base_estimator)
-        calibrator = CalibratedClassifierCV(estimator=est, method=method, cv=3)
+
+        if TimeSeriesSplit is not None and len(X_train) >= 60:
+            tscv = TimeSeriesSplit(n_splits=3)
+            calibrator = CalibratedClassifierCV(
+                estimator=est, method=method, cv=tscv,
+            )
+        else:
+            calibrator = CalibratedClassifierCV(
+                estimator=est, method=method, cv=3,
+            )
+
         calibrator.fit(X_train, y_train)
         proba = calibrator.predict_proba(X_pred)
         return proba, calibrator
     except Exception:
-        # Last-resort fallback: use the prefit estimator's own proba
         return base_estimator.predict_proba(X_pred), None
 
 
@@ -79,13 +127,30 @@ class ConformalClassifier:
     """
     alpha: float = 0.1
     qhat_: Optional[float] = None
+    MIN_CAL_SET: int = 20
 
     def fit(self, proba_cal: np.ndarray, y_cal: np.ndarray) -> "ConformalClassifier":
-        idx = (np.arange(len(y_cal)), y_cal.astype(int))
+        n = len(y_cal)
+        if n < self.MIN_CAL_SET:
+            warnings.warn(
+                f"Conformal calibration set too small (n={n}, need>={self.MIN_CAL_SET}). "
+                f"Coverage guarantees are invalid.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        idx = (np.arange(n), y_cal.astype(int))
         nc = 1.0 - proba_cal[idx]
-        n = len(nc)
+
         k = int(np.ceil((n + 1) * (1 - self.alpha))) - 1
-        k = np.clip(k, 0, n - 1)
+        if k < 0 or k >= n:
+            k = np.clip(k, 0, n - 1)
+            _log.warning(
+                "Conformal quantile index clipped to %d (n=%d, alpha=%.3f). "
+                "Increase calibration set size.",
+                k, n, self.alpha,
+            )
+
         self.qhat_ = float(np.partition(nc, k)[k])
         return self
 
@@ -134,17 +199,21 @@ def apply_temperature_to_proba(proba: np.ndarray, T: float) -> np.ndarray:
 
 
 def fit_temperature_from_proba(proba: np.ndarray, y_true: np.ndarray) -> float:
-    """1-D grid search for T minimizing NLL on a calibration slice."""
+    """Find optimal temperature T minimizing NLL on a calibration slice."""
     idx = np.arange(len(y_true))
-    def nll(p):
-        p = np.clip(p[idx, y_true], 1e-7, 1.0)
+
+    def nll(T_val):
+        scaled = apply_temperature_to_proba(proba, float(T_val))
+        p = np.clip(scaled[idx, y_true], 1e-7, 1.0)
         return float(-np.mean(np.log(p)))
-    Ts = np.concatenate([np.linspace(0.5, 3.0, 26),
-                         np.linspace(0.3, 0.5, 5),
-                         np.linspace(3.0, 4.0, 5)])
-    best_T, best_loss = 1.0, nll(proba)
-    for T in Ts:
-        L = nll(apply_temperature_to_proba(proba, T))
+
+    if minimize_scalar is not None:
+        result = minimize_scalar(nll, bounds=(0.1, 5.0), method="bounded")
+        return float(result.x)
+
+    best_T, best_loss = 1.0, nll(1.0)
+    for T in np.linspace(0.3, 4.0, 38):
+        L = nll(T)
         if L < best_loss:
             best_T, best_loss = float(T), float(L)
     return float(best_T)

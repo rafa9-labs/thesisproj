@@ -22,6 +22,61 @@ _COMMITTEE_RESULTS_DIR = Path("results/committee")
 _COMMITTEE_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _inject_features_metadata(config, cc_data: dict, hpo_model_params: Optional[Dict[str, dict]]):
+    """Inject features_config into committee config metadata for Fast Loop.
+
+    The Fast Retrain script reads features_config, fracdiff_d, and
+    input_window_size from the committee JSON metadata so it can reproduce
+    the exact same feature engineering as the Slow Loop without guessing.
+    """
+    from copy import deepcopy
+    from pipeline.metrics_tuples import CLASS_DEFAULTS
+
+    fc_path = os.environ.get("FEATURE_CONFIG_PATH", "configs/feature_config.json")
+    features_dict = {}
+    try:
+        with open(fc_path) as f:
+            features_dict = json.load(f)
+    except Exception:
+        features_dict = {}
+
+    defaults = deepcopy(CLASS_DEFAULTS.get("features", {}))
+    defaults.update(features_dict)
+
+    fracdiff_d = None
+    window_size = None
+    if hpo_model_params:
+        for mparams in hpo_model_params.values():
+            if isinstance(mparams, dict):
+                if fracdiff_d is None:
+                    for key in ("fracdiff_d",):
+                        if key in mparams:
+                            fracdiff_d = float(mparams[key])
+                            break
+                if window_size is None:
+                    for key in ("lags_range", "lags"):
+                        if key in mparams:
+                            try:
+                                window_size = int(mparams[key])
+                            except Exception:
+                                pass
+                            break
+
+    if fracdiff_d is not None:
+        defaults["fracdiff_d"] = fracdiff_d
+        defaults["use_fracdiff"] = True
+    if window_size is not None:
+        defaults["lags_range"] = window_size
+
+    if "metadata" not in cc_data:
+        cc_data["metadata"] = {}
+    cc_data["metadata"]["features_config"] = defaults
+    cc_data["metadata"]["fracdiff_d"] = fracdiff_d or defaults.get("fracdiff_d", 0.4)
+    cc_data["metadata"]["input_window_size"] = window_size or defaults.get(
+        "lags_range", defaults.get("lags", 50)
+    )
+
+
 # ── Pydantic models ─────────────────────────────────────────────────
 
 class RegimeAssignmentSchema(BaseModel):
@@ -575,6 +630,12 @@ def start_full_cycle(req: FullCycleRequest):
         args=(job_dir, job_id, req, started_at),
         daemon=True,
     )
+
+    from api.process_cleanup import register_job_thread, register_cancellation_event
+    cancel_event = threading.Event()
+    register_cancellation_event(job_id, cancel_event)
+    register_job_thread(job_id, thread)
+
     thread.start()
     return status
 
@@ -703,17 +764,23 @@ class CancelResponse(BaseModel):
 
 @router.post("/full-cycle/{job_id}/cancel")
 def cancel_full_cycle(job_id: str):
-    """Immediately cancel the running full cycle. Writes cancel flag for the thread."""
+    """Immediately cancel the running full cycle. Kills thread + processes, cleans up."""
     job_dir = _FULL_CYCLE_DIR / job_id
     if not job_dir.exists():
         raise HTTPException(404, f"Job {job_id} not found")
+
+    log_info(job_id, "Full cycle cancelled by user — force-stopping")
+
+    # 1. Force-stop thread + child processes
+    from api.process_cleanup import force_stop_job
+    killed = force_stop_job(job_id)
+    log_info(job_id, f"Force-stop: killed {killed} processes")
+
+    # 2. Write cancel flag for any remaining checks
     cancel_path = job_dir / "cancel.json"
     _write_json(cancel_path, {"cancelled": True, "at": datetime.utcnow().isoformat()})
-    log_info(job_id, "Full cycle cancelled by user — cleaning up processes")
 
-    from api.process_cleanup import cleanup_job
-    cleanup_job(job_id)
-
+    # 3. Clear pending queue
     from api.config import settings
     try:
         from api.services import JobManager
@@ -723,21 +790,32 @@ def cancel_full_cycle(job_id: str):
     except Exception as e:
         log_warn(job_id, f"Cancel: failed to clear pending queue: {e}")
 
+    # 4. Compute elapsed time
     elapsed = 0.0
     try:
         status_data = _read_json(job_dir / "status.json")
         started = status_data.get("started_at", "")
         if started:
             elapsed = (datetime.utcnow() - datetime.fromisoformat(started)).total_seconds()
-    except Exception as e:
-        log_warn(job_id, f"Cancel: failed to compute elapsed time: {e}")
+    except Exception:
+        pass
 
+    # 5. Mark as cancelled
     _update_full_cycle_status(job_dir, "cancelled", phase_number=0,
                                current_action="Cancelled by user",
                                error="Cancelled by user")
     results = {"job_id": job_id, "status": "cancelled", "total_time_s": elapsed}
     with open(job_dir / "results.json", "w") as f:
         json.dump(results, f, indent=2, default=str)
+
+    # 6. Delete job directory so monitor stops showing it
+    import shutil
+    try:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        log_info(job_id, f"Cleaned up job directory: {job_dir}")
+    except Exception as e:
+        log_warn(job_id, f"Failed to remove job directory: {e}")
+
     return CancelResponse(status="cancelled")
 
 
@@ -1311,6 +1389,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                 if hpo_model_params:
                     committee_config.model_params = hpo_model_params
                     cc_data["model_params"] = hpo_model_params
+                _inject_features_metadata(committee_config, cc_data, hpo_model_params)
                 with open(job_dir / "committee_config.json", "w") as f:
                     json.dump(cc_data, f, indent=2, default=str)
 
@@ -1660,7 +1739,12 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                 final_coverage = final_result.regime_coverage_report(min_trades=30, min_sharpe=0.0) if final_result else {}
 
                 # Save final committee config to disk (deployment)
-                final_config.to_json(str(job_dir / "committee_config_final.json"))
+                final_data = final_config.to_dict()
+                if hpo_model_params:
+                    final_data["model_params"] = hpo_model_params
+                _inject_features_metadata(final_config, final_data, hpo_model_params)
+                with open(job_dir / "committee_config_final.json", "w") as f:
+                    json.dump(final_data, f, indent=2, default=str)
 
                 # ── Save committee snapshot (MLOps reproducibility) ──
                 # Train all committee models on full history and save exact weights

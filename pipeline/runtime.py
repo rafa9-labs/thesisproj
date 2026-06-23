@@ -7,7 +7,6 @@ Imports config.py for centralized settings.
 import os
 import sys
 import glob
-import multiprocessing
 
 from config import get_settings, apply_global_env
 
@@ -72,12 +71,14 @@ except Exception:
 _TF_SKIP = os.environ.get("TF_SKIP_INIT", "0") == "1"
 
 if not _TF_SKIP:
-    try:
-        import tensorflow as _tf
-        for g in _tf.config.list_physical_devices("GPU"):
-            _tf.config.experimental.set_memory_growth(g, True)
-    except Exception:
-        pass
+    _vram_limit = os.environ.get("CUDA_VRAM_LIMIT_MB", "").strip()
+    if not _vram_limit:
+        try:
+            import tensorflow as _tf
+            for g in _tf.config.list_physical_devices("GPU"):
+                _tf.config.experimental.set_memory_growth(g, True)
+        except Exception:
+            pass
 
     # -- Force-CPU escape --
     if os.environ.get("TF_FORCE_CPU", "0") == "1":
@@ -150,3 +151,41 @@ def gpu_status() -> dict:
 
 # Models that benefit significantly from GPU acceleration
 GPU_RECOMMENDED_MODELS = {"cnn", "lstm", "transformer", "dqn"}
+
+
+def apply_vram_lock():
+    """Apply CUDA_VRAM_LIMIT_MB as a hard logical device memory bound.
+
+    Called once per process before any TF model is loaded.
+    If CUDA_VRAM_LIMIT_MB is not set, falls back to memory growth.
+
+    This ensures a process cannot exceed its allocated VRAM budget,
+    preventing OOM from concurrent GPU backtests.
+    """
+    vram_limit = os.environ.get("CUDA_VRAM_LIMIT_MB", "").strip()
+    try:
+        import tensorflow as tf
+        gpus = tf.config.list_physical_devices("GPU")
+        if not gpus:
+            return
+
+        if vram_limit:
+            limit_mb = int(vram_limit)
+            try:
+                tf.config.set_logical_device_configuration(
+                    gpus[0],
+                    [tf.config.LogicalDeviceConfiguration(memory_limit=limit_mb)],
+                )
+                print(f"[VRAM] GPU locked to {limit_mb} MB via logical device config")
+                return
+            except Exception as exc:
+                print(f"[VRAM] Logical device config failed ({exc}), falling back to memory growth")
+                os.environ.pop("TF_FORCE_GPU_ALLOW_GROWTH", None)
+
+        for g in gpus:
+            try:
+                tf.config.experimental.set_memory_growth(g, True)
+            except Exception:
+                pass
+    except Exception:
+        pass

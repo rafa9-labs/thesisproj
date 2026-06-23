@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import threading
+import time
 import traceback
 import uuid
 from pathlib import Path
@@ -94,7 +95,7 @@ def _convert_model_overrides(overrides: Dict[str, Any]) -> Dict[str, Any]:
     result.update(converted)
     return result
 from api.schemas.backtest import HPO_TRIAL_MAPS
-from logging_config import emit_event
+from logging_config import emit_event, log_print
 
 IS_DESKTOP = os.environ.get("FX_APP_MODE", "") == "desktop"
 
@@ -137,6 +138,121 @@ def _compute_total_work(models: list[str], months: int, hpo_intensity: str | Non
         sim_work = n_periods
         total += hpo_work + sim_work
     return max(total, 1)
+
+
+def _make_progress_callback(job_id: str, total_work: int, jm):
+    """Factory for progress callback closures. Each job gets its own state."""
+    job_start_time = time.time()
+    completed_work = 0
+    _last_heartbeat = 0
+    _completion_times = []
+
+    def _progress_cb(phase: str, model: str, detail: dict | None = None):
+        nonlocal completed_work, _last_heartbeat, _completion_times
+        _check_force_stopped(job_id)
+        data = {"model": model, "phase": phase}
+        if detail:
+            data.update(detail)
+        if phase == "hpo_trial":
+            cv_b = detail.get("cv_blocks", CV_BLOCKS_DEFAULT) if detail else CV_BLOCKS_DEFAULT
+            completed_work += cv_b
+        elif phase == "month":
+            completed_work += 1
+        elif phase == "period":
+            completed_work += 1
+        pct = min(round((completed_work / total_work) * 100, 1), 100) if total_work > 0 else 0
+        data["completed_work"] = completed_work
+        data["total_work"] = total_work
+        data["progress_pct"] = pct
+
+        # ETA computation via rolling window of work-unit timestamps
+        _completion_times.append((completed_work, time.time()))
+        if len(_completion_times) > 20:
+            _completion_times = _completion_times[-20:]
+        elapsed = time.time() - job_start_time
+        data["elapsed_seconds"] = round(elapsed, 1)
+        if len(_completion_times) >= 2:
+            first_wu, first_ts = _completion_times[0]
+            last_wu, last_ts = _completion_times[-1]
+            wu_delta = last_wu - first_wu
+            time_delta = last_ts - first_ts
+            if wu_delta > 0 and time_delta > 0:
+                remaining = total_work - completed_work
+                data["eta_seconds"] = round(remaining * time_delta / wu_delta, 1)
+            else:
+                data["eta_seconds"] = None
+        else:
+            data["eta_seconds"] = None
+
+        if completed_work - _last_heartbeat >= 2:
+            _last_heartbeat = completed_work
+            try:
+                jm.touch_job(job_id)
+            except Exception:
+                pass
+        if phase in ("hpo", "hpo_trial"):
+            evt_name = "hpo_progress"
+        elif phase in ("month", "period"):
+            evt_name = "month_progress"
+        else:
+            evt_name = "model_phase"
+        _pub(evt_name, job_id, data)
+        emit_event(evt_name, job_id=job_id, pct=pct, **data)
+
+        if phase == "simulation_started" and detail:
+            _pub("simulation_started", job_id, {
+                "model": model,
+                "n_periods": detail["n_periods"],
+                "bh_curve": detail["bh_curve"],
+            })
+
+        elif phase == "hpo_trial" and detail:
+            trial_n = detail.get("trial", 0)
+            trial_score = detail.get("score")
+            trial_state = detail.get("trial_state", "?")
+            total_trials = detail.get("total_trials", "?")
+            params_keys = list(detail.get("params", {}).keys())
+            if trial_score is not None:
+                log_print(f"[HPO] Trial {trial_n}/{total_trials}  score={trial_score:.2f}  state={trial_state}  "
+                          f"params=[{','.join(params_keys[:6])}...] ({len(params_keys)} total)")
+            else:
+                log_print(f"[HPO] Trial {trial_n}/{total_trials}  PRUNED  state={trial_state}")
+            _pub("hpo_trial_result", job_id, {
+                "model": model,
+                "trial_number": trial_n,
+                "score": trial_score,
+                "params": detail.get("params", {}),
+                "best_score_so_far": detail.get("best_score_so_far"),
+                "trial_state": trial_state,
+            })
+
+        elif phase in ("month", "period") and detail:
+            _pub("oos_result", job_id, {
+                "model": model,
+                "period": detail.get("period", 0),
+                "total_periods": detail.get("total_periods", 0),
+                "equity": detail.get("equity_strategy"),
+                "equity_bh": detail.get("equity_bh"),
+                "sharpe": detail.get("sharpe"),
+                "return_pct": detail.get("return_pct"),
+                "trades": detail.get("trades"),
+                "drawdown": detail.get("drawdown"),
+                "win_rate": detail.get("win_rate"),
+                "precision": detail.get("precision_macro"),
+                "f1": detail.get("f1_macro"),
+                "directional_accuracy": detail.get("directional_accuracy"),
+                "active_rate": detail.get("active_rate"),
+                "train_sharpe": detail.get("train_sharpe"),
+                "sharpe_gap_pct": detail.get("sharpe_gap_pct"),
+                "signals_raw": detail.get("signals_raw"),
+                "signals_passed_gate": detail.get("signals_passed_gate"),
+                "signal_coverage": detail.get("signal_coverage"),
+                "profit_per_hit": detail.get("profit_per_hit"),
+                "outperformance": detail.get("outperformance"),
+            })
+
+    return _progress_cb
+
 
 celery_app = None
 _celery_available = False
@@ -181,10 +297,21 @@ def revoke_task(job_id: str) -> bool:
     On Windows, terminate=True uses TerminateProcess which is a hard kill
     that skips all cleanup handlers, leaving child processes orphaned.
     Instead we set the threading event so the backtester's _force_stop_checker
-    raises KeyboardInterrupt → cleanup runs gracefully. If the task hasn't
+    raises KeyboardInterrupt -> cleanup runs gracefully. If the task hasn't
     stopped in 5s, escalate with terminate as last resort.
+
+    Reads Celery task_id from the jobs DB table for cross-worker revocation.
     """
+    # Try in-memory dict first, fall back to DB
     task_id = _JOB_TASK_IDS.pop(job_id, None)
+    if not task_id:
+        try:
+            store = DataStore(settings.db_full_path)
+            from api.services import JobManager as _JM
+            jm = _JM(store)
+            task_id = jm.get_task_id(job_id)
+        except Exception:
+            pass
     revoked = False
 
     # Phase 1: gentle signal via threading event (works cross-platform)
@@ -213,10 +340,9 @@ def revoke_task(job_id: str) -> bool:
 
 
 def _check_force_stopped(job_id: str):
-    """Check if the job has been force-stopped. Raises SystemExit if stopped."""
+    """Check if the job has been force-stopped. Raises KeyboardInterrupt if stopped."""
     if _is_cancelled(job_id):
-        import sys as _sys
-        _sys.exit(0)
+        raise KeyboardInterrupt("Force stopped by user")
 
 
 _wsl_available_cache = None
@@ -260,6 +386,13 @@ def _run_backtest_via_wsl(job_id: str, config: dict) -> bool:
     jm.update_status(job_id, "running", error=None)
     _pub("job_started", job_id, {"pair": config.get("pair"), "models": models, "runtime": "wsl_gpu"})
     emit_event("job_started", job_id=job_id, runtime="wsl_gpu")
+
+    months_wsl = config.get("months", 3)
+    hpo_intensity_wsl = config.get("hpo_intensity", "quick")
+    n_trials_override_wsl = config.get("n_trials")
+    period_unit_wsl = config.get("period_unit", "months")
+    total_work_wsl = _compute_total_work(models, months_wsl, hpo_intensity_wsl, period_unit=period_unit_wsl, n_trials_override=n_trials_override_wsl)
+    progress_cb = _make_progress_callback(job_id, total_work_wsl, jm)
 
     project_root = settings.project_root
     results_dir = os.path.join(project_root, "results")
@@ -317,6 +450,17 @@ def _run_backtest_via_wsl(job_id: str, config: dict) -> bool:
                         _, evt_name, msg = parts
                         msg = msg.rstrip("]")
                         _pub(evt_name, job_id, {"message": msg})
+                except Exception:
+                    pass
+            elif line.startswith("[WSL_CB:"):
+                try:
+                    rest = line[len("[WSL_CB:"):]
+                    parts = rest.split(":", 1)
+                    if len(parts) >= 2:
+                        _, payload_str = parts
+                        payload_str = payload_str.rstrip("]")
+                        payload = json.loads(payload_str)
+                        progress_cb(payload["p"], payload["m"], payload.get("d"))
                 except Exception:
                     pass
 
@@ -592,6 +736,12 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     _current_task_id = getattr(_run_backtest_impl, "request", None)
     if _current_task_id and hasattr(_current_task_id, "id"):
         _JOB_TASK_IDS[job_id] = _current_task_id.id
+    # Register cancellation event so gentle force-stop signals work
+    _cancellation_events[job_id] = threading.Event()
+    # Ensure job row exists (defense against race-condition deletes)
+    inserted = jm.ensure_job_exists(job_id, "backtest", config)
+    if inserted:
+        print(f"[job-recovery] Re-created missing job row for {job_id[:8]}", flush=True)
     jm.update_status(job_id, "running", error=None)
 
     pair = config.get("pair", "EURUSD")
@@ -607,6 +757,22 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     period_unit = config.get("period_unit", "months")
     parent_job_id = config.get("parent_job_id")
     pip_freeze = _capture_environment()
+
+    tb = config.get("thread_budget")
+    if tb and isinstance(tb, int) and tb >= 1:
+        os.environ["MLB_THREADS"] = str(tb)
+        os.environ["BLAS_THREADS_PER_TRIAL"] = str(tb)
+        os.environ["XGB_JOBS"] = str(tb)
+        for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+                  "NUMEXPR_NUM_THREADS", "SKLEARN_JOBS", "RF_JOBS"):
+            os.environ.setdefault(k, str(tb))
+        try:
+            from threadpoolctl import threadpool_limits
+            threadpool_limits(limits=tb)
+        except Exception:
+            pass
+    import tempfile
+    os.environ.setdefault("JOBLIB_TEMP_FOLDER", os.path.join(tempfile.gettempdir(), f"joblib_{job_id[:12]}"))
 
     if end is None:
         from datetime import date
@@ -633,71 +799,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     _pub("job_started", job_id, {"pair": pair, "models": models, "total_work": total_work})
     emit_event("job_started", job_id=job_id, pair=pair, models=",".join(models), total_work=total_work)
 
-    completed_work = 0
-
-    def _progress_cb(phase: str, model: str, detail: dict | None = None):
-        nonlocal completed_work
-        data = {"model": model, "phase": phase}
-        if detail:
-            data.update(detail)
-        if phase == "hpo_trial":
-            cv_b = detail.get("cv_blocks", CV_BLOCKS_DEFAULT) if detail else CV_BLOCKS_DEFAULT
-            completed_work += cv_b
-        elif phase == "month":
-            completed_work += 1
-        elif phase == "period":
-            completed_work += 1
-        pct = min(round((completed_work / total_work) * 100, 1), 100) if total_work > 0 else 0
-        data["completed_work"] = completed_work
-        data["total_work"] = total_work
-        data["progress_pct"] = pct
-        if phase in ("hpo", "hpo_trial"):
-            evt_name = "hpo_progress"
-        elif phase in ("month", "period"):
-            evt_name = "month_progress"
-        else:
-            evt_name = "model_phase"
-        _pub(evt_name, job_id, data)
-        emit_event(evt_name, job_id=job_id, pct=pct, **data)
-
-        if phase == "simulation_started" and detail:
-            _pub("simulation_started", job_id, {
-                "model": model,
-                "n_periods": detail["n_periods"],
-                "bh_curve": detail["bh_curve"],
-            })
-
-        elif phase == "hpo_trial" and detail:
-            _pub("hpo_trial_result", job_id, {
-                "model": model,
-                "trial_number": detail.get("trial", 0),
-                "score": detail.get("score"),
-                "params": detail.get("params", {}),
-                "best_score_so_far": detail.get("best_score_so_far"),
-                "trial_state": detail.get("trial_state", "COMPLETE"),
-            })
-
-        elif phase in ("month", "period") and detail:
-            _pub("oos_result", job_id, {
-                "model": model,
-                "period": detail.get("period", 0),
-                "total_periods": detail.get("total_periods", 0),
-                "equity": detail.get("equity_strategy"),
-                "equity_bh": detail.get("equity_bh"),
-                "sharpe": detail.get("sharpe"),
-                "return_pct": detail.get("return_pct"),
-                "trades": detail.get("trades"),
-                "drawdown": detail.get("drawdown"),
-                "win_rate": detail.get("win_rate"),
-                "precision": detail.get("precision_macro"),
-                "f1": detail.get("f1_macro"),
-                "directional_accuracy": detail.get("directional_accuracy"),
-                "active_rate": detail.get("active_rate"),
-                "train_sharpe": detail.get("train_sharpe"),
-                "sharpe_gap_pct": detail.get("sharpe_gap_pct"),
-                "signals_raw": detail.get("signals_raw"),
-                "signals_passed_gate": detail.get("signals_passed_gate"),
-            })
+    _progress_cb = _make_progress_callback(job_id, total_work, jm)
 
     all_metrics = []
 
@@ -932,10 +1034,17 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                             metrics_row["sortino"] = float(ann_ret / downside_vol) if downside_vol > 0 else 0.0
                         elif len(downside) == 1:
                             metrics_row["sortino"] = float(ann_ret / abs(downside[0])) if abs(downside[0]) > 1e-9 else 0.0
+                        else:
+                            metrics_row["sortino"] = 0.0
+                    else:
+                        metrics_row["sharpe"] = 0.0
+                        metrics_row["sortino"] = 0.0
                     metrics_row["win_rate"] = float((rets > 0).mean()) if len(rets) > 0 else 0.0
                     gross_wins = float(np.sum(rets[rets > 0])) if np.any(rets > 0) else 0.0
                     gross_losses = abs(float(np.sum(rets[rets < 0]))) if np.any(rets < 0) else 0.0
                     metrics_row["profit_factor"] = gross_wins / gross_losses if gross_losses > 1e-9 else (float('inf') if gross_wins > 0 else 0.0)
+                    if metrics_row["profit_factor"] is not None and np.isinf(float(metrics_row["profit_factor"])):
+                        metrics_row["profit_factor"] = None
                     total_trades = metrics_row.get("total_trades", 0)
                     if total_trades > 0:
                         metrics_row["avg_trade"] = float(np.sum(rets) / total_trades)
@@ -966,8 +1075,13 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 metrics_row["total_return_pct"] = 0.0
                 metrics_row["max_drawdown"] = 0.0
                 metrics_row["sharpe"] = 0.0
+                metrics_row["sortino"] = 0.0
+                metrics_row["profit_factor"] = 0.0
+                metrics_row["cagr"] = 0.0
+                metrics_row["calmar_ratio"] = 0.0
                 metrics_row["total_trades"] = 0
                 metrics_row["win_rate"] = 0.0
+                metrics_row["active_rate"] = 0.0
 
             if trade_log is not None and not trade_log.empty:
                 safe_trades = trade_log.reset_index(drop=True)
@@ -995,6 +1109,10 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
 
             metrics_row["hpo_param_importance"] = None
             metrics_row["hpo_trials"] = None
+            metrics_row["best_study"] = None
+            metrics_row["hpo_study_meta"] = None
+            metrics_row["hpo_learning_summary"] = None
+            metrics_row["hpo_sensitivity"] = None
 
             try:
                 import glob as _glob
@@ -1013,19 +1131,173 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 pass
 
             try:
-                if hasattr(bt, "_optuna_study"):
+                if hasattr(bt, "_optuna_study") and bt._optuna_study is not None:
                     study = bt._optuna_study
-                    if study is not None:
-                        trials_data = []
-                        for t in study.trials:
-                            trials_data.append({
-                                "trial_number": t.number,
-                                "value": t.value if t.value is not None else float("nan"),
-                                "params": dict(t.params) if t.params else {},
-                            })
-                        if trials_data:
-                            metrics_row["hpo_trials"] = _sanitize_metrics([trials_data])[0] if trials_data else None
-                            metrics_row["hpo_trials"] = trials_data
+                    trials_data = []
+                    for t in study.trials:
+                        user_attrs = {}
+                        try:
+                            if hasattr(t, "user_attrs") and t.user_attrs:
+                                for ka, va in t.user_attrs.items():
+                                    if isinstance(va, (float, int, str, bool, type(None))):
+                                        user_attrs[ka] = va
+                                    elif isinstance(va, (np.floating,)):
+                                        user_attrs[ka] = float(va)
+                                    elif isinstance(va, (np.integer,)):
+                                        user_attrs[ka] = int(va)
+                                    elif isinstance(va, (list,)):
+                                        user_attrs[ka] = [float(x) if isinstance(x, (np.floating,)) else
+                                                          int(x) if isinstance(x, (np.integer,)) else x
+                                                          for x in va[:20]]
+                        except Exception:
+                            user_attrs = {}
+                        trials_data.append({
+                            "trial_number": t.number,
+                            "value": t.value if t.value is not None else float("nan"),
+                            "params": dict(t.params) if t.params else {},
+                            "state": str(t.state).split(".")[-1] if hasattr(t, "state") else None,
+                            "duration_sec": t.duration.total_seconds() if hasattr(t, "duration") and t.duration else None,
+                            "user_attrs": user_attrs,
+                        })
+                    if trials_data:
+                        metrics_row["hpo_trials"] = _sanitize_metrics([trials_data])[0] if trials_data else None
+                        metrics_row["hpo_trials"] = trials_data
+
+                    best_trial_num = 0
+                    best_value = None
+                    best_params = {}
+                    try:
+                        if study.best_trial is not None:
+                            best_trial_num = study.best_trial.number
+                            best_value = float(study.best_trial.value) if study.best_trial.value is not None else None
+                            best_params = dict(study.best_trial.params) if study.best_trial.params else {}
+                    except Exception:
+                        pass
+                    metrics_row["best_study"] = {
+                        "best_trial": best_trial_num,
+                        "best_value": best_value,
+                        "best_params": best_params,
+                    }
+
+                    n_completed = n_pruned = n_failed = 0
+                    total_dur = 0.0
+                    for t in study.trials:
+                        st = str(t.state).split(".")[-1] if hasattr(t, "state") else ""
+                        if st == "COMPLETE":
+                            n_completed += 1
+                        elif st == "PRUNED":
+                            n_pruned += 1
+                        else:
+                            n_failed += 1
+                        if hasattr(t, "duration") and t.duration:
+                            total_dur += t.duration.total_seconds()
+                    sampler_name = None
+                    try:
+                        sampler_name = study.sampler.__class__.__name__ if hasattr(study, "sampler") and study.sampler else None
+                    except Exception:
+                        pass
+                    direction = None
+                    try:
+                        direction = str(study.direction).split(".")[-1] if hasattr(study, "direction") else None
+                    except Exception:
+                        pass
+                    metrics_row["hpo_study_meta"] = {
+                        "study_name": getattr(study, "study_name", None),
+                        "direction": direction,
+                        "n_trials": len(study.trials),
+                        "n_completed": n_completed,
+                        "n_pruned": n_pruned,
+                        "n_failed": n_failed,
+                        "sampler_type": sampler_name,
+                        "total_duration_sec": round(total_dur, 2) if total_dur > 0 else None,
+                    }
+            except Exception:
+                pass
+
+            try:
+                import glob as _glob_learn
+                results_base = os.path.join(project_root, "results")
+                pattern = os.path.join(results_base, "**", "learning_summary.json")
+                found = _glob_learn.glob(pattern, recursive=True)
+                if found:
+                    latest = max(found, key=os.path.getmtime)
+                    with open(latest, "r") as _f:
+                        ls = json.load(_f)
+                    cl_delta = ls.get("cliffs_delta_post_vs_startup", None)
+                    if cl_delta is not None:
+                        abs_d = abs(float(cl_delta))
+                        if abs_d < 0.147:
+                            interp = "negligible"
+                        elif abs_d < 0.33:
+                            interp = "small"
+                        elif abs_d < 0.474:
+                            interp = "medium"
+                        else:
+                            interp = "large"
+                    else:
+                        interp = None
+                    startup_best = ls.get("startup_best")
+                    post_best = ls.get("post_best")
+                    if (startup_best is not None and post_best is not None and
+                            startup_best and post_best and startup_best != 0 and np.isfinite(startup_best) and np.isfinite(post_best)):
+                        uplift_pct = round(float((post_best - startup_best) / abs(startup_best)) * 100, 2)
+                    else:
+                        uplift_pct = None
+                    metrics_row["hpo_learning_summary"] = {
+                        "cliff_delta": cl_delta,
+                        "delta_interpretation": interp,
+                        "startup_median_score": ls.get("startup_median"),
+                        "post_startup_median_score": ls.get("post_median"),
+                        "share_beating_startup": ls.get("share_post_above_startup_median"),
+                        "best_uplift_pct": uplift_pct,
+                        "startup_trials": ls.get("n_startup_complete", 0),
+                        "post_startup_trials": ls.get("n_post_complete", 0),
+                    }
+            except Exception:
+                pass
+
+            try:
+                if metrics_row["hpo_trials"] and len(metrics_row["hpo_trials"]) >= 3:
+                    trials = metrics_row["hpo_trials"]
+                    numeric_params = set()
+                    param_values = {}
+                    for t in trials:
+                        for pk, pv in (t.get("params") or {}).items():
+                            if isinstance(pv, (int, float)) and not isinstance(pv, bool):
+                                numeric_params.add(pk)
+                                param_values.setdefault(pk, []).append((t["trial_number"], float(pv), t.get("value")))
+                    sensitivity = []
+                    for pk in sorted(numeric_params):
+                        pts = [(v, val) for _, v, val in param_values[pk] if val is not None and np.isfinite(val)]
+                        if len(pts) < 3:
+                            continue
+                        try:
+                            from scipy.stats import spearmanr
+                            vals = [v for v, _ in pts]
+                            objs = [o for _, o in pts]
+                            if len(set(vals)) < 2 or len(set(objs)) < 2:
+                                continue
+                            rho, _ = spearmanr(vals, objs)
+                        except Exception:
+                            continue
+                        best_v_set = set()
+                        for _, v, val in param_values[pk]:
+                            if best_params and pk in best_params and abs(v - float(best_params[pk])) < 1e-9:
+                                best_v_set.add(val if val is not None and np.isfinite(val) else None)
+                        std_best = float(np.std(list(x for x in best_v_set if x is not None))) if best_v_set else None
+                        all_vals = sorted(set(vals))
+                        range_pct = None
+                        if len(all_vals) >= 2 and all_vals[-1] != all_vals[0]:
+                            range_pct = float((max(all_vals) - min(all_vals)) / max(abs(all_vals[0]), 1e-9))
+                        sensitivity.append({
+                            "param": pk,
+                            "index": round(float(rho), 4),
+                            "std_at_best": round(std_best, 6) if std_best is not None else None,
+                            "range_at_best": round(range_pct, 4) if range_pct is not None else None,
+                            "perturbation_direction": "increasing" if rho > 0 else "decreasing",
+                        })
+                    if sensitivity:
+                        metrics_row["hpo_sensitivity"] = sensitivity
             except Exception:
                 pass
 
@@ -1065,6 +1337,8 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                     "is_mean_sharpe": overfit.is_mean_sharpe,
                     "oos_mean_sharpe": overfit.oos_mean_sharpe,
                     "dsr_min_sharpe": overfit.dsr_min_sharpe,
+                    "psr": overfit.psr,
+                    "dsr_value": overfit.dsr_value,
                     "interaction_effects": overfit.interaction_effects,
                 }
                 metrics_row["walkforward_periods"] = compute_period_breakdown(wfo_records)

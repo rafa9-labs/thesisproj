@@ -44,6 +44,8 @@ class OverfittingReport:
     is_mean_sharpe: float | None = None
     oos_mean_sharpe: float | None = None
     dsr_min_sharpe: float | None = None
+    psr: float | None = None
+    dsr_value: float | None = None
     interaction_effects: List[Dict[str, Any]] | None = None
 
 
@@ -361,6 +363,30 @@ def compute_overfitting_report(
         report.dsr_min_sharpe = _compute_dsr_min_sharpe(
             n_hpo_trials, len(sharpes_finite), len(trades_arr)
         )
+
+    # --- PSR / DSR (Probabilistic & Deflated Sharpe Ratios) ---
+    total_trades = int(np.sum(trades_arr))
+    if len(sharpes_finite) >= 3 and len(returns_finite) >= 3:
+        oos_sr = report.oos_mean_sharpe if report.oos_mean_sharpe is not None else float(np.nanmean(sharpes_finite))
+        try:
+            from pipeline.metrics import _psr
+            from scipy.stats import skew as _scipy_skew, kurtosis as _scipy_kurt
+            _skew = float(_scipy_skew(returns_finite, bias=False)) if len(returns_finite) >= 4 else 0.0
+            _kurt = float(_scipy_kurt(returns_finite, bias=False, fisher=False)) if len(returns_finite) >= 4 else 3.0
+            n_eff = max(total_trades, len(returns_finite))
+            report.psr = round(float(_psr(oos_sr, n_eff, sr_bench=0.0, skew=_skew, kurt=_kurt)), 4)
+        except Exception:
+            report.psr = None
+
+        try:
+            from pipeline.dsr import deflated_sharpe_ratio
+            n_trials_use = n_hpo_trials if n_hpo_trials is not None and n_hpo_trials > 0 else 1
+            report.dsr_value = round(float(deflated_sharpe_ratio(
+                oos_sr, T=max(total_trades, len(returns_finite)),
+                N_trials=n_trials_use, skew=_skew, kurt=_kurt, sr_star=0.0
+            )), 4)
+        except Exception:
+            report.dsr_value = None
 
     return report
 

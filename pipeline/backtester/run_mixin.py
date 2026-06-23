@@ -1315,7 +1315,18 @@ class RunMixin:
                         else:
                             split = fold
                             tr_end_idx = max(0, split - embargo_bars)
-                            tr         = train_data.iloc[:tr_end_idx]
+                            wtype_cv = (config if isinstance(config, dict) else {}).get("window_type", "rolling")
+                            if wtype_cv == "rolling":
+                                bpm_hint = int((config if isinstance(config, dict) else {}).get("bars_per_month_hint", 1000))
+                                cv_tm = (config if isinstance(config, dict) else {}).get("cv_train_months")
+                                if cv_tm is None:
+                                    cv_tm = (config if isinstance(config, dict) else {}).get("train_months", 36)
+                                train_months_cv = int(cv_tm)
+                                train_rows = max(50, int(round(bpm_hint * train_months_cv)))
+                                tr_start_idx = max(0, tr_end_idx - train_rows)
+                                tr = train_data.iloc[tr_start_idx:tr_end_idx]
+                            else:
+                                tr = train_data.iloc[:tr_end_idx]
                             tr         = purge_train_set(tr, val_start_iloc=split,
                                                          label_horizon_bars=embargo_bars)
                             val        = train_data.iloc[split : split + val_window_local]
@@ -4049,6 +4060,7 @@ class RunMixin:
         self._optuna_best_for_wfo = best_params_once
         self._optuna_top5_for_wfo = top5_once or []
         self._optuna_consensus_pool_for_wfo = consensus_pool_once
+        self._optuna_study = study_obj
         
         log_print(
             f"[DATA] Stored Top-{len(self._optuna_top5_for_wfo or ['best'])} params "
@@ -4079,7 +4091,11 @@ class RunMixin:
             # IMPORTANT: end-exclusive slicing to avoid boundary leakage.
             # pandas .loc is inclusive; using < train_end keeps train strictly before test.
             idx_w = walk_data.index
-            train_data = walk_data[(idx_w >= start_date) & (idx_w < train_end)]
+            wtype = (config if isinstance(config, dict) else {}).get("window_type", "rolling")
+            if wtype == "expanding":
+                train_data = walk_data[(idx_w >= idx_w[0]) & (idx_w < train_end)]
+            else:
+                train_data = walk_data[(idx_w >= start_date) & (idx_w < train_end)]
             test_data  = walk_data[(idx_w >= train_end) & (idx_w < test_end)]
             if len(train_data) < 150 or len(test_data) < 30:
                 log_print(
@@ -4388,7 +4404,11 @@ class RunMixin:
             all_results = []
             for s, trn, tst, pu in tqdm(tasks, desc="Walk-forward splits (dynamic HPO)"):
                 train_end = s + period_offset(trn, unit=pu)
-                fold_train = walk_data[(walk_data.index >= s) & (walk_data.index < train_end)]
+                wtype_dyn = (config if isinstance(config, dict) else {}).get("window_type", "rolling")
+                if wtype_dyn == "expanding":
+                    fold_train = walk_data[(walk_data.index >= walk_data.index[0]) & (walk_data.index < train_end)]
+                else:
+                    fold_train = walk_data[(walk_data.index >= s) & (walk_data.index < train_end)]
 
                 if len(fold_train) >= 150:
                     fold_features = [c for c in fold_train.columns

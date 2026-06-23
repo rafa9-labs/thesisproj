@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     error       TEXT,
     parent_job_id TEXT,
     study_meta  TEXT,
+    task_id     TEXT,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 );
@@ -173,6 +174,10 @@ class DataStore:
                     pass
                 try:
                     cur.execute("ALTER TABLE jobs ADD COLUMN study_meta TEXT")
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    cur.execute("ALTER TABLE jobs ADD COLUMN task_id TEXT")
                 except sqlite3.OperationalError:
                     pass
                 try:
@@ -307,6 +312,33 @@ class DataStore:
                 rows,
             )
 
+    def upsert_candle(
+        self,
+        pair: str,
+        timeframe: str,
+        ts: str,
+        mid_open: float,
+        mid_high: float,
+        mid_low: float,
+        mid_close: float,
+        bid_open: float = 0.0,
+        bid_close: float = 0.0,
+        ask_open: float = 0.0,
+        ask_close: float = 0.0,
+        spread: float = 0.0,
+        volume: int = 0,
+    ):
+        """Insert or replace a single completed candle (called from the price stream thread)."""
+        with self._cursor() as (conn, cur):
+            cur.execute(
+                """INSERT OR REPLACE INTO candles
+                   (pair, timeframe, ts, mid_open, mid_high, mid_low, mid_close,
+                    bid_open, bid_close, ask_open, ask_close, spread, volume)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (pair, timeframe, ts, mid_open, mid_high, mid_low, mid_close,
+                 bid_open, bid_close, ask_open, ask_close, spread, volume),
+            )
+
     def get_candles(
         self,
         pair: str,
@@ -355,7 +387,7 @@ class DataStore:
         df.rename(columns={"ts": "time"}, inplace=True)
 
         try:
-            df["time"] = pd.to_datetime(df["time"], utc=True)
+            df["time"] = pd.to_datetime(df["time"], utc=True, format="mixed")
         except Exception:
             pass
 
@@ -426,7 +458,7 @@ class DataStore:
                 return pd.DataFrame(columns=cols)
             df = pd.DataFrame(rows, columns=cols)
             df.rename(columns={"ts": "time"}, inplace=True)
-            df["time"] = pd.to_datetime(df["time"], utc=True)
+            df["time"] = pd.to_datetime(df["time"], utc=True, format="mixed")
             for c in ("mid_open","mid_high","mid_low","mid_close","bid_open","bid_close","ask_open","ask_close","spread"):
                 if c in df.columns:
                     df[c] = df[c].astype("float32")

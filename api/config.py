@@ -28,7 +28,10 @@ class Settings(BaseSettings):
     project_root: str = str(Path(__file__).resolve().parent.parent)
 
     model_check_interval: float = 2.0
-    max_concurrent_backtests: int = 1
+    max_concurrent_backtests: int = 4
+    gpu_enabled: bool = False
+    max_concurrent_gpu: int = 1
+    gpu_total_vram_mb: int = 0
 
     paddle_vendor_id: str = ""
     paddle_product_id: str = ""
@@ -59,6 +62,11 @@ class Settings(BaseSettings):
         if fx_data_dir:
             return os.path.join(fx_data_dir, "results")
         return os.path.join(self.project_root, self.results_dir)
+
+    @property
+    def sync_pairs(self) -> list[str]:
+        raw = os.environ.get("SYNC_PAIRS", "EURUSD,GBPUSD,USDJPY")
+        return [p.strip() for p in raw.split(",") if p.strip()]
 
 
 settings = Settings()

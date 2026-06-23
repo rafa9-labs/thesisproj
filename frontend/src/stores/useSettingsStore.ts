@@ -92,6 +92,9 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()((set, 
         liveNewsBlendWeight,
         notificationsEnabled,
         notificationSound,
+        maxConcurrentBacktests,
+        gpuEnabled,
+        maxConcurrentGpu,
       } = get();
       localStorage.setItem(
         STORAGE_KEY,
@@ -111,6 +114,9 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()((set, 
           liveNewsBlendWeight,
           notificationsEnabled,
           notificationSound,
+          maxConcurrentBacktests,
+          gpuEnabled,
+          maxConcurrentGpu,
         }),
       );
     } catch {

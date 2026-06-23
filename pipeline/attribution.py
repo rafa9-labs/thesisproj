@@ -7,9 +7,10 @@ with its regime and attributing PnL to specific committee models.
 Works with LiveJournalEntry from OandaTradingEngine, or with
 approximate journal built from committee signal history.
 """
-from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -165,38 +166,89 @@ class AttributionEngine:
 
         return report
 
+    @staticmethod
+    def _parse_ts(ts: Any) -> float:
+        """Parse a timestamp to float epoch seconds. Returns -1 on failure."""
+        if isinstance(ts, (int, float)):
+            return float(ts)
+        if isinstance(ts, str):
+            try:
+                return datetime.fromisoformat(
+                    ts.replace("Z", "+00:00")
+                ).timestamp()
+            except (ValueError, TypeError):
+                return -1.0
+        return -1.0
+
     def _tag_regimes(self) -> List[str]:
-        """Match each trade to a regime from the nearest signal."""
+        """Match each trade to a regime from the nearest signal.
+
+        Uses bisect for O(n log m) instead of brute-force O(n*m).
+        """
         regimes: List[str] = []
         trade_times = [float(t.get("entry_time", 0)) for t in self.journal]
 
         if not self.signal_history:
             return ["unknown"] * len(self.journal)
 
-        signal_times = []
-        signal_regimes = []
-        for s in self.signal_history:
-            ts = s.get("timestamp")
-            if isinstance(ts, str):
-                try:
-                    from datetime import datetime
-                    ts = datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
-                except Exception:
-                    ts = 0
-            signal_times.append(float(ts))
-            signal_regimes.append(s.get("regime", "unknown"))
+        parsed = [
+            (self._parse_ts(s.get("timestamp")), s.get("regime", "unknown"))
+            for s in self.signal_history
+        ]
+        signal_times = [t for t, _ in parsed]
+        signal_regimes = [r for _, r in parsed]
+
+        valid = [(t, r) for t, r in zip(signal_times, signal_regimes) if t >= 0]
+        if not valid:
+            return ["unknown"] * len(self.journal)
+
+        valid.sort(key=lambda x: x[0])
+        sorted_times = [t for t, _ in valid]
+        sorted_regimes = [r for _, r in valid]
 
         for trade_time in trade_times:
-            best_idx = -1
-            best_distance = float("inf")
-            for i, st in enumerate(signal_times):
-                dist = abs(trade_time - st)
-                if dist < best_distance:
-                    best_distance = dist
-                    best_idx = i
-            regimes.append(signal_regimes[best_idx] if best_idx >= 0 else "unknown")
+            idx = bisect.bisect_left(sorted_times, trade_time)
+            best_idx = 0
+            if idx == 0:
+                best_idx = 0
+            elif idx >= len(sorted_times):
+                best_idx = len(sorted_times) - 1
+            else:
+                d_left = abs(trade_time - sorted_times[idx - 1])
+                d_right = abs(sorted_times[idx] - trade_time)
+                best_idx = idx if d_right <= d_left else idx - 1
+            regimes.append(sorted_regimes[best_idx])
 
         return regimes
+
+    def _build_signal_index(self):
+        """Build sorted signal time index for binary search."""
+        parsed = [
+            (self._parse_ts(s.get("timestamp")), i)
+            for i, s in enumerate(self.signal_history)
+        ]
+        valid = [(t, i) for t, i in parsed if t >= 0]
+        valid.sort(key=lambda x: x[0])
+        if not valid:
+            return [], []
+        times = [t for t, _ in valid]
+        indices = [i for _, i in valid]
+        return times, indices
+
+    def _find_nearest_signal(
+        self, trade_time: float, sorted_times: List[float],
+    ) -> int:
+        """Find index into self.signal_history of the nearest signal."""
+        if not sorted_times:
+            return -1
+        idx = bisect.bisect_left(sorted_times, trade_time)
+        if idx == 0:
+            return 0
+        if idx >= len(sorted_times):
+            return len(sorted_times) - 1
+        d_left = abs(trade_time - sorted_times[idx - 1])
+        d_right = abs(sorted_times[idx] - trade_time)
+        return idx if d_right <= d_left else idx - 1
 
     def _compute_model_contributions(self) -> Dict[str, ModelContribution]:
         models: Dict[str, ModelContribution] = {}
@@ -214,35 +266,88 @@ class AttributionEngine:
                 weight = float(weights[i]) if i < len(weights) else 1.0
                 mc.contribution_score += weight * (1.0 if sig_val != 0 else 0.0)
 
-        # Estimate signal correctness from win rate correlation
-        total_wins = sum(1 for t in self.journal if t.get("is_win", False))
-        total_entries = len(self.journal)
-        base_accuracy = total_wins / max(1, total_entries)
+        if not models:
+            return models
+
+        sorted_times, sorted_indices = self._build_signal_index()
+
+        for trade in self.journal:
+            trade_time = float(trade.get("entry_time", 0))
+            is_win = trade.get("is_win", trade.get("pnl", 0) > 0)
+            sig_idx = self._find_nearest_signal(trade_time, sorted_times)
+            if sig_idx < 0:
+                continue
+            signal = self.signal_history[sorted_indices[sig_idx]]
+            sig_val = int(signal.get("signal", 0))
+            direction = trade.get("direction", 0)
+            if sig_val == 0 or direction == 0:
+                continue
+            signal_correct = (sig_val == direction)
+            for model in signal.get("active_models", []):
+                if model in models:
+                    if signal_correct and is_win:
+                        models[model].signals_correct += 1
 
         for mc in models.values():
             if mc.signals_produced > 0:
-                mc.signals_correct = int(mc.signals_produced * base_accuracy)
-                mc.accuracy = base_accuracy
-                mc.contribution_score /= max(1, mc.signals_produced)
+                mc.accuracy = mc.signals_correct / mc.signals_produced
+                mc.contribution_score /= mc.signals_produced
 
         return models
 
     def _compute_slippage(self) -> SlippageReport:
-        actual = sum(float(t.get("pnl", 0)) for t in self.journal)
-        expected = 0.0
-        for t in self.journal:
-            if t.get("is_win", False):
-                expected += abs(float(t.get("pnl", 0)))
-            else:
-                expected -= abs(float(t.get("pnl", 0)))
-        # Expected PnL from signal direction alone (simplified)
-        # Actual slippage = entry/exit spread cost not captured in signal PnL
-        slip_cost = actual - expected if abs(expected) > 1e-8 else 0.0
-        slip_pct = (slip_cost / abs(actual) * 100.0) if abs(actual) > 1e-8 else 0.0
+        """Compute slippage from signal→execution price difference.
+
+        Expected PnL = what the trade would have returned if filled at
+        the signal price.  Actual PnL = what it returned at the real
+        entry price.  Slippage = expected − actual (always ≥ 0 for
+        winning trades, ≤ 0 for losing trades).
+        """
+        if not self.journal:
+            return SlippageReport()
+
+        sorted_times, sorted_indices = self._build_signal_index()
+
+        actual_total = 0.0
+        expected_total = 0.0
+
+        for trade in self.journal:
+            actual_pnl = float(trade.get("pnl", 0))
+            direction = trade.get("direction", 0)
+            size = float(trade.get("size", 1))
+            entry_price = float(trade.get("entry_price", 0))
+            trade_time = float(trade.get("entry_time", 0))
+
+            actual_total += actual_pnl
+
+            if entry_price <= 0 or direction == 0 or size <= 0:
+                expected_total += actual_pnl
+                continue
+
+            sig_idx = self._find_nearest_signal(trade_time, sorted_times)
+            if sig_idx < 0:
+                expected_total += actual_pnl
+                continue
+
+            signal = self.signal_history[sorted_indices[sig_idx]]
+            sig_price = float(signal.get("price", 0))
+            if sig_price <= 0:
+                expected_total += actual_pnl
+                continue
+
+            exit_price = entry_price + actual_pnl / (direction * size)
+            expected_pnl = direction * (exit_price - sig_price) * size
+            expected_total += expected_pnl
+
+        slip_cost = expected_total - actual_total
+        slip_pct = (
+            (slip_cost / abs(actual_total) * 100.0)
+            if abs(actual_total) > 1e-8 else 0.0
+        )
 
         return SlippageReport(
-            expected_pnl=expected,
-            actual_pnl=actual,
+            expected_pnl=expected_total,
+            actual_pnl=actual_total,
             slippage_cost=slip_cost,
             slippage_pct=slip_pct,
         )

@@ -62,6 +62,7 @@ def _fetch_candles(
     start: datetime,
     end: datetime,
     granularity: str,
+    include_incomplete: bool = False,
 ) -> pd.DataFrame:
     """Fetch candles from OANDA API with pagination."""
     from oandapyV20.endpoints import instruments
@@ -92,7 +93,7 @@ def _fetch_candles(
 
         batch: list[dict] = []
         for candle in candles:
-            if not candle["complete"]:
+            if not include_incomplete and not candle["complete"]:
                 continue
 
             time_str = candle["time"]

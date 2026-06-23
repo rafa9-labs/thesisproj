@@ -123,7 +123,7 @@ export function RunningJobsBar() {
 
   const handleCommittee = (jobId: string) => {
     cmSelectJob(jobId);
-    navigate("/monitor?tab=committee");
+    navigate(`/committee?jobId=${jobId}`);
   };
 
   return (

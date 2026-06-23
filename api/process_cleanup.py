@@ -5,6 +5,8 @@ graceful termination on cancellation, and reaps orphaned processes on startup.
 """
 from __future__ import annotations
 
+import ctypes
+import threading
 import time
 from typing import Any, Dict, List, Optional
 
@@ -13,6 +15,8 @@ import psutil
 _job_processes: Dict[str, List[int]] = {}
 _bt_refs: Dict[str, Any] = {}
 _deep_pools: Dict[str, Any] = {}
+_job_threads: Dict[str, threading.Thread] = {}
+_job_cancellation_events: Dict[str, threading.Event] = {}
 
 
 def register_job_process(job_id: str, pid: int) -> None:
@@ -28,6 +32,43 @@ def register_backtester(job_id: str, bt) -> None:
 
 def register_deep_pool(job_id: str, pool) -> None:
     _deep_pools[job_id] = pool
+
+
+def register_job_thread(job_id: str, thread: threading.Thread) -> None:
+    _job_threads[job_id] = thread
+
+
+def register_cancellation_event(job_id: str, event: threading.Event) -> None:
+    _job_cancellation_events[job_id] = event
+
+
+def force_stop_job(job_id: str) -> int:
+    """Aggressively stop a job: signal cancellation, interrupt thread, kill process tree."""
+    killed = 0
+
+    # 1. Set cancellation event
+    evt = _job_cancellation_events.pop(job_id, None)
+    if evt is not None:
+        evt.set()
+
+    # 2. Interrupt the thread via async exception
+    thread = _job_threads.pop(job_id, None)
+    if thread is not None and thread.is_alive():
+        try:
+            res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                ctypes.c_ulong(thread.ident),
+                ctypes.py_object(SystemExit),
+            )
+            if res > 1:
+                ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(thread.ident), None)
+        except Exception:
+            pass
+        thread.join(timeout=3)
+
+    # 3. Kill child processes
+    killed += cleanup_job(job_id)
+
+    return killed
 
 
 def _terminate_process(pid: int, timeout: float = 3.0) -> bool:
@@ -110,6 +151,8 @@ def cleanup_all() -> int:
     _job_processes.clear()
     _bt_refs.clear()
     _deep_pools.clear()
+    _job_threads.clear()
+    _job_cancellation_events.clear()
     return killed
 
 

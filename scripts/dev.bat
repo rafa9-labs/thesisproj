@@ -19,7 +19,7 @@ if errorlevel 1 (
 )
 
 echo [2/3] Starting Celery worker...
-start "Celery" cmd /c "celery -A api.tasks.celery_app worker --loglevel=info --pool=solo -Q celery"
+start "Celery" cmd /c "celery -A api.tasks.celery_app worker --loglevel=info --pool=threads --concurrency=8 -Q celery"
 
 echo [3/3] Starting FastAPI backend...
 start "FastAPI" cmd /c "uvicorn api.main:app --host 127.0.0.1 --port 8001 --reload"

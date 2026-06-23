@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Square, Wifi, WifiOff } from "lucide-react";
-import { useActiveBacktests, useForceStopJob, useJobStatus, useFullCycleStatus, useFullCycleHistory } from "@/api/queries";
+import { useActiveBacktests, useForceStopJob, useJobStatus } from "@/api/queries";
 import { useJobStore } from "@/stores/useJobStore";
-import { useCommitteeMonitorStore } from "@/stores/useCommitteeMonitorStore";
 import { useBacktestProgress } from "@/api/queries";
 import { JobPillStrip } from "./JobPillStrip";
 import { EquityChart } from "./EquityChart";
@@ -13,15 +12,14 @@ import { ModelHealthTable } from "./ModelHealthTable";
 import { MonthlyHeatmap } from "./MonthlyHeatmap";
 import { wsManager } from "@/api/websocket";
 import type { JobSummary } from "@/api/schemas";
-import { CommitteeJobHeader } from "./committee/CommitteeJobHeader";
-import { PipelineNavigator } from "./committee/PipelineNavigator";
-import { CommitteeLogConsole } from "./committee/CommitteeLogConsole";
-import { FeatureSweepView } from "./committee/FeatureSweepView";
-import { HpoTuningView } from "./committee/HpoTuningView";
-import { AssemblyView } from "./committee/AssemblyView";
-import { ValidationView } from "./committee/ValidationView";
-import { FactoryView } from "./committee/FactoryView";
-import { FinalSnapshotView } from "./committee/FinalSnapshotView";
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h ${m.toString().padStart(2, "0")}m`;
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
 
 export function MonitorPage() {
   const navigate = useNavigate();
@@ -52,7 +50,8 @@ export function MonitorPage() {
   useEffect(() => {
     const jobs = activeJobs instanceof Map ? activeJobs : new Map();
     for (const job of runningList) {
-      if (!jobs.has(job.job_id)) {
+      const existing = jobs.get(job.job_id);
+      if (!existing || existing.status === "stale") {
         ensureJob(job.job_id, job.pair ?? "", job.models ?? []);
       }
     }
@@ -71,32 +70,25 @@ export function MonitorPage() {
       prevRunningIds.current = { ids: currentIds, initialized: true };
       return;
     }
-    const newIds = [...currentIds].filter((id) => !prevRunningIds.current.ids.has(id));
-    if (newIds.length > 0) {
-      clearCompletedJobs();
-    }
     prevRunningIds.current.ids = currentIds;
-  }, [runningIds, clearCompletedJobs]);
+  }, [runningIds]);
 
-  // Rehydrate sync: reconcile persisted jobs with server state.
+  // Rehydrate sync: reconcile persisted jobs with server state on every poll.
   // On server restart the job store (localStorage) outlives the backend.
   // Any persisted job that is NOT in the active list is stale and should be
-  // removed entirely to avoid phantom 404 polling.
-  const rehydrateChecked = useRef(false);
+  // removed entirely to avoid phantom 404 polling and WebSocket connections.
   useEffect(() => {
-    if (rehydrateChecked.current) return;
     if (!activeData || !activeData.jobs) return;
-    rehydrateChecked.current = true;
-
     const serverIds = new Set(activeData.jobs.map((j) => j.job_id));
-    if (activeJobs instanceof Map) {
-      for (const [id] of activeJobs) {
-        if (!serverIds.has(id)) {
-          removeJob(id);
+    const state = useJobStore.getState();
+    if (state.activeJobs instanceof Map) {
+      for (const [id, job] of state.activeJobs) {
+        if (!serverIds.has(id) && job.status !== "completed" && job.status !== "failed") {
+          state.removeJob(id);
         }
       }
     }
-  }, [activeData, activeJobs, removeJob]);
+  }, [activeData?.jobs]);
 
   const completedSummaries: JobSummary[] = useMemo(() => {
     if (completedJobIds.size === 0) return [];
@@ -117,10 +109,14 @@ export function MonitorPage() {
       });
   }, [completedJobIds, activeJobs]);
 
-  const allJobs = useMemo(
-    () => [...activeList, ...completedSummaries],
-    [activeList, completedSummaries],
-  );
+  const allJobs = useMemo(() => {
+    const seen = new Set<string>();
+    return [...activeList, ...completedSummaries].filter((j) => {
+      if (seen.has(j.job_id)) return false;
+      seen.add(j.job_id);
+      return true;
+    });
+  }, [activeList, completedSummaries]);
   const visibleIds = useMemo(
     () => new Set([...runningIds, ...(completedJobIds instanceof Set ? completedJobIds : [])]),
     [runningIds, completedJobIds],
@@ -132,8 +128,15 @@ export function MonitorPage() {
       const selectedStillVisible =
         selectedJobId && visibleIds.has(selectedJobId) && activeJobs.has(selectedJobId);
       if (!selectedStillVisible) {
-        const firstRunning = [...visibleIds].find((id) => runningIds.has(id) && activeJobs.has(id));
-        const first = firstRunning ?? [...visibleIds].find((id) => activeJobs.has(id)) ?? null;
+        // Pick most recent running job, then most recent completed
+        const byCreatedDesc = (a: string, b: string) => {
+          const ja = activeJobs.get(a); const jb = activeJobs.get(b);
+          return (jb?.createdAt ?? 0).getTime() - (ja?.createdAt ?? 0).getTime();
+        };
+        const runningCandidates = [...visibleIds].filter((id) => runningIds.has(id) && activeJobs.has(id));
+        const completedCandidates = [...visibleIds].filter((id) => !runningIds.has(id) && activeJobs.has(id));
+        const first = (runningCandidates.length > 0 ? runningCandidates.sort(byCreatedDesc)[0] : null)
+                   ?? (completedCandidates.length > 0 ? completedCandidates.sort(byCreatedDesc)[0] : null);
         if (first) {
           selectJob(first);
           setActiveTab(first, "hpo-and-results");
@@ -144,10 +147,10 @@ export function MonitorPage() {
 
   useEffect(() => {
     if (!selectedJobId) return;
-    const check = setInterval(() => {
-      setWsConnected(wsManager.connected);
-    }, 1000);
-    return () => clearInterval(check);
+    const check = () => setWsConnected(wsManager.isConnected(selectedJobId));
+    check();
+    const interval = setInterval(check, 1000);
+    return () => clearInterval(interval);
   }, [selectedJobId]);
 
   const shouldPoll = selectedJobId != null;
@@ -252,9 +255,16 @@ export function MonitorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allOosPeriods.length]);
 
-  const allHpoTrials = (selectedJob?.cycles ?? []).flatMap((c) =>
-    c.hpoTrials.map((t) => ({ model: c.model, trial: t })),
-  );
+  const allHpoTrials = useMemo(() => {
+    const fromCycles = (selectedJob?.cycles ?? []).flatMap((c) =>
+      c.hpoTrials.map((t) => ({ model: c.model, trial: t })),
+    );
+    if (fromCycles.length > 0) return fromCycles;
+    return (selectedJob?.hpoTrials ?? []).map((t) => ({
+      model: (t as { model?: string }).model ?? selectedJob?.currentModel ?? "unknown",
+      trial: t,
+    }));
+  }, [selectedJob?.cycles, selectedJob?.hpoTrials, selectedJob?.currentModel]);
 
   const [expandedPeriod, setExpandedPeriod] = useState<string | null>(null);
   const periodRows = allOosPeriods
@@ -262,129 +272,17 @@ export function MonitorPage() {
     .slice(-50)
     .reverse();
 
-  // ── Committee tab state ──
-  const [searchParams] = useSearchParams();
-  const monitorTab: "backtests" | "committee" =
-    searchParams.get("tab") === "committee" ? "committee" : "backtests";
-  const switchTab = (tab: "backtests" | "committee") => {
-    navigate(tab === "committee" ? "/monitor?tab=committee" : "/monitor", { replace: true });
-  };
-  const cmJobId = useCommitteeMonitorStore((s) => s.selectedJobId);
-  const cmUpdateFromStatus = useCommitteeMonitorStore((s) => s.updateFromStatus);
-  const cmViewPhase = useCommitteeMonitorStore((s) => s.viewPhase);
-  const cmSelectJob = useCommitteeMonitorStore((s) => s.selectJob);
-  const { data: cmStatus } = useFullCycleStatus(monitorTab === "committee" ? cmJobId : null);
-  const { data: fcHistory } = useFullCycleHistory();
-  useEffect(() => {
-    if (cmStatus) cmUpdateFromStatus(cmStatus);
-  }, [cmStatus, cmUpdateFromStatus]);
-
-  // Auto-select first running committee job when entering committee tab
-  useEffect(() => {
-    if (monitorTab !== "committee" || cmJobId) return;
-    const running = (fcHistory?.entries ?? [])
-      .filter((e) =>
-        e.status !== "completed" &&
-        e.status !== "failed" &&
-        e.status !== "validation_failed" &&
-        e.status !== "cancelled" &&
-        e.status !== "orphaned" &&
-        e.status !== "unknown",
-      )
-      .sort((a, b) => b.started_at.localeCompare(a.started_at));
-    if (running.length > 0) {
-      cmSelectJob(running[0].job_id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monitorTab]);
-
-  // Deselect orphaned/cancelled/unknown committee jobs — prevents broken dead-study UI
-  const cmReset = useCommitteeMonitorStore((s) => s.reset);
-  useEffect(() => {
-    if (!cmJobId || monitorTab !== "committee") return;
-    const entry = (fcHistory?.entries ?? []).find((e) => e.job_id === cmJobId);
-    if (
-      entry &&
-      (entry.status === "orphaned" ||
-        entry.status === "cancelled" ||
-        entry.status === "unknown")
-    ) {
-      cmReset();
-    }
-  }, [cmJobId, fcHistory, monitorTab, cmReset]);
-
-  // Auto-redirect to committee tab when only committee jobs are running
-  useEffect(() => {
-    if (monitorTab !== "backtests" || isLoading || runningList.length > 0) return;
-    const hasRunningCommittee = (fcHistory?.entries ?? []).some(
-      (e) =>
-        e.status !== "completed" &&
-        e.status !== "failed" &&
-        e.status !== "validation_failed" &&
-        e.status !== "cancelled" &&
-        e.status !== "orphaned" &&
-        e.status !== "unknown",
-    );
-    if (hasRunningCommittee) {
-      navigate("/monitor?tab=committee", { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monitorTab, isLoading, runningList.length, fcHistory]);
-
-  // ── Committee tab ──
-  if (monitorTab === "committee") {
-    const cmEntry = (fcHistory?.entries ?? []).find((e) => e.job_id === cmJobId);
-    const isCmTerminal =
-      !cmEntry ||
-      cmEntry.status === "orphaned" ||
-      cmEntry.status === "cancelled" ||
-      cmEntry.status === "completed" ||
-      cmEntry.status === "failed" ||
-      cmEntry.status === "validation_failed" ||
-      cmEntry.status === "unknown";
-
+  if (isLoading) {
     return (
-      <div className="flex h-full flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center gap-1 pt-3 pb-2">
-          <TabButton label="Backtests" active={false} onClick={() => switchTab("backtests")} />
-          <TabButton label="Committee" active={true} onClick={() => {}} />
-        </div>
-        {cmJobId && !isCmTerminal ? (
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <CommitteeJobHeader />
-            <PipelineNavigator />
-            <div className="flex-1 overflow-y-auto pb-4 [scrollbar-width:thin]">
-              {cmViewPhase === 1 && <FeatureSweepView />}
-              {cmViewPhase === 2 && <HpoTuningView />}
-              {cmViewPhase === 3 && <AssemblyView />}
-              {cmViewPhase === 4 && <ValidationView />}
-              {cmViewPhase === 5 && <FactoryView />}
-              {cmViewPhase === 6 && <FinalSnapshotView />}
-            </div>
-            <div className="shrink-0 border-t border-(--color-glass-border)">
-              <CommitteeLogConsole />
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-1 items-center justify-center">
-            <span className="text-xs text-(--color-text-muted)">
-              No active committee jobs. Click a committee pill in the running bar above.
-            </span>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (monitorTab === "backtests" && isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center bg-(--color-app)">
+      <div className="flex h-full items-center justify-center">
         <span className="text-xs text-(--color-text-muted)">Checking for backtests...</span>
       </div>
     );
   }
 
-  if (runningList.length === 0 && completedJobIds instanceof Set && completedJobIds.size === 0) {
+  const noBacktestData = runningList.length === 0 && (!(completedJobIds instanceof Set) || completedJobIds.size === 0);
+
+  if (noBacktestData) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 rounded-sm border border-(--color-glass-border) bg-(--color-surface) py-16">
         <span className="text-sm font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
@@ -411,49 +309,10 @@ export function MonitorPage() {
     );
   }
 
-  if (runningList.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 rounded-sm border border-(--color-glass-border) bg-(--color-surface) py-16">
-        <span className="text-sm font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase">
-          All Studies Complete
-        </span>
-        <span className="text-xs text-(--color-text-muted)">
-          View results or start a new study
-        </span>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate("/backtest")}
-            className="flex items-center gap-1.5 rounded-md bg-(--color-brand) px-4 py-2 text-[11px] font-medium tracking-[0.06em] text-(--color-text-inverse) uppercase transition-all hover:brightness-110"
-          >
-            New Backtest
-          </button>
-          <button
-            onClick={() => navigate("/committee")}
-            className="flex items-center gap-1.5 rounded-md border border-(--color-brand) bg-(--color-brand-glow) px-4 py-2 text-[11px] font-medium tracking-[0.06em] text-(--color-brand) uppercase transition-all hover:brightness-110"
-          >
-            New Committee
-          </button>
-          <button
-            onClick={() => navigate("/results")}
-            className="flex items-center gap-1.5 rounded-md border border-(--color-glass-border) bg-(--color-glass) px-4 py-2 text-[11px] font-medium tracking-[0.06em] text-(--color-text-secondary) uppercase transition-all hover:brightness-110"
-          >
-            View Results
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* ── Tab bar ── */}
-      <div className="flex shrink-0 items-center gap-1 pt-3 pb-2">
-        <TabButton label="Backtests" active={true} onClick={() => {}} />
-        <TabButton label="Committee" active={false} onClick={() => switchTab("committee")} />
-      </div>
-
       {/* ── Top Bar ── */}
-      <div className="flex flex-row shrink-0 items-center gap-4 w-full rounded-lg border border-(--color-glass-border) bg-(--color-glass) px-4 py-2.5">
+      <div className="flex flex-row shrink-0 items-center gap-4 w-full rounded-lg border border-(--color-glass-border) bg-(--color-glass) px-4 py-2.5 mt-2 mb-1">
         <JobPillStrip
           jobs={allJobs}
           selectedJobId={selectedJobId}
@@ -483,6 +342,20 @@ export function MonitorPage() {
           <span className="shrink-0 font-mono text-[9px] text-(--color-text-dim) tabular-nums">
             {progressText}
           </span>
+        )}
+
+        {selectedJob && selectedJob.elapsedSec > 0 && (
+          <>
+            <span className="text-[9px] text-(--color-text-dim)">|</span>
+            <span className="shrink-0 font-mono text-[9px] text-(--color-text-secondary) tabular-nums">
+              {formatDuration(selectedJob.elapsedSec)}
+            </span>
+            {selectedJob.etaSec != null && selectedJob.etaSec > 0 && (
+              <span className="shrink-0 font-mono text-[9px] text-(--color-text-dim) tabular-nums">
+                ~{formatDuration(selectedJob.etaSec)} left
+              </span>
+            )}
+          </>
         )}
 
         {selectedJobId && (
@@ -741,6 +614,24 @@ export function MonitorPage() {
                                 <span className="text-right text-(--color-accent-danger)">
                                   {p.drawdown != null ? `${p.drawdown.toFixed(2)}%` : "\u2014"}
                                 </span>
+                                <span className="text-(--color-text-dim)">Precision</span>
+                                <span className="text-right text-(--color-text-secondary)">
+                                  {p.precision != null ? p.precision.toFixed(3) : "\u2014"}
+                                </span>
+                                <span className="text-(--color-text-dim)">F1</span>
+                                <span className="text-right text-(--color-text-secondary)">
+                                  {p.f1 != null ? p.f1.toFixed(3) : "\u2014"}
+                                </span>
+                                <span className="text-(--color-text-dim)">Active Rate</span>
+                                <span className="text-right text-(--color-text-secondary)">
+                                  {p.active_rate != null ? `${(p.active_rate * 100).toFixed(1)}%` : "\u2014"}
+                                </span>
+                                <span className="text-(--color-text-dim)">Dir Accuracy</span>
+                                <span className="text-right text-(--color-text-secondary)">
+                                  {p.directional_accuracy != null
+                                    ? `${(p.directional_accuracy * 100).toFixed(1)}%`
+                                    : "\u2014"}
+                                </span>
                                 <span className="text-(--color-text-dim)">Gate Rate</span>
                                 <span className="text-right text-(--color-text-secondary)">
                                   {(p.signals_raw ?? 0) > 0
@@ -756,6 +647,20 @@ export function MonitorPage() {
                                       : "var(--color-accent-success)",
                                 }}>
                                   {p.sharpe_gap_pct != null ? `${p.sharpe_gap_pct.toFixed(0)}% gap` : "\u2014"}
+                                </span>
+                                <span className="text-(--color-text-dim)">Signal Cov</span>
+                                <span className="text-right text-(--color-text-secondary)">
+                                  {p.signal_coverage != null ? `${(p.signal_coverage * 100).toFixed(1)}%` : "\u2014"}
+                                </span>
+                                <span className="text-(--color-text-dim)">Profit/Hit</span>
+                                <span className="text-right text-(--color-text-secondary)">
+                                  {p.profit_per_hit != null ? p.profit_per_hit.toFixed(4) : "\u2014"}
+                                </span>
+                                <span className="text-(--color-text-dim)">Alpha</span>
+                                <span className="text-right" style={{
+                                  color: (p.outperformance ?? 0) >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)",
+                                }}>
+                                  {p.outperformance != null ? `${p.outperformance.toFixed(4)}%` : "\u2014"}
                                 </span>
                               </div>
                             </div>
@@ -785,29 +690,5 @@ export function MonitorPage() {
         </div>
       )}
     </div>
-  );
-}
-
-function TabButton({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className="rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors"
-      style={{
-        backgroundColor: active ? "var(--color-brand)" : "transparent",
-        color: active ? "white" : "var(--color-text-muted)",
-        border: active ? "1px solid var(--color-brand)" : "1px solid var(--color-border)",
-      }}
-      onClick={onClick}
-    >
-      {label}
-    </button>
   );
 }

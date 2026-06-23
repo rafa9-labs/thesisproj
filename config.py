@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Literal
 
 PeriodUnit = Literal["months", "weeks", "days"]
+WindowType = Literal["rolling", "expanding"]
 
 
 def period_offset(count: int, unit: PeriodUnit = "months") -> "pd.DateOffset":
@@ -272,6 +273,8 @@ SEARCH_SPACE = {
         "subsample": (0.6, 1.0),
         "colsample_bytree": (0.6, 1.0),
         # Fixed to defaults: gamma=0, min_child_weight=1, lambda=1, alpha=0
+        "warm_start": [True, False],
+        "cold_restart_interval": [2, 3, 4, 6],
     },
     # -- SVM --
     "svm": {
@@ -304,6 +307,9 @@ SEARCH_SPACE = {
         "learning_rate": (1e-4, 5e-3, True), # narrowed from [1e-5, ...]
         # Fixed: dense_units=64, bidirectional=False, clipnorm=1.0,
         #        batch_size=256, use_seq_windows=False
+        "warm_start": [True, False],
+        "cold_restart_interval": [2, 3, 4, 6],
+        "warm_start_lr_multiplier": (0.05, 0.3),
     },
     # -- CNN --
     "cnn": {
@@ -313,6 +319,9 @@ SEARCH_SPACE = {
         "learning_rate": (1e-4, 5e-3, True),
         # Fixed: dropout=0.3, dense_units=64, batch_size=256,
         #        use_seq_windows=False
+        "warm_start": [True, False],
+        "cold_restart_interval": [2, 3, 4, 6],
+        "warm_start_lr_multiplier": (0.05, 0.3),
     },
     # -- Transformer --
     "transformer": {
@@ -322,6 +331,9 @@ SEARCH_SPACE = {
         "learning_rate": (1e-4, 5e-3, True),
         # Fixed: num_blocks=1, ff_multiple=2, dense_units=128,
         #        pooling="cls", use_time2vec=False, batch_size=256
+        "warm_start": [True, False],
+        "cold_restart_interval": [2, 3, 4, 6],
+        "warm_start_lr_multiplier": (0.05, 0.3),
     },
     # -- LightGBM (Microsoft histogram GBDT) --
     "lightgbm": {
@@ -333,6 +345,8 @@ SEARCH_SPACE = {
         "colsample_bytree": (0.6, 1.0),
         "reg_lambda": (0.0, 10.0),
         # Fixed: boosting_type=gbdt, min_child_samples=20
+        "warm_start": [True, False],
+        "cold_restart_interval": [2, 3, 4, 6],
     },
     # -- CatBoost (Yandex ordered boosting) --
     "catboost": {
@@ -342,6 +356,8 @@ SEARCH_SPACE = {
         "subsample": (0.6, 1.0),
         "l2_leaf_reg": (1.0, 10.0),
         # Fixed: border_count=128, loss_function=MultiClass
+        "warm_start": [True, False],
+        "cold_restart_interval": [2, 3, 4, 6],
     },
     # -- GRU (Gated Recurrent Unit) --
     "gru": {
@@ -417,6 +433,15 @@ CV_SEARCH_SPACE = {
 # Kept in sync with CLASS_DEFAULTS in pipeline/metrics_tuples.py.
 # ---------------------------------------------------------------------------
 PIPELINE_CONSTANTS = {
+    # Walk-forward window contract (P1: unified toggle)
+    "window_type": "rolling",
+
+    # Warm-start engine (P2: incremental learning)
+    "warm_start": False,
+    "cold_restart_interval": 3,
+    "warm_start_lr_multiplier": 0.1,
+    "warm_start_lr_floor": 1e-6,
+
     # Volatility & cost regime
     "vol_window_bars": 96,
     "high_vol_q": 0.85,

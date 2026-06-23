@@ -496,6 +496,7 @@ CLASS_DEFAULTS = {
 
     "cv": {
         
+        "window_type": "rolling",
         "use_cached_global_hpo": True,
         "n_trials": 0,
         
@@ -624,6 +625,13 @@ CLASS_DEFAULTS = {
         "robust_seeds": [1111, 2222, 3333],
         "robust_require_pass": False,
         "verify_topn_monthly_roll": False,
+    },
+
+    "training": {
+        "warm_start": False,
+        "cold_restart_interval": 3,
+        "warm_start_lr_multiplier": 0.1,
+        "warm_start_lr_floor": 1e-6,
     },
 }
 

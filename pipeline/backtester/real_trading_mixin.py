@@ -892,6 +892,11 @@ class RealTradingMixin:
                 pass
             return float("nan")
 
+        # --- Warm-start engine (P2): initialize state before monthly loop ---
+        self._warm_start_prev_tree_model_path = getattr(self, "_warm_start_prev_tree_model_path", None)
+        self._warm_start_prev_deep_weights_path = getattr(self, "_warm_start_prev_deep_weights_path", None)
+        self._warm_start_month_count = 0
+
         for i in range(n_periods):
             period_idx = i + 1
 
@@ -899,6 +904,17 @@ class RealTradingMixin:
                 if self._force_stop_checker():
                     print(f"[CANCELLED] Force-stop requested at month {period_idx}/{n_periods}")
                     raise KeyboardInterrupt("Force stopped by user")
+            
+            # --- Warm-start cold-restart management ---
+            self._warm_start_month_count = int(getattr(self, "_warm_start_month_count", 0)) + 1
+            ws_enabled = bool((config if isinstance(config, dict) else {}).get("warm_start", False))
+            ws_cold_int = int((config if isinstance(config, dict) else {}).get("cold_restart_interval", 3))
+            if ws_enabled:
+                if self._warm_start_month_count >= ws_cold_int:
+                    self._warm_start_prev_tree_model_path = None
+                    self._warm_start_prev_deep_weights_path = None
+                    self._warm_start_month_count = 0
+                    log_print(f"[WARM-START] Cold restart at month {period_idx} (interval={ws_cold_int})", level="COMPACT")
             
             # V2 export safety: always define, then overwrite if evaluator provides it
             _signal_coverage_month = float("nan")
@@ -923,7 +939,11 @@ class RealTradingMixin:
                 _pad_p = _cvt(1, _pu)
                 test_start_naive  = _start_dt + period_offset(_warmup + i, unit=_pu)
                 test_end_naive    = test_start_naive + period_offset(_test_p, unit=_pu)
-                train_start_naive = test_start_naive - period_offset(_train_p, unit=_pu)
+                wtype_rt = (config if isinstance(config, dict) else {}).get("window_type", "rolling")
+                if wtype_rt == "expanding":
+                    train_start_naive = _start_dt
+                else:
+                    train_start_naive = test_start_naive - period_offset(_train_p, unit=_pu)
                 train_end_naive   = test_start_naive - pd.Timedelta(minutes=30)
 
                 # make the slices tz-aware (UTC) -- uses _ensure_dt defined at method top
@@ -2914,6 +2934,9 @@ class RealTradingMixin:
                         "sharpe_gap_pct": result.get("sharpe_gap_pct"),
                         "signals_raw": result.get("signals_raw"),
                         "signals_passed_gate": result.get("signals_passed_gate"),
+                        "signal_coverage": result.get("signal_coverage"),
+                        "profit_per_hit": result.get("profit_per_hit"),
+                        "outperformance": result.get("outperformance"),
                     })
                 
                 # PBO/MCS monthly bookkeeping (does not affect trading logic)

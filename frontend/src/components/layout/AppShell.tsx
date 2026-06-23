@@ -1,11 +1,12 @@
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { useState, useEffect, useMemo } from "react";
+import { Outlet } from "react-router-dom";
+import { useState, useEffect, useMemo, useRef } from "react";
 
 import { TerminalPanel } from "./TerminalPanel";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { RunningJobsBar } from "./RunningJobsBar";
-import { useHealth, useActiveBacktests, useFullCycleHistory } from "@/api/queries";
+import { useHealth, useActiveBacktests, _progressCursors } from "@/api/queries";
+import { apiClient } from "@/api/client";
 import { wsManager } from "@/api/websocket";
 import { useBacktestWebSocket } from "@/hooks/useBacktestWebSocket";
 import { useJobNotifications } from "@/hooks/useJobNotifications";
@@ -13,6 +14,7 @@ import { useJobStore } from "@/stores/useJobStore";
 import { UpdateNotification } from "../UpdateNotification/UpdateNotification";
 import { DataSourceModal } from "../onboarding/DataSourceModal";
 import { useAppStore } from "@/stores/useAppStore";
+import type { WsEvent } from "@/api/schemas";
 
 const DS_CHOSEN_KEY = "fx-datasource-chosen";
 
@@ -37,12 +39,9 @@ export function AppShell() {
   const [showDataSource, setShowDataSource] = useState(!hasChosenDataSource());
   const { data: health } = useHealth();
   const { data: activeData } = useActiveBacktests();
-  const { data: fcHistory } = useFullCycleHistory();
   const { setDemoMode } = useAppStore();
   const activeJobs = useJobStore((s) => s.activeJobs);
   const ensureJob = useJobStore((s) => s.ensureJob);
-  const navigate = useNavigate();
-  const location = useLocation();
 
   // Job completion notifications (sound + desktop)
   useJobNotifications();
@@ -57,7 +56,9 @@ export function AppShell() {
   useEffect(() => {
     const jobs = activeData?.jobs ?? [];
     for (const job of jobs) {
-      if (!(activeJobs instanceof Map) || !activeJobs.has(job.job_id)) {
+      const jobsMap = activeJobs instanceof Map ? activeJobs : new Map();
+      const local = jobsMap.get(job.job_id);
+      if (!local || local.status === "stale") {
         ensureJob(job.job_id, job.pair ?? "", job.models ?? []);
       }
     }
@@ -77,20 +78,50 @@ export function AppShell() {
 
   useBacktestWebSocket(runningIds);
 
-  // Redirect to Dashboard when no visible jobs and user is viewing a dead study
+  // Continuous REST fallback poll — keeps event cursor advancing even when
+  // MonitorPage is not mounted, so returning to Monitor shows current data.
+  // On first poll for a job, skip replaying old events by advancing cursor
+  // to the current total. This prevents rehydrated jobs from appearing to
+  // restart by replaying historical events.
+  const handleWsEventRef = useRef(useJobStore.getState().handleWsEvent);
   useEffect(() => {
-    if (!location.pathname.startsWith("/monitor")) return;
-    const rawJobs = activeJobs instanceof Map ? activeJobs : new Map();
-    const hasBacktestJobs = [...rawJobs.values()].some(
-      (j) => j.status === "pending" || j.status === "running",
-    );
-    const hasCommitteeJobs = (fcHistory?.entries ?? []).some(
-      (e) => e.status !== "orphaned" && e.status !== "cancelled",
-    );
-    if (!hasBacktestJobs && !hasCommitteeJobs) {
-      navigate("/", { replace: true });
-    }
-  }, [activeJobs, fcHistory, location.pathname, navigate]);
+    handleWsEventRef.current = useJobStore.getState().handleWsEvent;
+  });
+  const syncedCursorRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (runningIds.length === 0) return;
+    const interval = setInterval(() => {
+      for (const id of runningIds) {
+        const synced = syncedCursorRef.current.has(id);
+        const cursor = _progressCursors.get(id) ?? 0;
+        if (!synced && cursor === 0) {
+          // First fetch: get total count, advance cursor past all old events
+          apiClient
+            .get<{ events: WsEvent[]; total: number }>(`/backtest/${id}/events?after=0`)
+            .then(({ data }) => {
+              _progressCursors.set(id, data.total);
+              syncedCursorRef.current.add(id);
+            })
+            .catch(() => {});
+        } else {
+          apiClient
+            .get<{ events: WsEvent[]; total: number }>(`/backtest/${id}/events?after=${cursor}`)
+            .then(({ data }) => {
+              if (data.events && data.events.length > 0) {
+                for (const evt of data.events) {
+                  handleWsEventRef.current(evt);
+                }
+                _progressCursors.set(id, data.total);
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [runningIds]);
+
+  // ── Dead-study redirect removed — MonitorPage handles empty state with routing UI ──
 
   const handleStart = (mode: string) => {
     markDataSourceChosen();

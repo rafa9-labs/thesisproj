@@ -308,7 +308,11 @@ def run_optuna_tuning(
 
         sampler = _create_sampler(sampler_method, sampler_seed, _n_startup, _model_name)
 
-        study = optuna.create_study(direction="maximize", sampler=sampler, pruner=pruner)
+        _study_name = f"{_model_name}_{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+        study = optuna.create_study(
+            direction="maximize", sampler=sampler, pruner=pruner,
+            study_name=_study_name,
+        )
 
     _progress_cb = cv_config.get("_progress_callback", None) if isinstance(cv_config, dict) else None
     _model_name_for_cb = str(models_to_test[0]) if isinstance(models_to_test, (list, tuple)) and models_to_test else str(models_to_test)
@@ -374,6 +378,8 @@ def run_optuna_tuning(
                     "best_score_so_far": best_so_far,
                     "trial_state": trial_state,
                 })
+            except KeyboardInterrupt:
+                raise
             except Exception:
                 pass
 

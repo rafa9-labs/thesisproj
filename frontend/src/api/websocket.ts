@@ -7,6 +7,8 @@ interface ConnectionState {
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   watchDogTimer: ReturnType<typeof setInterval> | null;
   lastMsgTime: number;
+  isTerminal: boolean;
+  watchdogRetries: number;
 }
 
 const MAX_RECONNECT_ATTEMPTS = 10;
@@ -37,7 +39,9 @@ export class WebSocketManager {
       reconnectAttempts: 0,
       reconnectTimer: null,
       watchDogTimer: null,
-      lastMsgTime: 0,
+      lastMsgTime: Date.now(),
+      isTerminal: false,
+      watchdogRetries: 0,
     };
     this.connections.set(jobId, state);
     this.doConnect(jobId, state);
@@ -72,6 +76,10 @@ export class WebSocketManager {
       this.stopWatchDog(state);
       if (import.meta.env.DEV)
         console.warn("[WS] closed, code:", ev.code, "wasClean:", ev.wasClean, "reason:", ev.reason);
+      if (state.isTerminal) {
+        state.ws = null;
+        return;
+      }
       if (!ev.wasClean && state.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         const delay = Math.min(1000 * Math.pow(2, state.reconnectAttempts), 30_000);
         state.reconnectAttempts++;
@@ -88,8 +96,24 @@ export class WebSocketManager {
   private startWatchDog(jobId: string, state: ConnectionState) {
     this.stopWatchDog(state);
     state.watchDogTimer = setInterval(() => {
+      if (state.isTerminal) {
+        this.stopWatchDog(state);
+        state.ws?.close();
+        state.ws = null;
+        return;
+      }
       const elapsed = Date.now() - state.lastMsgTime;
       if (elapsed > WATCHDOG_TIMEOUT && state.ws) {
+        state.watchdogRetries++;
+        if (state.watchdogRetries > 5) {
+          if (import.meta.env.DEV) console.warn("[WS] watchdog: max retries for job, giving up:", jobId.slice(0, 8));
+          this.stopWatchDog(state);
+          state.ws.onclose = null;
+          state.ws.close();
+          state.ws = null;
+          state.isTerminal = true;
+          return;
+        }
         if (import.meta.env.DEV) console.warn("[WS] watchdog: no message for 60s, reconnecting job:", jobId.slice(0, 8));
         state.ws.onclose = null;
         state.ws.close();
@@ -121,6 +145,22 @@ export class WebSocketManager {
       state.ws = null;
     }
     this.connections.delete(jobId);
+  }
+
+  markTerminal(jobId: string) {
+    const state = this.connections.get(jobId);
+    if (!state) return;
+    state.isTerminal = true;
+    this.stopWatchDog(state);
+    if (state.reconnectTimer) {
+      clearTimeout(state.reconnectTimer);
+      state.reconnectTimer = null;
+    }
+    if (state.ws) {
+      state.ws.onclose = null;
+      state.ws.close();
+      state.ws = null;
+    }
   }
 
   subscribe(jobId: string, fn: WsListener): () => void {

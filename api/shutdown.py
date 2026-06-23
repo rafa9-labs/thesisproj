@@ -31,10 +31,11 @@ def wal_checkpoint_periodic(db_path: str) -> None:
 def mark_stale_jobs_failed(db_path: str) -> int:
     """On server restart, transition stale jobs.
 
-    - 'running' jobs → set back to 'pending' so they can be re-queued.
-      A running job at restart means the worker was killed mid-execution;
-      marking it pending preserves the job for manual or auto retry.
-    - 'pending' jobs stay 'pending' — they were never picked up.
+    - 'running' jobs with an active Celery task are LEFT as 'running'
+      (the worker survived the restart, or a different worker picked it up).
+    - 'running' jobs where the Celery task is dead/superseded are reset
+      to 'pending' so they can be re-queued.
+    - 'pending' jobs stay 'pending' -- they were never picked up.
 
     Returns number of jobs updated.
     """
@@ -42,14 +43,31 @@ def mark_stale_jobs_failed(db_path: str) -> int:
     total = 0
     try:
         conn = sqlite3.connect(db_path, timeout=10)
+        conn.row_factory = sqlite3.Row
         cur = conn.execute(
-            "UPDATE jobs SET status = 'pending', "
-            "error = 'Server restarted while running — reset to pending', "
-            "updated_at = ? "
-            "WHERE status = 'running'",
-            (now,),
+            "SELECT id, task_id FROM jobs WHERE status = 'running'"
         )
-        total += cur.rowcount
+        running = cur.fetchall()
+        for row in running:
+            job_id = row["id"]
+            task_id = row["task_id"]
+            reset = True
+            if task_id:
+                try:
+                    from celery.result import AsyncResult
+                    ar = AsyncResult(task_id)
+                    if ar.state in ("STARTED", "RETRY", "PENDING"):
+                        reset = False
+                except Exception:
+                    pass
+            if reset:
+                conn.execute(
+                    "UPDATE jobs SET status = 'pending', "
+                    "error = 'Server restarted while running -- reset to pending', "
+                    "updated_at = ? WHERE id = ?",
+                    (now, job_id),
+                )
+                total += 1
         conn.commit()
         conn.close()
         return total

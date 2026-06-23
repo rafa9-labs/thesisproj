@@ -16,18 +16,16 @@ Reference:
   Bias in random forest variable importance measures.
   BMC Bioinformatics, 8(1), 25.
 """
-from __future__ import annotations
 
 import json
 import os
 from typing import Callable, Dict, List, Optional, Tuple
 
-import gc
 import numpy as np
 import pandas as pd
 
 try:
-    import shap
+    import shap  # type: ignore[import-untyped]
     HAS_SHAP = True
 except ImportError:
     HAS_SHAP = False
@@ -41,8 +39,10 @@ def _make_labels(df: pd.DataFrame, threshold: float = 0.0001) -> np.ndarray:
     rets = np.zeros_like(prices)
     rets[1:] = np.log(prices[1:] / prices[:-1])
     labels = np.ones(len(rets), dtype=np.int32) * -1
-    labels[rets > threshold] = 1
-    labels[rets < -threshold] = 0
+    labels[:-1] = np.where(
+        rets[1:] > threshold, 1,
+        np.where(rets[1:] < -threshold, 0, -1),
+    )
     labels[-1] = 1
     return labels
 
@@ -147,6 +147,7 @@ class BorutaSHAPSelector:
         confirmation_counts = np.zeros(n_features, dtype=np.int32)
         rejection_counts = np.zeros(n_features, dtype=np.int32)
         per_feature_shap: Dict[str, float] = {}
+        iteration = 0
 
         for iteration in range(1, self.max_iter + 1):
             if not tentative:
@@ -212,7 +213,6 @@ class BorutaSHAPSelector:
                         rejection_counts[j] += 1
 
                 del shadow, X_combined, shap_values, real_shap_raw, real_shap_2d
-                gc.collect()
 
             folds_required_for_confirmation = max(
                 1, int(np.ceil(len(fold_splits) * self.percentile / 100.0))
@@ -380,11 +380,13 @@ def boruta_sweep_features(
         print(f"  MI filter: capped at {len(locked)} features")
 
     if len(locked) < 8:
-        shap_scores = []
-        for f in confirmed:
-            shap_scores.append((f, boruta_report.get("per_feature_shap", {}).get(f, 0)))
-        shap_scores.sort(key=lambda x: x[1], reverse=True)
-        locked = [f for f, _ in shap_scores[:8]]
+        fallback_pool = confirmed if confirmed else rejected
+        if fallback_pool:
+            shap_scores = []
+            for f in fallback_pool:
+                shap_scores.append((f, boruta_report.get("per_feature_shap", {}).get(f, 0)))
+            shap_scores.sort(key=lambda x: x[1], reverse=True)
+            locked = [f for f, _ in shap_scores[:8]]
         print(f"  Floor: ensured {len(locked)} features minimum")
 
     importance_scores = {

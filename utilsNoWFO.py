@@ -765,6 +765,31 @@ TRAIN_TEST_MONTHS_DEBUG = {
     "stacking_ensemble":           {"train": (6, 12), "test": (1, 1)},
 }
 
+def get_train_window_bounds(
+    start_date,
+    train_periods: int,
+    data_start,
+    window_type: str = "rolling",
+    unit: str = "months",
+):
+    """Compute (train_start, train_end) respecting the window_type contract.
+
+    rolling:   train_start = start_date  (slides forward with test_start)
+    expanding: train_start = data_start  (anchored at data origin, never slides)
+
+    Returns (train_start, train_end)
+    """
+    from config import period_offset
+
+    if window_type == "expanding":
+        train_start = data_start
+    else:
+        train_start = start_date
+
+    train_end = start_date + period_offset(train_periods, unit=unit)
+    return train_start, train_end
+
+
 def _ensure_dt(s):
     import pandas as pd
     return pd.to_datetime(s, utc=True, errors="coerce")
