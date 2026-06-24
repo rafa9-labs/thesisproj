@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef } from "react";
 import {
   createChart,
   createSeriesMarkers,
@@ -10,22 +10,9 @@ import {
   LineSeries,
   ColorType,
 } from "lightweight-charts";
-import { useCandles } from "@/api/queries";
 import { TIMEFRAMES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-
-const TF_SECONDS: Record<string, number> = {
-  M15: 900,
-  M30: 1800,
-  H1: 3600,
-  H2: 7200,
-  H4: 14400,
-};
-
-function clockBarStartEpoch(tsEpoch: number, timeframe: string): number {
-  const seconds = TF_SECONDS[timeframe] || 60;
-  return Math.floor(tsEpoch / seconds) * seconds;
-}
+import type { CandleData } from "@/hooks/useChartStream";
 
 export interface OverlayLine {
   data: { time: number; value: number }[];
@@ -45,29 +32,33 @@ export interface ChartMarker {
 interface CandlestickChartProps {
   pair: string;
   timeframe?: string;
-  limit?: number;
+  historical: CandleData[];
+  liveBar: CandleData | null;
+  isLoading?: boolean;
   height?: number;
   onTimeframeChange?: (tf: string) => void;
   overlayLines?: OverlayLine[];
   showVolume?: boolean;
   showToolbar?: boolean;
-  liveCandle?: { time: number; open: number; high: number; low: number; close: number } | null;
-  livePrice?: number | null;
   chartMarkers?: ChartMarker[];
+  onRequestOlder?: () => void;
+  hasOlder?: boolean;
 }
 
 export function CandlestickChart({
   pair,
   timeframe = "M30",
-  limit = 200,
+  historical,
+  liveBar,
+  isLoading = false,
   height,
   onTimeframeChange,
   overlayLines,
   showVolume = true,
   showToolbar = true,
-  liveCandle,
-  livePrice,
   chartMarkers,
+  onRequestOlder,
+  hasOlder = false,
 }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -77,10 +68,12 @@ export function CandlestickChart({
   const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<number> | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const markersRef = useRef<ChartMarker[]>([]);
-  const lastBarTimeRef = useRef<number | null>(null);
+  const didInitialLoad = useRef(false);
+  const onRequestOlderRef = useRef(onRequestOlder);
 
-  const { data, isLoading } = useCandles(pair, timeframe, limit);
-  const candles = useMemo(() => data?.candles ?? [], [data]);
+  useEffect(() => {
+    onRequestOlderRef.current = onRequestOlder;
+  });
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -130,6 +123,8 @@ export function CandlestickChart({
         color: "#10B98160",
         priceFormat: { type: "volume" },
         priceScaleId: "volume",
+        lastValueVisible: false,
+        priceLineVisible: false,
       });
       chart.priceScale("volume").applyOptions({
         scaleMargins: { top: 0.8, bottom: 0 },
@@ -160,58 +155,103 @@ export function CandlestickChart({
       volSeriesRef.current = null;
       lineSeriesRefs.current = [];
       seriesMarkersRef.current = null;
+      didInitialLoad.current = false;
     };
   }, []);
 
   useEffect(() => {
-    if (!chartRef.current || isLoading || candles.length === 0) return;
-
-    const chart = chartRef.current;
-    const candleSeries = candleSeriesRef.current;
-    if (!candleSeries) return;
+    if (!candleSeriesRef.current || isLoading || historical.length === 0) return;
 
     const seen = new Set<number>();
-    const mapped = candles
+    const ohlc = historical
       .map((c) => ({
-        time: c.t as number,
-        open: c.o,
-        high: c.h,
-        low: c.l,
-        close: c.c,
+        time: c.time,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
       }))
       .filter((c) => {
         if (seen.has(c.time)) return false;
         seen.add(c.time);
         return true;
-      });
-    candleSeries.setData(mapped);
-    if (mapped.length > 0) lastBarTimeRef.current = mapped[mapped.length - 1].time;
+      })
+      .sort((a, b) => a.time - b.time);
+    candleSeriesRef.current.setData(ohlc);
+
+    if (!didInitialLoad.current) {
+      chartRef.current?.timeScale().fitContent();
+      didInitialLoad.current = true;
+    }
 
     if (showVolume && volSeriesRef.current) {
       const volSeen = new Set<number>();
       volSeriesRef.current.setData(
-        candles
+        historical
           .map((c) => ({
-            time: c.t as number,
+            time: c.time,
             value: c.volume || 0,
-            color: c.c >= c.o ? "#10B98140" : "#F43F5E40",
+            color: c.close >= c.open ? "#10B98140" : "#F43F5E40",
           }))
           .filter((v) => {
             if (volSeen.has(v.time)) return false;
             volSeen.add(v.time);
             return true;
-          }),
+          })
+          .sort((a, b) => a.time - b.time),
       );
     }
+  }, [historical, isLoading, showVolume]);
+
+  useEffect(() => {
+    if (!candleSeriesRef.current || !liveBar) return;
+    candleSeriesRef.current.update({
+      time: liveBar.time,
+      open: liveBar.open,
+      high: liveBar.high,
+      low: liveBar.low,
+      close: liveBar.close,
+    });
+  }, [liveBar]);
+
+  useEffect(() => {
+    if (!chartRef.current || !hasOlder) return;
+
+    const timeScale = chartRef.current.timeScale();
+    let fetching = false;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+
+    const handler = (range: { from: number; to: number } | null) => {
+      if (!range || fetching) return;
+      if (range.from < 50) {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(async () => {
+          fetching = true;
+          await onRequestOlderRef.current?.();
+          fetching = false;
+        }, 300);
+      }
+    };
+
+    timeScale.subscribeVisibleLogicalRangeChange(handler);
+
+    return () => {
+      timeScale.unsubscribeVisibleLogicalRangeChange(handler);
+      if (debounce) clearTimeout(debounce);
+    };
+  }, [hasOlder]);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
 
     for (const ls of lineSeriesRefs.current) {
-      chart.removeSeries(ls);
+      chartRef.current.removeSeries(ls);
     }
     lineSeriesRefs.current = [];
 
     if (overlayLines && overlayLines.length > 0) {
       for (const line of overlayLines) {
-        const lineSeries = chart.addSeries(LineSeries, {
+        const lineSeries = chartRef.current.addSeries(LineSeries, {
           color: line.color,
           lineWidth: 2,
           priceLineVisible: false,
@@ -222,56 +262,14 @@ export function CandlestickChart({
         lineSeries.setData(line.data);
         lineSeriesRefs.current.push(lineSeries);
       }
-      chart.priceScale("overlay").applyOptions({
+      chartRef.current.priceScale("overlay").applyOptions({
         visible: true,
         borderColor: "#334155",
         scaleMargins: { top: 0.3, bottom: 0 },
         mode: 0,
       });
     }
-
-    chart.timeScale().fitContent();
-
-    if (markersRef.current.length > 0) {
-      seriesMarkersRef.current?.setMarkers(markersRef.current);
-    }
-  }, [data, isLoading, pair, overlayLines, showVolume, candles]);
-
-  useEffect(() => {
-    if (!candleSeriesRef.current || !liveCandle) return;
-    candleSeriesRef.current.update(liveCandle);
-    lastBarTimeRef.current = liveCandle.time;
-  }, [liveCandle, candles]);
-
-  useEffect(() => {
-    if (!candleSeriesRef.current || livePrice == null || candles.length === 0) return;
-
-    const nowEpoch = Math.floor(Date.now() / 1000);
-    const barStartEpoch = clockBarStartEpoch(nowEpoch, timeframe);
-
-    const lastCandle = candles[candles.length - 1];
-    const lastTime = lastCandle.t as number;
-
-    if (barStartEpoch === lastTime) {
-      candleSeriesRef.current.update({
-        time: barStartEpoch,
-        open: lastCandle.o,
-        high: Math.max(lastCandle.h, livePrice),
-        low: Math.min(lastCandle.l, livePrice),
-        close: livePrice,
-      });
-    } else if (barStartEpoch > lastTime) {
-      candleSeriesRef.current.update({
-        time: barStartEpoch,
-        open: livePrice,
-        high: livePrice,
-        low: livePrice,
-        close: livePrice,
-      });
-    }
-
-    lastBarTimeRef.current = barStartEpoch;
-  }, [livePrice, candles, timeframe]);
+  }, [overlayLines]);
 
   useEffect(() => {
     if (!chartMarkers) return;
@@ -284,6 +282,8 @@ export function CandlestickChart({
       chartRef.current.applyOptions({ height });
     }
   }, [height]);
+
+  const bars = (historical?.length ?? 0) + (liveBar ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
@@ -319,7 +319,7 @@ export function CandlestickChart({
             <span className="text-xs text-(--color-text-muted)">Loading candles...</span>
           </div>
         )}
-        {!isLoading && candles.length === 0 && (
+        {!isLoading && bars === 0 && (
           <div className="flex flex-col items-center justify-center gap-1" style={{ height: height ?? "100%" }}>
             <span className="text-xs text-(--color-text-muted)">
               No data for {pair} at {timeframe}
