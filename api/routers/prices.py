@@ -286,6 +286,72 @@ def get_candles(
     return {"pair": pair, "timeframe": timeframe, "candles": candles}
 
 
+@router.get("/candles/{pair}/{timeframe}/live")
+def get_live_candles(
+    pair: str,
+    timeframe: str,
+    limit: int = Query(1000, ge=1, le=5000),
+):
+    """Fetch recent candles directly from OANDA (bypasses SQLite).
+
+    Returns clean, sequential OHLC data for the charting frontend.
+    Falls back to DB query if OANDA is unreachable.
+    """
+    pair = pair.upper()
+    try:
+        pair_cfg = get_pair_config(pair)
+    except Exception:
+        raise HTTPException(404, f"Unknown pair: {pair}")
+
+    valid_tfs = {"M15", "M30", "H1", "H2", "H4"}
+    if timeframe not in valid_tfs:
+        raise HTTPException(400, f"Invalid timeframe: {timeframe}. Valid: {sorted(valid_tfs)}")
+
+    tf_minutes = _timeframe_minutes(timeframe)
+
+    try:
+        token, account_id = _get_oanda_credentials()
+        if token and account_id:
+            from oandapyV20 import API
+            from pipeline.data_downloader import _fetch_candles
+            from datetime import timedelta
+            import pandas as pd
+
+            now = datetime.now(timezone.utc)
+            lookback = now - timedelta(minutes=tf_minutes * limit * 2)
+
+            oanda_env = os.environ.get("OANDA_ENV", "practice").strip().lower()
+            client = API(access_token=token, environment=oanda_env)
+            oanda_name = pair_cfg.oanda_name
+
+            df = _fetch_candles(client, oanda_name, lookback, now, timeframe, include_incomplete=True)
+
+            if not df.empty:
+                df["time"] = pd.to_datetime(df["time"])
+                df = df.drop_duplicates("time")
+                df = df.sort_values("time").tail(limit)
+
+                candles = []
+                for _, row in df.iterrows():
+                    t_val = row["time"]
+                    t_epoch = int(t_val.timestamp()) if hasattr(t_val, "timestamp") else 0
+                    candles.append({
+                        "t": t_epoch,
+                        "o": round(float(row.get("mid_open", 0) or 0), 10),
+                        "h": round(float(row.get("mid_high", 0) or 0), 10),
+                        "l": round(float(row.get("mid_low", 0) or 0), 10),
+                        "c": round(float(row.get("mid_close", 0) or 0), 10),
+                        "volume": int(row.get("volume", 0) or 0),
+                    })
+                return {"pair": pair, "timeframe": timeframe, "candles": candles}
+    except Exception as exc:
+        logger.warning("Live OANDA fetch failed for %s/%s — falling back to DB: %s", pair, timeframe, exc)
+
+    store = get_data_store()
+    candles = _query_candles(store, pair, timeframe, None, None, limit)
+    return {"pair": pair, "timeframe": timeframe, "candles": candles}
+
+
 @router.websocket("/chart/{pair}/{timeframe}/ws")
 async def chart_ws(websocket: WebSocket, pair: str, timeframe: str):
     """Real-time chart stream — forming candles + new-bar events per tick.

@@ -618,8 +618,14 @@ export function useLivePrices(pairs: string[], lookbackBars = 50, pollingEnabled
   });
 }
 
-export function useCandles(pair: string, timeframe: string, limit = 200) {
+export function useCandles(
+  pair: string,
+  timeframe: string,
+  limit = 200,
+  refetchInterval?: number | false,
+) {
   const refetchMs = useMemo(() => {
+    if (refetchInterval !== undefined) return refetchInterval;
     const t = timeframe.toUpperCase();
     if (t === "M1") return 15_000;
     if (t === "M5") return 30_000;
@@ -627,7 +633,7 @@ export function useCandles(pair: string, timeframe: string, limit = 200) {
     if (t === "H1") return 120_000;
     if (t === "H4") return 300_000;
     return 300_000;
-  }, [timeframe]);
+  }, [timeframe, refetchInterval]);
 
   return useQuery({
     queryKey: ["candles", pair, timeframe, limit],
@@ -642,6 +648,25 @@ export function useCandles(pair: string, timeframe: string, limit = 200) {
     },
     staleTime: 15_000,
     refetchInterval: refetchMs,
+    enabled: !!pair && !!timeframe,
+  });
+}
+
+export function useLiveCandles(
+  pair: string,
+  timeframe: string,
+  limit = 1000,
+) {
+  return useQuery({
+    queryKey: ["live-candles", pair, timeframe, limit],
+    queryFn: async () => {
+      const { data } = await apiClient.get<import("./schemas").CandlesResponse>(
+        `/candles/${pair}/${timeframe}/live`,
+        { params: { limit } },
+      );
+      return data;
+    },
+    staleTime: 30_000,
     enabled: !!pair && !!timeframe,
   });
 }

@@ -137,7 +137,7 @@ class CoreMixin:
         # Prevent silent 0.0 when trading_costs are enabled.
         try:
             if isinstance(self.features_config, dict) and ("slippage_factor" in self.features_config):
-                self.slippage_factor = float(self.features_config.get("slippage_factor"))
+                self.slippage_factor = float(self.features_config.get("slippage_factor") or 1.0)
             elif bool(self.trading_costs) and float(getattr(self, "slippage_factor", 0.0) or 0.0) == 0.0:
                 # Legacy default was 0.0; treat as 'unset' unless explicitly provided in config.
                 self.slippage_factor = 1.0

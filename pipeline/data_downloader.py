@@ -78,6 +78,7 @@ def _fetch_candles(
             "granularity": granularity,
             "count": 5000,
             "price": "MBA",
+            "includeFirst": True,
         }
 
         try:

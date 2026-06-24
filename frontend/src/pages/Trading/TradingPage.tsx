@@ -17,7 +17,8 @@ import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/api/client";
 import { CandlestickChart } from "@/components/charts/CandlestickChart";
 import type { OverlayLine } from "@/components/charts/CandlestickChart";
-import type { PaperSignalEvent, LiveSignalEvent, PaperSummary, CandleBar } from "@/api/schemas";
+import { useChartStream } from "@/hooks/useChartStream";
+import type { PaperSignalEvent, LiveSignalEvent, PaperSummary } from "@/api/schemas";
 
 import type { TradingMode } from "./SessionControls";
 import type { SignalDirection } from "./PositionMonitor";
@@ -230,8 +231,9 @@ export default function TradingPage() {
   const [riskConfig, setRiskConfig] = useState(RISK_DEFAULTS);
   const [confirmLive, setConfirmLive] = useState(false);
   const [live, setLive] = useState<LiveState>(INITIAL_LIVE_STATE);
-  const [liveCandle, setLiveCandle] = useState<CandleBar | null>(null);
   const [chartMarkers, setChartMarkers] = useState<ChartMarker[]>([]);
+
+  const { historical, liveBar, isLoading: chartLoading, loadOlder, hasOlder, setChartReady } = useChartStream(selectedPair, timeframe, 1000);
 
   const { data: committeeData } = useSavedCommittees();
   const committeeList = committeeData?.committees?.map((c) => c.name) ?? [];
@@ -341,10 +343,7 @@ export default function TradingPage() {
     ws.onmessage = (event) => {
       try {
         const raw = JSON.parse(event.data);
-        if (raw.event === "price_tick") {
-          if (raw.forming_candle) setLiveCandle(raw.forming_candle as CandleBar);
-          return;
-        }
+        if (raw.event === "price_tick") return;
         if (tradingMode === "paper") handlePaperWSEvent(raw as PaperSignalEvent);
         else handleLiveWSEvent(raw as LiveSignalEvent);
       } catch {
@@ -429,8 +428,6 @@ export default function TradingPage() {
   }
 
   function handlePaperWSEvent(msg: PaperSignalEvent) {
-    if (msg.candle) setLiveCandle(msg.candle);
-
     if (msg.event === "signal" || msg.event === "hold") {
       setLive((prev) => {
         const eq = msg.equity ?? prev.equity;
@@ -467,8 +464,6 @@ export default function TradingPage() {
   }
 
   function handleLiveWSEvent(msg: LiveSignalEvent) {
-    if (msg.candle) setLiveCandle(msg.candle);
-
     if (msg.event === "signal" || msg.event === "hold") {
       setLive((prev) => {
         const eq = msg.equity ?? prev.equity;
@@ -853,12 +848,15 @@ export default function TradingPage() {
             <CandlestickChart
               pair={selectedPair}
               timeframe={timeframe}
-              limit={300}
+              historical={historical}
+              liveBar={liveBar}
+              isLoading={chartLoading}
               overlayLines={equityOverlay}
               showToolbar={false}
-              liveCandle={liveCandle}
               chartMarkers={chartMarkers}
-              livePrice={!isRunning ? midPrice : null}
+              onRequestOlder={loadOlder}
+              hasOlder={hasOlder}
+              onReady={() => setChartReady(true)}
             />
           </div>
 

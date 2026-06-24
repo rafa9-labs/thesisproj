@@ -43,6 +43,7 @@ interface CandlestickChartProps {
   chartMarkers?: ChartMarker[];
   onRequestOlder?: () => void;
   hasOlder?: boolean;
+  onReady?: () => void;
 }
 
 export function CandlestickChart({
@@ -59,6 +60,7 @@ export function CandlestickChart({
   chartMarkers,
   onRequestOlder,
   hasOlder = false,
+  onReady,
 }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -162,21 +164,13 @@ export function CandlestickChart({
   useEffect(() => {
     if (!candleSeriesRef.current || isLoading || historical.length === 0) return;
 
-    const seen = new Set<number>();
-    const ohlc = historical
-      .map((c) => ({
-        time: c.time,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-      }))
-      .filter((c) => {
-        if (seen.has(c.time)) return false;
-        seen.add(c.time);
-        return true;
-      })
-      .sort((a, b) => a.time - b.time);
+    const ohlc = historical.map((c) => ({
+      time: c.time,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+    }));
     candleSeriesRef.current.setData(ohlc);
 
     if (!didInitialLoad.current) {
@@ -184,21 +178,15 @@ export function CandlestickChart({
       didInitialLoad.current = true;
     }
 
+    onReady?.();
+
     if (showVolume && volSeriesRef.current) {
-      const volSeen = new Set<number>();
       volSeriesRef.current.setData(
-        historical
-          .map((c) => ({
-            time: c.time,
-            value: c.volume || 0,
-            color: c.close >= c.open ? "#10B98140" : "#F43F5E40",
-          }))
-          .filter((v) => {
-            if (volSeen.has(v.time)) return false;
-            volSeen.add(v.time);
-            return true;
-          })
-          .sort((a, b) => a.time - b.time),
+        historical.map((c) => ({
+          time: c.time,
+          value: c.volume || 0,
+          color: c.close >= c.open ? "#10B98140" : "#F43F5E40",
+        })),
       );
     }
   }, [historical, isLoading, showVolume]);

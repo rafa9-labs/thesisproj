@@ -412,7 +412,14 @@ class CandleSyncer:
         r = instruments.InstrumentsCandles(
             instrument=instrument, params=params,
         )
-        self._api.request(r)
+        try:
+            self._api.request(r)
+        except Exception as exc:
+            logger.error(
+                "OANDA candles fetch failed for %s %s: %s",
+                instrument, granularity, exc,
+            )
+            return []
         if r.response is None:
             return []
         candles = r.response.get("candles")

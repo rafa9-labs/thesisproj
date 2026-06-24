@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useCandles } from "@/api/queries";
+import { useLiveCandles } from "@/api/queries";
 import apiClient from "@/api/client";
 import type { CandleBar } from "@/api/schemas";
 
@@ -49,19 +49,22 @@ interface UseChartStreamResult {
   loadOlder: () => Promise<boolean>;
   hasOlder: boolean;
   isLoadingOlder: boolean;
+  setChartReady: (ready: boolean) => void;
 }
 
 export function useChartStream(
   pair: string,
   timeframe: string,
-  limit = 300,
+  limit = 1000,
 ): UseChartStreamResult {
-  const { data, isLoading } = useCandles(pair, timeframe, limit, undefined);
+  const { data, isLoading } = useLiveCandles(pair, timeframe, limit);
   const [isStreaming, setIsStreaming] = useState(false);
   const [liveBar, setLiveBar] = useState<CandleData | null>(null);
   const [olderBars, setOlderBars] = useState<CandleData[]>([]);
   const [hasOlder, setHasOlder] = useState(true);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [chartReady, setChartReady] = useState(false);
+  const chartReadyRef = useRef(false);
   const wsRef = useRef<WebSocket | null>(null);
   const prevPairTfRef = useRef(`${pair}:${timeframe}`);
 
@@ -71,7 +74,14 @@ export function useChartStream(
     prevPairTfRef.current = key;
     setOlderBars([]);
     setHasOlder(true);
+    setChartReady(false);
+    chartReadyRef.current = false;
   }, [pair, timeframe]);
+
+  const setReady = useCallback((ready: boolean) => {
+    chartReadyRef.current = ready;
+    setChartReady(ready);
+  }, []);
 
   const historical: CandleData[] = useMemo(() => {
     const candles = data?.candles;
@@ -89,13 +99,11 @@ export function useChartStream(
   const allHistorical = useMemo(() => {
     const combined = [...olderBars, ...historical];
     const seen = new Set<number>();
-    return combined
-      .filter((c) => {
-        if (seen.has(c.time)) return false;
-        seen.add(c.time);
-        return true;
-      })
-      .sort((a, b) => a.time - b.time);
+    return combined.filter((c) => {
+      if (seen.has(c.time)) return false;
+      seen.add(c.time);
+      return true;
+    });
   }, [olderBars, historical]);
 
   const loadOlder = useCallback(async (): Promise<boolean> => {
@@ -157,6 +165,7 @@ export function useChartStream(
         const msg: ChartWSEvent = JSON.parse(evt.data);
 
         if (msg.event === "price_tick" && msg.forming_candle) {
+          if (!chartReadyRef.current) return;
           setLiveBar((prev) => {
             const fc = msg.forming_candle as CandleBar;
             if (!prev || prev.time !== fc.time) {
@@ -169,6 +178,7 @@ export function useChartStream(
             };
           });
         } else if (msg.event === "new_bar_saved" && msg.candle) {
+          if (!chartReadyRef.current) return;
           setLiveBar((prev) => {
             const nc = msg.candle as CandleBar;
             return { ...nc, volume: prev?.volume ?? 0 };
@@ -191,5 +201,14 @@ export function useChartStream(
     };
   }, [pair, timeframe, isLoading]);
 
-  return { historical: allHistorical, liveBar, isLoading, isStreaming, loadOlder, hasOlder, isLoadingOlder };
+  return {
+    historical: allHistorical,
+    liveBar: chartReady ? liveBar : null,
+    isLoading,
+    isStreaming: chartReady && isStreaming,
+    loadOlder,
+    hasOlder,
+    isLoadingOlder,
+    setChartReady: setReady,
+  };
 }

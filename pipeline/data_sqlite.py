@@ -135,12 +135,18 @@ class DataStore:
     """SQLite-backed market data store."""
 
     def __init__(self, db_path: str = "data/forex.db"):
-        self.db_path = db_path
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.db_path = str(Path(db_path).resolve())
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._ensure_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=30)
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        try:
+            conn = sqlite3.connect(self.db_path, timeout=30)
+        except sqlite3.OperationalError:
+            raise sqlite3.OperationalError(
+                f"unable to open database file: {self.db_path}"
+            ) from None
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA cache_size=-64000")

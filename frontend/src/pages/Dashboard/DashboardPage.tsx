@@ -5,7 +5,7 @@ import { useAppStore } from "@/stores/useAppStore";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import apiClient from "@/api/client";
 import { useDashboardWaterfall } from "@/hooks/useDashboardWaterfall";
-import { useLivePrices } from "@/api/queries";
+import { useChartStream } from "@/hooks/useChartStream";
 import { AlgoPerformancePanel } from "./AlgoPerformancePanel";
 import { SentimentNewsWidget } from "./SentimentNewsWidget";
 import { PriceTicker } from "./PriceTicker";
@@ -83,18 +83,7 @@ export function DashboardPage() {
     isCommitteesLoading,
   } = useDashboardWaterfall(activePair, !demoMode);
 
-  const { data: livePricesData } = useLivePrices(
-    activePair ? [activePair] : [],
-    50,
-    !demoMode,
-  );
-  const liveMid = useMemo(() => {
-    if (!livePricesData?.prices) return null;
-    const p = livePricesData.prices.find(
-      (lp) => lp.symbol?.toUpperCase() === activePair?.toUpperCase(),
-    );
-    return p?.mid ?? null;
-  }, [livePricesData, activePair]);
+  const { historical: chartCandles, liveBar, isLoading: chartLoading, loadOlder, hasOlder, setChartReady } = useChartStream(activePair, activeTimeframe, 1000);
 
   const availablePairs = useMemo(
     () => pairs.map((p) => p.pair?.symbol ?? "").filter((s) => s !== ""),
@@ -214,10 +203,14 @@ export function DashboardPage() {
               <CandlestickChart
                 pair={activePair}
                 timeframe={activeTimeframe}
-                limit={150}
+                historical={chartCandles}
+                liveBar={liveBar}
+                isLoading={chartLoading}
                 height={440}
-                livePrice={liveMid}
                 onTimeframeChange={setActiveTimeframe}
+                onRequestOlder={loadOlder}
+                hasOlder={hasOlder}
+                onReady={() => setChartReady(true)}
               />
             </ErrorBoundary>
           </div>
