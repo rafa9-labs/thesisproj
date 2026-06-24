@@ -2,6 +2,7 @@
 from contextlib import asynccontextmanager
 import asyncio
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,6 +49,9 @@ async def lifespan(app: FastAPI):
     try:
         store = get_data_store()
         store.mark_orphaned_sessions()
+        db_path = store.db_path
+        db_exists = "exists" if Path(db_path).exists() else "MISSING"
+        print(f"[DB] Path: {db_path} ({db_exists})")
     except Exception:
         pass
     try:
@@ -71,15 +75,45 @@ async def lifespan(app: FastAPI):
     _candle_syncer = None
     try:
         from pipeline.candle_syncer import CandleSyncer
-        pairs = settings.sync_pairs
+        all_pairs = [p["symbol"] for p in store.list_pairs()]
+        pairs = all_pairs or settings.sync_pairs
         if pairs:
             _candle_syncer = CandleSyncer(store, active_pairs=pairs)
             await _candle_syncer.start()
+            short = ", ".join(pairs[:5])
+            tail = "..." if len(pairs) > 5 else ""
+            print(f"[CandleSyncer] Syncing {len(pairs)} pairs: {short}{tail}")
     except Exception:
         print("[CandleSyncer] Failed to start — sync disabled")
 
+    # ── Startup gap-fill: sync missing candles BEFORE live streams ──
+    if _candle_syncer is not None:
+        print("[StartupSync] Filling candle gaps since last shutdown...")
+        _sync_pairs = all_pairs if all_pairs else settings.sync_pairs
+        _total = 0
+        for _pair in _sync_pairs:
+            for _tf in ("M30", "H1", "H4"):
+                try:
+                    _n = await _candle_syncer.sync_pair(_pair, _tf)
+                    if _n:
+                        _total += _n
+                except Exception as _exc:
+                    print(f"[StartupSync] {_pair}/{_tf}: FAILED ({_exc})")
+        if _total:
+            print(f"[StartupSync] Gap fill complete — {_total} candles synced")
+        else:
+            print("[StartupSync] No gaps detected")
+
     from api.routers.price_stream import PriceStreamManager
-    PriceStreamManager.get()
+    psm = PriceStreamManager.get()
+    _stream_pairs = all_pairs if all_pairs else settings.sync_pairs
+    for pair in _stream_pairs:
+        try:
+            await psm.ensure_stream(pair)
+        except Exception as e:
+            print(f"[PriceStream] Failed to start stream for {pair}: {e}")
+    if _stream_pairs:
+        print(f"[PriceStream] Started streams for {len(_stream_pairs)} pairs")
 
     yield
 
