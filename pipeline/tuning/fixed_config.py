@@ -104,7 +104,7 @@ class UserFixedConfig:
         # Per-param HPO range keys: model__param__hpo_range → [min, max]
         # Aliased through HYPERPARAM_ALIASES to match sampler's internal key convention.
         model_param_ranges: dict[str, tuple[float, float]] = {}
-        from pipeline.hyperparam_aliases import HYPERPARAM_ALIASES as _ALIASES
+        from pipeline.hpo.hyperparam_aliases import HYPERPARAM_ALIASES as _ALIASES
 
         for key, value in config_overrides.items():
             if not (isinstance(key, str) and key.endswith("__hpo_range")):

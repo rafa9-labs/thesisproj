@@ -97,7 +97,7 @@ from utilsNoWFO import (
 
 # -- Late import of CLASS_DEFAULTS (must happen BEFORE pipeline.* imports below
 #    because refit -> composed -> strategy_mixin star-imports us while we're loading)
-from pipeline.metrics_tuples import CLASS_DEFAULTS, _safe_metrics_return, _empty_metrics  # noqa: F811,E402
+from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS, _safe_metrics_return, _empty_metrics  # noqa: F811,E402
 DEFAULT_CV = deepcopy(CLASS_DEFAULTS["cv"])
 DEFAULT_FEATURES = deepcopy(CLASS_DEFAULTS["features"])
 
@@ -110,9 +110,16 @@ from pipeline.standalone_utils import (
     print_block_summary, print_pruned_block_summary,
 )
 from pipeline.memory_utils import _hard_free, _apply_low_ram_overrides
-from pipeline.dqn_config import _load_default_dqn_cfg, _coerce_dqn_cfg
-from pipeline.hpo_persistence import save_hpo_config_to_disk, load_hpo_config_from_disk
-from pipeline.metrics import _apply_temperature_to_proba, _psr, _dsr_sign
+from pipeline.models.dqn_config import _load_default_dqn_cfg, _coerce_dqn_cfg
+# Deferred to avoid circular import (hpo_persistence -> _imports -> hpo_persistence)
+def save_hpo_config_to_disk(*args, **kwargs):
+    from pipeline.hpo.hpo_persistence import save_hpo_config_to_disk as _impl
+    return _impl(*args, **kwargs)
+
+def load_hpo_config_from_disk(*args, **kwargs):
+    from pipeline.hpo.hpo_persistence import load_hpo_config_from_disk as _impl
+    return _impl(*args, **kwargs)
+from pipeline.metrics.metrics import _apply_temperature_to_proba, _psr, _dsr_sign
 from pipeline.tuning.runner import run_optuna_tuning
 from pipeline.tuning.refit import final_refit_if_deep, _evaluate_original_no_refit
 

@@ -24,7 +24,7 @@ os.environ["OMP_NUM_THREADS"] = "4"
 os.environ["MLB_DISABLE_OPTUNA_PRUNING"] = "1"
 sys.path.insert(0, r"C:\Users\rafa\ML_Trading\thesisproj")
 
-for _m in ["config", "pipeline.metrics_tuples",
+for _m in ["config", "pipeline.metrics.metrics_tuples",
            "pipeline.backtester.composed", "pipeline.tuning.helpers",
            "pipeline.tuning.runner", "pipeline.tuning.objective"]:
     sys.modules.pop(_m, None)
@@ -36,7 +36,7 @@ MONTHS = 1
 
 def _run_mini_backtest(model_type="logistic"):
     """Run a minimal backtest and return the MLBacktester instance + metrics."""
-    from pipeline.metrics_tuples import CLASS_DEFAULTS
+    from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
     from pipeline.backtester.composed import MLBacktester
 
     cfg = deepcopy(CLASS_DEFAULTS["features"])
@@ -69,20 +69,20 @@ class TestFullPipeline:
     @pytest.mark.slow
     @pytest.mark.timeout(600)
     def test_full_lifecycle(self, tmp_path):
-        from pipeline.model_persistence import (
+        from pipeline.models.model_persistence import (
             save_snapshot, load_snapshot, read_metadata,
             validate_snapshot, DEPLOY_ROOT,
         )
-        from pipeline.model_registry_disk import (
+        from pipeline.models.model_registry_disk import (
             register_snapshot, get_all_deployed,
             activate_model, deactivate_model, delete_model,
         )
 
         # Redirect deploy root to temp dir
         orig_root = DEPLOY_ROOT
-        import pipeline.model_persistence as mp
+        import pipeline.models.model_persistence as mp
         mp.DEPLOY_ROOT = str(tmp_path)
-        import pipeline.model_registry_disk as mrd
+        import pipeline.models.model_registry_disk as mrd
         os.makedirs(str(tmp_path), exist_ok=True)
 
         try:
@@ -174,7 +174,7 @@ class TestFullPipeline:
             pred_path = mp.get_active_model_id("logistic")
             assert pred_path is not None
 
-            from pipeline.model_persistence import load_model_only
+            from pipeline.models.model_persistence import load_model_only
             pred_model = load_model_only(snap_dir)
             X_pred = np.random.RandomState(42).randn(3, n_features)
             proba_pred = pred_model.predict_proba(X_pred)
@@ -251,8 +251,8 @@ class TestRoundtripPrediction:
     @pytest.mark.slow
     @pytest.mark.timeout(300)
     def test_prediction_fidelity_after_save_load(self):
-        from pipeline.model_persistence import save_snapshot, load_snapshot
-        import pipeline.model_persistence as mp
+        from pipeline.models.model_persistence import save_snapshot, load_snapshot
+        import pipeline.models.model_persistence as mp
 
         with tempfile.TemporaryDirectory() as td:
             mp.DEPLOY_ROOT = td

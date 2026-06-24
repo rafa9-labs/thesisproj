@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipeline.feature_sweep import (
+from pipeline.features.feature_sweep import (
     expand_features,
     sweep_features,
     save_locked_features,
@@ -19,7 +19,7 @@ from pipeline.feature_sweep import (
     RETURNS_LAGS,
 )
 
-from pipeline.regime_utils import detect_regimes_anchored
+from pipeline.regime.regime_utils import detect_regimes_anchored
 
 
 class TestExpandFeatures:

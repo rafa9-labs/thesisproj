@@ -13,7 +13,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from pipeline.model_persistence import load_snapshot, read_metadata
+from pipeline.models.model_persistence import load_snapshot, read_metadata
 from pipeline.execution.position_sizing import (
     SizingConfig,
     SizingMethod,
@@ -28,7 +28,7 @@ from pipeline.execution.position_sizing import (
 # ──────────────────────────────────────────────────────
 def _load_m30_data(pair: str, start: str, end: str, db_path: str = "data/forex.db", timeframe: str = "M30") -> pd.DataFrame:
     """Load base candles, remap columns to backtester format (price, high, low, etc.)."""
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(db_path)
     raw = store.get_candles(pair.upper(), timeframe, start=start, end=end)

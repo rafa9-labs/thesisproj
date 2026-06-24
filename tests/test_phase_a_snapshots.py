@@ -27,7 +27,7 @@ def snapshot_dir():
 @pytest.fixture(autouse=True)
 def patch_deploy_root(snapshot_dir):
     """Redirect DEPLOY_ROOT to temp dir for all tests."""
-    import pipeline.model_persistence as mp
+    import pipeline.models.model_persistence as mp
     orig = mp.DEPLOY_ROOT
     mp.DEPLOY_ROOT = snapshot_dir
     yield
@@ -49,7 +49,7 @@ class TestSnapshotSaveLoad:
         model = Pipeline([("scaler", StandardScaler()), ("clf", LogisticRegression(solver="lbfgs"))])
         model.fit(X, y)
 
-        from pipeline.model_persistence import save_snapshot, load_snapshot, read_metadata
+        from pipeline.models.model_persistence import save_snapshot, load_snapshot, read_metadata
 
         d = save_snapshot(
             model=model,
@@ -83,7 +83,7 @@ class TestSnapshotSaveLoad:
         y = (X[:, 0] > 0).astype(int)
         model = LogisticRegression().fit(X, y)
 
-        from pipeline.model_persistence import save_snapshot, read_metadata
+        from pipeline.models.model_persistence import save_snapshot, read_metadata
 
         d = save_snapshot(
             model=model,
@@ -125,7 +125,7 @@ class TestSnapshotSaveLoad:
         y = (X[:, -1] > 0).astype(int)
         model = DecisionTreeClassifier().fit(X, y)
 
-        from pipeline.model_persistence import save_snapshot, load_snapshot
+        from pipeline.models.model_persistence import save_snapshot, load_snapshot
 
         d = save_snapshot(
             model=model,
@@ -145,7 +145,7 @@ class TestManifestValidation:
 
     def test_valid_manifest_passes(self, snapshot_dir):
         from sklearn.linear_model import LogisticRegression
-        from pipeline.model_persistence import save_snapshot, validate_snapshot
+        from pipeline.models.model_persistence import save_snapshot, validate_snapshot
 
         X = np.random.RandomState(1).randn(20, 3)
         y = (X[:, 0] > 0).astype(int)
@@ -156,7 +156,7 @@ class TestManifestValidation:
 
     def test_corrupt_file_detected(self, snapshot_dir):
         from sklearn.linear_model import LogisticRegression
-        from pipeline.model_persistence import save_snapshot, validate_snapshot
+        from pipeline.models.model_persistence import save_snapshot, validate_snapshot
 
         X = np.random.RandomState(2).randn(20, 3)
         y = (X[:, 0] > 0).astype(int)
@@ -176,7 +176,7 @@ class TestExportImport:
 
     def test_export_import_roundtrip(self, snapshot_dir):
         from sklearn.linear_model import LogisticRegression
-        from pipeline.model_persistence import save_snapshot, export_snapshot, import_snapshot, load_snapshot, read_metadata
+        from pipeline.models.model_persistence import save_snapshot, export_snapshot, import_snapshot, load_snapshot, read_metadata
 
         X = np.random.RandomState(5).randn(50, 4)
         y = (X[:, 0] > 0).astype(int)
@@ -205,7 +205,7 @@ class TestActivePointer:
     """File-based active model pointer — one global active model."""
 
     def test_active_pointer_crud(self, snapshot_dir):
-        from pipeline.model_persistence import (
+        from pipeline.models.model_persistence import (
             get_active_model_id, set_active_model_id, clear_active_model_id,
         )
 
@@ -225,7 +225,7 @@ class TestActivePointer:
 
     def test_active_pointer_global_singleton(self, snapshot_dir):
         """Setting a new active model replaces the previous one globally."""
-        from pipeline.model_persistence import (
+        from pipeline.models.model_persistence import (
             get_active_model_id, set_active_model_id,
         )
 
@@ -250,7 +250,7 @@ class TestPipFreeze:
 
     def test_pip_freeze_in_metadata(self, snapshot_dir):
         from sklearn.linear_model import LogisticRegression
-        from pipeline.model_persistence import save_snapshot, read_metadata
+        from pipeline.models.model_persistence import save_snapshot, read_metadata
 
         X = np.random.RandomState(1).randn(20, 3)
         y = (X[:, 0] > 0).astype(int)
@@ -270,7 +270,7 @@ class TestParentLineage:
 
     def test_lineage_persisted_in_metadata(self, snapshot_dir):
         from sklearn.linear_model import LogisticRegression
-        from pipeline.model_persistence import save_snapshot, read_metadata
+        from pipeline.models.model_persistence import save_snapshot, read_metadata
 
         X = np.random.RandomState(1).randn(20, 3)
         y = (X[:, 0] > 0).astype(int)
@@ -291,7 +291,7 @@ class TestDataStoreMigration:
     """Verify parent_job_id column exists in DB."""
 
     def test_parent_job_id_column_exists(self):
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
         import tempfile, os
 
         db = os.path.join(tempfile.mkdtemp(), "test.db")

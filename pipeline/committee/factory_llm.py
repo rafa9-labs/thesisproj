@@ -23,9 +23,9 @@ from typing import Any, Optional, Tuple
 
 import requests
 
-from pipeline.factory_proposer import ActionProposal, DeterministicProposer
-from pipeline.factory_state import FactoryState
-from pipeline.regime_utils import _REGIME_NAMES
+from pipeline.committee.factory_proposer import ActionProposal, DeterministicProposer
+from pipeline.committee.factory_state import FactoryState
+from pipeline.regime.regime_utils import _REGIME_NAMES
 
 _DEBUG = os.environ.get("FACTORY_LLM_DEBUG", "").strip().lower() in ("1", "true")
 
@@ -643,7 +643,7 @@ class LLMProposer:
     def _enumerate_candidates(self, state: FactoryState) -> List[ActionProposal]:
         if self._fallback is None:
             return []
-        from pipeline.factory_proposer import DeterministicProposer
+        from pipeline.committee.factory_proposer import DeterministicProposer
         fallback = self._fallback if isinstance(self._fallback, DeterministicProposer) else DeterministicProposer()
         candidates = []
         for _ in range(10):

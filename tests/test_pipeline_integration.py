@@ -144,7 +144,7 @@ def test_mixin_cross_imports():
 
 def test_end_to_end_metric_pipeline():
     """Full metric pipeline: temp scaling -> PSR -> DSR works end-to-end."""
-    from pipeline.metrics import (
+    from pipeline.metrics.metrics import (
         _apply_temperature_to_proba,
         _fit_temperature_from_proba,
         _psr, _dsr_sign,

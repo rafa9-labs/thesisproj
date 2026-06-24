@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from pipeline.meta_labeler import MetaLabeler
+from pipeline.models.meta_labeler import MetaLabeler
 
 
 def _make_bar_predictions(signal, next_return, prob_short=0.2, prob_flat=0.3, prob_long=0.5, regime_id=3):

@@ -369,7 +369,7 @@ def compute_overfitting_report(
     if len(sharpes_finite) >= 3 and len(returns_finite) >= 3:
         oos_sr = report.oos_mean_sharpe if report.oos_mean_sharpe is not None else float(np.nanmean(sharpes_finite))
         try:
-            from pipeline.metrics import _psr
+            from pipeline.metrics.metrics import _psr
             from scipy.stats import skew as _scipy_skew, kurtosis as _scipy_kurt
             _skew = float(_scipy_skew(returns_finite, bias=False)) if len(returns_finite) >= 4 else 0.0
             _kurt = float(_scipy_kurt(returns_finite, bias=False, fisher=False)) if len(returns_finite) >= 4 else 3.0
@@ -379,7 +379,7 @@ def compute_overfitting_report(
             report.psr = None
 
         try:
-            from pipeline.dsr import deflated_sharpe_ratio
+            from pipeline.metrics.dsr import deflated_sharpe_ratio
             n_trials_use = n_hpo_trials if n_hpo_trials is not None and n_hpo_trials > 0 else 1
             report.dsr_value = round(float(deflated_sharpe_ratio(
                 oos_sr, T=max(total_trades, len(returns_finite)),

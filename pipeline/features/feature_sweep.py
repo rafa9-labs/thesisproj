@@ -234,7 +234,7 @@ def sweep_features(
         Full report with fold-level details, pruned features, etc.
     """
     if use_boruta:
-        from pipeline.boruta_sweep import boruta_sweep_features
+        from pipeline.features.boruta_sweep import boruta_sweep_features
         return boruta_sweep_features(
             df, label_threshold=label_threshold,
             n_estimators=n_estimators, max_depth=max_depth,

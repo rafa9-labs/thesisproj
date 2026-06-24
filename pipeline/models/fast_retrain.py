@@ -184,7 +184,7 @@ class FastRetrainer:
 
         Replicates DataMixin.get_data() preprocessing exactly.
         """
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
 
         self._store = DataStore(self.db_path)
 
@@ -335,7 +335,7 @@ class FastRetrainer:
         except Exception:
             fc = {}
 
-        from pipeline.metrics_tuples import CLASS_DEFAULTS
+        from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
         defaults = deepcopy(CLASS_DEFAULTS.get("features", {}))
         defaults.update(fc)
 
@@ -423,7 +423,7 @@ class FastRetrainer:
 
     def generate_labels(self) -> np.ndarray:
         """Generate triple-barrier labels on the train portion."""
-        from pipeline.feature_utils import triple_barrier_labels
+        from pipeline.features.feature_utils import triple_barrier_labels
 
         df = self.df_features.iloc[:self.split_idx]
         if "price" not in df.columns:
@@ -447,7 +447,7 @@ class FastRetrainer:
 
     def tag_regimes(self):
         """Load frozen HMM, predict regime IDs on train data.  No .fit()."""
-        from pipeline.hmm_regime import HMMRegimeDetector
+        from pipeline.regime.hmm_regime import HMMRegimeDetector
 
         self._hmm = HMMRegimeDetector.load(str(self.hmm_path))
         if not self._hmm.is_fitted:
@@ -749,7 +749,7 @@ class FastRetrainer:
         window is held out.  Primary models predict on OOS data; MetaLabeler
         learns from the resulting per-bar predictions.
         """
-        from pipeline.meta_labeler import MetaLabeler
+        from pipeline.models.meta_labeler import MetaLabeler
 
         if self.X_oos is None or len(self.X_oos) < 50:
             logger.warning("OOS window too small (%d bars) — skipping MetaLabeler refit",

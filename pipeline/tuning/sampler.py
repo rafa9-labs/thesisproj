@@ -278,7 +278,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
                     break
             if price_col is not None:
                 try:
-                    from pipeline.feature_utils import find_min_stationary_d
+                    from pipeline.features.feature_utils import find_min_stationary_d
                     d_floor = find_min_stationary_d(train_data[price_col])
                 except Exception:
                     pass

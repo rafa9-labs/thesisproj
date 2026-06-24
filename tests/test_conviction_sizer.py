@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from pipeline.conviction_sizer import ConvictionSizer, logistic
+from pipeline.execution.conviction_sizer import ConvictionSizer, logistic
 
 
 class TestLogisticFunction:

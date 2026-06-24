@@ -50,7 +50,7 @@ class TestHiddenImportsAvailable:
         "models.base_model",
         "pipeline._imports",
         "pipeline.runtime",
-        "pipeline.metrics_eval",
+        "pipeline.metrics.metrics_eval",
         "api.main",
         "api.config",
         "api.tasks",

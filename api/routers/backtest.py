@@ -38,7 +38,7 @@ from api.schemas.backtest import (
 )
 from api.services import JobManager
 from api.tasks import download_data_task, run_backtest_task, IS_DESKTOP
-from pipeline.pair_config import VALID_PAIRS
+from pipeline.data.pair_config import VALID_PAIRS
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
@@ -540,7 +540,7 @@ def get_backtest_status(job_id: str):
 def get_backtest_events(job_id: str, after: int = 0):
     from api.tasks import get_job_events
     from api.config import settings
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
     import logging as _logging
     events = get_job_events(job_id, after=after)
     # Return actual total event count, not after+len (enables skip-to-latest)
@@ -977,7 +977,7 @@ def get_trade_chart_data(job_id: str, model: str = Query(..., description="Model
 def debug_job_events(job_id: str, limit: int = Query(50, ge=1, le=500)):
     """Debug endpoint: return raw events from SQLite for a job, with metadata."""
     from api.dependencies import get_data_store
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
     import logging
 
     store = get_data_store()

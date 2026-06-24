@@ -13,14 +13,14 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipeline.expert_profiler import (
+from pipeline.committee.expert_profiler import (
     FoldResult,
     RegimeModelMatrix,
     ExpertProfileResult,
     ExpertProfiler,
 )
 
-from pipeline.regime_utils import _REGIME_NAMES
+from pipeline.regime.regime_utils import _REGIME_NAMES
 
 
 _RNG = np.random.default_rng(42)

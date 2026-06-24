@@ -32,7 +32,7 @@ import optuna
 
 @pytest.fixture(scope="module")
 def all_params():
-    from pipeline.model_defaults import MODEL_PARAMS
+    from pipeline.models.model_defaults import MODEL_PARAMS
     return MODEL_PARAMS
 
 
@@ -177,7 +177,7 @@ class TestTierAssignments:
 class TestDerivedConfigs:
 
     def test_search_space_contains_only_tier1(self, all_params):
-        from pipeline.model_defaults import build_search_space
+        from pipeline.models.model_defaults import build_search_space
 
         ss = build_search_space()
         for model_key, entries in ss.items():
@@ -192,7 +192,7 @@ class TestDerivedConfigs:
                 )
 
     def test_fixed_defaults_contains_only_tier3(self, all_params):
-        from pipeline.model_defaults import build_fixed_defaults
+        from pipeline.models.model_defaults import build_fixed_defaults
 
         fd = build_fixed_defaults()
         for model_key, entries in fd.items():
@@ -272,7 +272,7 @@ class TestDiscrepancyResolution:
 class TestAliasCoverage:
 
     def test_all_16_tunable_models_have_aliases(self, all_params):
-        from pipeline.hyperparam_aliases import HYPERPARAM_ALIASES
+        from pipeline.hpo.hyperparam_aliases import HYPERPARAM_ALIASES
 
         tunable = {
             k for k, v in all_params.items()
@@ -285,7 +285,7 @@ class TestAliasCoverage:
         )
 
     def test_cnn_filters1_filters2_both_mapped(self):
-        from pipeline.hyperparam_aliases import HYPERPARAM_ALIASES
+        from pipeline.hpo.hyperparam_aliases import HYPERPARAM_ALIASES
 
         cnn_aliases = HYPERPARAM_ALIASES.get("cnn", {})
         assert "filters1" in cnn_aliases, (
@@ -298,7 +298,7 @@ class TestAliasCoverage:
         assert cnn_aliases["filters2"] == "cnn_filters2"
 
     def test_lightgbm_catboost_prefixes_mapped(self):
-        from pipeline.hyperparam_aliases import HYPERPARAM_ALIASES
+        from pipeline.hpo.hyperparam_aliases import HYPERPARAM_ALIASES
 
         lgbm = HYPERPARAM_ALIASES.get("lightgbm", {})
         assert "max_depth" in lgbm, "lightgbm missing max_depth alias"
@@ -445,13 +445,13 @@ class TestSamplerIntegration:
 class TestEdgeCases:
 
     def test_get_defaults_unknown_model_returns_empty(self):
-        from pipeline.model_defaults import get_defaults
+        from pipeline.models.model_defaults import get_defaults
 
         result = get_defaults("nonexistent_model_v42")
         assert result == {}, f"Expected {{}}, got {result}"
 
     def test_build_funcs_handle_empty_model_params(self, monkeypatch):
-        import pipeline.model_defaults as md
+        import pipeline.models.model_defaults as md
 
         original = md.MODEL_PARAMS
         try:

@@ -7,10 +7,10 @@ STANDALONE_MODULES = [
     "pipeline.runtime",
     "pipeline.standalone_utils",
     "pipeline.memory_utils",
-    "pipeline.dqn_config",
-    "pipeline.hpo_persistence",
-    "pipeline.metrics",
-    "pipeline.metrics_tuples",
+    "pipeline.models.dqn_config",
+    "pipeline.hpo.hpo_persistence",
+    "pipeline.metrics.metrics",
+    "pipeline.metrics.metrics_tuples",
     "pipeline.workers",
 ]
 

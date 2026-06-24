@@ -5,9 +5,9 @@ import pytest
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
-from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-from pipeline.committee_backtester import CommitteeBacktester
-from pipeline.regime_utils import RegimeConfig
+from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+from pipeline.committee.committee_backtester import CommitteeBacktester
+from pipeline.regime.regime_utils import RegimeConfig
 
 
 @pytest.fixture

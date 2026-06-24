@@ -3,9 +3,9 @@ import math
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
-from pipeline.factory_ucb import UCB1Proposer, UCBArm, _arm_hash
-from pipeline.factory_hybrid import HybridLLMUCB1Proposer
-from pipeline.factory_proposer import ActionProposal
+from pipeline.committee.factory_ucb import UCB1Proposer, UCBArm, _arm_hash
+from pipeline.committee.factory_hybrid import HybridLLMUCB1Proposer
+from pipeline.committee.factory_proposer import ActionProposal
 
 
 # ============================================================

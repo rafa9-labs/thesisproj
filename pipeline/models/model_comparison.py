@@ -8,9 +8,9 @@ Provides a clean API for:
   - Statistical significance testing (paired t-test on monthly returns)
 
 Usage (CLI):
-    python -m pipeline.model_comparison
-    python -m pipeline.model_comparison --results-dir results/15_04_26__16_15
-    python -m pipeline.model_comparison --quick  # only scan, no heavy stats
+    python -m pipeline.models.model_comparison
+    python -m pipeline.models.model_comparison --results-dir results/15_04_26__16_15
+    python -m pipeline.models.model_comparison --quick  # only scan, no heavy stats
 """
 
 from __future__ import annotations

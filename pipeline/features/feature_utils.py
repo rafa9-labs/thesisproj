@@ -578,7 +578,7 @@ def prefilter_features_train(
     # 4) Per-family budget cap
     if use_family_budget and len(keep_final) > 1:
         try:
-            from pipeline.metrics_tuples import FEATURE_FAMILIES, MAX_FEATURES_PER_FAMILY
+            from pipeline.metrics.metrics_tuples import FEATURE_FAMILIES, MAX_FEATURES_PER_FAMILY
             keep_final = _apply_per_family_budget(keep_final, Xmi, ymi)
         except Exception:
             pass
@@ -598,7 +598,7 @@ def _classify_feature(col: str, families: dict) -> str:
 
 def _apply_per_family_budget(features: list[str], X: pd.DataFrame, y: pd.Series) -> list[str]:
     """Reduce features so each family stays within MAX_FEATURES_PER_FAMILY."""
-    from pipeline.metrics_tuples import FEATURE_FAMILIES, MAX_FEATURES_PER_FAMILY
+    from pipeline.metrics.metrics_tuples import FEATURE_FAMILIES, MAX_FEATURES_PER_FAMILY
 
     groups: dict[str, list[str]] = {}
     for col in features:

@@ -397,7 +397,7 @@ def _build_transformer(*, use_proba=True, **params):
 def _build_dqn(*, use_proba=True, **params):
     """Dueling DQN agent. Requires input_shape in params."""
     from rl.dqn_agent import DQNAgent
-    from pipeline.dqn_config import _coerce_dqn_cfg
+    from pipeline.models.dqn_config import _coerce_dqn_cfg
     from rl.dqn_agent import filter_dqn_config
 
     _configure_tf_threads()
@@ -682,7 +682,7 @@ def _build_regime_classifier(*, seed=None, use_proba=True, **params):
     random_state = int(params.get("random_state", seed or 42))
     feature_columns = params.get("feature_columns", None)
 
-    from pipeline.regime_utils import RegimeConfig
+    from pipeline.regime.regime_utils import RegimeConfig
     regime_cfg = RegimeConfig(**{k: v for k, v in params.items()
                                   if k in ("adx_thresh", "rsi_high", "rsi_low",
                                            "bbpct_high", "bbpct_low",

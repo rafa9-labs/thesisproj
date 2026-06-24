@@ -281,8 +281,8 @@ async def deploy_live_session(req: DeployRequest):
 
     if req.model_id:
         # Load from saved snapshot
-        from pipeline.model_persistence import load_snapshot, load_model_only, read_metadata
-        from pipeline.model_registry_disk import get_all_deployed
+        from pipeline.models.model_persistence import load_snapshot, load_model_only, read_metadata
+        from pipeline.models.model_registry_disk import get_all_deployed
         from api.config import settings
 
         rows = get_all_deployed(settings.db_full_path)
@@ -399,8 +399,8 @@ def _train_committee_models(
     """
     from pathlib import Path
     from models.registry import build_model
-    from pipeline.feature_sweep import compute_feature_matrix, FEATURE_NAMES
-    from pipeline.expert_profiler import _reprefix_params
+    from pipeline.features.feature_sweep import compute_feature_matrix, FEATURE_NAMES
+    from pipeline.committee.expert_profiler import _reprefix_params
     import pandas as pd
     import numpy as np
 

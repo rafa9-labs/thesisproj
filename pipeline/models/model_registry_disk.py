@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from pipeline.model_persistence import (
+from pipeline.models.model_persistence import (
     DEPLOY_ROOT, _ensure_deploy_root, read_metadata, validate_snapshot,
     get_active_model_id, set_active_model_id, clear_active_model_id,
 )
@@ -33,7 +33,7 @@ def register_snapshot(snapshot_path: str, db_path: str, parent_job_status: str |
             "Only models from successfully completed backtests can be saved."
         )
 
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     ok, reason = validate_snapshot(snapshot_path)
     if not ok:
@@ -66,7 +66,7 @@ def register_snapshot(snapshot_path: str, db_path: str, parent_job_status: str |
 
 def get_all_deployed(db_path: str) -> List[Dict[str, Any]]:
     """List all registered models. Verifies disk paths still exist."""
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(db_path)
     rows: List[Dict[str, Any]] = []
@@ -87,7 +87,7 @@ def get_all_deployed(db_path: str) -> List[Dict[str, Any]]:
 
 def activate_model(model_id: str, db_path: str) -> bool:
     """Activate a model as the single global active model. Deactivates all others."""
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(db_path)
     with store._cursor() as (conn, cur):
@@ -111,7 +111,7 @@ def activate_model(model_id: str, db_path: str) -> bool:
 
 def deactivate_model(model_id: str, db_path: str) -> bool:
     """Deactivate a model."""
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(db_path)
     with store._cursor() as (conn, cur):
@@ -126,7 +126,7 @@ def deactivate_model(model_id: str, db_path: str) -> bool:
 
 def delete_model(model_id: str, db_path: str) -> Tuple[bool, str]:
     """Remove a model from DB and disk."""
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(db_path)
     with store._cursor() as (conn, cur):
@@ -147,7 +147,7 @@ def delete_model(model_id: str, db_path: str) -> Tuple[bool, str]:
 
 def update_tags(model_id: str, db_path: str, action: str, tag: str) -> Optional[List[str]]:
     """Add or remove a tag from a model. Returns updated tag list or None."""
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(db_path)
     with store._cursor() as (conn, cur):
@@ -175,7 +175,7 @@ def scan_and_repair(db_path: str) -> Dict[str, int]:
 
     Returns dict with counts: {registered, cleaned, skipped}.
     """
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     root = _ensure_deploy_root()
     store = DataStore(db_path)

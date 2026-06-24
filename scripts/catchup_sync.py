@@ -3,8 +3,8 @@ import asyncio
 import sys
 sys.path.insert(0, ".")
 
-from pipeline.data_sqlite import DataStore
-from pipeline.candle_syncer import CandleSyncer, _DEFAULT_TIMEFRAMES
+from pipeline.data.data_sqlite import DataStore
+from pipeline.data.candle_syncer import CandleSyncer, _DEFAULT_TIMEFRAMES
 
 
 async def main():

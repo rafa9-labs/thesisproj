@@ -68,7 +68,7 @@ def _fill_runner_buffer(runner, n_bars: int = 100, trend: str = "flat"):
 
 def _make_committee_config():
     """Create a minimal CommitteeConfig for testing."""
-    from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+    from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
     config = CommitteeConfig()
     config.regimes["trend_up"] = RegimeAssignment(
         models=["logistic_a", "logistic_b"],
@@ -124,7 +124,7 @@ class TestDynamicWeightDecay:
     def test_hit_rate_above_50_no_decay(self):
         """Model with 65% hit rate keeps full weight."""
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         model_a = _build_mock_model(np.array([[0.1, 0.2, 0.7]]))
         model_b = _build_mock_model(np.array([[0.15, 0.25, 0.6]]))
@@ -146,7 +146,7 @@ class TestDynamicWeightDecay:
         runner._health["logistic_a"].record_trade(1, 80)
         runner._health["logistic_a"].record_trade(1, 20)
 
-        from pipeline.committee_builder import RegimeAssignment
+        from pipeline.committee.committee_builder import RegimeAssignment
         assignment = RegimeAssignment(
             models=["logistic_a", "logistic_b"], weights=[0.6, 0.4],
         )
@@ -163,7 +163,7 @@ class TestDynamicWeightDecay:
     def test_hit_rate_below_50_linear_decay(self):
         """Model at 42.5% hit rate gets ~50% weight decay."""
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         model_a = _build_mock_model(np.array([[0.1, 0.2, 0.7]]))
         cfg = _make_committee_config()
@@ -187,7 +187,7 @@ class TestDynamicWeightDecay:
         health.last_hit_rate = 0.5  # 4/8 = 0.5 but let's force 0.425
         health.last_sharpe = 0.5
 
-        from pipeline.committee_builder import RegimeAssignment
+        from pipeline.committee.committee_builder import RegimeAssignment
         assignment = RegimeAssignment(
             models=["logistic_a"], weights=[1.0],
         )
@@ -201,7 +201,7 @@ class TestDynamicWeightDecay:
     def test_hit_rate_35_pct_max_decay(self):
         """Model at 35% hit rate gets max 50% weight reduction."""
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         model_a = _build_mock_model(np.array([[0.1, 0.2, 0.7]]))
         cfg = _make_committee_config()
@@ -219,7 +219,7 @@ class TestDynamicWeightDecay:
         health.last_hit_rate = 0.35
         health.last_sharpe = -0.3
 
-        from pipeline.committee_builder import RegimeAssignment
+        from pipeline.committee.committee_builder import RegimeAssignment
         assignment = RegimeAssignment(
             models=["logistic_a"], weights=[1.0],
         )
@@ -232,7 +232,7 @@ class TestDynamicWeightDecay:
     def test_hit_rate_nan_no_decay(self):
         """NaN hit rate (not enough trades) uses full weight."""
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         model_a = _build_mock_model(np.array([[0.1, 0.2, 0.7]]))
         cfg = _make_committee_config()
@@ -250,7 +250,7 @@ class TestDynamicWeightDecay:
         health.total_signals = 2
         health.last_hit_rate = float("nan")
 
-        from pipeline.committee_builder import RegimeAssignment
+        from pipeline.committee.committee_builder import RegimeAssignment
         assignment = RegimeAssignment(
             models=["logistic_a"], weights=[1.0],
         )
@@ -268,7 +268,7 @@ class TestConvictionMultiplier:
     def _setup_runner_with_proba(self, prob_short, prob_flat, prob_long):
         """Setup a runner that returns specific blended probabilities."""
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         proba = np.array([[prob_short, prob_flat, prob_long]])
         model = _build_mock_model(proba)
@@ -343,7 +343,7 @@ class TestHealthSuppression:
     def test_all_models_unhealthy_suppresses_signal(self):
         """When >50% of active models are unhealthy, signals suppressed to 0."""
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         model_a = _build_mock_model(np.array([[0.05, 0.25, 0.70]]))
         model_b = _build_mock_model(np.array([[0.05, 0.25, 0.70]]))
@@ -378,8 +378,8 @@ class TestHealthSuppression:
     def test_one_model_unhealthy_still_trades(self):
         """With 1/3 models unhealthy, committee still trades (<50%)."""
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
-        from pipeline.committee_builder import RegimeAssignment
+        from pipeline.regime.regime_utils import RegimeConfig
+        from pipeline.committee.committee_builder import RegimeAssignment
 
         model_a = _build_mock_model(np.array([[0.05, 0.25, 0.70]]))
         model_b = _build_mock_model(np.array([[0.05, 0.25, 0.70]]))
@@ -421,7 +421,7 @@ class TestHealthSuppression:
     def test_insufficient_history_skips_health_check(self):
         """Models with <5 signals are skipped, so health check passes."""
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         model_a = _build_mock_model(np.array([[0.05, 0.25, 0.70]]))
         cfg = _make_committee_config()
@@ -451,7 +451,7 @@ class TestFuzzyRegime:
     def test_classify_regime_returns_named_dict(self):
         """_classify_regime() returns 3-tuple including named regime dict."""
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         cfg = _make_committee_config()
         runner = LiveCommitteeRunner(
@@ -471,7 +471,7 @@ class TestFuzzyRegime:
     def test_trend_up_sets_highest_prob(self):
         """Strong uptrend should set trend_up as highest probability."""
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         cfg = _make_committee_config()
         runner = LiveCommitteeRunner(
@@ -489,7 +489,7 @@ class TestFuzzyRegime:
     def test_returns_int_id_and_int_dict(self):
         """Backward compat: still returns int regime_id and int-keyed dict."""
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         cfg = _make_committee_config()
         runner = LiveCommitteeRunner(

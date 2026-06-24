@@ -7,16 +7,16 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipeline.factory_llm import (
+from pipeline.committee.factory_llm import (
     PromptBuilder,
     ResponseParser,
     LLMProposer,
     create_llm_proposer,
     SYSTEM_PROMPT,
 )
-from pipeline.factory_state import FactoryState
-from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-from pipeline.expert_profiler import RegimeModelMatrix
+from pipeline.committee.factory_state import FactoryState
+from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+from pipeline.committee.expert_profiler import RegimeModelMatrix
 
 _RNG = np.random.default_rng(42)
 

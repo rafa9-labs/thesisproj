@@ -36,7 +36,7 @@ class TestMacroPrecF1:
     """Tests for the internal confusion-matrix helper."""
 
     def test_perfect_prediction(self):
-        from pipeline.metrics_eval import _macro_prec_f1_from_confusion
+        from pipeline.metrics.metrics_eval import _macro_prec_f1_from_confusion
 
         y_true = np.array([-1, 0, 1, -1, 0, 1])
         y_pred = np.array([-1, 0, 1, -1, 0, 1])
@@ -45,7 +45,7 @@ class TestMacroPrecF1:
         assert f1 == pytest.approx(1.0, abs=1e-6)
 
     def test_all_wrong(self):
-        from pipeline.metrics_eval import _macro_prec_f1_from_confusion
+        from pipeline.metrics.metrics_eval import _macro_prec_f1_from_confusion
 
         y_true = np.array([1, 1, 1])
         y_pred = np.array([-1, -1, -1])
@@ -55,7 +55,7 @@ class TestMacroPrecF1:
         assert prec == pytest.approx(0.0, abs=1e-6)
 
     def test_random_noise(self):
-        from pipeline.metrics_eval import _macro_prec_f1_from_confusion
+        from pipeline.metrics.metrics_eval import _macro_prec_f1_from_confusion
 
         rng = np.random.RandomState(0)
         y_true = rng.choice([-1, 0, 1], size=300)
@@ -74,7 +74,7 @@ class TestComputeFullEvalBasic:
     """Validate the 16-tuple return type and shape."""
 
     def test_returns_16_tuple(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=60, pred_signal=1.0)
         result = compute_full_evaluation_metrics(df)
@@ -82,7 +82,7 @@ class TestComputeFullEvalBasic:
         assert len(result) == 16
 
     def test_tuple_elements_are_scalar(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=60, pred_signal=1.0)
         result = compute_full_evaluation_metrics(df)
@@ -92,14 +92,14 @@ class TestComputeFullEvalBasic:
             )
 
     def test_all_nan_when_no_returns_column(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = pd.DataFrame({"pred": [1, -1, 0]}, index=pd.date_range("2024-01-02", periods=3, freq="h"))
         result = compute_full_evaluation_metrics(df)
         assert all(np.isnan(v) for v in result)
 
     def test_flat_pred_gives_no_trades(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=60, pred_signal=0.0)
         result = compute_full_evaluation_metrics(df)
@@ -116,7 +116,7 @@ class TestCumulativeCurves:
     """Verify cstrategy / creturns / continuous variants are produced."""
 
     def test_curves_exist(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=60, pred_signal=1.0)
         compute_full_evaluation_metrics(df)
@@ -124,7 +124,7 @@ class TestCumulativeCurves:
             assert col in df.columns, f"Missing column: {col}"
 
     def test_creturns_start_near_one(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=60, pred_signal=1.0)
         compute_full_evaluation_metrics(df)
@@ -132,7 +132,7 @@ class TestCumulativeCurves:
         assert df["creturns"].iloc[0] == pytest.approx(1.0, abs=0.01)
 
     def test_carry_rescale(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=60, pred_signal=1.0)
         compute_full_evaluation_metrics(
@@ -152,7 +152,7 @@ class TestCarryOutAttrs:
     """Verify df.attrs are set correctly for month-stitching."""
 
     def test_attrs_set(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=60, pred_signal=1.0)
         compute_full_evaluation_metrics(df)
@@ -161,7 +161,7 @@ class TestCarryOutAttrs:
         assert "end_eq_bh" in df.attrs
 
     def test_carry_in_last_position(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=60, pred_signal=1.0)
         # Carry-in a long position
@@ -178,7 +178,7 @@ class TestVolTargetSizing:
     """Verify that vol-target sizing produces position_exec != pred magnitude."""
 
     def test_sizing_reduces_position(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=200, pred_signal=1.0, returns_std=0.005)
         cfg = {
@@ -202,7 +202,7 @@ class TestSpreadGuard:
     """Verify SpreadGuard blocks entries on extreme spreads."""
 
     def test_blocks_extreme_spread(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=100, pred_signal=1.0)
         # Inject a massive spread spike on bar 10
@@ -229,7 +229,7 @@ class TestKillSwitch:
     """Verify kill-switch triggers on large daily loss."""
 
     def test_kill_switch_flattens(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         rng = np.random.RandomState(99)
         n = 200
@@ -269,7 +269,7 @@ class TestEdgeCases:
     """Boundary conditions and malformed inputs."""
 
     def test_single_bar(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = pd.DataFrame(
             {"returns": [0.001], "pred": [1.0], "spread": [0.0001]},
@@ -280,7 +280,7 @@ class TestEdgeCases:
         assert len(result) == 16
 
     def test_missing_pred_column(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = pd.DataFrame(
             {"returns": [0.001, -0.001, 0.0]},
@@ -293,7 +293,7 @@ class TestEdgeCases:
         assert "pred" in df.columns
 
     def test_missing_spread_column(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = pd.DataFrame(
             {"returns": [0.001, -0.001], "pred": [1.0, -1.0]},
@@ -304,7 +304,7 @@ class TestEdgeCases:
         assert len(result) == 16
 
     def test_all_flat_predictions(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=100, pred_signal=0.0)
         result = compute_full_evaluation_metrics(df)
@@ -313,7 +313,7 @@ class TestEdgeCases:
         assert perf == pytest.approx(1.0, abs=0.01)
 
     def test_pred_with_nan_values(self):
-        from pipeline.metrics_eval import compute_full_evaluation_metrics
+        from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
 
         df = _make_df(n=60, pred_signal=1.0)
         df.loc[df.index[5], "pred"] = np.nan

@@ -14,7 +14,7 @@ from api.schemas.pairs import (
     PairListResponse,
     TimeframeData,
 )
-from pipeline.pair_config import get_pair_config, register_custom_pair
+from pipeline.data.pair_config import get_pair_config, register_custom_pair
 
 router = APIRouter(prefix="/pairs", tags=["pairs"])
 
@@ -73,7 +73,7 @@ def list_pairs():
         ))
 
     # Always show all registry pairs (even without data) so users can download them
-    from pipeline.pair_config import PAIR_REGISTRY
+    from pipeline.data.pair_config import PAIR_REGISTRY
     seen = set()
     pairs = []
     for symbol in PAIR_REGISTRY:

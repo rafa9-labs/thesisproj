@@ -162,7 +162,7 @@ class TestForwardTestSnapshot:
         # We can't directly test run_forward_test without a valid snapshot
         # that has proper features_config matching M30 data features.
         # But we can test loading and validation.
-        from pipeline.model_persistence import load_snapshot, validate_snapshot
+        from pipeline.models.model_persistence import load_snapshot, validate_snapshot
         ok, reason = validate_snapshot(snap_dir)
         assert ok, f"Snapshot invalid: {reason}"
 

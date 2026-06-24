@@ -51,7 +51,7 @@ class TestS161Overfitting:
 
     def test_block_bootstrap_imports(self):
         """Block bootstrap functions are importable."""
-        from pipeline.overfitting import _block_bootstrap_ci, _optimal_block_length, _classify_risk
+        from pipeline.metrics.overfitting import _block_bootstrap_ci, _optimal_block_length, _classify_risk
         vals = np.random.default_rng(42).normal(0.8, 0.3, 24)
         bl = _optimal_block_length(vals)
         assert bl >= 3
@@ -59,14 +59,14 @@ class TestS161Overfitting:
         assert lo < mean < hi
 
     def test_risk_classification(self):
-        from pipeline.overfitting import _classify_risk
+        from pipeline.metrics.overfitting import _classify_risk
         assert _classify_risk(10) == ("low", "green")
         assert _classify_risk(30) == ("medium", "yellow")
         assert _classify_risk(60) == ("high", "red")
 
     def test_period_breakdown_includes_gaps(self):
         """compute_period_breakdown should include sharpe_gap_pct, return_gap_pct, cv_fold_sharpes."""
-        from pipeline.overfitting import compute_period_breakdown
+        from pipeline.metrics.overfitting import compute_period_breakdown
         records = [
             {"test_start": "2023-01-01", "test_end": "2023-02-01",
              "train_start": "2020-01-01", "train_end": "2022-12-31",
@@ -106,7 +106,7 @@ class TestS163Diagnostics:
     """Prediction histogram, confusion matrix format."""
 
     def test_prediction_histogram(self):
-        from pipeline.diagnostics import compute_prediction_histogram
+        from pipeline.metrics.diagnostics import compute_prediction_histogram
         data = [np.array([0.55, 0.72, 0.88, 0.91, 0.63, 0.77, 0.95, 0.51])]
         bins = compute_prediction_histogram(data, n_bins=10)
         assert len(bins) == 10
@@ -129,7 +129,7 @@ class TestS164Summary:
     """Backtest summary text generation."""
 
     def test_summary_generation(self):
-        from pipeline.summary_generator import generate_summary
+        from pipeline.metrics.summary_generator import generate_summary
         metrics = {
             "model": "xgboost", "sharpe": 1.24, "win_rate": 0.58,
             "max_drawdown": -0.083, "total_return_pct": 0.142, "total_trades": 142,
@@ -151,19 +151,19 @@ class TestS164Summary:
         assert "low" in text or "moderate" in text or "high" in text
 
     def test_summary_empty_overfitting(self):
-        from pipeline.summary_generator import generate_summary
+        from pipeline.metrics.summary_generator import generate_summary
         metrics = {"model": "logistic", "sharpe": 0.5, "win_rate": 0.5,
                    "total_trades": 5, "overfitting": None}
         text = generate_summary(metrics, {"pair": "EURUSD"})
         assert isinstance(text, str)
 
     def test_summary_low_trades_message(self):
-        from pipeline.summary_generator import _sentence_overfitting
+        from pipeline.metrics.summary_generator import _sentence_overfitting
         msg = _sentence_overfitting("low", 18, 8.9, 1.35, 1.24, 3)
         assert "very few trades" in msg or "limited" in msg
 
     def test_summary_regime_sentence(self):
-        from pipeline.summary_generator import _sentence_regimes
+        from pipeline.metrics.summary_generator import _sentence_regimes
         periods = [
             {"test_sharpe": 2.1, "pct_sideways": 0.1, "pct_trend": 0.8, "pct_volatile": 0.1},
             {"test_sharpe": -0.3, "pct_sideways": 0.7, "pct_trend": 0.1, "pct_volatile": 0.2},
@@ -196,7 +196,7 @@ class TestS165Defaults:
         assert None not in md, "RF max_depth should not include None"
 
     def test_cv_prune_relax_default(self):
-        from pipeline.metrics_tuples import CLASS_DEFAULTS
+        from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
         cv = CLASS_DEFAULTS.get("cv", {})
         relax = cv.get("cv_prune_relax", None)
         assert relax is not None
@@ -223,15 +223,15 @@ class TestFeatureFamilies:
     """Feature family classification and budget enforcement."""
 
     def test_classify_feature(self):
-        from pipeline.feature_utils import _classify_feature
-        from pipeline.metrics_tuples import FEATURE_FAMILIES
+        from pipeline.features.feature_utils import _classify_feature
+        from pipeline.metrics.metrics_tuples import FEATURE_FAMILIES
         assert _classify_feature("sma_20", FEATURE_FAMILIES) == "trend"
         assert _classify_feature("macd_signal", FEATURE_FAMILIES) == "momentum"
         assert _classify_feature("atr_14", FEATURE_FAMILIES) == "volatility"
         assert _classify_feature("nonexistent_col", FEATURE_FAMILIES) == "other"
 
     def test_feature_families_defined(self):
-        from pipeline.metrics_tuples import FEATURE_FAMILIES, MAX_FEATURES_PER_FAMILY
+        from pipeline.metrics.metrics_tuples import FEATURE_FAMILIES, MAX_FEATURES_PER_FAMILY
         assert "trend" in FEATURE_FAMILIES
         assert "momentum" in FEATURE_FAMILIES
         assert "rolling" in FEATURE_FAMILIES
@@ -239,8 +239,8 @@ class TestFeatureFamilies:
         assert MAX_FEATURES_PER_FAMILY["momentum"] == 6
 
     def test_per_family_budget(self):
-        from pipeline.feature_utils import _apply_per_family_budget, _classify_feature
-        from pipeline.metrics_tuples import FEATURE_FAMILIES, MAX_FEATURES_PER_FAMILY
+        from pipeline.features.feature_utils import _apply_per_family_budget, _classify_feature
+        from pipeline.metrics.metrics_tuples import FEATURE_FAMILIES, MAX_FEATURES_PER_FAMILY
         feats = [f"sma_{i}" for i in range(1, 12)] + [f"macd_{i}" for i in range(1, 8)]
         X = pd.DataFrame(np.random.randn(50, len(feats)), columns=feats)
         y = pd.Series(np.random.choice([0, 1, 2], 50))
@@ -259,33 +259,33 @@ class TestImportanceMethods:
     """get_importance_method returns correct method per model type."""
 
     def test_method_xgboost(self):
-        from pipeline.diagnostics import get_importance_method
+        from pipeline.metrics.diagnostics import get_importance_method
         m = get_importance_method("xgboost")
         assert m in ("shap", "gain")
 
     def test_method_logistic(self):
-        from pipeline.diagnostics import get_importance_method
+        from pipeline.metrics.diagnostics import get_importance_method
         assert get_importance_method("logistic") == "coefficients"
 
     def test_method_svm(self):
-        from pipeline.diagnostics import get_importance_method
+        from pipeline.metrics.diagnostics import get_importance_method
         m = get_importance_method("svm")
         assert m in ("permutation", "none")
 
     def test_method_cnn(self):
-        from pipeline.diagnostics import get_importance_method
+        from pipeline.metrics.diagnostics import get_importance_method
         assert get_importance_method("cnn") == "gradient"
 
     def test_method_lstm(self):
-        from pipeline.diagnostics import get_importance_method
+        from pipeline.metrics.diagnostics import get_importance_method
         assert get_importance_method("lstm") == "gradient"
 
     def test_method_transformer(self):
-        from pipeline.diagnostics import get_importance_method
+        from pipeline.metrics.diagnostics import get_importance_method
         assert get_importance_method("transformer") == "gradient"
 
     def test_classify_feature_families(self):
-        from pipeline.diagnostics import classify_feature_families
+        from pipeline.metrics.diagnostics import classify_feature_families
         families = classify_feature_families(["sma_20", "macd_signal", "atr_14", "rsi_10", "bb_20"])
         assert families.get("trend", 0) >= 1
         assert families.get("momentum", 0) >= 1
@@ -301,7 +301,7 @@ class TestSVMPermutation:
 
     def test_svm_repeats_value(self):
         import ast, inspect
-        import pipeline.diagnostics as diag
+        import pipeline.metrics.diagnostics as diag
         src = inspect.getsource(diag)
         assert "n_repeats=5" in src
 
@@ -314,14 +314,14 @@ class TestVIF:
     """Variance Inflation Factor."""
 
     def test_compute_vif(self):
-        from pipeline.diagnostics import compute_vif
+        from pipeline.metrics.diagnostics import compute_vif
         X = np.random.randn(100, 5)
         vif = compute_vif(X)
         assert len(vif) == 5
         assert all(np.isfinite(v) for v in vif)
 
     def test_vif_low_for_random(self):
-        from pipeline.diagnostics import compute_vif
+        from pipeline.metrics.diagnostics import compute_vif
         np.random.seed(42)
         X = np.random.randn(200, 4)
         vif = compute_vif(X)
@@ -337,7 +337,7 @@ class TestLightGBMProxy:
     """LightGBM proxy pre-filter."""
 
     def test_proxy_import(self):
-        from pipeline.lightgbm_proxy import LightGBMProxy
+        from pipeline.models.lightgbm_proxy import LightGBMProxy
         proxy = LightGBMProxy(top_k=5)
         X = pd.DataFrame(np.random.randn(100, 10), columns=[f"f{i}" for i in range(10)])
         y = pd.Series(np.random.choice([0, 1, 2], 100))
@@ -346,7 +346,7 @@ class TestLightGBMProxy:
         assert len(selected) > 0
 
     def test_proxy_reduces_features(self):
-        from pipeline.lightgbm_proxy import LightGBMProxy
+        from pipeline.models.lightgbm_proxy import LightGBMProxy
         proxy = LightGBMProxy(top_k=3)
         X = pd.DataFrame(np.random.randn(200, 20), columns=[f"f{i}" for i in range(20)])
         y = pd.Series(np.random.choice([0, 1, 2], 200))
@@ -362,13 +362,13 @@ class TestDSRThreshold:
     """DSR minimum Sharpe threshold for significance."""
 
     def test_dsr_computation(self):
-        from pipeline.overfitting import _compute_dsr_min_sharpe
+        from pipeline.metrics.overfitting import _compute_dsr_min_sharpe
         threshold = _compute_dsr_min_sharpe(50, 24, 60)
         assert threshold is not None
         assert 0.2 < threshold < 1.5
 
     def test_dsr_more_trials_higher_threshold(self):
-        from pipeline.overfitting import _compute_dsr_min_sharpe
+        from pipeline.metrics.overfitting import _compute_dsr_min_sharpe
         t1 = _compute_dsr_min_sharpe(10, 24, 60)
         t2 = _compute_dsr_min_sharpe(200, 24, 60)
         assert t2 > t1
@@ -390,7 +390,7 @@ class TestWalkForwardPeriod:
     """Per-period breakdown test (full round-trip)."""
 
     def test_period_breakdown_structure(self):
-        from pipeline.overfitting import compute_period_breakdown
+        from pipeline.metrics.overfitting import compute_period_breakdown
         records = [
             {"test_start": "2023-01-01", "test_end": "2023-02-01",
              "train_start": "2022-06-01", "train_end": "2022-12-31",

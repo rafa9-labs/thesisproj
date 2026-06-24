@@ -666,7 +666,8 @@ export function useLiveCandles(
       );
       return data;
     },
-    staleTime: 30_000,
+    staleTime: Infinity,
+    gcTime: 24 * 60 * 60 * 1000,
     enabled: !!pair && !!timeframe,
   });
 }

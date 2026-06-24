@@ -19,7 +19,7 @@ import numpy as np
 # Type-only import for static analysis — used in method signatures
 # ruff: noqa: F811
 try:
-    from pipeline.expert_profiler import RegimeModelMatrix  # noqa: F401
+    from pipeline.committee.expert_profiler import RegimeModelMatrix  # noqa: F401
 except ImportError:
     RegimeModelMatrix = type(None)  # type: ignore
 

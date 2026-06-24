@@ -1,7 +1,7 @@
 """Auto-extracted mixin -- see composed.py for the full MLBacktester."""
 from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
-from pipeline.dqn_config import HPO_CONFIG_DIR  # noqa: F811
+from pipeline.models.dqn_config import HPO_CONFIG_DIR  # noqa: F811
 
 
 class RealTradingMixin:

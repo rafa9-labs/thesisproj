@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from api.config import settings
-from pipeline.data_sqlite import DataStore
+from pipeline.data.data_sqlite import DataStore
 
 HYPERPARAM_ALIASES: Dict[str, Dict[str, str]] = {
     "logistic": {
@@ -379,7 +379,7 @@ def _run_backtest_via_wsl(job_id: str, config: dict) -> bool:
         return False
 
     from api.services import JobManager
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(settings.db_full_path)
     jm = JobManager(store)
@@ -727,7 +727,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
     _dbg = settings.debug
 
     from api.services import JobManager
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(settings.db_full_path)
     jm = JobManager(store)
@@ -782,7 +782,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
         end = last_of_prev.strftime("%Y-%m-%d")
 
     try:
-        from pipeline.data_sqlite import DataStore as _DS
+        from pipeline.data.data_sqlite import DataStore as _DS
         _store = _DS(settings.db_full_path)
         _tf_list = _store.list_timeframes(pair)
         if _tf_list:
@@ -887,7 +887,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             _pub("model_phase", job_id, {"model": model_type, "phase": "hpo", "total_work": total_work})
 
             from copy import deepcopy
-            from pipeline.metrics_tuples import CLASS_DEFAULTS
+            from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
             from pipeline.backtester.composed import MLBacktester
 
             feat_cfg = deepcopy(CLASS_DEFAULTS["features"])
@@ -1302,7 +1302,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 pass
 
             try:
-                from pipeline.overfitting import compute_overfitting_report, compute_period_breakdown
+                from pipeline.metrics.overfitting import compute_overfitting_report, compute_period_breakdown
                 wfo_records = getattr(bt, "_wfo_monthly_records", [])
                 hpo_best = None
                 if hasattr(bt, "_optuna_study") and bt._optuna_study is not None:
@@ -1312,7 +1312,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 # S16.7: fANOVA interaction effects from Optuna study
                 try:
                     if hasattr(bt, "_optuna_study") and bt._optuna_study is not None:
-                        from pipeline.overfitting import compute_fanova_interactions
+                        from pipeline.metrics.overfitting import compute_fanova_interactions
                         overfit.interaction_effects = compute_fanova_interactions(bt._optuna_study)
                 except Exception:
                     pass
@@ -1350,14 +1350,14 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
 
             # S16.4: Plain-English backtest summary
             try:
-                from pipeline.summary_generator import generate_summary
+                from pipeline.metrics.summary_generator import generate_summary
                 metrics_row["summary_text"] = generate_summary(metrics_row, config)
             except Exception:
                 metrics_row["summary_text"] = None
 
             # S16.3: Training diagnostics (feature importance, confusion matrix, confidence bands)
             try:
-                from pipeline.diagnostics import (
+                from pipeline.metrics.diagnostics import (
                     compute_feature_importance,
                     compute_prediction_histogram,
                     compute_confidence_bands,
@@ -1368,7 +1368,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 # Feature importance from per-period capture
                 _fi_tuples = getattr(bt, "_diagnostics_feature_importance", [])
                 if _fi_tuples:
-                    from pipeline.diagnostics import FeatureImportanceEntry
+                    from pipeline.metrics.diagnostics import FeatureImportanceEntry
                     _diag["feature_importance"] = [
                         {"feature": f, "importance": float(i)} for f, i in _fi_tuples
                     ]
@@ -1377,7 +1377,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
 
                 # Importance method + feature family distribution
                 try:
-                    from pipeline.diagnostics import get_importance_method, classify_feature_families
+                    from pipeline.metrics.diagnostics import get_importance_method, classify_feature_families
                     _diag["importance_method"] = get_importance_method(model_type)
                     _feat_names = getattr(bt, "_diagnostics_feature_names", None)
                     if not _feat_names:
@@ -1391,7 +1391,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 _diag["vif_warnings"] = []
                 if model_type in ("logistic", "logit") and _fi_tuples:
                     try:
-                        from pipeline.diagnostics import compute_vif
+                        from pipeline.metrics.diagnostics import compute_vif
                         _vif_feats = [f for f, _ in _fi_tuples]
                         _res = getattr(bt, "results", None)
                         if _res is not None and hasattr(_res, "columns") and _vif_feats:
@@ -1479,7 +1479,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
             # when the user explicitly clicks "Save Model" on the Results page.
             _snap_path = None
             try:
-                from pipeline.model_persistence import save_snapshot
+                from pipeline.models.model_persistence import save_snapshot
                 _model_obj = getattr(bt, "_last_trained_model", None) or getattr(bt, "model", None)
                 if _model_obj is not None:
                     _cov_thr = getattr(bt, "_coverage_conf_thr", None) or getattr(bt, "_deep_coverage_thr", None)
@@ -1561,8 +1561,8 @@ def _download_data_impl(job_id: str, pair: str, years: int = 10, base_timeframe:
     os.chdir(project_root)
 
     from api.services import JobManager
-    from pipeline.data_sqlite import DataStore
-    from pipeline.pair_config import get_pair_config, PAIR_REGISTRY
+    from pipeline.data.data_sqlite import DataStore
+    from pipeline.data.pair_config import get_pair_config, PAIR_REGISTRY
 
     store = DataStore(settings.db_full_path)
     jm = JobManager(store)
@@ -1571,7 +1571,7 @@ def _download_data_impl(job_id: str, pair: str, years: int = 10, base_timeframe:
     _pub("download_started", job_id, {"pair": pair})
 
     try:
-        from pipeline.data_downloader import download_pair
+        from pipeline.data.data_downloader import download_pair
 
         try:
             cfg = get_pair_config(pair)
@@ -1625,7 +1625,7 @@ def _run_forward_test_impl(job_id: str, config: dict):
     os.chdir(project_root)
 
     from api.services import JobManager
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(settings.db_full_path)
     jm = JobManager(store)
@@ -1635,7 +1635,7 @@ def _run_forward_test_impl(job_id: str, config: dict):
 
     try:
         from pipeline.forward_test import run_forward_test
-        from pipeline.model_registry_disk import get_all_deployed
+        from pipeline.models.model_registry_disk import get_all_deployed
 
         model_id = config.get("model_id", "")
         snapshot_path = config.get("snapshot_path", "")

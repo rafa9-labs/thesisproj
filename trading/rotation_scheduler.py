@@ -183,7 +183,7 @@ class RotationScheduler:
         committee_models: List[str],
     ) -> Optional[str]:
         if matrix is not None:
-            from pipeline.regime_utils import _REGIME_NAMES
+            from pipeline.regime.regime_utils import _REGIME_NAMES
 
             try:
                 regime_idx = list(_REGIME_NAMES.values()).index(regime)
@@ -235,7 +235,7 @@ class RotationScheduler:
         try:
             with open(self._matrix_path) as f:
                 data = json.load(f)
-            from pipeline.expert_profiler import RegimeModelMatrix
+            from pipeline.committee.expert_profiler import RegimeModelMatrix
             import numpy as np
             return RegimeModelMatrix(
                 regimes=data.get("regimes", []),

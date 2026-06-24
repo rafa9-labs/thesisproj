@@ -30,7 +30,7 @@ def _inject_features_metadata(config, cc_data: dict, hpo_model_params: Optional[
     the exact same feature engineering as the Slow Loop without guessing.
     """
     from copy import deepcopy
-    from pipeline.metrics_tuples import CLASS_DEFAULTS
+    from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
 
     fc_path = os.environ.get("FEATURE_CONFIG_PATH", "configs/feature_config.json")
     features_dict = {}
@@ -165,7 +165,7 @@ def get_committee_config(job_id: str | None = Query(default=None)):
         except (json.JSONDecodeError, OSError):
             pass
 
-    from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+    from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
     default = CommitteeConfig(
         regimes={
             "trend_up": RegimeAssignment(models=["logistic"], weights=[1.0]),
@@ -222,7 +222,7 @@ class SaveCommitteeRequest(BaseModel):
 @router.get("/saved", response_model=SavedCommitteeListResponse)
 def list_saved_committees():
     from api.config import settings
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
     store = DataStore(settings.db_full_path)
     with store._cursor() as (conn, cur):
         cur.execute(
@@ -251,7 +251,7 @@ def list_saved_committees():
 @router.post("/saved")
 def save_committee(req: SaveCommitteeRequest):
     from api.config import settings
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
     import uuid as _uuid
     from datetime import datetime as _dt, timezone as _tz
 
@@ -272,7 +272,7 @@ def save_committee(req: SaveCommitteeRequest):
 @router.delete("/saved/{committee_id}")
 def delete_saved_committee(committee_id: str):
     from api.config import settings
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
     store = DataStore(settings.db_full_path)
     with store._cursor() as (conn, cur):
         cur.execute("SELECT id FROM saved_committees WHERE id = ?", (committee_id,))
@@ -285,7 +285,7 @@ def delete_saved_committee(committee_id: str):
 @router.post("/saved/{committee_id}/activate")
 def activate_saved_committee(committee_id: str):
     from api.config import settings
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
     store = DataStore(settings.db_full_path)
     with store._cursor() as (conn, cur):
         cur.execute("SELECT id, config_json FROM saved_committees WHERE id = ?", (committee_id,))
@@ -364,7 +364,7 @@ def get_regime_labels(
     bars: int = Query(500, description="Number of most recent bars to return"),
 ):
     """Return per-bar regime labels for the most recent N bars of a dataset."""
-    from pipeline.regime_utils import detect_regimes, RegimeConfig, _REGIME_NAMES
+    from pipeline.regime.regime_utils import detect_regimes, RegimeConfig, _REGIME_NAMES
 
     timeframe_map = {"H1": "H1", "H4": "H4", "M30": "M30", "M15": "M15"}
     tf = timeframe_map.get(timeframe, "H1")
@@ -784,7 +784,7 @@ def cancel_full_cycle(job_id: str):
     from api.config import settings
     try:
         from api.services import JobManager
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
         store = DataStore(settings.db_full_path)
         JobManager(store).clear_pending_queue()
     except Exception as e:
@@ -1001,14 +1001,14 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
         os.environ["CV_JOBS"] = cv
         os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-        from pipeline.expert_profiler import (
+        from pipeline.committee.expert_profiler import (
             ExpertProfiler, RegimeConfig,
         )
-        from pipeline.committee_builder import CommitteeBuilder
-        from pipeline.committee_backtester import CommitteeBacktester
-        from pipeline.model_families import get_trial_budget
-        from pipeline.factory_state import load_state_from_disk
-        from pipeline.factory_executor import FactoryExecutor
+        from pipeline.committee.committee_builder import CommitteeBuilder
+        from pipeline.committee.committee_backtester import CommitteeBacktester
+        from pipeline.models.model_families import get_trial_budget
+        from pipeline.committee.factory_state import load_state_from_disk
+        from pipeline.committee.factory_executor import FactoryExecutor
         import numpy as np
 
         csv_path, df = _load_csv_for_committee(req.pair, req.timeframe)
@@ -1041,7 +1041,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
 
             if locked_features_path.exists():
                 try:
-                    from pipeline.feature_sweep import load_locked_features
+                    from pipeline.features.feature_sweep import load_locked_features
                     # Check if cached sweep was done with different params
                     expected_sig = f"n{req.sweep_n_estimators}_d{req.sweep_max_depth}_f3"
                     if sweep_report_path.exists():
@@ -1066,7 +1066,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                 if req.skip_feature_sweep:
                     log_warn(job_id, "Phase 1 skipped (skip_feature_sweep=true) — no cached features available, proceeding without feature filtering")
                 else:
-                    from pipeline.feature_sweep import run_phase_minus1
+                    from pipeline.features.feature_sweep import run_phase_minus1
 
                     def _on_sweep_progress(msg: str):
                         _update_full_cycle_status(job_dir, "feature_sweep", phase_number=1,
@@ -1169,7 +1169,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
             for m in survivors:
                 hpo_status[m] = ModelStatus.SKIPPED.value
         else:
-            from pipeline.model_families import ModelStatus, is_gpu_model
+            from pipeline.models.model_families import ModelStatus, is_gpu_model
 
             _update_full_cycle_status(job_dir, "phase1_hpo", phase_number=2,
                                        current_action="Starting Phase 2 HPO",
@@ -1346,7 +1346,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
             # ──────────────────────────────────────────────────────────────
             if not req.enable_phase4:
                 log_info(job_id, "Phase 3: skipped (disabled) -- using fallback committee", phase_number=3)
-                from pipeline.committee_builder import CommitteeConfig as CC, RegimeAssignment as RA
+                from pipeline.committee.committee_builder import CommitteeConfig as CC, RegimeAssignment as RA
                 n = len(survivors)
                 w = 1.0 / max(n, 1)
                 ra = RA(models=list(survivors), weights=[w] * n)
@@ -1376,7 +1376,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                     }
                     committee_config = builder.build(matrix, constraints=constraints)
                 else:
-                    from pipeline.committee_builder import CommitteeConfig as CC, RegimeAssignment as RA
+                    from pipeline.committee.committee_builder import CommitteeConfig as CC, RegimeAssignment as RA
                     n = len(survivors)
                     w = 1.0 / max(n, 1)
                     ra = RA(models=list(survivors), weights=[w] * n)
@@ -1451,7 +1451,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                     fold_sharpes = [f.sharpe for f in bt_result.folds if not np.isnan(f.sharpe)]
                     # Build approximate fold returns matrix for PBO
                     try:
-                        from pipeline.pbo import compute_pbo
+                        from pipeline.metrics.pbo import compute_pbo
                         # Use fold Sharpes * sqrt(approx bars) to approximate returns
                         approx_bars = len(df) // max(1, len(bt_result.folds))
                         fold_rets = np.array([[s / np.sqrt(approx_bars * 6) for _ in range(10)]
@@ -1468,7 +1468,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                     get_trial_budget(m)[0] for m in survivors
                 )
                 try:
-                    from pipeline.dsr import deflated_sharpe_ratio
+                    from pipeline.metrics.dsr import deflated_sharpe_ratio
                     avg_sharpe = float(np.mean(fold_sharpes)) if fold_sharpes else 0.0
                     bars_per_fold = req.test_months * 21 * 24
                     T_obs = max(1, len(fold_sharpes) * bars_per_fold)
@@ -1487,7 +1487,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
 
                 # -- Compute trust score --
                 min_fold_sr = min(fold_sharpes) if fold_sharpes else -float("inf")
-                from pipeline.trust_score import compute_trust_score
+                from pipeline.metrics.trust_score import compute_trust_score
                 trust = compute_trust_score(pbo, dsr, regime_coverage_ratio, min_fold_sr)
                 log_info(job_id, f"Phase 4: Trust Score={trust['trust_score']:.4f} -> {trust['action'].upper()}", phase_number=4)
 
@@ -1506,7 +1506,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                 # Train meta-learner on Phase 4 OOS predictions
                 if trust["action"] != "reject" and fold_pred_path.exists():
                     try:
-                        from pipeline.committee_meta import CommitteeMetaLearner
+                        from pipeline.committee.committee_meta import CommitteeMetaLearner
                         meta = CommitteeMetaLearner()
                         acc = meta.train([str(fold_pred_path)])
                         if meta.is_trained and acc >= 0.40:
@@ -1617,17 +1617,17 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
 
                 proposer = None
                 if req.proposer == "llm":
-                    from pipeline.factory_llm import create_llm_proposer
+                    from pipeline.committee.factory_llm import create_llm_proposer
                     proposer = create_llm_proposer(backend=req.llm_backend)
                 elif req.proposer == "hybrid_llm_ucb1":
-                    from pipeline.factory_llm import create_llm_proposer
-                    from pipeline.factory_ucb import UCB1Proposer
-                    from pipeline.factory_hybrid import HybridLLMUCB1Proposer
+                    from pipeline.committee.factory_llm import create_llm_proposer
+                    from pipeline.committee.factory_ucb import UCB1Proposer
+                    from pipeline.committee.factory_hybrid import HybridLLMUCB1Proposer
                     llm = create_llm_proposer(backend=req.llm_backend)
                     ucb = UCB1Proposer(c=req.ucb_c)
                     proposer = HybridLLMUCB1Proposer(llm_proposer=llm, ucb_proposer=ucb, c=req.ucb_c, llm_refresh_interval=5)
                 elif req.proposer == "ucb1":
-                    from pipeline.factory_ucb import UCB1Proposer
+                    from pipeline.committee.factory_ucb import UCB1Proposer
                     proposer = UCB1Proposer(c=req.ucb_c)
 
                 executor = FactoryExecutor(
@@ -1667,7 +1667,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                     if isinstance(_loop_proposer, HybridLLMUCB1Proposer):
                         _loop_proposer.record_result(proposal, delta)
                     elif isinstance(_loop_proposer, UCB1Proposer):
-                        from pipeline.factory_ucb import _arm_hash
+                        from pipeline.committee.factory_ucb import _arm_hash
                         ah = _arm_hash(proposal.regime, proposal.type, proposal.model_remove, proposal.model_add)
                         _loop_proposer.record_result(ah, delta)
                     _update_full_cycle_status(
@@ -1753,9 +1753,9 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                 snapshot_dir = job_dir / "committee_snapshot"
                 snapshot_saved = False
                 try:
-                    from pipeline.feature_sweep import compute_feature_matrix, FEATURE_NAMES
+                    from pipeline.features.feature_sweep import compute_feature_matrix, FEATURE_NAMES
                     from models.registry import build_model
-                    from pipeline.expert_profiler import _reprefix_params
+                    from pipeline.committee.expert_profiler import _reprefix_params
 
                     snapshot_feature_names = locked_features if locked_features else FEATURE_NAMES
 

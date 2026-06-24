@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 def _writer(db_path: str, job_id: str):
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(db_path)
     for i in range(5):
@@ -27,7 +27,7 @@ def _writer(db_path: str, job_id: str):
 
 
 def _reader(db_path: str, job_id: str):
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(db_path)
     events = store.get_job_events(job_id, after=0)

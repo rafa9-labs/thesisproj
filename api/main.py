@@ -4,6 +4,9 @@ import asyncio
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -55,7 +58,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     try:
-        from pipeline.model_registry_disk import scan_and_repair
+        from pipeline.models.model_registry_disk import scan_and_repair
         result = scan_and_repair(settings.db_full_path)
         if any(v for v in result.values()):
             print(f"[Registry] scan_and_repair: registered={result['registered']} cleaned={result['cleaned']} skipped={result['skipped']}")
@@ -74,7 +77,7 @@ async def lifespan(app: FastAPI):
 
     _candle_syncer = None
     try:
-        from pipeline.candle_syncer import CandleSyncer
+        from pipeline.data.candle_syncer import CandleSyncer
         all_pairs = [p["symbol"] for p in store.list_pairs()]
         pairs = all_pairs or settings.sync_pairs
         if pairs:
@@ -93,12 +96,18 @@ async def lifespan(app: FastAPI):
         _total = 0
         for _pair in _sync_pairs:
             for _tf in ("M30", "H1", "H4"):
-                try:
-                    _n = await _candle_syncer.sync_pair(_pair, _tf)
-                    if _n:
-                        _total += _n
-                except Exception as _exc:
-                    print(f"[StartupSync] {_pair}/{_tf}: FAILED ({_exc})")
+                for _attempt in range(3):
+                    try:
+                        _n = await _candle_syncer.sync_pair(_pair, _tf)
+                        if _n:
+                            _total += _n
+                        break
+                    except Exception as _exc:
+                        if _attempt < 2:
+                            print(f"[StartupSync] {_pair}/{_tf}: attempt {_attempt + 1}/3 FAILED ({_exc}) — retrying in 5s")
+                            await asyncio.sleep(5)
+                        else:
+                            print(f"[StartupSync] {_pair}/{_tf}: FAILED after 3 attempts ({_exc})")
         if _total:
             print(f"[StartupSync] Gap fill complete — {_total} candles synced")
         else:

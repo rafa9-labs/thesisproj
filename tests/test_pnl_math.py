@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pipeline.metrics_eval import (
+from pipeline.metrics.metrics_eval import (
     _coerce_direction_labels,
     compute_metrics,
     compute_geometric_mean_annualized,

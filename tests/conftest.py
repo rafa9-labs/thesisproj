@@ -104,7 +104,7 @@ def _make_placeholder_ohlc(start: str = "2020-01-01", end: str = "2023-03-03"):
 
 def _seed_placeholder_db_impl(db_path: str):
     """Create a SQLite DB with synthetic EURUSD M30/H1/H4 data."""
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore(db_path)
 

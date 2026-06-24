@@ -4,7 +4,7 @@ import pytest
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 
-from pipeline.feature_utils import compute_mda, prune_noise_features
+from pipeline.features.feature_utils import compute_mda, prune_noise_features
 
 
 def _make_informative_data(n_samples=200, n_features=10, n_informative=5, n_noise=3, seed=42):

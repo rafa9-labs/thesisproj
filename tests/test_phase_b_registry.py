@@ -38,7 +38,7 @@ def _create_snapshot(snapshot_dir: str, model_type="logistic", sharpe=0.8, retur
                      parent_job_id=None):
     """Helper to create a valid snapshot on disk."""
     from sklearn.linear_model import LogisticRegression
-    from pipeline.model_persistence import save_snapshot
+    from pipeline.models.model_persistence import save_snapshot
 
     X = np.random.RandomState(42).randn(20, 3)
     y = (X[:, 0] > 0).astype(int)
@@ -57,9 +57,9 @@ class TestDeployedModelsCRUD:
     """Register, list, activate, delete deployed models."""
 
     def test_register_and_list(self, tmp_snapshot_dir, tmp_db):
-        from pipeline.model_registry_disk import register_snapshot, get_all_deployed
+        from pipeline.models.model_registry_disk import register_snapshot, get_all_deployed
 
-        import pipeline.model_persistence as mp
+        import pipeline.models.model_persistence as mp
         orig = mp.DEPLOY_ROOT
         mp.DEPLOY_ROOT = tmp_snapshot_dir
         try:
@@ -75,10 +75,10 @@ class TestDeployedModelsCRUD:
             mp.DEPLOY_ROOT = orig
 
     def test_activate_and_delete(self, tmp_snapshot_dir, tmp_db):
-        from pipeline.model_registry_disk import (
+        from pipeline.models.model_registry_disk import (
             register_snapshot, get_all_deployed, activate_model, delete_model,
         )
-        import pipeline.model_persistence as mp
+        import pipeline.models.model_persistence as mp
         orig = mp.DEPLOY_ROOT
         mp.DEPLOY_ROOT = tmp_snapshot_dir
         try:
@@ -99,10 +99,10 @@ class TestDeployedModelsCRUD:
             mp.DEPLOY_ROOT = orig
 
     def test_only_one_active_per_model_type(self, tmp_snapshot_dir, tmp_db):
-        from pipeline.model_registry_disk import (
+        from pipeline.models.model_registry_disk import (
             register_snapshot, get_all_deployed, activate_model,
         )
-        import pipeline.model_persistence as mp
+        import pipeline.models.model_persistence as mp
         import time
         orig = mp.DEPLOY_ROOT
         mp.DEPLOY_ROOT = tmp_snapshot_dir
@@ -128,9 +128,9 @@ class TestDeployedModelsCRUD:
             mp.DEPLOY_ROOT = orig
 
     def test_tags_update(self, tmp_snapshot_dir, tmp_db):
-        from pipeline.model_registry_disk import register_snapshot, update_tags
+        from pipeline.models.model_registry_disk import register_snapshot, update_tags
 
-        import pipeline.model_persistence as mp
+        import pipeline.models.model_persistence as mp
         orig = mp.DEPLOY_ROOT
         mp.DEPLOY_ROOT = tmp_snapshot_dir
         try:
@@ -150,9 +150,9 @@ class TestDeployedModelsCRUD:
             mp.DEPLOY_ROOT = orig
 
     def test_scan_and_repair(self, tmp_snapshot_dir, tmp_db):
-        from pipeline.model_registry_disk import scan_and_repair, get_all_deployed
+        from pipeline.models.model_registry_disk import scan_and_repair, get_all_deployed
 
-        import pipeline.model_persistence as mp
+        import pipeline.models.model_persistence as mp
         orig = mp.DEPLOY_ROOT
         mp.DEPLOY_ROOT = tmp_snapshot_dir
         try:
@@ -175,10 +175,10 @@ class TestActivePointer:
     """File-based active model pointer."""
 
     def test_activation_writes_pointer(self, tmp_snapshot_dir, tmp_db):
-        from pipeline.model_registry_disk import register_snapshot, activate_model
-        from pipeline.model_persistence import get_active_model_id
+        from pipeline.models.model_registry_disk import register_snapshot, activate_model
+        from pipeline.models.model_persistence import get_active_model_id
 
-        import pipeline.model_persistence as mp
+        import pipeline.models.model_persistence as mp
         orig = mp.DEPLOY_ROOT
         mp.DEPLOY_ROOT = tmp_snapshot_dir
         try:
@@ -190,10 +190,10 @@ class TestActivePointer:
             mp.DEPLOY_ROOT = orig
 
     def test_deactivation_clears_pointer(self, tmp_snapshot_dir, tmp_db):
-        from pipeline.model_registry_disk import register_snapshot, activate_model, deactivate_model
-        from pipeline.model_persistence import get_active_model_id
+        from pipeline.models.model_registry_disk import register_snapshot, activate_model, deactivate_model
+        from pipeline.models.model_persistence import get_active_model_id
 
-        import pipeline.model_persistence as mp
+        import pipeline.models.model_persistence as mp
         orig = mp.DEPLOY_ROOT
         mp.DEPLOY_ROOT = tmp_snapshot_dir
         try:

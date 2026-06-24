@@ -39,7 +39,7 @@ async def _ws_polling_loop(websocket: WebSocket, job_id: str):
             if idle_rounds >= 30:
                 from api.config import settings as s
                 from api.services import JobManager as JM
-                from pipeline.data_sqlite import DataStore as DS
+                from pipeline.data.data_sqlite import DataStore as DS
                 try:
                     jm = JM(DS(s.db_full_path))
                     job = jm.get_job(job_id)

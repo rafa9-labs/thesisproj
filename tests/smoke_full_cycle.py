@@ -18,11 +18,11 @@ os.environ["MLB_THREADS"] = "1"
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.feature_sweep import run_phase_minus1, load_locked_features
-from pipeline.regime_utils import detect_regimes_anchored, RegimeConfig
-from pipeline.expert_profiler import ExpertProfiler
-from pipeline.committee_builder import CommitteeBuilder
-from pipeline.committee_backtester import CommitteeBacktester
+from pipeline.features.feature_sweep import run_phase_minus1, load_locked_features
+from pipeline.regime.regime_utils import detect_regimes_anchored, RegimeConfig
+from pipeline.committee.expert_profiler import ExpertProfiler
+from pipeline.committee.committee_builder import CommitteeBuilder
+from pipeline.committee.committee_backtester import CommitteeBacktester
 
 import numpy as np
 import pandas as pd
@@ -118,7 +118,7 @@ print("  PHASE 4: Committee Assembly")
 print("-" * 40)
 t0 = time.time()
 
-from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
 n = len(survivors)
 w = 1.0 / max(n, 1)
 ra = RegimeAssignment(models=list(survivors), weights=[w] * n)

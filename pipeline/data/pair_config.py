@@ -6,7 +6,7 @@ and helpers for resolving CSV data paths.
 
 Usage::
 
-    from pipeline.pair_config import get_pair_config, resolve_csv_paths
+    from pipeline.data.pair_config import get_pair_config, resolve_csv_paths
 
     cfg = get_pair_config("GBPUSD")
     print(cfg.pip_value)  # 0.0001

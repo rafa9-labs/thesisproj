@@ -77,7 +77,7 @@ class TestLiveDeployWithSavedModel:
         """Test that a snapshot can be loaded for live trading use."""
         snapshot_dir = _make_dummy_snapshot(tmp_path)
 
-        from pipeline.model_persistence import (
+        from pipeline.models.model_persistence import (
             load_model_only, read_metadata, validate_snapshot,
         )
 
@@ -96,7 +96,7 @@ class TestLiveDeployWithSavedModel:
         import numpy as np
         snapshot_dir = _make_dummy_snapshot(tmp_path)
 
-        from pipeline.model_persistence import load_model_only
+        from pipeline.models.model_persistence import load_model_only
         model = load_model_only(snapshot_dir)
 
         X = np.random.randn(3, 10)

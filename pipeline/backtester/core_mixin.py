@@ -56,12 +56,12 @@ class CoreMixin:
         self.end = end
 
         # --- Resolve pair-specific config (S3.2) ---
-        from pipeline.pair_config import get_pair_config
-        from pipeline.data_sqlite import DataStore, DataNotAvailableError
+        from pipeline.data.pair_config import get_pair_config
+        from pipeline.data.data_sqlite import DataStore, DataNotAvailableError
         try:
             self._pair_config = get_pair_config(symbol)
         except ValueError:
-            from pipeline.pair_config import PairConfig
+            from pipeline.data.pair_config import PairConfig
             self._pair_config = PairConfig(
                 symbol=symbol,
                 oanda_name=symbol[:3] + "_" + symbol[3:] if len(symbol) == 6 else symbol,

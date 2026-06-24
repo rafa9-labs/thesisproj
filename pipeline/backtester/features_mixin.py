@@ -172,7 +172,7 @@ class FeaturesMixin:
         # --- Disk cache: try loading before recomputing ---
         if not base_only and not in_cv:
             try:
-                from pipeline.feature_cache import load_from_disk
+                from pipeline.features.feature_cache import load_from_disk
                 import hashlib as _hashlib_dl, json as _json_dl
                 _disk_key = _hashlib_dl.sha256(
                     _json_dl.dumps(cache_key, default=str).encode()
@@ -804,7 +804,7 @@ class FeaturesMixin:
         # --- Disk cache: always persist (independent of in-memory toggle) ---
         if not base_only and not in_cv:
             try:
-                from pipeline.feature_cache import compute_disk_key, save_to_disk
+                from pipeline.features.feature_cache import compute_disk_key, save_to_disk
                 import hashlib as _hashlib, json as _json
                 # Derive a stable disk key from the in-memory cache_key tuple
                 _disk_key = _hashlib.sha256(

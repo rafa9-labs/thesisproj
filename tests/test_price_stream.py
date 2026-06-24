@@ -154,7 +154,7 @@ class TestUpsertCandle:
 
     @pytest.fixture
     def store(self, tmp_path):
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
         db_path = str(tmp_path / "test_upsert.db")
         return DataStore(db_path)
 

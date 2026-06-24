@@ -49,14 +49,14 @@ except Exception as e:
 # Check critical function availability
 print("\n── Pre-flight: Critical imports ──", flush=True)
 try:
-    from pipeline.metrics_tuples import _safe_metrics_return, _empty_metrics, N_METRICS
+    from pipeline.metrics.metrics_tuples import _safe_metrics_return, _empty_metrics, N_METRICS
     print(f"OK: _safe_metrics_return (arity={N_METRICS})", flush=True)
 except Exception as e:
     print(f"FAIL: cannot import _safe_metrics_return: {e}", flush=True)
     sys.exit(1)
 
 try:
-    from pipeline.metrics_eval import compute_full_evaluation_metrics
+    from pipeline.metrics.metrics_eval import compute_full_evaluation_metrics
     print("OK: compute_full_evaluation_metrics", flush=True)
 except Exception as e:
     print(f"FAIL: cannot import compute_full_evaluation_metrics: {e}", flush=True)

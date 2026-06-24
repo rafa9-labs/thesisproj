@@ -352,42 +352,42 @@ def simulate(levels: Optional[List[int]] = None) -> int:
         # 1a — core imports
         pkg_imports = []
         try:
-            from pipeline.feature_sweep import sweep_features, expand_features, INDICATOR_GRID
+            from pipeline.features.feature_sweep import sweep_features, expand_features, INDICATOR_GRID
             pkg_imports.append("feature_sweep")
         except Exception as e:
             _check(1, "import feature_sweep", False, str(e))
             return 1
 
         try:
-            from pipeline.boruta_sweep import boruta_sweep_features, BorutaSHAPSelector
+            from pipeline.features.boruta_sweep import boruta_sweep_features, BorutaSHAPSelector
             pkg_imports.append("boruta_sweep")
         except Exception as e:
             _check(1, "import boruta_sweep", False, str(e))
             return 1
 
         try:
-            from pipeline.committee_builder import CommitteeBuilder, CommitteeConfig, RegimeAssignment
+            from pipeline.committee.committee_builder import CommitteeBuilder, CommitteeConfig, RegimeAssignment
             pkg_imports.append("committee_builder")
         except Exception as e:
             _check(1, "import committee_builder", False, str(e))
             return 1
 
         try:
-            from pipeline.committee_backtester import CommitteeBacktester
+            from pipeline.committee.committee_backtester import CommitteeBacktester
             pkg_imports.append("committee_backtester")
         except Exception as e:
             _check(1, "import committee_backtester", False, str(e))
             return 1
 
         try:
-            from pipeline.regime_utils import detect_regimes, RegimeConfig, _REGIME_NAMES
+            from pipeline.regime.regime_utils import detect_regimes, RegimeConfig, _REGIME_NAMES
             pkg_imports.append("regime_utils")
         except Exception as e:
             _check(1, "import regime_utils", False, str(e))
             return 1
 
         try:
-            from pipeline.expert_profiler import FoldResult, RegimeModelMatrix
+            from pipeline.committee.expert_profiler import FoldResult, RegimeModelMatrix
             pkg_imports.append("expert_profiler")
         except Exception as e:
             _check(1, "import expert_profiler", False, str(e))
@@ -445,7 +445,7 @@ def simulate(levels: Optional[List[int]] = None) -> int:
                len(set(df2["regime_label"])) >= 4,
                f"got {len(set(df2['regime_label']))} labels")
 
-        from pipeline.feature_sweep import expand_features
+        from pipeline.features.feature_sweep import expand_features
         df_feat = expand_features(df2)
         n_feat = sum(1 for c in df_feat.columns
                      if c not in {"mid_h","mid_l","mid_c","mid_o","mid_open","mid_high",
@@ -471,7 +471,7 @@ def simulate(levels: Optional[List[int]] = None) -> int:
     if _should_run(3):
         _header("LEVEL 3 — Feature Sweep (BorutaSHAP + 2% Floor)")
 
-        from pipeline.boruta_sweep import boruta_sweep_features
+        from pipeline.features.boruta_sweep import boruta_sweep_features
 
         df3 = _make_synthetic_ohlc(3000, seed=42)
         locked, scores, report = boruta_sweep_features(
@@ -509,7 +509,7 @@ def simulate(levels: Optional[List[int]] = None) -> int:
         from sklearn.preprocessing import StandardScaler
 
         df4 = _make_synthetic_ohlc(3000, seed=42)
-        from pipeline.feature_sweep import expand_features, _make_labels
+        from pipeline.features.feature_sweep import expand_features, _make_labels
 
         df_feat = expand_features(df4)
         labels = _make_labels(df_feat, threshold=0.0001)
@@ -567,7 +567,7 @@ def simulate(levels: Optional[List[int]] = None) -> int:
             from sklearn.model_selection import TimeSeriesSplit
 
             df5 = _make_synthetic_ohlc(2000, seed=42)
-            from pipeline.feature_sweep import expand_features, _make_labels
+            from pipeline.features.feature_sweep import expand_features, _make_labels
 
             df_feat = expand_features(df5)
             labels5 = _make_labels(df_feat, threshold=0.0001)
@@ -614,8 +614,8 @@ def simulate(levels: Optional[List[int]] = None) -> int:
     if _should_run(6):
         _header("LEVEL 6 — Committee Assembly (CommitteeBuilder)")
 
-        from pipeline.committee_builder import CommitteeBuilder
-        from pipeline.expert_profiler import FoldResult, RegimeModelMatrix
+        from pipeline.committee.committee_builder import CommitteeBuilder
+        from pipeline.committee.expert_profiler import FoldResult, RegimeModelMatrix
 
         regimes = ["trend_up", "trend_down", "sideways", "high_volatile", "mean_reverting"]
         models = ["logistic", "random_forest", "xgboost", "lightgbm", "catboost"]
@@ -675,9 +675,9 @@ def simulate(levels: Optional[List[int]] = None) -> int:
     if _should_run(7):
         _header("LEVEL 7 — Committee WFO (CommitteeBacktester)")
 
-        from pipeline.regime_utils import detect_regimes, RegimeConfig
-        from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.regime.regime_utils import detect_regimes, RegimeConfig
+        from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df7 = _make_synthetic_ohlc(6000, seed=42)
         # detect regimes on synthetic data
@@ -784,7 +784,7 @@ def simulate(levels: Optional[List[int]] = None) -> int:
                f"got {schema_ct:.2f}")
 
         # P2: MI cap is now 50
-        import pipeline.boruta_sweep as bs
+        import pipeline.features.boruta_sweep as bs
         import inspect
         src = inspect.getsource(bs.boruta_sweep_features)
         has_mi_50 = "> 50:" in src
@@ -798,9 +798,9 @@ def simulate(levels: Optional[List[int]] = None) -> int:
     if _should_run(9):
         _header("LEVEL 9 — Stability / Robustness")
 
-        from pipeline.regime_utils import detect_regimes, RegimeConfig
-        from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.regime.regime_utils import detect_regimes, RegimeConfig
+        from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df9 = _make_synthetic_ohlc(5000, seed=42)
         df9 = df9.rename(columns={
@@ -873,7 +873,7 @@ def simulate(levels: Optional[List[int]] = None) -> int:
         _header("LEVEL 10 — Edge Cases")
 
         # 10a — empty feature set: sweep with no features should return floor
-        from pipeline.boruta_sweep import boruta_sweep_features
+        from pipeline.features.boruta_sweep import boruta_sweep_features
         df_empty = _make_synthetic_ohlc(500, seed=42)
         # drop all indicator columns to simulate empty feature set
         # (boruta_sweep_features will still compute features internally;
@@ -906,9 +906,9 @@ def simulate(levels: Optional[List[int]] = None) -> int:
                    True, f"exception but handled: {e}")
 
         # 10c — zero confidence threshold allows all signals
-        from pipeline.regime_utils import detect_regimes, RegimeConfig
-        from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.regime.regime_utils import detect_regimes, RegimeConfig
+        from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df_10c = _make_synthetic_ohlc(4000, seed=42)
         df_10c = df_10c.rename(columns={

@@ -144,7 +144,7 @@ class TestResultsSchema:
 
     def test_committee_config_roundtrip(self, tmp_path):
         """CommitteeConfig survives dict→JSON→dict roundtrip."""
-        from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+        from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
         cfg = CommitteeConfig(
             regimes={
                 "trend_up": RegimeAssignment(
@@ -188,9 +188,9 @@ class TestDeployIntegration:
         """LiveCommitteeRunner processes bars with real trained models."""
         _ensure_csv()
         from api.routers.live import _train_committee_models
-        from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+        from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         models, features = _train_committee_models("EURUSD", "H1", ["logistic"])
         cfg = CommitteeConfig(

@@ -16,7 +16,7 @@ from api.process_manager import ProcessManager
 class TestCancelIsolation:
 
     def test_force_stop_only_target_job(self, tmp_path):
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
 
         db_path = str(tmp_path / "cancel_iso.db")
         store = DataStore(db_path)
@@ -37,7 +37,7 @@ class TestCancelIsolation:
         assert job_b_data["status"] == "running"
 
     def test_force_stop_nonexistent_no_side_effects(self, tmp_path):
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
 
         db_path = str(tmp_path / "cancel_sidefx.db")
         store = DataStore(db_path)
@@ -91,7 +91,7 @@ class TestCancelIsolation:
             assert "job-b" in pm._active_futures
 
     def test_force_stop_only_active_affected(self, tmp_path):
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
 
         db_path = str(tmp_path / "only_active.db")
         store = DataStore(db_path)
@@ -115,7 +115,7 @@ class TestCancelIsolation:
         assert jm.get_job(job_completed)["status"] == "completed"
 
     def test_simultaneous_force_stop_two_jobs(self, tmp_path):
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
         import threading
 
         db_path = str(tmp_path / "dual_stop.db")

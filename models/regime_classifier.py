@@ -19,7 +19,7 @@ try:
 except ImportError:
     _SKLEARN_OK = False
 
-from pipeline.regime_utils import (
+from pipeline.regime.regime_utils import (
     _REGIME_NAMES,
     _STABLE_REGIMES_FOR_MODEL,
     RegimeConfig,

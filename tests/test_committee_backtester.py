@@ -12,16 +12,16 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipeline.committee_builder import (
+from pipeline.committee.committee_builder import (
     CommitteeConfig,
     RegimeAssignment,
 )
-from pipeline.committee_backtester import (
+from pipeline.committee.committee_backtester import (
     CommitteeBacktester,
     CommitteeFoldResult,
     CommitteeBacktestResult,
 )
-from pipeline.regime_utils import RegimeConfig
+from pipeline.regime.regime_utils import RegimeConfig
 
 
 _RNG = np.random.default_rng(42)

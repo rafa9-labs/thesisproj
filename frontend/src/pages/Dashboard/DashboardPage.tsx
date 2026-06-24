@@ -83,7 +83,7 @@ export function DashboardPage() {
     isCommitteesLoading,
   } = useDashboardWaterfall(activePair, !demoMode);
 
-  const { historical: chartCandles, liveBar, isLoading: chartLoading, loadOlder, hasOlder, setChartReady } = useChartStream(activePair, activeTimeframe, 1000);
+  const { historical: chartCandles, liveBar, isLoading: chartLoading, loadOlder, hasOlder, setChartReady } = useChartStream(activePair, activeTimeframe, 500);
 
   const availablePairs = useMemo(
     () => pairs.map((p) => p.pair?.symbol ?? "").filter((s) => s !== ""),
@@ -201,6 +201,7 @@ export function DashboardPage() {
           <div className="p-4">
             <ErrorBoundary fallback={<WidgetErrorFallback label="Price Chart" />}>
               <CandlestickChart
+                key={`${activePair}-${activeTimeframe}`}
                 pair={activePair}
                 timeframe={activeTimeframe}
                 historical={chartCandles}

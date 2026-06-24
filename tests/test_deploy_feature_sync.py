@@ -4,13 +4,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pipeline.feature_sweep import (
+from pipeline.features.feature_sweep import (
     expand_features,
     compute_feature_matrix,
     FEATURE_NAMES,
     INDICATOR_GRID,
 )
-from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
 
 
 @pytest.fixture

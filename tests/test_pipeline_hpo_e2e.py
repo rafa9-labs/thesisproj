@@ -83,7 +83,7 @@ def _hpo_bt_config(model_type: str):
 
 
 def _skip_if_no_db():
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
     store = DataStore(os.path.join(_project_root, "data", "forex.db"))
     tfs = store.list_timeframes("EURUSD")
     if not {"M30", "H1", "H4"}.issubset(set(tfs)):

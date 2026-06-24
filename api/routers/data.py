@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from api.dependencies import get_data_store
 from api.schemas.pairs import DownloadRequest, DownloadResponse
 from api.services import JobManager
-from pipeline.pair_config import VALID_PAIRS
+from pipeline.data.pair_config import VALID_PAIRS
 
 
 class SeedDemoRequest(BaseModel):

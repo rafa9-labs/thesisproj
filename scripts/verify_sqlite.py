@@ -1,5 +1,5 @@
 """Quick verification of the SQLite data layer."""
-from pipeline.data_sqlite import DataStore
+from pipeline.data.data_sqlite import DataStore
 
 store = DataStore("data/forex.db")
 

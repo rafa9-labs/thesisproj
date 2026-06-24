@@ -6,14 +6,14 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipeline.factory_executor import FactoryExecutor
-from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-from pipeline.expert_profiler import RegimeModelMatrix
-from pipeline.factory_proposer import (
+from pipeline.committee.factory_executor import FactoryExecutor
+from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+from pipeline.committee.expert_profiler import RegimeModelMatrix
+from pipeline.committee.factory_proposer import (
     ActionProposal,
     DeterministicProposer,
 )
-from pipeline.factory_state import (
+from pipeline.committee.factory_state import (
     FactoryState,
     IterationRecord,
 )

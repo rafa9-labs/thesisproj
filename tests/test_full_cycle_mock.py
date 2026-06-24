@@ -33,7 +33,7 @@ def _assert_no_nan_in_list(lst, label):
 
 def test_phase1_feature_sweep(mock_ohlc_df):
     """Phase 1 on mock data: returns locked features list and sweep report."""
-    from pipeline.feature_sweep import sweep_features
+    from pipeline.features.feature_sweep import sweep_features
 
     locked, scores, report = sweep_features(
         mock_ohlc_df,

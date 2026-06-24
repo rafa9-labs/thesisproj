@@ -6,7 +6,7 @@ model-agnostic feature pre-filtering step that works for ALL model types
 (including deep sequential models — features are flattened for the proxy).
 
 Usage:
-    from pipeline.lightgbm_proxy import LightGBMProxy
+    from pipeline.models.lightgbm_proxy import LightGBMProxy
     proxy = LightGBMProxy(top_k=40)
     keep = proxy.select(X_train, y_train)  # returns list of feature names
 """

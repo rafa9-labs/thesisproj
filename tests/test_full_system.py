@@ -34,17 +34,17 @@ os.environ.setdefault("SKIP_PLOTS", "1")
 # ═══════════════════════════════════════════════════════════════════════
 
 REEXPORT_MODULES = [
-    "pipeline.coverage",
-    "pipeline.optuna_utils",
-    "pipeline.model_utils",
+    "pipeline.metrics.coverage",
+    "pipeline.hpo.optuna_utils",
+    "pipeline.models.model_utils",
     "pipeline.io_utils",
     "pipeline.plotting",
     "pipeline.misc_utils",
-    "pipeline.hpo_io",
-    "pipeline.feature_utils",
-    "pipeline.calibration",
-    "pipeline.execution_utils",
-    "pipeline.metrics_extra",
+    "pipeline.hpo.hpo_io",
+    "pipeline.features.feature_utils",
+    "pipeline.metrics.calibration",
+    "pipeline.execution.execution_utils",
+    "pipeline.metrics.metrics_extra",
     "rl.wrappers",
 ]
 
@@ -152,7 +152,7 @@ def test_model_registry_has_all_models():
 
 def test_fracdiff():
     """FracDiff must produce finite values after warmup."""
-    from pipeline.feature_utils import fracdiff
+    from pipeline.features.feature_utils import fracdiff
     s = pd.Series(np.cumsum(np.random.randn(500)), name="price")
     result = fracdiff(s, d=0.4)
     valid = result.dropna()
@@ -162,7 +162,7 @@ def test_fracdiff():
 
 def test_triple_barrier_labels():
     """Triple barrier must produce labels {0, 1, 2}."""
-    from pipeline.feature_utils import triple_barrier_labels
+    from pipeline.features.feature_utils import triple_barrier_labels
     np.random.seed(42)
     close = pd.Series(1.1000 + np.cumsum(np.random.randn(300) * 0.001))
     labels = triple_barrier_labels(close, pt_mult=2.0, sl_mult=2.0, max_holding=36, neutral_zone=0.5)
@@ -172,7 +172,7 @@ def test_triple_barrier_labels():
 
 def test_add_cyclic_hour_features():
     """Cyclic hour features must add sin/cos columns."""
-    from pipeline.feature_utils import add_cyclic_hour_features
+    from pipeline.features.feature_utils import add_cyclic_hour_features
     df = pd.DataFrame({"hour": np.arange(24)})
     result = add_cyclic_hour_features(df)
     assert "hour_sin" in result.columns
@@ -182,7 +182,7 @@ def test_add_cyclic_hour_features():
 
 def test_build_features_from_params():
     """build_features_from_params must return a list of existing columns."""
-    from pipeline.feature_utils import build_features_from_params
+    from pipeline.features.feature_utils import build_features_from_params
     df = _make_synthetic_df(500)
     params = {
         "use_sma": True, "use_ema": True, "use_rsi": True,
@@ -202,7 +202,7 @@ def test_build_features_from_params():
 
 def test_realized_vol():
     """realized_vol must return a Series of the same length."""
-    from pipeline.feature_utils import realized_vol
+    from pipeline.features.feature_utils import realized_vol
     s = pd.Series(np.random.randn(200))
     vol = realized_vol(s, window=20)
     assert len(vol) == len(s)
@@ -214,7 +214,7 @@ def test_realized_vol():
 
 def test_temperature_scaling():
     """Temperature scaling must preserve sum-to-1."""
-    from pipeline.calibration import apply_temperature_to_proba, fit_temperature_from_proba
+    from pipeline.metrics.calibration import apply_temperature_to_proba, fit_temperature_from_proba
     np.random.seed(42)
     proba = np.random.dirichlet([1, 1, 1], size=100)
     y = np.argmax(proba, axis=1)
@@ -240,7 +240,7 @@ def test_sanitize_proba():
 
 def test_coverage_policy():
     """Coverage policy must return a float between 0 and 1."""
-    from pipeline.coverage import target_coverage_policy, is_coverage_intent
+    from pipeline.metrics.coverage import target_coverage_policy, is_coverage_intent
     rate = target_coverage_policy("logistic")
     assert 0.0 <= rate <= 1.0, f"Coverage rate {rate} out of range"
     
@@ -250,7 +250,7 @@ def test_coverage_policy():
 
 def test_model_category():
     """model_category must return a known category string."""
-    from pipeline.model_utils import model_category
+    from pipeline.models.model_utils import model_category
     cat = model_category("logistic")
     assert isinstance(cat, str) and len(cat) > 0, f"Unexpected category: {cat}"
     # Just verify it returns non-empty strings for known model types
@@ -260,7 +260,7 @@ def test_model_category():
 
 def test_friendly_model_name():
     """friendly_model_name must return a string."""
-    from pipeline.model_utils import friendly_model_name
+    from pipeline.models.model_utils import friendly_model_name
     name = friendly_model_name("logistic")
     assert isinstance(name, str)
     assert len(name) > 0
@@ -288,7 +288,7 @@ def test_ensure_metric_tuple():
 
 def test_brier_and_nll():
     """compute_brier_and_nll must return finite floats."""
-    from pipeline.metrics_extra import compute_brier_and_nll
+    from pipeline.metrics.metrics_extra import compute_brier_and_nll
     np.random.seed(42)
     proba = np.random.dirichlet([1, 1, 1], size=50)
     y = np.random.randint(0, 3, 50)
@@ -303,7 +303,7 @@ def test_brier_and_nll():
 
 def test_build_trade_log():
     """build_trade_log_from_df must produce a DataFrame."""
-    from pipeline.execution_utils import build_trade_log_from_df
+    from pipeline.execution.execution_utils import build_trade_log_from_df
     np.random.seed(42)
     n = 100
     df = pd.DataFrame({
@@ -387,14 +387,14 @@ def test_hac_std():
 
 def test_train_test_months():
     """TRAIN_TEST_MONTHS must be a non-empty dict."""
-    from pipeline.optuna_utils import TRAIN_TEST_MONTHS
+    from pipeline.hpo.optuna_utils import TRAIN_TEST_MONTHS
     assert isinstance(TRAIN_TEST_MONTHS, dict)
     assert len(TRAIN_TEST_MONTHS) > 0
 
 
 def test_norm_optuna_direction():
     """_norm_optuna_direction must return valid string."""
-    from pipeline.optuna_utils import _norm_optuna_direction
+    from pipeline.hpo.optuna_utils import _norm_optuna_direction
     assert _norm_optuna_direction("maximize") == "maximize"
     assert _norm_optuna_direction("minimize") == "minimize"
     assert _norm_optuna_direction(None) == "maximize"

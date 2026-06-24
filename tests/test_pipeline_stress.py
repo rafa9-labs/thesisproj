@@ -19,7 +19,7 @@ class TestPipelineConcurrency:
 
     def test_four_concurrent_job_creations(self, tmp_path):
         """4 simultaneous job creations in WAL mode → all succeed, no lock errors."""
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
 
         db_path = str(tmp_path / "pipeline_stress.db")
         store = DataStore(db_path)
@@ -46,7 +46,7 @@ class TestPipelineConcurrency:
 
     def test_job_events_concurrent_appends(self, tmp_path):
         """Multiple workers appending events → no lost events."""
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
 
         db_path = str(tmp_path / "events_stress.db")
         store = DataStore(db_path)
@@ -143,7 +143,7 @@ class TestDBConnectionCleanup:
 
     def test_connections_closed_after_use(self, tmp_path):
         """Each _cursor() call opens and closes its connection."""
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
         import sqlite3
 
         db_path = str(tmp_path / "conn_cleanup.db")

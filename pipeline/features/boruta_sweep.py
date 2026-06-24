@@ -309,7 +309,7 @@ def boruta_sweep_features(
     report : dict
         Full report with confirmed/rejected/tentative counts.
     """
-    from pipeline.feature_sweep import expand_features
+    from pipeline.features.feature_sweep import expand_features
 
     print("\n" + "=" * 64)
     print("  PHASE -1: BORUTA SHAP FEATURE SWEEP")

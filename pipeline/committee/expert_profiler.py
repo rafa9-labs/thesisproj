@@ -20,12 +20,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from pipeline.model_families import (
+from pipeline.models.model_families import (
     DEEP_MODELS,
     LINEAR_MODELS,
     TREE_MODELS,
 )
-from pipeline.regime_utils import (
+from pipeline.regime.regime_utils import (
     _REGIME_NAMES,
     RegimeConfig,
 )
@@ -451,7 +451,7 @@ class ExpertProfiler:
         eliminating look-ahead bias.
         """
         from collections import defaultdict
-        from pipeline.regime_utils import detect_regimes_anchored
+        from pipeline.regime.regime_utils import detect_regimes_anchored
 
         has_time = "time" in raw_df.columns
         if not has_time:

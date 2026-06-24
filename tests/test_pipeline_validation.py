@@ -43,7 +43,7 @@ except ImportError:
 
 from pipeline.backtester.execution_patches import PatchConfig, LoopResult, run_execution_loop
 from pipeline.backtester.composed import MLBacktester
-from pipeline.metrics_tuples import CLASS_DEFAULTS
+from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
 
 
 # ── Shared helpers ───────────────────────────────────────────────────
@@ -143,7 +143,7 @@ def _validate_df_months(df_months):
 
 
 def _skip_if_no_csv():
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
     store = DataStore(os.path.join(_project_root, "data", "forex.db"))
     tfs = store.list_timeframes("EURUSD")
     if not {"M30", "H1", "H4"}.issubset(set(tfs)):

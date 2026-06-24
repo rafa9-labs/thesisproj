@@ -372,7 +372,7 @@ class PriceStreamManager:
         async with self._lock:
             stream = self._streams.get(pair)
             if stream is None:
-                from pipeline.pair_config import get_pair_config
+                from pipeline.data.pair_config import get_pair_config
                 try:
                     cfg = get_pair_config(pair)
                     oanda_name = cfg.oanda_name

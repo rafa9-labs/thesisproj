@@ -17,14 +17,14 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipeline.committee_builder import (
+from pipeline.committee.committee_builder import (
     CommitteeBuilder,
     CommitteeConfig,
     RegimeAssignment,
 )
-from pipeline.committee_backtester import CommitteeBacktester
-from pipeline.expert_profiler import FoldResult, RegimeModelMatrix
-from pipeline.regime_utils import (
+from pipeline.committee.committee_backtester import CommitteeBacktester
+from pipeline.committee.expert_profiler import FoldResult, RegimeModelMatrix
+from pipeline.regime.regime_utils import (
     detect_regimes,
     RegimeConfig,
     _REGIME_NAMES,
@@ -580,8 +580,8 @@ class TestPruneModels:
 class TestCommitteePhase3Metrics:
     def test_fold_consistency_cv_infinite_for_too_few_folds(self):
         import numpy as np
-        from pipeline.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
-        from pipeline.committee_builder import CommitteeConfig
+        from pipeline.committee.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
+        from pipeline.committee.committee_builder import CommitteeConfig
 
         config = CommitteeConfig()
         folds = [
@@ -597,8 +597,8 @@ class TestCommitteePhase3Metrics:
 
     def test_fold_consistency_cv_computes_correctly(self):
         import numpy as np
-        from pipeline.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
-        from pipeline.committee_builder import CommitteeConfig
+        from pipeline.committee.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
+        from pipeline.committee.committee_builder import CommitteeConfig
 
         config = CommitteeConfig()
         folds = [
@@ -616,8 +616,8 @@ class TestCommitteePhase3Metrics:
 
     def test_fold_consistency_pass_threshold(self):
         import numpy as np
-        from pipeline.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
-        from pipeline.committee_builder import CommitteeConfig
+        from pipeline.committee.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
+        from pipeline.committee.committee_builder import CommitteeConfig
 
         config = CommitteeConfig()
         # High variance across folds → CV > 1.0
@@ -635,8 +635,8 @@ class TestCommitteePhase3Metrics:
 
     def test_regime_coverage_report_per_model_active_fraction(self):
         import numpy as np
-        from pipeline.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
-        from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+        from pipeline.committee.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
+        from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
 
         config = CommitteeConfig(
             regimes={
@@ -665,8 +665,8 @@ class TestCommitteePhase3Metrics:
 
     def test_regime_coverage_report_insufficient_trades_fails(self):
         import numpy as np
-        from pipeline.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
-        from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+        from pipeline.committee.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
+        from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
 
         config = CommitteeConfig(
             regimes={
@@ -778,8 +778,8 @@ class TestPhase3Halting:
 
     @staticmethod
     def _make_backtest_result(sharpe_vals, trades=30, folds=3):
-        from pipeline.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
-        from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+        from pipeline.committee.committee_backtester import CommitteeBacktestResult, CommitteeFoldResult
+        from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
 
         config = CommitteeConfig(
             regimes={"trend_up": RegimeAssignment(models=["logistic"], weights=[1.0])},

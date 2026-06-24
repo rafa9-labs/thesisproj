@@ -13,15 +13,15 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipeline.regime_utils import _REGIME_NAMES
+from pipeline.regime.regime_utils import _REGIME_NAMES
 
-from pipeline.expert_profiler import (
+from pipeline.committee.expert_profiler import (
     FoldResult,
     RegimeModelMatrix,
     ExpertProfiler,
 )
 
-from pipeline.committee_builder import (
+from pipeline.committee.committee_builder import (
     RegimeAssignment,
     CommitteeConfig,
     CommitteeBuilder,

@@ -10,7 +10,7 @@ import threading
 import pytest
 
 from api.services import JobManager
-from pipeline.data_sqlite import DataStore
+from pipeline.data.data_sqlite import DataStore
 
 
 @pytest.fixture

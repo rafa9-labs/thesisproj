@@ -1,7 +1,7 @@
 """Quick smoke test for multi-currency pipeline."""
 from pipeline.backtester.composed import MLBacktester
 from copy import deepcopy
-from pipeline.metrics_tuples import CLASS_DEFAULTS
+from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
 
 cfg = deepcopy(CLASS_DEFAULTS["features"])
 

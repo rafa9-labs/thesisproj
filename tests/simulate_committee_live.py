@@ -132,8 +132,8 @@ def create_mock_models(feature_count: int = 12, seed: int = 42) -> dict:
 # ═══════════════════════════════════════════════════════════════════════
 
 def create_committee_config() -> tuple:
-    from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-    from pipeline.regime_utils import RegimeConfig
+    from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+    from pipeline.regime.regime_utils import RegimeConfig
 
     config = CommitteeConfig()
     config.regimes = {

@@ -233,7 +233,7 @@ export default function TradingPage() {
   const [live, setLive] = useState<LiveState>(INITIAL_LIVE_STATE);
   const [chartMarkers, setChartMarkers] = useState<ChartMarker[]>([]);
 
-  const { historical, liveBar, isLoading: chartLoading, loadOlder, hasOlder, setChartReady } = useChartStream(selectedPair, timeframe, 1000);
+  const { historical, liveBar, isLoading: chartLoading, loadOlder, hasOlder, setChartReady } = useChartStream(selectedPair, timeframe, 500);
 
   const { data: committeeData } = useSavedCommittees();
   const committeeList = committeeData?.committees?.map((c) => c.name) ?? [];
@@ -846,6 +846,7 @@ export default function TradingPage() {
             }
           >
             <CandlestickChart
+              key={`${selectedPair}-${timeframe}`}
               pair={selectedPair}
               timeframe={timeframe}
               historical={historical}

@@ -5,7 +5,7 @@ Extracted from MLBacktesterNoWFO.py lines 18441-end.
 """
 
 from pipeline._imports import *  # noqa: F401,F403
-from pipeline.metrics_tuples import CLASS_DEFAULTS, _safe_metrics_return, _empty_metrics  # noqa: F811
+from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS, _safe_metrics_return, _empty_metrics  # noqa: F811
 from pipeline.backtester.composed import MLBacktester  # noqa: F811
 from pipeline.memory_utils import _apply_low_ram_overrides  # noqa: F811
 
@@ -1137,7 +1137,7 @@ def _run_profile(
     Activated by setting PROFILE=1 in the environment.
     Outputs the regime x model performance matrix to results/profile/.
     """
-    from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
+    from pipeline.committee.expert_profiler import ExpertProfiler, RegimeConfig
 
     _profile_n_months = int(os.environ.get("N_MONTHS", "2"))
     _profile_trials = int(os.environ.get("PROFILE_TRIALS", "5"))
@@ -1218,9 +1218,9 @@ def _run_committee(
     Activated by setting COMMITTEE=1 in the environment.
     Reads committee_config.json from results/ directory or builds a default.
     """
-    from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-    from pipeline.committee_backtester import CommitteeBacktester
-    from pipeline.regime_utils import RegimeConfig
+    from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+    from pipeline.committee.committee_backtester import CommitteeBacktester
+    from pipeline.regime.regime_utils import RegimeConfig
 
     _committee_months = int(os.environ.get("N_MONTHS", "4"))
     _committee_config_path = os.environ.get("COMMITTEE_CONFIG", "")
@@ -1297,9 +1297,9 @@ def _run_racecar(
 
     Activated by setting RACECAR=1 in the environment.
     """
-    from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
-    from pipeline.committee_builder import CommitteeBuilder
-    from pipeline.committee_backtester import CommitteeBacktester
+    from pipeline.committee.expert_profiler import ExpertProfiler, RegimeConfig
+    from pipeline.committee.committee_builder import CommitteeBuilder
+    from pipeline.committee.committee_backtester import CommitteeBacktester
 
     _racecar_months = int(os.environ.get("N_MONTHS", "6"))
     _profile_trials = int(os.environ.get("PROFILE_TRIALS", "5"))
@@ -1397,9 +1397,9 @@ def _run_factory(
     otherwise falls back to deterministic greedy proposer. Stops on
     patience, budget, hard gate, exhaustion, divergence, or confidence.
     """
-    from pipeline.factory_state import load_state_from_disk
-    from pipeline.factory_executor import run_factory_from_disk
-    from pipeline.factory_llm import create_llm_proposer
+    from pipeline.committee.factory_state import load_state_from_disk
+    from pipeline.committee.factory_executor import run_factory_from_disk
+    from pipeline.committee.factory_llm import create_llm_proposer
 
     _factory_patience = int(os.environ.get("FACTORY_PATIENCE", "5"))
     _factory_tolerance = float(os.environ.get("FACTORY_TOLERANCE", "0.02"))

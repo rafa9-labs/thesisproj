@@ -400,7 +400,7 @@ class StrategyMixin:
                     _use_lgbm = bool(cfg.get("use_lightgbm_prefilter", False))
                     if _use_lgbm and len(features) > 40:
                         try:
-                            from pipeline.lightgbm_proxy import LightGBMProxy
+                            from pipeline.models.lightgbm_proxy import LightGBMProxy
                             _lg_proxy = LightGBMProxy(top_k=40, n_estimators=200)
                             _pref = _lg_proxy.select(X_pref, y_pref)
                             if _pref and len(_pref) < len(features):
@@ -1004,7 +1004,7 @@ class StrategyMixin:
                     
                         # S16.3: Capture feature importance for deep models
                         try:
-                            from pipeline.diagnostics import compute_feature_importance
+                            from pipeline.metrics.diagnostics import compute_feature_importance
                             _X_fi = X_seq_train[:64] if len(X_seq_train) > 64 else X_seq_train
                             _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
                             _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
@@ -1116,7 +1116,7 @@ class StrategyMixin:
 
                         # S16.3: Capture feature importance for deep models
                         try:
-                            from pipeline.diagnostics import compute_feature_importance
+                            from pipeline.metrics.diagnostics import compute_feature_importance
                             _X_fi = X_seq_train[:64] if len(X_seq_train) > 64 else X_seq_train
                             _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
                             _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
@@ -1207,7 +1207,7 @@ class StrategyMixin:
 
                         # S16.3: Capture feature importance for deep models (LSTM 3D)
                         try:
-                            from pipeline.diagnostics import compute_feature_importance
+                            from pipeline.metrics.diagnostics import compute_feature_importance
                             _X_fi = X_train_3d[:64] if len(X_train_3d) > 64 else X_train_3d
                             _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
                             _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
@@ -1313,7 +1313,7 @@ class StrategyMixin:
 
                         # S16.3: Capture feature importance for deep models (LSTM 3D)
                         try:
-                            from pipeline.diagnostics import compute_feature_importance
+                            from pipeline.metrics.diagnostics import compute_feature_importance
                             _X_fi = X_train_3d[:64] if len(X_train_3d) > 64 else X_train_3d
                             _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
                             _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
@@ -1374,7 +1374,7 @@ class StrategyMixin:
 
                         # S16.3: Capture feature importance for deep models (CNN 3D)
                         try:
-                            from pipeline.diagnostics import compute_feature_importance
+                            from pipeline.metrics.diagnostics import compute_feature_importance
                             _X_fi = X_train_3d[:64] if len(X_train_3d) > 64 else X_train_3d
                             _feat_fi = list(features) if isinstance(features, (list, tuple)) else None
                             _fi = compute_feature_importance(self.model, model_type, feature_names=_feat_fi, X_val=_X_fi)
@@ -1475,7 +1475,7 @@ class StrategyMixin:
 
                 # --- S16.3: Capture feature importance for classical models ---
                 try:
-                    from pipeline.diagnostics import compute_feature_importance
+                    from pipeline.metrics.diagnostics import compute_feature_importance
                     _feat_names = list(features) if isinstance(features, (list, tuple)) else None
                     _X_val = None
                     _y_val = None

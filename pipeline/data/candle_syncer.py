@@ -11,7 +11,7 @@ Design
 
 Usage::
 
-    from pipeline.candle_syncer import CandleSyncer
+    from pipeline.data.candle_syncer import CandleSyncer
     syncer = CandleSyncer(store, ["EUR_USD"], ["M30", "H1"])
     await syncer.start()
     # ... server running ...
@@ -27,7 +27,7 @@ import pandas as pd
 from oandapyV20 import API
 from oandapyV20.endpoints import instruments
 
-from pipeline.data_sqlite import DataStore
+from pipeline.data.data_sqlite import DataStore
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,7 @@ INTERVALS: dict[str, float] = {
 }
 
 _SQLITE_CHUNK = 500
+_TASK_SPAWN_STAGGER = 0.5
 
 
 def _norm_pair(pair: str) -> str:
@@ -313,9 +314,17 @@ class CandleSyncer:
         max_pages = 20
 
         for _page in range(max_pages):
-            batch = await asyncio.to_thread(
-                self._fetch_candles, oanda_instrument, tf, since,
-            )
+            try:
+                batch = await asyncio.to_thread(
+                    self._fetch_candles, oanda_instrument, tf, since,
+                )
+            except Exception:
+                if all_rows:
+                    await asyncio.to_thread(
+                        self._store.insert_candles_batch, all_rows,
+                    )
+                    all_rows.clear()
+                raise
             if not batch:
                 break
 
@@ -415,11 +424,13 @@ class CandleSyncer:
         try:
             self._api.request(r)
         except Exception as exc:
-            logger.error(
-                "OANDA candles fetch failed for %s %s: %s",
-                instrument, granularity, exc,
-            )
-            return []
+            if _is_auth_error(exc):
+                logger.error(
+                    "OANDA candles fetch auth error for %s %s: %s",
+                    instrument, granularity, exc,
+                )
+                return []
+            raise
         if r.response is None:
             return []
         candles = r.response.get("candles")

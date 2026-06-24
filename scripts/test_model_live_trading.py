@@ -33,7 +33,7 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 def pick_deployed_model(preferred=None):
     """Return (model_id, snapshot_path, model_type) for a deployed model."""
     from api.config import settings
-    from pipeline.model_registry_disk import get_all_deployed
+    from pipeline.models.model_registry_disk import get_all_deployed
 
     rows = get_all_deployed(settings.db_full_path)
     if not rows:
@@ -57,7 +57,7 @@ def pick_deployed_model(preferred=None):
 
 def load_model(snapshot_path):
     """Load model and metadata from a snapshot directory."""
-    from pipeline.model_persistence import load_model_only, read_metadata
+    from pipeline.models.model_persistence import load_model_only, read_metadata
 
     if not os.path.isdir(snapshot_path):
         raise FileNotFoundError(f"Snapshot not found: {snapshot_path}")
@@ -69,7 +69,7 @@ def load_model(snapshot_path):
 
 def get_latest_candles(pair, timeframe, n_bars=120):
     """Fetch latest OHLC bars from SQLite."""
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
     from api.config import settings
 
     store = DataStore(settings.db_full_path)

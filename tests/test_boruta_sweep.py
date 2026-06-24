@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import pandas as pd
 
-from pipeline.boruta_sweep import (
+from pipeline.features.boruta_sweep import (
     BorutaSHAPSelector,
     boruta_sweep_features,
     _make_labels,

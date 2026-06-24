@@ -15,9 +15,9 @@ from __future__ import annotations
 
 from typing import List
 
-from pipeline.factory_llm import LLMProposer
-from pipeline.factory_proposer import ActionProposal
-from pipeline.factory_ucb import UCB1Proposer, _arm_hash
+from pipeline.committee.factory_llm import LLMProposer
+from pipeline.committee.factory_proposer import ActionProposal
+from pipeline.committee.factory_ucb import UCB1Proposer, _arm_hash
 
 
 class HybridLLMUCB1Proposer:

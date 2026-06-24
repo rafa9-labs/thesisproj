@@ -49,7 +49,7 @@ class TestPhaseMinus1RealData:
 
     def test_expand_features_on_real_data(self):
         """Phase -1 expand: produces 55-85 feature columns from real OHLC."""
-        from pipeline.feature_sweep import expand_features
+        from pipeline.features.feature_sweep import expand_features
         df = _load_real_data()
         result = expand_features(df)
 
@@ -63,7 +63,7 @@ class TestPhaseMinus1RealData:
 
     def test_sweep_features_on_real_data(self):
         """Phase -1 sweep: prunes to 15-50 features, top features are sensible."""
-        from pipeline.feature_sweep import sweep_features
+        from pipeline.features.feature_sweep import sweep_features
         df = _load_real_data()
         locked, scores, report = sweep_features(
             df, n_estimators=30, max_depth=4, n_folds=2, n_repeats=3,
@@ -83,7 +83,7 @@ class TestPhaseMinus1RealData:
 
     def test_sweep_saves_and_loads_real_data(self, tmp_path):
         """Phase -1: full run_phase_minus1 saves loadable JSON."""
-        from pipeline.feature_sweep import run_phase_minus1, load_locked_features
+        from pipeline.features.feature_sweep import run_phase_minus1, load_locked_features
         df = _load_real_data()
         out_path = str(tmp_path / "locked_features.json")
         locked, report = run_phase_minus1(
@@ -103,7 +103,7 @@ class TestAnchoredRegimeRealData:
 
     def test_detect_regimes_on_full_data(self):
         """Anchored GMM on full 10-year data: 3 valid clusters, valid IDs only."""
-        from pipeline.regime_utils import detect_regimes_anchored
+        from pipeline.regime.regime_utils import detect_regimes_anchored
         df = _get_all_data()
         ids = detect_regimes_anchored(df, window=252, random_state=42)
 
@@ -121,7 +121,7 @@ class TestAnchoredRegimeRealData:
 
     def test_per_fold_mode_on_real_data(self):
         """Per-fold anchored detection: train on early data, predict on later data."""
-        from pipeline.regime_utils import detect_regimes_anchored
+        from pipeline.regime.regime_utils import detect_regimes_anchored
         df = _get_all_data()
         n = len(df)
         split = n // 2
@@ -136,7 +136,7 @@ class TestAnchoredRegimeRealData:
 
     def test_centroid_labels_consistent_across_folds(self):
         """Centroid anchoring stable: same data → same cluster mapping."""
-        from pipeline.regime_utils import detect_regimes_anchored
+        from pipeline.regime.regime_utils import detect_regimes_anchored
         df = _load_real_data(5000)
         ids1 = detect_regimes_anchored(df, window=250, random_state=42)
         ids2 = detect_regimes_anchored(df, window=250, random_state=42)
@@ -152,7 +152,7 @@ class TestPhase0RealData:
 
     def test_profiler_constructs_with_real_config(self):
         """ExpertProfiler accepts real data config and constructs cleanly."""
-        from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
+        from pipeline.committee.expert_profiler import ExpertProfiler, RegimeConfig
         profiler = ExpertProfiler(
             data_config={"symbol": "EURUSD"},
             wfo_config={
@@ -165,8 +165,8 @@ class TestPhase0RealData:
 
     def test_profiler_with_locked_features(self):
         """ExpertProfiler stores locked_features in wfo_config."""
-        from pipeline.feature_sweep import sweep_features
-        from pipeline.expert_profiler import ExpertProfiler, RegimeConfig
+        from pipeline.features.feature_sweep import sweep_features
+        from pipeline.committee.expert_profiler import ExpertProfiler, RegimeConfig
         df = _load_real_data(5000)
         locked, _, _ = sweep_features(
             df, n_estimators=20, max_depth=3, n_folds=2, n_repeats=2,
@@ -195,9 +195,9 @@ class TestCommitteeBacktesterRealData:
 
     def test_run_wfo_on_real_data_short_window(self):
         """CommitteeBacktester runs WFO on 2yr real data without crashing."""
-        from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-        from pipeline.committee_backtester import CommitteeBacktester
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+        from pipeline.committee.committee_backtester import CommitteeBacktester
+        from pipeline.regime.regime_utils import RegimeConfig
 
         df = _load_real_data()
         df = df.rename(columns={
@@ -229,11 +229,11 @@ class TestCommitteeBacktesterRealData:
 
     def test_fold_consistency_cv_computed(self):
         """Fold consistency CV is finite and non-negative on real-ish data."""
-        from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-        from pipeline.committee_backtester import (
+        from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+        from pipeline.committee.committee_backtester import (
             CommitteeBacktester, CommitteeBacktestResult, CommitteeFoldResult,
         )
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         config = CommitteeConfig(
             regimes={"trend_up": RegimeAssignment(models=["logistic"], weights=[1.0])},
@@ -258,9 +258,9 @@ class TestCommitteeBacktesterRealData:
 
     def test_regime_coverage_report_on_real_data(self):
         """Regime coverage report works with valid committee + real data."""
-        from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-        from pipeline.committee_backtester import CommitteeBacktester
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+        from pipeline.committee.committee_backtester import CommitteeBacktester
+        from pipeline.regime.regime_utils import RegimeConfig
 
         df = _load_real_data()
         df = df.rename(columns={

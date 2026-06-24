@@ -6,12 +6,12 @@ Inserts directly into SQLite via DataStore -- no intermediate CSV files.
 
 Usage as module::
 
-    from pipeline.data_downloader import download_pair
+    from pipeline.data.data_downloader import download_pair
     download_pair("GBP_USD", granularities=["M30", "H1", "H4"])
 
 Usage as CLI::
 
-    python -m pipeline.data_downloader --instrument GBP_USD --years 10
+    python -m pipeline.data.data_downloader --instrument GBP_USD --years 10
 """
 from __future__ import annotations
 
@@ -305,7 +305,7 @@ if __name__ == "__main__":
     parser.add_argument("--db", default="data/forex.db", help="SQLite database path")
     args = parser.parse_args()
 
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
     store = DataStore(args.db)
     pair_sym = args.pair or args.instrument.replace("_", "")
     download_pair(

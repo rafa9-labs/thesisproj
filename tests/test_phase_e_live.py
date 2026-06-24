@@ -13,7 +13,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
 
 from trading.model_store import (
     ModelStore,
@@ -361,7 +361,7 @@ class TestLiveCommitteeRunner:
         assert "logistic" not in runner.models or "logistic" in runner.models  # may still be in health
 
     def test_find_replacement(self, runner):
-        from pipeline.expert_profiler import RegimeModelMatrix
+        from pipeline.committee.expert_profiler import RegimeModelMatrix
 
         regimes = ["trend_up", "trend_down", "mean_reverting", "breakout",
                     "high_volatile", "quiet_squeeze", "sideways"]
@@ -384,7 +384,7 @@ class TestLiveCommitteeRunner:
         assert replacement != "logistic"
 
     def test_find_replacement_single_model(self, runner):
-        from pipeline.expert_profiler import RegimeModelMatrix
+        from pipeline.committee.expert_profiler import RegimeModelMatrix
 
         n_regimes = 7  # must match _REGIME_NAMES
         matrix = RegimeModelMatrix(

@@ -16,8 +16,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import pandas as pd
 import numpy as np
 
-from pipeline.feature_sweep import expand_features
-from pipeline.boruta_sweep import boruta_sweep_features, _make_labels
+from pipeline.features.feature_sweep import expand_features
+from pipeline.features.boruta_sweep import boruta_sweep_features, _make_labels
 
 DATA = os.path.join(
     os.path.dirname(__file__), "..", "csv_data", "EURUSD_10_years_H1_OANDA.csv"

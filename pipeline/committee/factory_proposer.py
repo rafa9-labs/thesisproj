@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from pipeline.factory_state import FactoryState
+from pipeline.committee.factory_state import FactoryState
 
 
 @dataclass

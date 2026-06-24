@@ -4,7 +4,7 @@ from __future__ import annotations
 import threading
 
 from api.config import Settings, settings
-from pipeline.data_sqlite import DataStore
+from pipeline.data.data_sqlite import DataStore
 
 _lock = threading.Lock()
 _store: DataStore | None = None

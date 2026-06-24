@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from pipeline.committee_backtester import CommitteeBacktester as CBT  # noqa: N811
+from pipeline.committee.committee_backtester import CommitteeBacktester as CBT  # noqa: N811
 
 
 class DummyConfig:

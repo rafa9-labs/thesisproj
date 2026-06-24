@@ -23,8 +23,8 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-from pipeline.regime_utils import (
+from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+from pipeline.regime.regime_utils import (
     RegimeConfig,
     _REGIME_NAMES,
 )
@@ -319,11 +319,11 @@ class LiveCommitteeRunner:
     def _build_features(self) -> np.ndarray:
         """Build a single-row feature vector from the bar buffer.
 
-        Delegates to pipeline.feature_sweep.compute_feature_matrix so the
+        Delegates to pipeline.features.feature_sweep.compute_feature_matrix so the
         exact same indicator computation used during profiling is applied
         at inference time (zero data-drift between train and production).
         """
-        from pipeline.feature_sweep import compute_feature_matrix
+        from pipeline.features.feature_sweep import compute_feature_matrix
 
         df = pd.DataFrame(list(self._bar_buffer))
         feature_df = compute_feature_matrix(df, feature_names=list(self.feature_names),

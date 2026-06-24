@@ -20,8 +20,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-from pipeline.regime_utils import _REGIME_NAMES
+from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+from pipeline.regime.regime_utils import _REGIME_NAMES
 
 
 @dataclass
@@ -261,7 +261,7 @@ def load_state_from_disk(
     except (json.JSONDecodeError, OSError):
         return None
 
-    from pipeline.expert_profiler import RegimeModelMatrix
+    from pipeline.committee.expert_profiler import RegimeModelMatrix
     matrix = RegimeModelMatrix(
         regimes=matrix_data.get("regimes", []),
         models=matrix_data.get("models", []),

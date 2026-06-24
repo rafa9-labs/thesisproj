@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLiveCandles } from "@/api/queries";
 import apiClient from "@/api/client";
 import type { CandleBar } from "@/api/schemas";
@@ -11,6 +12,14 @@ export interface CandleData {
   close: number;
   volume?: number;
 }
+
+const _TF_SECONDS: Record<string, number> = {
+  M15: 900,
+  M30: 1800,
+  H1: 3600,
+  H2: 7200,
+  H4: 14400,
+};
 
 interface PriceTickEvent {
   event: "price_tick";
@@ -55,8 +64,9 @@ interface UseChartStreamResult {
 export function useChartStream(
   pair: string,
   timeframe: string,
-  limit = 1000,
+  limit = 500,
 ): UseChartStreamResult {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useLiveCandles(pair, timeframe, limit);
   const [isStreaming, setIsStreaming] = useState(false);
   const [liveBar, setLiveBar] = useState<CandleData | null>(null);
@@ -65,6 +75,7 @@ export function useChartStream(
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [chartReady, setChartReady] = useState(false);
   const chartReadyRef = useRef(false);
+  const lastHistTimeRef = useRef(0);
   const wsRef = useRef<WebSocket | null>(null);
   const prevPairTfRef = useRef(`${pair}:${timeframe}`);
 
@@ -76,6 +87,8 @@ export function useChartStream(
     setHasOlder(true);
     setChartReady(false);
     chartReadyRef.current = false;
+    setLiveBar(null);
+    lastHistTimeRef.current = 0;
   }, [pair, timeframe]);
 
   const setReady = useCallback((ready: boolean) => {
@@ -96,14 +109,22 @@ export function useChartStream(
     }));
   }, [data]);
 
+  useEffect(() => {
+    if (historical.length > 0) {
+      lastHistTimeRef.current = historical[historical.length - 1].time;
+    }
+  }, [historical]);
+
   const allHistorical = useMemo(() => {
     const combined = [...olderBars, ...historical];
     const seen = new Set<number>();
-    return combined.filter((c) => {
-      if (seen.has(c.time)) return false;
-      seen.add(c.time);
-      return true;
-    });
+    return combined
+      .filter((c) => {
+        if (seen.has(c.time)) return false;
+        seen.add(c.time);
+        return true;
+      })
+      .sort((a, b) => a.time - b.time);
   }, [olderBars, historical]);
 
   const loadOlder = useCallback(async (): Promise<boolean> => {
@@ -179,8 +200,19 @@ export function useChartStream(
           });
         } else if (msg.event === "new_bar_saved" && msg.candle) {
           if (!chartReadyRef.current) return;
+          const nc = msg.candle as CandleBar;
+
+          const period = _TF_SECONDS[timeframe] ?? 1800;
+          if (
+            lastHistTimeRef.current > 0 &&
+            nc.time - lastHistTimeRef.current > period * 1.5
+          ) {
+            queryClient.invalidateQueries({
+              queryKey: ["live-candles", pair, timeframe],
+            });
+          }
+
           setLiveBar((prev) => {
-            const nc = msg.candle as CandleBar;
             return { ...nc, volume: prev?.volume ?? 0 };
           });
         }

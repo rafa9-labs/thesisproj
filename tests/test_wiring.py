@@ -29,7 +29,7 @@ def _make_synthetic_ohlc(n_bars=2000, seed=42):
 
 def _make_simple_committee():
     """Minimal 2-model committee: logistic for sideways, xgboost for trends."""
-    from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
+    from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
     return CommitteeConfig(
         regimes={
             "trend_up": RegimeAssignment(models=["xgboost"], weights=[1.0]),
@@ -58,7 +58,7 @@ class TestPurgeWiring:
 class TestMetaLabelerWiring:
     def test_meta_labeler_trained_after_wfo(self):
         """run_wfo with collect_predictions=True should produce a trained MetaLabeler."""
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -74,7 +74,7 @@ class TestMetaLabelerWiring:
 
     def test_meta_labeler_predicts_reasonable_prob(self):
         """Trained MetaLabeler should return P(win) in [0, 1]."""
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -88,7 +88,7 @@ class TestMetaLabelerWiring:
 
     def test_meta_labeler_should_trade(self):
         """should_trade returns (bool, float) for non-zero signal."""
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -103,8 +103,8 @@ class TestMetaLabelerWiring:
 
     def test_meta_labeler_save_load_roundtrip(self, tmp_path):
         """MetaLabeler should survive save → load roundtrip."""
-        from pipeline.committee_backtester import CommitteeBacktester
-        from pipeline.meta_labeler import MetaLabeler
+        from pipeline.committee.committee_backtester import CommitteeBacktester
+        from pipeline.models.meta_labeler import MetaLabeler
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -125,7 +125,7 @@ class TestMetaLabelerWiring:
 class TestHMMRegimeWiring:
     def test_hmm_fitted_after_first_fold(self):
         """Backtester should train HMM on first fold's training data."""
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -141,7 +141,7 @@ class TestHMMRegimeWiring:
 
     def test_hmm_predicts_valid_regime_ids(self):
         """Frozen HMM should produce valid regime IDs (0-6)."""
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -157,8 +157,8 @@ class TestHMMRegimeWiring:
 
     def test_hmm_save_load_roundtrip(self, tmp_path):
         """HMM should survive save → load roundtrip."""
-        from pipeline.committee_backtester import CommitteeBacktester
-        from pipeline.hmm_regime import HMMRegimeDetector
+        from pipeline.committee.committee_backtester import CommitteeBacktester
+        from pipeline.regime.hmm_regime import HMMRegimeDetector
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -180,7 +180,7 @@ class TestHMMRegimeWiring:
 
     def test_hmm_state_semantics_anchored(self):
         """Same seed + same data → same state map (anchored semantics)."""
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -203,7 +203,7 @@ class TestHMMRegimeWiring:
 class TestConvictionSizerWiring:
     def test_sizer_fitted_after_wfo(self):
         """Backtester should fit ConvictionSizer after run_wfo with predictions."""
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -218,7 +218,7 @@ class TestConvictionSizerWiring:
 
     def test_sizer_produces_monotonic_multipliers(self):
         """Higher confidence should produce >= multiplier."""
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -236,8 +236,8 @@ class TestConvictionSizerWiring:
 
     def test_sizer_save_load_roundtrip(self, tmp_path):
         """ConvictionSizer should survive save → load roundtrip."""
-        from pipeline.committee_backtester import CommitteeBacktester
-        from pipeline.conviction_sizer import ConvictionSizer
+        from pipeline.committee.committee_backtester import CommitteeBacktester
+        from pipeline.execution.conviction_sizer import ConvictionSizer
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -261,7 +261,7 @@ class TestConvictionSizerWiring:
 class TestMDAWiring:
     def test_mda_pruning_flag_respected(self):
         """When _enable_mda_pruning=True, MDA should potentially prune features."""
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -274,7 +274,7 @@ class TestMDAWiring:
 
     def test_mda_pruning_flag_default_false(self):
         """Default is False — no MDA pruning unless explicitly enabled."""
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.committee.committee_backtester import CommitteeBacktester
 
         bt = CommitteeBacktester(_make_simple_committee())
         assert bt._enable_mda_pruning is False
@@ -285,10 +285,10 @@ class TestMDAWiring:
 class TestEndToEndWiring:
     def test_all_artifacts_produced(self, tmp_path):
         """Full WFO run should produce all 3 artifacts that can be saved/loaded."""
-        from pipeline.committee_backtester import CommitteeBacktester
-        from pipeline.meta_labeler import MetaLabeler
-        from pipeline.hmm_regime import HMMRegimeDetector
-        from pipeline.conviction_sizer import ConvictionSizer
+        from pipeline.committee.committee_backtester import CommitteeBacktester
+        from pipeline.models.meta_labeler import MetaLabeler
+        from pipeline.regime.hmm_regime import HMMRegimeDetector
+        from pipeline.execution.conviction_sizer import ConvictionSizer
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()
@@ -336,9 +336,9 @@ class TestEndToEndWiring:
 
     def test_runner_accepts_all_artifacts(self):
         """LiveCommitteeRunner constructor accepts all new params without error."""
-        from pipeline.committee_backtester import CommitteeBacktester
+        from pipeline.committee.committee_backtester import CommitteeBacktester
         from trading.live_committee_runner import LiveCommitteeRunner
-        from pipeline.regime_utils import RegimeConfig
+        from pipeline.regime.regime_utils import RegimeConfig
 
         df = _make_synthetic_ohlc(2000)
         cfg = _make_simple_committee()

@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pipeline.feature_utils import find_min_stationary_d, fracdiff
+from pipeline.features.feature_utils import find_min_stationary_d, fracdiff
 
 
 def _make_price_series(n=500, seed=42):

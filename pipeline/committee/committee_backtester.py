@@ -23,8 +23,8 @@ import numpy as np
 import pandas as pd
 
 from models.registry import build_model
-from pipeline.committee_builder import CommitteeConfig
-from pipeline.regime_utils import (
+from pipeline.committee.committee_builder import CommitteeConfig
+from pipeline.regime.regime_utils import (
     detect_regimes,
     detect_regimes_anchored,
     attach_regime_columns,
@@ -306,7 +306,7 @@ class CommitteeBacktester:
         # ── Fit HMM on first fold's training data (P2: anchored regime detection) ──
         if splits:
             try:
-                from pipeline.hmm_regime import HMMRegimeDetector
+                from pipeline.regime.hmm_regime import HMMRegimeDetector
                 first_train, _ = splits[0]
                 self._hmm_detector = HMMRegimeDetector(random_state=self.seed)
                 self._hmm_detector.fit(first_train)
@@ -338,7 +338,7 @@ class CommitteeBacktester:
         # ── Train meta-labeler on accumulated OOS fold predictions (P1) ──
         if self._fold_predictions:
             try:
-                from pipeline.meta_labeler import MetaLabeler
+                from pipeline.models.meta_labeler import MetaLabeler
                 all_bars = []
                 for fp in self._fold_predictions:
                     all_bars.extend(fp.get("bars", []))
@@ -356,7 +356,7 @@ class CommitteeBacktester:
         # ── Fit conviction sizer from OOS trades (P3) ──
         if self._fold_predictions:
             try:
-                from pipeline.conviction_sizer import ConvictionSizer
+                from pipeline.execution.conviction_sizer import ConvictionSizer
                 all_bars = []
                 for fp in self._fold_predictions:
                     all_bars.extend(fp.get("bars", []))
@@ -635,7 +635,7 @@ class CommitteeBacktester:
         # ── 1b. Optional MDA feature pruning (P5) ──
         if getattr(self, "_enable_mda_pruning", False) and len(feat_cols) > 20:
             try:
-                from pipeline.feature_utils import compute_mda, prune_noise_features
+                from pipeline.features.feature_utils import compute_mda, prune_noise_features
                 n_train = len(X_flat_train_aligned)
                 split = max(int(n_train * 0.80), 50)
                 X_fit = X_flat_train_aligned[:split]

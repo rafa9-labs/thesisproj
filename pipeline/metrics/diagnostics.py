@@ -421,10 +421,10 @@ def get_importance_method(model_type: str) -> str:
 def classify_feature_families(feature_names: List[str]) -> Dict[str, int]:
     """Count features per family using FEATURE_FAMILIES taxonomy."""
     try:
-        from pipeline.metrics_tuples import FEATURE_FAMILIES
+        from pipeline.metrics.metrics_tuples import FEATURE_FAMILIES
     except ImportError:
         return {}
-    from pipeline.feature_utils import _classify_feature
+    from pipeline.features.feature_utils import _classify_feature
 
     counts: Dict[str, int] = {}
     for col in feature_names:

@@ -200,11 +200,11 @@ class FeaturesConfig(BaseModel):
         typed model. It extracts the known keys and ignores the rest.
         
         USAGE:
-            from pipeline.metrics_tuples import CLASS_DEFAULTS
+            from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
             features = FeaturesConfig.from_class_defaults()
         """
         # Import here to avoid circular imports
-        from pipeline.metrics_tuples import CLASS_DEFAULTS
+        from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
         return cls.model_validate(CLASS_DEFAULTS["features"])
 
 
@@ -263,5 +263,5 @@ class CVConfig(BaseModel):
     @classmethod
     def from_class_defaults(cls) -> "CVConfig":
         """Construct from CLASS_DEFAULTS["cv"] (backward-compatible factory)."""
-        from pipeline.metrics_tuples import CLASS_DEFAULTS
+        from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
         return cls.model_validate(CLASS_DEFAULTS["cv"])

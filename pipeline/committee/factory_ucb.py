@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from pipeline.factory_proposer import ActionProposal
+from pipeline.committee.factory_proposer import ActionProposal
 
 
 def _arm_hash(regime: str, action: str, model_remove: str, model_add: str) -> str:

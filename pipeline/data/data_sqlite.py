@@ -6,7 +6,7 @@ Thread-safe via connection pooling. Designed for single-user desktop use.
 
 Usage::
 
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
 
     store = DataStore("data/forex.db")
     df = store.get_candles("EURUSD", "M30", "2024-01-01", "2024-06-01")

@@ -193,6 +193,14 @@ export function CandlestickChart({
 
   useEffect(() => {
     if (!candleSeriesRef.current || !liveBar) return;
+    if (
+      !liveBar.open || !liveBar.close || !liveBar.high || !liveBar.low ||
+      liveBar.open === 0 || liveBar.close === 0 ||
+      liveBar.high < liveBar.low ||
+      liveBar.high < Math.max(liveBar.open, liveBar.close) ||
+      liveBar.low > Math.min(liveBar.open, liveBar.close)
+    ) return;
+    if (historical.length > 0 && liveBar.time < historical[historical.length - 1].time) return;
     candleSeriesRef.current.update({
       time: liveBar.time,
       open: liveBar.open,
@@ -200,7 +208,7 @@ export function CandlestickChart({
       low: liveBar.low,
       close: liveBar.close,
     });
-  }, [liveBar]);
+  }, [liveBar, historical]);
 
   useEffect(() => {
     if (!chartRef.current || !hasOlder) return;

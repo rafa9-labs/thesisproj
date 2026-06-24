@@ -6,7 +6,7 @@ import uuid
 import pytest
 import sqlite3
 
-from pipeline.data_sqlite import DataStore, SCHEMA_SQL
+from pipeline.data.data_sqlite import DataStore, SCHEMA_SQL
 from api.services import JobManager
 
 

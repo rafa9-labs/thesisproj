@@ -13,7 +13,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipeline.regime_utils import (
+from pipeline.regime.regime_utils import (
     detect_regimes,
     detect_regimes_anchored,
     _anchor_centroids,

@@ -14,7 +14,7 @@ try:
 except ImportError:
     _norm = None
 
-from pipeline.metrics_eval import estimate_frequency_per_year
+from pipeline.metrics.metrics_eval import estimate_frequency_per_year
 
 
 def _norm_cdf(z: float) -> float:

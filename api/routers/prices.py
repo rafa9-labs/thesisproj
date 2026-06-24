@@ -22,7 +22,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from api.dependencies import get_data_store
-from pipeline.pair_config import get_pair_config
+from pipeline.data.pair_config import get_pair_config
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ def _backfill_candles(
     last_ts: datetime, now: datetime, token: str, account_id: str,
 ) -> int:
     from oandapyV20 import API
-    from pipeline.data_downloader import _fetch_candles, _df_to_rows
+    from pipeline.data.data_downloader import _fetch_candles, _df_to_rows
 
     oanda_env = os.environ.get("OANDA_ENV", "practice").strip().lower()
     client = API(access_token=token, environment=oanda_env)
@@ -259,7 +259,7 @@ def get_candles(
         gap_minutes = (now - last_ts).total_seconds() / 60
 
         if gap_minutes > tf_minutes:
-            from pipeline.candle_syncer import _is_forex_weekend
+            from pipeline.data.candle_syncer import _is_forex_weekend
             import pandas as pd
             if _is_forex_weekend(pd.Timestamp(now)):
                 logger.debug(
@@ -313,7 +313,7 @@ def get_live_candles(
         token, account_id = _get_oanda_credentials()
         if token and account_id:
             from oandapyV20 import API
-            from pipeline.data_downloader import _fetch_candles
+            from pipeline.data.data_downloader import _fetch_candles
             from datetime import timedelta
             import pandas as pd
 

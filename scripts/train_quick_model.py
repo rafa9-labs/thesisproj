@@ -19,9 +19,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.backtester.composed import MLBacktester
-from pipeline.metrics_tuples import CLASS_DEFAULTS
-from pipeline.model_persistence import save_snapshot
-from pipeline.model_registry_disk import register_snapshot
+from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
+from pipeline.models.model_persistence import save_snapshot
+from pipeline.models.model_registry_disk import register_snapshot
 from api.config import settings
 
 # -- Config ------------------------------------------------------

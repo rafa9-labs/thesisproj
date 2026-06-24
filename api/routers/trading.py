@@ -118,8 +118,8 @@ def _load_model_for_paper(model_id: str | None, model_type: str, pair: str, time
     bt = None
 
     if model_id:
-        from pipeline.model_persistence import load_model_only, read_metadata
-        from pipeline.model_registry_disk import get_all_deployed
+        from pipeline.models.model_persistence import load_model_only, read_metadata
+        from pipeline.models.model_registry_disk import get_all_deployed
         from api.config import settings
 
         rows = get_all_deployed(settings.db_full_path)
@@ -912,7 +912,7 @@ async def get_live_attribution(session_id: str):
     session = live_sessions.get(session_id)
     if not session:
         raise HTTPException(404, f"Session {session_id} not found")
-    from pipeline.attribution import compute_attribution_from_session
+    from pipeline.metrics.attribution import compute_attribution_from_session
     report = compute_attribution_from_session(session)
     return report.to_dict()
 
@@ -1126,7 +1126,7 @@ async def start_committee_session(req: DeployCommitteeRequest):
     with open(config_path) as f:
         config_json = json.load(f)
 
-    from pipeline.committee_builder import CommitteeConfig
+    from pipeline.committee.committee_builder import CommitteeConfig
     committee_config = CommitteeConfig.from_dict(config_json)
     model_params = committee_config.model_params or config_json.get("model_params", {})
 
@@ -1159,7 +1159,7 @@ async def start_committee_session(req: DeployCommitteeRequest):
     locked_features_path = Path("results/locked_features.json")
     if locked_features_path.exists():
         try:
-            from pipeline.feature_sweep import load_locked_features
+            from pipeline.features.feature_sweep import load_locked_features
             locked_features = load_locked_features(str(locked_features_path))
         except Exception:
             pass
@@ -1222,7 +1222,7 @@ async def start_committee_session(req: DeployCommitteeRequest):
         ml_path = parent_job_dir / "meta_labeler.joblib"
         if ml_path.exists():
             try:
-                from pipeline.meta_labeler import MetaLabeler
+                from pipeline.models.meta_labeler import MetaLabeler
                 meta_labeler = MetaLabeler.load(str(ml_path))
             except Exception:
                 pass
@@ -1230,7 +1230,7 @@ async def start_committee_session(req: DeployCommitteeRequest):
         hmm_path = parent_job_dir / "hmm_detector.joblib"
         if hmm_path.exists():
             try:
-                from pipeline.hmm_regime import HMMRegimeDetector
+                from pipeline.regime.hmm_regime import HMMRegimeDetector
                 hmm_detector = HMMRegimeDetector.load(str(hmm_path))
             except Exception:
                 pass
@@ -1238,14 +1238,14 @@ async def start_committee_session(req: DeployCommitteeRequest):
         cs_path = parent_job_dir / "conviction_sizer.json"
         if cs_path.exists():
             try:
-                from pipeline.conviction_sizer import ConvictionSizer
+                from pipeline.execution.conviction_sizer import ConvictionSizer
                 conviction_sizer = ConvictionSizer.load(str(cs_path))
             except Exception:
                 pass
 
     # 8. Create runner
     from trading.live_committee_runner import LiveCommitteeRunner
-    from pipeline.regime_utils import RegimeConfig
+    from pipeline.regime.regime_utils import RegimeConfig
 
     runner = LiveCommitteeRunner(
         config=committee_config,
@@ -1418,7 +1418,7 @@ async def retrain_committee(session_id: str, req: RetrainRequest):
     loop = asyncio.get_running_loop()
 
     def _retrain_sync():
-        from pipeline.fast_retrain import FastRetrainer
+        from pipeline.models.fast_retrain import FastRetrainer
         import shutil
 
         status = session["_retrain_status"]
@@ -1499,7 +1499,7 @@ async def retrain_committee(session_id: str, req: RetrainRequest):
                     ml_path = output_dir / "meta_labeler.joblib"
                     if ml_path.exists() and manifest.get("meta_labeler_refitted"):
                         try:
-                            from pipeline.meta_labeler import MetaLabeler
+                            from pipeline.models.meta_labeler import MetaLabeler
                             new_meta = MetaLabeler.load(str(ml_path))
                             session["runner"]._meta_labeler = new_meta
                         except Exception as e:

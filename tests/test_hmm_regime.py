@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pipeline.hmm_regime import HMMRegimeDetector
+from pipeline.regime.hmm_regime import HMMRegimeDetector
 
 
 def _make_ohlc_df(n_bars=500, seed=42):

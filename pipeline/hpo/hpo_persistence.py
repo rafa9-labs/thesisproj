@@ -5,7 +5,7 @@ Extracted from MLBacktesterNoWFO.py lines 663-804.
 """
 
 from pipeline._imports import *  # noqa: F401,F403
-from pipeline.dqn_config import HPO_CONFIG_DIR  # noqa: F811
+from pipeline.models.dqn_config import HPO_CONFIG_DIR  # noqa: F811
 
 def _ensure_hpo_dir():
     try:

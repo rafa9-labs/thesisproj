@@ -143,7 +143,7 @@ def list_deployed_models(
     status: Optional[str] = Query(None),
 ):
     from api.config import settings
-    from pipeline.model_registry_disk import get_all_deployed
+    from pipeline.models.model_registry_disk import get_all_deployed
 
     rows = get_all_deployed(settings.db_full_path)
     models = []
@@ -177,7 +177,7 @@ def list_deployed_models(
 @router.post("/deployed/{model_id}/activate")
 def activate_deployed_model(model_id: str):
     from api.config import settings
-    from pipeline.model_registry_disk import activate_model
+    from pipeline.models.model_registry_disk import activate_model
 
     ok = activate_model(model_id, settings.db_full_path)
     if not ok:
@@ -188,7 +188,7 @@ def activate_deployed_model(model_id: str):
 @router.post("/deployed/{model_id}/deactivate")
 def deactivate_deployed_model(model_id: str):
     from api.config import settings
-    from pipeline.model_registry_disk import deactivate_model
+    from pipeline.models.model_registry_disk import deactivate_model
 
     ok = deactivate_model(model_id, settings.db_full_path)
     if not ok:
@@ -199,7 +199,7 @@ def deactivate_deployed_model(model_id: str):
 @router.get("/deployed/{model_id}")
 def get_deployed_model_detail(model_id: str):
     from api.config import settings
-    from pipeline.model_registry_disk import get_all_deployed
+    from pipeline.models.model_registry_disk import get_all_deployed
 
     rows = get_all_deployed(settings.db_full_path)
     found = None
@@ -254,7 +254,7 @@ def get_deployed_model_detail(model_id: str):
 @router.delete("/deployed/{model_id}")
 def delete_deployed_model(model_id: str):
     from api.config import settings
-    from pipeline.model_registry_disk import delete_model
+    from pipeline.models.model_registry_disk import delete_model
 
     ok, reason = delete_model(model_id, settings.db_full_path)
     if not ok:
@@ -265,7 +265,7 @@ def delete_deployed_model(model_id: str):
 @router.patch("/deployed/{model_id}/tags")
 def update_model_tags(model_id: str, req: TagUpdateRequest):
     from api.config import settings
-    from pipeline.model_registry_disk import update_tags
+    from pipeline.models.model_registry_disk import update_tags
 
     tags = update_tags(model_id, settings.db_full_path, req.action, req.tag)
     if tags is None:
@@ -285,7 +285,7 @@ class BulkRequest(BaseModel):
 @router.post("/deployed/bulk/delete")
 def bulk_delete_models(req: BulkRequest):
     from api.config import settings
-    from pipeline.model_registry_disk import delete_model, get_all_deployed
+    from pipeline.models.model_registry_disk import delete_model, get_all_deployed
 
     rows = get_all_deployed(settings.db_full_path)
     existing_ids = {r["id"] for r in rows}
@@ -325,8 +325,8 @@ def predict_with_active_model(req: PredictRequest):
     which model would be used. Full feature computation is wired in S21.
     """
     from api.config import settings
-    from pipeline.model_persistence import read_metadata, load_model_only, get_active_model_id
-    from pipeline.model_registry_disk import get_all_deployed
+    from pipeline.models.model_persistence import read_metadata, load_model_only, get_active_model_id
+    from pipeline.models.model_registry_disk import get_all_deployed
 
     rows = get_all_deployed(settings.db_full_path)
     active_by_type: dict[str, dict] = {
@@ -363,8 +363,8 @@ def predict_with_features(req: PredictWithDataRequest):
     Returns predicted classes + probabilities.
     """
     from api.config import settings
-    from pipeline.model_persistence import load_model_only, get_active_model_id
-    from pipeline.model_registry_disk import get_all_deployed
+    from pipeline.models.model_persistence import load_model_only, get_active_model_id
+    from pipeline.models.model_registry_disk import get_all_deployed
     import numpy as np
 
     model_id = get_active_model_id(req.model_type)
@@ -398,7 +398,7 @@ def predict_with_features(req: PredictWithDataRequest):
 
     # Log to live_predictions
     try:
-        from pipeline.data_sqlite import DataStore
+        from pipeline.data.data_sqlite import DataStore
         from datetime import datetime, timezone
         store = DataStore(settings.db_full_path)
         now = datetime.now(timezone.utc).isoformat()
@@ -425,8 +425,8 @@ def predict_with_features(req: PredictWithDataRequest):
 def compare_active_models():
     """Compare live predictions vs saved backtest metrics for active models."""
     from api.config import settings
-    from pipeline.data_sqlite import DataStore
-    from pipeline.model_registry_disk import get_all_deployed
+    from pipeline.data.data_sqlite import DataStore
+    from pipeline.models.model_registry_disk import get_all_deployed
 
     active = [r for r in get_all_deployed(settings.db_full_path) if r.get("status") == "active"]
     if not active:
@@ -478,10 +478,10 @@ class ForwardTestResponse(PydBaseModel):
 @router.post("/{model_id}/forward-test", response_model=ForwardTestResponse, status_code=202)
 def forward_test_model(model_id: str, req: ForwardTestRequest):
     from api.config import settings
-    from pipeline.model_registry_disk import get_all_deployed
-    from pipeline.model_persistence import validate_snapshot
+    from pipeline.models.model_registry_disk import get_all_deployed
+    from pipeline.models.model_persistence import validate_snapshot
     from api.services import JobManager
-    from pipeline.data_sqlite import DataStore
+    from pipeline.data.data_sqlite import DataStore
     import uuid
 
     rows = get_all_deployed(settings.db_full_path)
@@ -603,12 +603,12 @@ def save_model_from_job(job_id: str, model_name: str = Query("", description="Mo
             f"Model '{target_model_name}' HPO status is '{model_hpo}'. "
             "Models with training failures cannot be saved.")
 
-    from pipeline.model_persistence import validate_snapshot
+    from pipeline.models.model_persistence import validate_snapshot
     ok, reason = validate_snapshot(snapshot_path)
     if not ok:
         raise HTTPException(500, f"Snapshot invalid: {reason}")
 
-    from pipeline.model_registry_disk import register_snapshot
+    from pipeline.models.model_registry_disk import register_snapshot
     from api.config import settings
     model_id = register_snapshot(snapshot_path, settings.db_full_path, parent_job_status=job["status"])
 

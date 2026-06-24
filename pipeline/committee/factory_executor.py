@@ -9,16 +9,16 @@ from typing import Any, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from pipeline.committee_builder import CommitteeConfig, RegimeAssignment
-from pipeline.committee_backtester import CommitteeBacktester
-from pipeline.factory_proposer import ActionProposal, DeterministicProposer
-from pipeline.factory_state import FactoryState, IterationRecord
+from pipeline.committee.committee_builder import CommitteeConfig, RegimeAssignment
+from pipeline.committee.committee_backtester import CommitteeBacktester
+from pipeline.committee.factory_proposer import ActionProposal, DeterministicProposer
+from pipeline.committee.factory_state import FactoryState, IterationRecord
 
 try:
-    from pipeline.factory_hybrid import HybridLLMUCB1Proposer
+    from pipeline.committee.factory_hybrid import HybridLLMUCB1Proposer
 except ImportError:
     HybridLLMUCB1Proposer = None
-from pipeline.regime_utils import RegimeConfig
+from pipeline.regime.regime_utils import RegimeConfig
 
 
 class FactoryExecutor:
@@ -216,7 +216,7 @@ def run_factory_from_disk(
     verbose: bool = True,
     proposer=None,
 ) -> Optional[FactoryState]:
-    from pipeline.factory_state import load_state_from_disk
+    from pipeline.committee.factory_state import load_state_from_disk
 
     state = load_state_from_disk(
         config_path=config_path,

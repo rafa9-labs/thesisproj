@@ -418,7 +418,7 @@ def print_conf_stats(conf_array, label: str = "", median_thr: float | None = Non
 
 
 # --- compute_full_evaluation_metrics extracted to pipeline/metrics_eval.py ---
-from pipeline.metrics_eval import (  # noqa: F401
+from pipeline.metrics.metrics_eval import (  # noqa: F401
     compute_full_evaluation_metrics,
     _macro_prec_f1_from_confusion,
 )

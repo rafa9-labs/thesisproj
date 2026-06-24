@@ -14,7 +14,7 @@ import psutil
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from copy import deepcopy
-from pipeline.metrics_tuples import CLASS_DEFAULTS
+from pipeline.metrics.metrics_tuples import CLASS_DEFAULTS
 from pipeline.backtester.composed import MLBacktester
 from pipeline.standalone_utils import clear_data_cache
 

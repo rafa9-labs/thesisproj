@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from pipeline.data_sqlite import DataStore
+from pipeline.data.data_sqlite import DataStore
 
 _STALE_TIMEOUT_MINUTES = 90
 
