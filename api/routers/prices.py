@@ -5,16 +5,21 @@ GET /prices/live?pairs=EURUSD,GBPUSD,USDJPY&lookback_bars=50
 
 GET /candles/{pair}/{timeframe}?limit=200
     OHLC bars from SQLite candles table.
+
+WS  /chart/{pair}/{timeframe}/ws
+    Real-time chart stream — forming candles + new-bar events per tick.
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 import time
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from api.dependencies import get_data_store
 from pipeline.pair_config import get_pair_config
@@ -54,6 +59,8 @@ def _query_candles(
         start_iso = datetime.fromtimestamp(start, tz=timezone.utc).strftime(ts_fmt) if start is not None else None
         end_iso = datetime.fromtimestamp(end, tz=timezone.utc).strftime(ts_fmt) if end is not None else None
         df = store.get_candles(pair, timeframe, start=start_iso, end=end_iso)
+        if limit and len(df) > limit:
+            df = df.iloc[-limit:]
     else:
         df = store.get_latest_candles(pair, timeframe, limit)
 
@@ -252,19 +259,80 @@ def get_candles(
         gap_minutes = (now - last_ts).total_seconds() / 60
 
         if gap_minutes > tf_minutes:
-            token, account_id = _get_oanda_credentials()
-            if token and account_id:
-                try:
-                    new_count = _backfill_candles(
-                        store, pair_cfg, pair, timeframe,
-                        last_ts, now, token, account_id,
-                    )
-                    if new_count > 0:
-                        logger.info("Backfill %s/%s: %d candles inserted", pair, timeframe, new_count)
-                        candles = _query_candles(store, pair, timeframe, None, None, limit)
-                except Exception as e:
-                    logger.warning("Backfill failed for %s/%s: %s", pair, timeframe, e)
+            from pipeline.candle_syncer import _is_forex_weekend
+            import pandas as pd
+            if _is_forex_weekend(pd.Timestamp(now)):
+                logger.debug(
+                    "Skipping backfill for %s/%s — weekend gap (%d min -> %d candles), "
+                    "market closed until Sun 22:00 UTC",
+                    pair, timeframe, int(gap_minutes), int(gap_minutes / tf_minutes),
+                )
             else:
-                logger.info("Skipping backfill for %s/%s - no OANDA credentials", pair, timeframe)
+                token, account_id = _get_oanda_credentials()
+                if token and account_id:
+                    try:
+                        new_count = _backfill_candles(
+                            store, pair_cfg, pair, timeframe,
+                            last_ts, now, token, account_id,
+                        )
+                        if new_count > 0:
+                            logger.info("Backfill %s/%s: %d candles inserted", pair, timeframe, new_count)
+                            candles = _query_candles(store, pair, timeframe, None, None, limit)
+                    except Exception as e:
+                        logger.warning("Backfill failed for %s/%s: %s", pair, timeframe, e)
+                else:
+                    logger.info("Skipping backfill for %s/%s - no OANDA credentials", pair, timeframe)
 
     return {"pair": pair, "timeframe": timeframe, "candles": candles}
+
+
+@router.websocket("/chart/{pair}/{timeframe}/ws")
+async def chart_ws(websocket: WebSocket, pair: str, timeframe: str):
+    """Real-time chart stream — forming candles + new-bar events per tick.
+
+    Subscribe to the OANDA price stream for *pair* and forward
+    ``price_tick`` (with ``forming_candle``) and ``new_bar_saved``
+    events to the frontend.  No trading session required.
+    """
+    await websocket.accept()
+
+    pair = pair.upper()
+    valid_tfs = {"M15", "M30", "H1", "H2", "H4"}
+    if timeframe not in valid_tfs:
+        await websocket.send_text(json.dumps({"event": "error", "message": f"Invalid timeframe: {timeframe}"}))
+        await websocket.close()
+        return
+
+    try:
+        get_pair_config(pair)
+    except Exception:
+        await websocket.send_text(json.dumps({"event": "error", "message": f"Unknown pair: {pair}"}))
+        await websocket.close()
+        return
+
+    from api.routers.price_stream import PriceStreamManager
+    psm = PriceStreamManager.get()
+    await psm.ensure_stream(pair)
+
+    queue: asyncio.Queue = asyncio.Queue()
+    psm.subscribe(pair, queue)
+
+    try:
+        while True:
+            try:
+                msg = await asyncio.wait_for(queue.get(), timeout=30.0)
+            except asyncio.TimeoutError:
+                await websocket.send_text(json.dumps({"event": "heartbeat", "time": int(time.time())}))
+                continue
+
+            if msg.get("pair") != pair or msg.get("timeframe") != timeframe:
+                continue
+
+            await websocket.send_text(json.dumps(msg, default=str))
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        logger.exception("Chart WS error for %s/%s", pair, timeframe)
+    finally:
+        psm.unsubscribe(pair, queue)
+        await psm.release_stream(pair)

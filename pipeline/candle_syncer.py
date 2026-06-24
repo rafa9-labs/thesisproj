@@ -89,7 +89,44 @@ def _granularity(timeframe: str) -> str:
     return mapping.get(timeframe, timeframe)
 
 
-_DEFAULT_TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4"]
+# Forex market: Sunday 22:00 UTC → Friday 22:00 UTC
+# Weekend: Friday 22:00 UTC → Sunday 22:00 UTC
+_FOREX_WEEKEND_START_UTC_HOUR = 22  # Friday 22:00
+_FOREX_CLOSE_DAY = 4               # Friday (Monday=0)
+_FOREX_OPEN_DAY = 6                # Sunday (Monday=0)
+
+
+def _is_forex_weekend(dt: "pd.Timestamp") -> bool:
+    """Return True if *dt* falls inside the Forex weekend (Fri 22:00–Sun 22:00 UTC)."""
+    wd = dt.dayofweek   # Monday=0 ... Sunday=6
+    hh = dt.hour
+    if wd == _FOREX_CLOSE_DAY and hh >= _FOREX_WEEKEND_START_UTC_HOUR:
+        return True
+    if wd == 5:  # Saturday
+        return True
+    if wd == _FOREX_OPEN_DAY and hh < _FOREX_WEEKEND_START_UTC_HOUR:
+        return True
+    return False
+
+
+def _validate_m30_sequence(rows: list[tuple], pair: str) -> None:
+    """Log a warning if any M30 candle timestamp is not aligned to :00 or :30."""
+    for row in rows:
+        ts_str = row[2]  # ts column at index 2
+        try:
+            ts = pd.Timestamp(ts_str)
+        except Exception:
+            continue
+        if ts.minute % 30 != 0 or ts.second != 0 or ts.microsecond != 0:
+            logger.warning(
+                "Non-aligned M30 candle for %s: %s (minute=%d, second=%d)",
+                pair, ts_str, ts.minute, ts.second,
+            )
+
+
+_DEFAULT_TIMEFRAMES = ["M5", "M15", "M30", "H1", "H4"]
+
+_AUTH_BACKOFF = [300, 600, 1800, 3600]
 
 _COLD_START_LOOKBACK: dict[str, int] = {
     "M1":  360,
@@ -194,6 +231,7 @@ class CandleSyncer:
 
     async def _sync_loop(self, pair: str, tf: str) -> None:
         interval = INTERVALS.get(tf, 60)
+        consecutive_failures = 0
         while self._running:
             try:
                 count = await self._sync_pair_impl(pair, tf)
@@ -202,19 +240,35 @@ class CandleSyncer:
                         "CandleSyncer %s/%s: %d new/updated candles",
                         pair, tf, count,
                     )
+                consecutive_failures = 0
             except asyncio.CancelledError:
                 break
             except Exception as exc:
+                consecutive_failures += 1
+                backoff_idx = min(consecutive_failures - 1, len(_AUTH_BACKOFF) - 1)
                 if _is_auth_error(exc):
-                    logger.error(
-                        "CandleSyncer %s/%s: OANDA authentication failed. "
-                        "Check OANDA_ENV=%s (practice vs live).",
-                        pair, tf, OANDA_ENV,
-                    )
+                    if consecutive_failures <= 3:
+                        logger.error(
+                            "CandleSyncer %s/%s: OANDA authentication failed. "
+                            "Check OANDA_ENV=%s (practice vs live). "
+                            "Backing off %ds (failure #%d)",
+                            pair, tf, OANDA_ENV, _AUTH_BACKOFF[backoff_idx],
+                            consecutive_failures,
+                        )
+                    if consecutive_failures > 20:
+                        logger.error(
+                            "CandleSyncer %s/%s: authentication failed %d times — "
+                            "permanently stopping sync for this pair/timeframe",
+                            pair, tf, consecutive_failures,
+                        )
+                        break
                 else:
                     logger.exception(
-                        "CandleSyncer %s/%s: sync failed", pair, tf,
+                        "CandleSyncer %s/%s: sync failed (attempt #%d)",
+                        pair, tf, consecutive_failures,
                     )
+                await asyncio.sleep(_AUTH_BACKOFF[backoff_idx])
+                continue
             await asyncio.sleep(interval)
 
     async def _sync_pair_impl(self, pair: str, tf: str) -> int:
@@ -243,6 +297,15 @@ class CandleSyncer:
                 "CandleSyncer %s/%s: cold start — fetching %d bars (~%s)",
                 pair, tf, lookback_bars, lookback.date(),
             )
+
+        now = pd.Timestamp.utcnow()
+        if _is_forex_weekend(now):
+            if last_ts is not None:
+                last_dt = pd.Timestamp(last_ts)
+                if _is_forex_weekend(last_dt) or last_dt <= now:
+                    return 0
+            else:
+                return 0
 
         all_rows: list[tuple] = []
         since = last_ts
@@ -302,6 +365,8 @@ class CandleSyncer:
             await asyncio.to_thread(
                 self._store.insert_candles_batch, all_rows,
             )
+            if tf == "M30":
+                _validate_m30_sequence(all_rows, db_pair)
 
         return len(all_rows)
 
