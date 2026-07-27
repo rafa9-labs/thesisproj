@@ -27,7 +27,7 @@
 - **ALWAYS** push all work to GitHub before ending a session.
 - Before completing a task, check for uncommitted changes.
 - Commit with descriptive messages. Push to `origin <current-branch>`.
-- Current branch: `feature/sprint16.6-ui-redesign` — Tab-based Backtest Setup UI redesign
+- Current branch: `repo-cleanup`
 - Remote: `https://github.com/rafa9-labs/thesisproj.git`
 
 ## Architecture Overview
@@ -39,45 +39,81 @@
 - `pipeline/model_comparison.py` — Model comparison & leaderboard (CLI)
 
 ### Pipeline Engine (`pipeline/`)
-- `pipeline/backtester/composed.py` — **MLBacktester** class (core engine)
+- `pipeline/backtester/composed.py` — **MLBacktester** class (11 mixins)
+- `pipeline/backtester/run_mixin.py` — HPO loop, Optuna study, walk-forward optimization
+- `pipeline/backtester/real_trading_mixin.py` — Real trading simulation + equity curve
 - `pipeline/backtester/features_mixin.py` — Feature engineering (TA indicators)
 - `pipeline/backtester/execution_patches.py` — Execution simulation (slippage, costs)
 - `pipeline/backtester/deep_mixin.py` — Deep learning model handling
 - `pipeline/backtester/dqn_mixin.py` — DQN/RL model handling
-- `pipeline/backtester/model_factory_mixin.py` — Model creation
-- `pipeline/backtester/real_trading_mixin.py` — Real trading simulation
-- `pipeline/backtester/strategy_mixin.py` — Strategy logic
+- `pipeline/backtester/model_factory_mixin.py` — Model creation dispatch
 - `pipeline/backtester/ensemble_mixin.py` — Ensemble model logic
-- `pipeline/backtester/run_mixin.py` — Run orchestration
+- `pipeline/backtester/strategy_mixin.py` — Strategy signal generation
+- `pipeline/backtester/evaluation_mixin.py` — CV evaluation + metrics
+- `pipeline/backtester/data_mixin.py` — Data loading + date range
+- `pipeline/execution/` — Position sizing, stops, trailing, risk management
+- `pipeline/tuning/` — Optuna HPO (runner, objective, sampler, refit)
+- `pipeline/metrics/` — 16-metric evaluation, overfitting detection, DSR, PBO
+- `pipeline/features/` — Feature engineering, BorutaSHAP, caching
+- `pipeline/committee/` — Multi-agent committee system (11 files)
+- `pipeline/regime/` — HMM regime detection + utilities
+- `pipeline/llm/` — LLM sentiment engine + advisor
+- `pipeline/models/` — Model persistence, registry, fast retrain
+- `pipeline/data/` — SQLite store, candle syncer, data downloader
+- `pipeline/forward_test.py` — Forward testing for saved models
+- `pipeline/main_cli.py` — CLI runner (headless backtesting)
+- `pipeline/workers.py` — Multiprocessing worker pool
+- `pipeline/hardware_profile.py` — CPU/GPU detection + VRAM measurement
 
 ### Models (`models/`)
-- `models/registry.py` — Model registry (maps names to classes)
+- `models/registry.py` — Model registry with `@register_model` decorator
 - `models/base_model.py` — Abstract base model
-- `models/logistic.py`, `models/xgboost_model.py`, `models/svm.py`, `models/random_forest.py`
-- `models/cnn.py`, `models/lstm.py`, `models/transformer.py`
+- `models/logistic.py`, `models/svm.py`, `models/random_forest.py`, `models/decision_tree.py`
+- `models/xgboost_model.py`, `models/lightgbm_proxy.py`
+- `models/cnn.py`, `models/lstm.py`, `models/gru.py`, `models/gru_lstm.py`, `models/transformer.py`
 - `models/ensemble_cnn_lstm_xgboost.py`, `models/ensemble_adaptive_regime.py`
-- **All 17 model types verified working end-to-end** (2026-06-01)
+- `models/stacking_ensemble.py`, `models/meta_ensemble.py`
+- `models/regime_classifier.py`
+- **All 18 model types verified working end-to-end**
 
 ### Frontend (`frontend/`)
-- React + Vite + TypeScript + TailwindCSS
-- Pages: Dashboard, Backtest, Results, Compare, News, Settings
+- React 19 + TypeScript 6 + TailwindCSS 4 + shadcn/ui
+- 10 pages: Dashboard, Backtest, Results, Compare, Committee, Trading, Models, News, Monitor, Settings
+- 60+ components (charts, panels, forms, tables)
+- 7 Zustand stores + React Query cache
 - API client: `frontend/src/api/` (REST + WebSocket)
 - State: Zustand stores + React Query cache
+
+### Trading (`trading/`)
+- `trading/oanda_client.py` — OANDA v20 REST API client
+- `trading/live_engine.py` — Live trading engine with 4-layer risk architecture
+- `trading/paper_engine.py` — Paper trading engine with portfolio tracking
+- `trading/committee_engine.py` — Committee-based live trading
+- `trading/risk_controls.py` — 17 risk gates (pre-trade, post-trade, infra, kill switch)
+- `trading/live_committee_runner.py` — Live committee runner with regime switching
+- `trading/model_store.py` — Model artifact loading for live deployment
+- `trading/rotation_scheduler.py` — Model rotation scheduling
+- `trading/lean_bridge.py` — QuantConnect LEAN integration
+- `trading/alerting.py` — Trade and risk event alerting
 
 ### Streamlit UI — REMOVED (2026-04-20)
 - All Streamlit code deleted: `app.py`, `ui/` directory, `launch_ui.bat`
 - React frontend is the product UI
 
 ### Config & Schemas
-- `config.py` — Global config (`PIPELINE_CONSTANTS`, `SEARCH_SPACE`)
-- `schemas/` — Pydantic-like validators (backtest, features, hpo, settings)
+- `config.py` — Global config (`PIPELINE_CONSTANTS`, `SEARCH_SPACE`, 697 lines)
+- `schemas/` — Pydantic v2 validators (backtest, features, hpo, settings)
 - `pipeline/runtime.py` — GPU detection, thread budgets, CUDA config
 - `pipeline/feature_cache.py` — Parquet disk cache for features
 
 ### Data (`csv_data/`)
-- `EURUSD_10_years_H1_OANDA.csv`
-- `EURUSD_10_years_H4_OANDA.csv`
-- `EURUSD_10_years_M30_OANDA.csv`
+- 24 CSV files: 6 pairs × 4 timeframes (M15, M30, H1, H4)
+- `EURUSD_10_years_{M15,M30,H1,H4}_OANDA.csv`
+- `GBPUSD_10_years_{M15,M30,H1,H4}_OANDA.csv`
+- `USDJPY_10_years_{M15,M30,H1,H4}_OANDA.csv`
+- `AUDUSD_10_years_{M15,M30,H1,H4}_OANDA.csv`
+- `USDCAD_10_years_{M15,M30,H1,H4}_OANDA.csv`
+- `GBPJPY_10_years_{M15,M30,H1,H4}_OANDA.csv`
 
 ### HPO Configs (`hpo/`)
 - Best configs for: cnn, lstm, transformer, xgboost, logistic, ensemble_adaptive_regime, ensemble_cnn_lstm_xgboost
@@ -89,12 +125,12 @@
 - `rl/wrappers.py` — Reward processing, cost-aware wrappers
 
 ### Tests (`tests/`)
-- 496+ tests covering pipeline, metrics, models, schemas, walk-forward integrity, build validation
-- `tests/test_models_train_predict.py` — Build/train/predict for all 10 models + ensemble (40 tests)
+- 2,028 tests covering pipeline, metrics, models, schemas, walk-forward integrity, build validation, committee, trading
+- `tests/test_models_train_predict.py` — Build/train/predict for all 18 model types (40 tests)
 - `tests/test_build_validation.py` — PyInstaller spec + hidden imports validation (46 tests)
 - `tests/benchmarks/` — Model timing + memory benchmarks (11 tests, 4 slow)
 - `tests/golden/` — Deterministic output regression tests (7 tests + golden data files)
-- `tests/smoke_all_models.py` — Smoke test for all 17 model types
+- `tests/smoke_all_models.py` — Smoke test for all 18 model types
 - `tests/conftest.py` — Shared fixtures
 
 ### Key Utilities
@@ -196,23 +232,38 @@ Tools: fetch_html, fetch_markdown, fetch_txt, fetch_json, fetch_readable, fetch_
 | **Sprint 2** | Advanced Execution Models | ✅ DONE | 6-8h |
 | **Sprint 3** | Multi-Currency Expansion | ✅ DONE | 4-5h |
 | **Sprint 4** | Docker + CI/CD | 🔄 PARTIAL | 3-4h |
-| **Sprint 5** | Comprehensive Tests + Benchmarks | ⬜ TODO | 4-6h |
+| **Sprint 5** | Comprehensive Tests + Benchmarks | ✅ DONE | 4-6h |
 | **Sprint 6** | News & Sentiment Features | ✅ DONE | 6-8h |
 | **Sprint 7** | FastAPI Backend | ✅ DONE | 8-10h |
 | **Sprint 8** | React Frontend | ✅ DONE | 20-25h |
 | **Sprint 8B** | Frontend ↔ API Integration | ✅ DONE | 6-8h |
-| **Sprint 9** | Electron Desktop Shell | 🔄 SCAFFOLDED | 10-12h |
-| **Sprint 10** | Security & Licensing (Paddle) | ⬜ TODO | 12-15h |
-| **Sprint 11** | Installer & Auto-Update | ⬜ TODO | 6-8h |
-| **Sprint 12** | Product Intelligence & UX Overhaul | ⬜ TODO | 15-16h |
+| **Sprint 9** | Electron Desktop Shell | ✅ DONE | 10-12h |
+| **Sprint 10** | Security & Licensing (Paddle) | ✅ DONE | 12-15h |
+| **Sprint 11** | Installer & Auto-Update | ✅ DONE | 6-8h |
+| **Sprint 12** | Product Intelligence & UX | ✅ DONE | 22-24h |
 | **Sprint 13** | Beta & Launch | ⬜ TODO | 6-8h |
+| **Sprint 14** | Pipeline Enhancements | ✅ DONE | 5-8h |
+| **Sprint 15** | KodaQuant Branding | ✅ DONE | 4-6h |
+| **Sprint 16** | Overfitting & Transparency | ✅ DONE | 12-16h |
+| **Sprint 16.8** | Model Persistence & Deployment | ✅ DONE | 15-19h |
+| **Sprint 16.9** | Forward Test + Live Trading Bridge | ✅ DONE | 5-7h |
+| **Sprint 17** | UI Polish & Search | ⬜ TODO | 8-10h |
+| **Sprint 18** | Live News & Market Data | 🔄 PARTIAL | 10-14h |
+| **Sprint 19** | Ensemble Models & Extensibility | 🔄 PARTIAL | 8-10h |
+| **Sprint 20** | LLM / AI Integration | 🔄 PARTIAL | 10-14h |
+| **Sprint 21** | Live Trading (OANDA) | ✅ DONE | 12-16h |
+| **Sprint 22** | Commercial Infrastructure | ⬜ TODO | 8-10h |
+| **Sprint 23** | Pipeline Stability & Live Monitor UX | ✅ DONE | 6-8h |
+| **Sprint 24** | Historical News as Backtest Features | ⬜ TODO | 6-8h |
 
 **Product target**: Commercial Electron desktop app (React + FastAPI + Python), sold via Paddle.
 **Pricing**: Hybrid — one-time purchase + annual updates subscription.
+**Test suite**: 2,028 tests across 95+ test files.
+**Models**: 18 registered (shallow, boosting, deep, RL, ensemble, meta).
 
-**Next task**: Sprint 12 — Product Intelligence & UX Overhaul (S12.1 fix news pipeline → S12.2 LLM sentiment → S12.3 Results history → S12.4 Dashboard redesign)
+**Next task**: Sprint 13 — Beta & Launch (S13.1 closed beta → S13.2 performance optimization → S13.3 launch preparation)
 
-See `ROADMAP.md` for full sprint details with sub-tasks and file references.
+See `docs/ROADMAP.md` for full sprint details with sub-tasks and file references.
 
 ## How to Run
 
@@ -229,7 +280,7 @@ celery -A api.tasks.celery_app worker --loglevel=info --pool=solo -Q celery
 # Start React frontend (separate terminal)
 cd frontend; npm run dev
 
-# Run smoke test (all 17 models, 1 trial)
+# Run smoke test (all 18 models, 1 trial)
 .\run_smoke.bat
 
 # Run model comparison
@@ -264,16 +315,30 @@ wsl bash -c "~/thesisproj-venv/bin/python -c 'import tensorflow as tf; print(tf.
 
 | File | Role |
 |------|------|
-| `api/main.py` | FastAPI entry point (uvicorn) |
-| `api/tasks.py` | Celery backtest tasks |
-| `config.py` | Global configuration + constants + ExecutionConfig |
-| `pipeline/backtester/composed.py` | MLBacktester engine |
-| `pipeline/backtester/execution_patches.py` | Execution loop + PatchConfig + LoopResult |
-| `pipeline/execution/position_sizing.py` | Position sizing models |
-| `pipeline/backtester/data_mixin.py` | Data loading + date range handling |
-| `pipeline/main_cli.py` | CLI runner |
+| `api/main.py` | FastAPI entry point (15 routers) |
+| `api/tasks.py` | Celery background tasks |
+| `config.py` | Global configuration + constants + ExecutionConfig + SEARCH_SPACE |
+| `pipeline/backtester/composed.py` | MLBacktester engine (11 mixins) |
+| `pipeline/backtester/run_mixin.py` | HPO loop + walk-forward optimization (4,094 lines) |
+| `pipeline/backtester/real_trading_mixin.py` | Real trading simulation + equity curve |
+| `pipeline/backtester/features_mixin.py` | Feature engineering (TA indicators) |
+| `pipeline/execution/` | Position sizing, stops, trailing, risk management |
+| `pipeline/committee/` | Multi-agent committee system (11 files) |
+| `pipeline/regime/` | HMM regime detection |
+| `pipeline/llm/` | LLM sentiment + advisor |
+| `pipeline/models/` | Model persistence + registry + fast retrain |
+| `pipeline/tuning/` | Optuna HPO lifecycle |
+| `pipeline/metrics/` | 16-metric evaluation + overfitting detection |
+| `pipeline/features/` | Feature engineering + BorutaSHAP + caching |
+| `pipeline/data/` | SQLite store + candle syncer + downloader |
+| `pipeline/forward_test.py` | Forward testing for saved models |
+| `pipeline/main_cli.py` | CLI runner (headless backtesting) |
 | `pipeline/runtime.py` | GPU detection, CUDA config |
 | `pipeline/model_comparison.py` | Model comparison & leaderboard |
-| `models/registry.py` | Model registry |
-| `ROADMAP.md` | Full product roadmap (13 sprints) |
+| `pipeline/hardware_profile.py` | CPU/GPU detection + VRAM measurement |
+| `models/registry.py` | Model registry (18 types) |
+| `trading/` | OANDA client + paper/live engines + risk controls |
+| `news/` | RSS scraper + VADER/LLM sentiment + features |
+| `schemas/` | Pydantic v2 config validators |
+| `ROADMAP.md` | Full product roadmap (24 sprints) |
 | `CLAUDE.md` | This file — AI assistant context |
