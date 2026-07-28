@@ -33,7 +33,7 @@ class JobManager:
         with self.store._cursor() as (conn, cur):
             cur.execute(
                 "SELECT id, status, task_id FROM jobs "
-                "WHERE status IN ('pending', 'running') AND updated_at < ?",
+                "WHERE status IN ('pending', 'running', 'queued') AND updated_at < ?",
                 (threshold,),
             )
             stale_rows = cur.fetchall()
@@ -55,7 +55,7 @@ class JobManager:
         with self.store._cursor() as (conn, cur):
             for jid in stale_ids:
                 cur.execute(
-                    "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'running')",
+                    "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'running', 'queued')",
                     ("failed", f"Job orphaned -- no update for {_STALE_TIMEOUT_MINUTES}+ min", now, jid),
                 )
                 count += cur.rowcount
@@ -77,7 +77,7 @@ class JobManager:
         with self.store._cursor() as (conn, cur):
             self._cleanup_stale_jobs()
             cur.execute(
-                "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running')",
+                "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running', 'queued')",
                 (job_type,),
             )
             active_count = cur.fetchone()[0]
@@ -87,7 +87,7 @@ class JobManager:
             pair = str(config.get("pair", "")).upper()
             models_key = ",".join(sorted(config.get("models", [])))
             cur.execute(
-                "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running') "
+                "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running', 'queued') "
                 "AND json_extract(config, '$.pair') = ? "
                 "AND json_extract(config, '$.models') = ?",
                 (job_type, pair, json.dumps(config.get("models", []))),
@@ -106,7 +106,7 @@ class JobManager:
 
     def get_active_jobs(self, job_type: Optional[str] = None) -> List[Dict]:
         self._cleanup_stale_jobs()
-        sql = "SELECT * FROM jobs WHERE status IN ('pending', 'running')"
+        sql = "SELECT * FROM jobs WHERE status IN ('pending', 'running', 'queued')"
         params: list = []
         if job_type:
             sql += " AND type = ?"
@@ -129,7 +129,7 @@ class JobManager:
         now = self._now()
         with self.store._cursor() as (conn, cur):
             cur.execute(
-                "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'running')",
+                "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'running', 'queued')",
                 ("failed", "Force stopped by user", now, job_id),
             )
             return cur.rowcount > 0
@@ -140,7 +140,7 @@ class JobManager:
         with self.store._cursor() as (conn, cur):
             cur.execute(
                 "UPDATE jobs SET status = ?, error = ?, updated_at = ? "
-                "WHERE status IN ('pending', 'running')",
+                "WHERE status IN ('pending', 'running', 'queued')",
                 ("failed", "Queue cleared by cancellation or restart", now),
             )
             count = cur.rowcount

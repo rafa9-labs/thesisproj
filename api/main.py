@@ -38,6 +38,9 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
+    from api.config import load_persisted_execution_settings
+    load_persisted_execution_settings()
+
     try:
         from api.process_manager import get_process_manager
         pm = get_process_manager()

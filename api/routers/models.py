@@ -515,7 +515,7 @@ def forward_test_model(model_id: str, req: ForwardTestRequest):
         "trading_costs": req.trading_costs,
     }
 
-    jm.create_job_atomic(job_id, "forward_test", config, max_active=settings.max_concurrent_backtests)
+    jm.create_job_atomic(job_id, "forward_test", config, max_active=0)
 
     from api.tasks import IS_DESKTOP
     if IS_DESKTOP:

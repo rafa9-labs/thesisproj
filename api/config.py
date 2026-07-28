@@ -1,6 +1,7 @@
 """FastAPI application configuration."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
     model_check_interval: float = 2.0
     max_concurrent_backtests: int = 4
     gpu_enabled: bool = False
-    max_concurrent_gpu: int = 1
+    max_concurrent_gpu: int = 4
     gpu_total_vram_mb: int = 0
 
     paddle_vendor_id: str = ""
@@ -70,3 +71,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def load_persisted_execution_settings() -> None:
+    path = Path(os.environ.get("FX_EXEC_CONFIG_PATH", "fx_exec_config.json"))
+    if not path.exists():
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        settings.max_concurrent_backtests = data.get("max_concurrent_backtests", 4)
+        settings.gpu_enabled = data.get("gpu_enabled", False)
+        settings.max_concurrent_gpu = data.get("max_concurrent_gpu", 4)
+        print(f"[Config] Loaded execution settings from {path}", flush=True)
+    except Exception:
+        pass
