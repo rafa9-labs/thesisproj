@@ -206,7 +206,7 @@ if IS_DESKTOP:
             _frontend_dist = _candidate
             break
 
-    if os.path.isdir(_frontend_dist):
+    if _frontend_dist is not None and os.path.isdir(_frontend_dist):
         app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dist, "assets")), name="static-assets")
 
         @app.get("/favicon.svg")
