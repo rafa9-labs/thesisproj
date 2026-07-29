@@ -83,20 +83,18 @@ class JobManager:
             active_count = cur.fetchone()[0]
             if active_count >= max_active:
                 raise RuntimeError("Maximum concurrent backtest jobs reached")
-            # Per-model dedup: reject identical model+pair combo
-            pair = str(config.get("pair", "")).upper()
-            models_key = ",".join(sorted(config.get("models", [])))
+            # Full-config dedup: only reject if an identical job is already active/queued
+            config_json = json.dumps(config, sort_keys=True)
             cur.execute(
                 "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running', 'queued') "
-                "AND json_extract(config, '$.pair') = ? "
-                "AND json_extract(config, '$.models') = ?",
-                (job_type, pair, json.dumps(config.get("models", []))),
+                "AND config = ?",
+                (job_type, config_json),
             )
             dup_count = cur.fetchone()[0]
             if dup_count > 0:
                 raise RuntimeError(
-                    f"A backtest for {models_key} on {pair} is already running or pending. "
-                    f"Wait for it to complete before submitting an identical run."
+                    "An identical backtest is already running or queued. "
+                    "Wait for it to complete or change a parameter before resubmitting."
                 )
             cur.execute(
                 "INSERT INTO jobs (id, type, status, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
