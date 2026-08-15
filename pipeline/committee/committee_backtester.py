@@ -685,6 +685,7 @@ class CommitteeBacktester:
             regime_ids = regime_ids[-len(preds):]
 
         eval_df["pred"] = preds
+        eval_df["confidence"] = np.max(blended_probs, axis=1)
 
         # Collect per-bar predictions for meta-learner training
         if getattr(self, "_collect_predictions", False):
@@ -1024,6 +1025,21 @@ class CommitteeBacktester:
         preds_shifted = np.roll(preds, 1)
         preds_shifted[0] = 0.0
 
+        # Apply the fitted conviction sizer so committee backtest sizing
+        # matches live committee sizing (conviction_multiplier).
+        if self._conviction_sizer is not None and "confidence" in df.columns:
+            confs = df["confidence"].values.astype(float)
+            confs_shifted = np.roll(confs, 1)
+            confs_shifted[0] = 0.5
+            try:
+                mult = np.array([
+                    self._conviction_sizer.get_multiplier(float(c))
+                    for c in confs_shifted
+                ], dtype=float)
+                preds_shifted = preds_shifted * mult
+            except Exception:
+                pass
+
         strategy_returns = rets * preds_shifted
 
         # Filters: non-zero preds and finite returns
@@ -1040,8 +1056,12 @@ class CommitteeBacktester:
         mean_ret = np.mean(active_returns)
         std_ret = np.std(active_returns, ddof=1)
 
-        # Annualized Sharpe (assuming H1 bars ≈ 252*24 = 6048 per year)
-        annual_factor = np.sqrt(6048.0)
+        # Annualized Sharpe from the actual bar frequency
+        try:
+            from pipeline.metrics.metrics_eval import estimate_frequency_per_year
+            annual_factor = np.sqrt(estimate_frequency_per_year(df.index))
+        except Exception:
+            annual_factor = np.sqrt(6048.0)
         sharpe = (mean_ret / std_ret) * annual_factor if std_ret > 0 else 0.0
 
         win_rate = float((active_returns > 0).mean())

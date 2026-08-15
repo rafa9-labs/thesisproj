@@ -38,6 +38,16 @@ from pipeline.execution.position_sizing import (
     compute_size,
     update_state,
 )
+
+from pipeline.execution.stops import (
+    StopConfig,
+    StopLevels,
+    StopMethod,
+    compute_stop_levels,
+    check_stop_hit,
+)
+
+from trading.vol_tracker import VolTracker
 from trading.risk_controls import (
     LiveRiskConfig,
     LiveRiskState,
@@ -145,6 +155,21 @@ class OandaTradingEngine:
         self._sizing_config.trust_multiplier = trust_mult
 
         self._sizing_state = SizingState(equity=initial_equity)
+
+        self._vol_tracker = VolTracker()
+
+        stop_cfg_raw = config.get("stop_config") or {}
+        self._stop_cfg = StopConfig(
+            method=str(stop_cfg_raw.get("method", StopMethod.NONE)),
+            sl_pips=float(stop_cfg_raw.get("sl_pips", 30.0)),
+            tp_pips=float(stop_cfg_raw.get("tp_pips", 60.0)),
+            sl_atr_mult=float(stop_cfg_raw.get("sl_atr_mult", 2.0)),
+            tp_atr_mult=float(stop_cfg_raw.get("tp_atr_mult", 3.0)),
+            sl_sigma_mult=float(stop_cfg_raw.get("sl_sigma_mult", 2.0)),
+            tp_sigma_mult=float(stop_cfg_raw.get("tp_sigma_mult", 3.0)),
+            pip_value=float(stop_cfg_raw.get("pip_value", 0.0001)),
+        )
+        self._stop_levels: StopLevels | None = None
 
         self._risk_config = LiveRiskConfig(initial_equity=initial_equity)
         if not isinstance(risk_overrides, dict):
@@ -276,6 +301,29 @@ class OandaTradingEngine:
 
         st.signal_count += 1
 
+        # Track volatility/ATR so sizing and stops see real values (backtest-aligned)
+        bar_vol, atr = self._vol_tracker.update(mid)
+
+        # Engine-side stop/TP check (server-side SL/TP is the primary line of
+        # defense; this handles paper mode and API latency).
+        if st.position != 0 and self._stop_levels is not None and self._stop_cfg is not None:
+            exit_quote = bid if st.position == 1 else ask
+            hit, hit_type = check_stop_hit(self._stop_levels, exit_quote, float(st.position))
+            if hit:
+                reason = "stop_loss" if hit_type == "sl" else "take_profit"
+                close_result = self._close_position(oanda_client, st, rs, rc)
+                close_result["event"] = (
+                    "trade_closed" if close_result.get("event") == "trade_closed"
+                    else close_result.get("event", "position_closed")
+                )
+                close_result["stop_reason"] = reason
+                events.append(close_result)
+                st.position = 0
+                st.position_units = 0.0
+                st.entry_price = 0.0
+                st.unrealized_pnl = 0.0
+                self._stop_levels = None
+
         if target == st.position and target != 0:
             if mid > 0 and st.entry_price > 0:
                 st.unrealized_pnl = target * (mid - st.entry_price) * st.position_units
@@ -320,7 +368,7 @@ class OandaTradingEngine:
                 result["sub_events"] = events
             return result
 
-        size = float(compute_size(self._sizing_state, 0.0, 0.0, self._sizing_config))
+        size = float(compute_size(self._sizing_state, bar_vol, atr, self._sizing_config))
         if size <= 0:
             size = 1.0
 
@@ -371,8 +419,27 @@ class OandaTradingEngine:
 
         try:
             instrument = st.instrument
-            units = max(1, int(round(size)))
-            order_result = oanda_client.place_market_order(instrument, units)
+            # Backtest sizes are lots (contract_size=100_000); OANDA units are
+            # 1/100_000 of a lot. Scale so live positions match the backtest.
+            units = max(1, int(round(size * float(self._sizing_config.contract_size))))
+
+            stop_loss = None
+            take_profit = None
+            if self._stop_cfg is not None and self._stop_cfg.method != StopMethod.NONE:
+                entry_ref = ask if target == 1 else bid
+                self._stop_levels = compute_stop_levels(
+                    self._stop_cfg, entry_ref, float(target),
+                    atr=atr, bar_vol=bar_vol,
+                )
+                if self._stop_levels.sl_price > 0:
+                    stop_loss = self._stop_levels.sl_price
+                if self._stop_levels.tp_price > 0:
+                    take_profit = self._stop_levels.tp_price
+
+            order_result = oanda_client.place_market_order(
+                instrument, units,
+                stop_loss=stop_loss, take_profit=take_profit,
+            )
 
             oanda_order_id = order_result.get("orderFillTransaction", {}).get("orderID", "")
             oanda_fill_id = order_result.get("orderFillTransaction", {}).get("id", "")
@@ -421,6 +488,7 @@ class OandaTradingEngine:
 
         except Exception as exc:
             record_api_error(rs)
+            self._stop_levels = None
             logger.exception("OANDA order failed for %s", st.pair)
             return {
                 "event": "order_failed",

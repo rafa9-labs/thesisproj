@@ -49,6 +49,8 @@ class LiveSignal:
     meta_win_prob: float = 0.5        # P1: P(trade_is_winner) from meta-labeler
     throttle_level: str = "full"      # "full", "half", "observe"
     conviction_multiplier: float = 1.0  # 0.5 explorer / 1.0 standard / 1.5 conviction
+    bar_vol: float = 0.0              # rolling bar volatility (backtest-aligned sizing)
+    atr: float = 0.0                  # ATR proxy in price units (backtest-aligned sizing)
 
     def to_dict(self) -> dict:
         return {
@@ -66,6 +68,8 @@ class LiveSignal:
             "meta_win_prob": round(self.meta_win_prob, 4),
             "throttle_level": self.throttle_level,
             "conviction_multiplier": round(self.conviction_multiplier, 2),
+            "bar_vol": round(self.bar_vol, 8),
+            "atr": round(self.atr, 8),
         }
 
 
@@ -286,6 +290,9 @@ class LiveCommitteeRunner:
         #    reverse the primary model's direction — only suppress to flat.
         meta_override = False
 
+        # 8. Volatility inputs from the bar buffer (backtest-aligned sizing)
+        bar_vol, atr = self._compute_volatility()
+
         live_signal = LiveSignal(
             timestamp=bar.get("timestamp", self._bar_count),
             signal=signal,
@@ -304,6 +311,8 @@ class LiveCommitteeRunner:
             meta_filtered=meta_filtered,
             meta_win_prob=meta_win_prob,
             conviction_multiplier=conviction_multiplier,
+            bar_vol=bar_vol,
+            atr=atr,
         )
         self._signal_history.append(live_signal)
         return live_signal
@@ -313,6 +322,28 @@ class LiveCommitteeRunner:
         for model in signal.active_models:
             if model in self._health:
                 self._health[model].record_trade(signal.signal, pnl)
+
+    def _compute_volatility(self, vol_window: int = 48, atr_window: int = 14) -> tuple[float, float]:
+        """Compute (bar_vol, atr) from the bar buffer (backtest-aligned).
+
+        bar_vol = rolling std of log returns; atr = mean |log return| * price.
+        """
+        try:
+            closes = [
+                float(b.get("mid_c", b.get("mid_close", np.nan)))
+                for b in list(self._bar_buffer)[-(vol_window + 1):]
+                if b.get("mid_c", b.get("mid_close")) is not None
+            ]
+        except Exception:
+            return (0.0, 0.0)
+        if len(closes) < 4:
+            return (0.0, 0.0)
+        closes = np.asarray(closes, dtype=float)
+        lrs = np.diff(np.log(np.clip(closes, 1e-9, None)))
+        bar_vol = float(np.std(lrs, ddof=1)) if len(lrs) >= 2 else 0.0
+        atr_window = min(atr_window, len(lrs))
+        atr = float(np.mean(np.abs(lrs[-atr_window:]))) * float(closes[-1]) if atr_window >= 2 else 0.0
+        return (bar_vol, atr)
 
     # ── Feature engineering ──────────────────────────────────────────
 

@@ -68,6 +68,17 @@ from pipeline.execution.risk_manager import (
 # Configuration
 # ---------------------------------------------------------------------------
 
+def _conviction_multiplier(confidence: float) -> float:
+    """Tier-based conviction multiplier (mirrors ConvictionSizer's fallback)."""
+    if confidence >= 0.80:
+        return 1.5
+    if confidence >= 0.65:
+        return 1.0
+    if confidence >= 0.55:
+        return 0.5
+    return 1.0
+
+
 @dataclass
 class PatchConfig:
     """All execution-patch configuration, parsed from df.attrs['features_config']."""
@@ -81,6 +92,9 @@ class PatchConfig:
     use_vol_target: bool = False
     target_bar: float = 0.0
     max_lev: float = 1.5
+
+    # Conviction sizing (opt-in; mirrors live committee sizing)
+    use_conviction_sizing: bool = False
 
     # Patch #2 -- Trailing stop / scale-out
     use_trail: bool = False
@@ -156,11 +170,11 @@ class PatchConfig:
 
     # Patch #0d -- Risk management (Sprint 2)
     risk_use_dd_breaker: bool = False
-    risk_max_drawdown_pct: float = 0.20
+    risk_max_drawdown_pct: float = 0.15
     risk_dd_resume: str = "session_end"
     risk_dd_cooloff_bars: int = 48
     risk_use_daily_loss: bool = False
-    risk_max_daily_loss_pct: float = 0.03
+    risk_max_daily_loss_pct: float = 0.05
     risk_max_daily_loss_sigma: float = 3.0
     risk_daily_loss_mode: str = "pct"
     risk_use_consec_loss: bool = False
@@ -186,6 +200,8 @@ class LoopResult:
     # Core output arrays (length n)
     pos_actual: np.ndarray = field(default_factory=lambda: np.zeros(0))
     strat: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    # Per-bar stop/TP fill price (0.0 where no stop fill occurred)
+    stop_fill_price: np.ndarray = field(default_factory=lambda: np.zeros(0))
 
     # Diagnostic counters
     tp1_hits: int = 0
@@ -246,12 +262,14 @@ def run_execution_loop(
     slippage_factor: float,
     session_flag_arr: Optional[np.ndarray] = None,
     record_cost_columns: bool = False,
+    confidence: Optional[np.ndarray] = None,
 ) -> LoopResult:
     """Run the bar-by-bar execution loop with all patches applied.
 
     This is the tight inner loop extracted from
     ``compute_full_evaluation_metrics`` (lines 580-959 of the original).
-    Bit-for-bit identical outputs are guaranteed.
+    Stop/TP exits are booked at the stop price (clamped to the triggering
+    bar's high/low range) instead of skipping the exit bar's return.
     """
     n = len(df)
     if n != len(pred) or n != len(rets) or n != len(bar_vol):
@@ -264,6 +282,7 @@ def run_execution_loop(
     # --- Output arrays ---
     pos_actual = np.zeros(n, dtype=float)
     strat = np.zeros(n, dtype=float)
+    stop_fill_price_arr = np.zeros(n, dtype=float)
 
     # Optional cost-audit arrays
     cost_spread_pf = np.zeros(n, dtype=float) if record_cost_columns else None
@@ -281,6 +300,7 @@ def run_execution_loop(
     use_twap = cfg.use_twap
     twap_span = cfg.twap_span
     use_vol_target = cfg.use_vol_target
+    use_conviction_sizing = bool(cfg.use_conviction_sizing) and confidence is not None
     vol_floor = cfg.vol_floor
     target_bar = cfg.target_bar
     max_lev = cfg.max_lev
@@ -394,6 +414,15 @@ def run_execution_loop(
     stop_be_activations = 0
     partial_closed = False
 
+    # --- Stop-fill accounting state (P3) ---
+    # When a stop/TP is hit, the exit is booked at the stop price (clamped
+    # to the bar's high/low range) instead of skipping the exit bar's move.
+    stop_fill_ret: Optional[float] = None
+    stop_fill_size: float = 0.0
+    # Trades closed by signal/stops flush their accumulated PnL (including
+    # the exit bar) into the sizing/risk state AFTER the bar is booked.
+    deferred_trade_close = False
+
     # --- Trailing stop setup (Sprint 2) ---
     trailing_method = cfg.trailing_method
     trailing_cfg = TrailingConfig(
@@ -484,13 +513,19 @@ def run_execution_loop(
         return ramp_src + (ramp_dst - ramp_src) * prog
 
     def get_entry_size(i, sigma_ref):
+        size = 1.0
         if sizing_method == "fixed":
             if use_vol_target:
                 denom = max(sigma_ref, vol_floor)
-                return min(max_lev, float(target_bar) / float(denom))
-            return 1.0
-        atr_i = _get_atr(i)
-        return _compute_size(sizing_state, sigma_ref, atr_i, sizing_cfg)
+                size = min(max_lev, float(target_bar) / float(denom))
+            else:
+                size = 1.0
+        else:
+            atr_i = _get_atr(i)
+            size = _compute_size(sizing_state, sigma_ref, atr_i, sizing_cfg)
+        if use_conviction_sizing and confidence is not None and i < len(confidence):
+            size = size * _conviction_multiplier(float(confidence[i]))
+        return size
 
     def regime_tp_trail(i, sigma_ref):
         if not use_regime:
@@ -590,7 +625,7 @@ def run_execution_loop(
                     be_floor = 0.0
                     bars_held = 0
                     partial_closed = False
-                    entry_price = _get_price(i)
+                    entry_price = _get_price(i - 1) if i > 0 else _get_price(i)
                     if stop_method != "none" and entry_price > 0:
                         active_stop_levels = _compute_stop_levels(
                             stop_cfg, entry_price, dirn,
@@ -600,7 +635,7 @@ def run_execution_loop(
                         active_stop_levels = None
                     if trailing_method != "none":
                         active_trailing_state = TrailingState()
-                        _entry_px = float(df["close"].iloc[i]) if "close" in df.columns else 0.0
+                        _entry_px = _get_price(i - 1) if i > 0 else _get_price(i)
                         active_trailing_state.reset(trailing_cfg.chandelier_lookback, entry_price=_entry_px)
                     else:
                         active_trailing_state = None
@@ -656,12 +691,15 @@ def run_execution_loop(
                                 stop_be_activations += 1
                         _hit, _hit_type = _check_stop_hit(active_stop_levels, _cur_price, dirn, _bar_hi, _bar_lo)
                         if _hit:
+                            stop_fill_price = 0.0
                             if _hit_type == "sl":
                                 stop_sl_hits += 1
                                 stop_exit = True
+                                stop_fill_price = active_stop_levels.sl_price
                             elif _hit_type == "tp":
                                 stop_tp_hits += 1
                                 stop_exit = True
+                                stop_fill_price = active_stop_levels.tp_price
                             elif _hit_type == "tp1" and stop_cfg.use_partial_close and not partial_closed:
                                 stop_tp1_partial_hits += 1
                                 partial_closed = True
@@ -674,13 +712,31 @@ def run_execution_loop(
                             elif _hit_type == "tp2":
                                 stop_tp2_full_hits += 1
                                 stop_exit = True
+                                stop_fill_price = active_stop_levels.tp2_price
+
+                            if stop_exit and stop_fill_price > 0.0 and dirn != 0.0:
+                                # Book the exit at the stop/TP fill price. The
+                                # directionless price move is clamped to the
+                                # triggering bar's realized high/low range,
+                                # then signed by the trade direction.
+                                prev_close = _get_price(i - 1) if i > 0 else _get_price(i)
+                                if prev_close > 0.0:
+                                    price_move = float(np.log(stop_fill_price / prev_close))
+                                    _b_hi, _b_lo = _get_high_low(i)
+                                    if _b_hi > 0.0 and _b_lo > 0.0 and _b_lo < _b_hi:
+                                        ret_hi = float(np.log(_b_hi / prev_close))
+                                        ret_lo = float(np.log(_b_lo / prev_close))
+                                        price_move = min(max(price_move, ret_lo), ret_hi)
+                                    ret_stop = dirn * price_move
+                                    if np.isfinite(ret_stop):
+                                        stop_fill_ret = ret_stop
+                                        stop_fill_size = float(abs(prev_pos_actual))
+                                        stop_fill_price_arr[i] = float(stop_fill_price)
 
                 if stop_exit:
-                    if risk_any_active:
-                        _risk_update_after_trade(risk_cfg, risk_state, trade_pnl_accum, trade_pnl_accum > 0)
-                    if sizing_method != "fixed":
-                        _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
-                        trade_pnl_accum = 0.0
+                    # Exit booked at the stop fill price later in the bar-booking
+                    # section; trade PnL is flushed into sizing/risk AFTER booking.
+                    deferred_trade_close = True
                     in_pos = False
                     dirn = 0.0
                     size_entry = 0.0
@@ -688,11 +744,9 @@ def run_execution_loop(
                     active_stop_levels = None
                     active_trailing_state = None
                     pos_target = 0.0
-                    if use_twap:
-                        start_ramp(i, pos_target, prev_pos_actual)
-                    else:
-                        ramp_active = False
-                        ramp_dst = pos_target
+                    # Stops execute as market orders: no TWAP ramp on stop bars.
+                    ramp_active = False
+                    ramp_dst = 0.0
                 else:
                     # Regime-adaptive TP1/trail
                     tp1_z_eff, trail_k_eff = regime_tp_trail(i, sigma_ref)
@@ -732,11 +786,9 @@ def run_execution_loop(
                         if hit_stop:       stop_hits += 1
                         if flip_or_flat:   flips_exits += 1
                         if max_hold_hit:   timeouts += 1
-                        if risk_any_active:
-                            _risk_update_after_trade(risk_cfg, risk_state, trade_pnl_accum, trade_pnl_accum > 0)
-                        if sizing_method != "fixed":
-                            _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
-                            trade_pnl_accum = 0.0
+                        # Signal/trailing exits close at the bar close: defer the
+                        # sizing/risk flush until the exit bar PnL is booked.
+                        deferred_trade_close = True
                         in_pos = False
                         dirn = 0.0
                         size_entry = 0.0
@@ -840,9 +892,27 @@ def run_execution_loop(
 
         strat[i] = pos_exe * rets[i] - (slip_cost * delta_pos + impact)
 
+        # Stop/TP exits book the fill-price return for the pre-exit position
+        # instead of skipping the exit bar's move.
+        if stop_fill_ret is not None and stop_fill_size > 0.0:
+            strat[i] = stop_fill_size * float(stop_fill_ret) - (slip_cost * delta_pos + impact)
+
         sizing_state.equity += strat[i]
         if in_pos:
             trade_pnl_accum += strat[i]
+
+        # Flush the closed trade (including the exit bar's PnL) into the
+        # sizing/risk statistics after the bar is booked.
+        if deferred_trade_close:
+            trade_pnl_accum += strat[i]
+            if risk_any_active:
+                _risk_update_after_trade(risk_cfg, risk_state, trade_pnl_accum, trade_pnl_accum > 0)
+            if sizing_method != "fixed":
+                _update_sizing_state(sizing_state, trade_pnl_accum, trade_pnl_accum > 0)
+            trade_pnl_accum = 0.0
+            deferred_trade_close = False
+        stop_fill_ret = None
+        stop_fill_size = 0.0
 
         pos_actual[i] = pos_exe
         prev_pos_actual = pos_exe
@@ -880,6 +950,7 @@ def run_execution_loop(
     return LoopResult(
         pos_actual=pos_actual,
         strat=strat,
+        stop_fill_price=stop_fill_price_arr,
         tp1_hits=tp1_hits,
         stop_hits=stop_hits,
         timeouts=timeouts,

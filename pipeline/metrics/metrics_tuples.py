@@ -433,6 +433,9 @@ CLASS_DEFAULTS = {
         "eval_max_leverage": 1.5,
 
         "eval_use_scaleout_trail": True,
+
+        # --- Conviction sizing (opt-in; mirrors live committee sizing) ---
+        "eval_use_conviction_sizing": False,
         "eval_tp1_z": 1.5,
         "eval_trail_k": 3.0,
         "eval_trail_dynamic_vol": True,
@@ -476,7 +479,7 @@ CLASS_DEFAULTS = {
         "output_profile": "thesis",
         "light_output": False,
 
-        "enable_pbo_mcs_analysis": False,
+        "enable_pbo_mcs_analysis": True,
 
         "allow_param_fallback": False,
         "min_trades_for_wfo": 0,
@@ -569,7 +572,7 @@ CLASS_DEFAULTS = {
         "cv_invalid_share_penalty": 5.0,
 
         # --- Evaluation cost model knobs (CV) ---
-        "eval_use_trading_costs": False,
+        "eval_use_trading_costs": True,
         "eval_spread_pips": 0.8,
         "eval_slip_mode": "tworegime",
         "eval_slip_bps_lo": 0.08,

@@ -63,6 +63,19 @@ class TestChronologicalFolds:
         for train, test in indices:
             assert len(np.intersect1d(train, test)) == 0
 
+    def test_purge_creates_gap_between_train_and_test(self):
+        """Purged folds: train ends at least purge_bars before test starts."""
+        indices = _chronological_fold_indices(500, 5, purge_bars=1, embargo_bars=0)
+        for train, test in indices:
+            if len(train) > 0 and len(test) > 0:
+                assert test.min() - train.max() >= 1
+
+    def test_embargo_creates_explicit_gap(self):
+        indices = _chronological_fold_indices(500, 5, purge_bars=1, embargo_bars=3)
+        for train, test in indices:
+            if len(train) > 0 and len(test) > 0:
+                assert test.min() - train.max() >= 3
+
     def test_insufficient_data_returns_empty(self):
         indices = _chronological_fold_indices(10, 5)
         assert indices == []
@@ -79,11 +92,28 @@ class TestMakeLabels:
         labels = _make_labels(df, threshold=0.001)
         assert set(np.unique(labels)) <= {-1, 0, 1}
 
-    def test_last_bar_is_buy(self):
+    def test_last_bar_is_neutral(self):
+        """The last bar has no forward return: neutral (0), not 'buy'."""
         prices = np.linspace(1.1000, 1.2000, 100)
         df = pd.DataFrame({"mid_c": prices})
         labels = _make_labels(df)
-        assert labels[-1] == 1
+        assert labels[-1] == 0
+
+    def test_sell_neutral_buy_convention(self):
+        prices = np.array([1.0000, 1.0000, 1.0100, 0.9900, 1.0001, 0.9998])
+        df = pd.DataFrame({"mid_c": prices})
+        labels = _make_labels(df, threshold=0.0001)
+        # bar0 -> next return 0.0000 -> neutral
+        # bar1 -> next return +0.00995 > thr -> buy
+        # bar2 -> next return -0.0200 < -thr -> sell
+        # bar3 -> next return +0.01015 > thr -> buy
+        # bar4 -> next return -0.0003 < -thr -> sell
+        assert labels[0] == 0
+        assert labels[1] == 1
+        assert labels[2] == -1
+        assert labels[3] == 1
+        assert labels[4] == -1
+        assert labels[5] == 0
 
 
 # ============================================================

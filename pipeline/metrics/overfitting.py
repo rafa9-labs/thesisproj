@@ -381,9 +381,12 @@ def compute_overfitting_report(
         try:
             from pipeline.metrics.dsr import deflated_sharpe_ratio
             n_trials_use = n_hpo_trials if n_hpo_trials is not None and n_hpo_trials > 0 else 1
+            # Monthly walk-forward records: sr_hat is annualized, T counts
+            # months, so convert with periods_per_year=12 (Bailey & LdP 2014).
             report.dsr_value = round(float(deflated_sharpe_ratio(
-                oos_sr, T=max(total_trades, len(returns_finite)),
-                N_trials=n_trials_use, skew=_skew, kurt=_kurt, sr_star=0.0
+                oos_sr, T=max(len(returns_finite), 2),
+                N_trials=n_trials_use, skew=_skew, kurt=_kurt, sr_star=0.0,
+                periods_per_year=12.0,
             )), 4)
         except Exception:
             report.dsr_value = None
@@ -394,27 +397,31 @@ def compute_overfitting_report(
 def _compute_dsr_min_sharpe(n_hpo_trials: int, n_oos_periods: int, n_total_trades: int) -> float:
     """Minimum annualized Sharpe for statistical significance after multiple testing.
 
-    Based on the Deflated Sharpe Ratio framework (Lopez de Prado, Bailey et al. 2014).
+    Based on the Deflated Sharpe Ratio framework (Lopez de Prado, Bailey et al. 2014):
+    min_sr = (E[max_N] + z_alpha) * sigma_SR, annualized (12 periods/year).
+
     Accounts for:
-    - Number of HPO trials (multiple testing correction via Sidak)
-    - Number of OOS periods (estimation error)
+    - Number of HPO trials (expected maximum under selection, Eq. 7)
+    - Number of OOS periods (estimation error of the SR estimate)
     - Minimum trades (reliability floor)
 
-    Returns a float: the minimum Sharpe ratio a strategy must achieve to be
-    considered statistically significant at the 95% confidence level.
+    Returns a float: the minimum ANNUALIZED Sharpe ratio a strategy must achieve
+    to be considered statistically significant at the 95% confidence level.
     """
     from math import sqrt
     from scipy.stats import norm as _norm
 
-    m = max(n_hpo_trials, 1)
-    n = max(n_oos_periods, 6)
+    m = max(int(n_hpo_trials), 1)
+    n = max(int(n_oos_periods), 2)
 
-    # Sidak correction for multiple testing
-    adj_alpha = 1.0 - (1.0 - 0.05) ** (1.0 / m)
-    z_adj = _norm.ppf(1.0 - adj_alpha / 2.0)
+    from pipeline.metrics.dsr import expected_max_sharpe
+    e_max = float(expected_max_sharpe(m))
+    z_alpha = float(_norm.ppf(0.95))
 
-    # Minimum Sharpe for the given number of OOS observations
-    min_sr = z_adj / sqrt(n)
+    # Standard error of the per-period SR estimate under selection
+    # (i.i.d. approximation: sigma_SR ~ 1/sqrt(n)).
+    sigma_sr = 1.0 / sqrt(n)
+    min_sr = (e_max + z_alpha) * sigma_sr * sqrt(12.0)
 
     # Reliability penalty for very few trades
     if n_total_trades < 10:

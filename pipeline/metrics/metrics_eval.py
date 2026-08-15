@@ -595,6 +595,7 @@ def compute_full_evaluation_metrics(
 
 
     trades_sig = np.zeros(n, dtype=float)
+    stop_fill_price = None
 
     _is_cv = bool(eval_context) and (str(eval_context).startswith("cv:") or str(eval_context).startswith("hpo:"))
 
@@ -619,6 +620,7 @@ def compute_full_evaluation_metrics(
             use_vol_target=use_vol_target,
             target_bar=target_bar,
             max_lev=max_lev,
+            use_conviction_sizing=bool(_cfg("eval_use_conviction_sizing", False)),
             use_trail=use_trail,
             tp1_z_base=tp1_z_base,
             trail_k_base=trail_k_base,
@@ -678,11 +680,11 @@ def compute_full_evaluation_metrics(
             trailing_chandelier_lookback=_cfg("trailing_chandelier_lookback", 22),
             trailing_activation_pips=_cfg("trailing_activation_pips", 10.0),
             risk_use_dd_breaker=_cfg("risk_use_dd_breaker", False),
-            risk_max_drawdown_pct=_cfg("risk_max_drawdown_pct", 0.20),
+            risk_max_drawdown_pct=_cfg("risk_max_drawdown_pct", 0.15),
             risk_dd_resume=_cfg("risk_dd_resume", "session_end"),
             risk_dd_cooloff_bars=_cfg("risk_dd_cooloff_bars", 48),
             risk_use_daily_loss=_cfg("risk_use_daily_loss", False),
-            risk_max_daily_loss_pct=_cfg("risk_max_daily_loss_pct", 0.03),
+            risk_max_daily_loss_pct=_cfg("risk_max_daily_loss_pct", 0.05),
             risk_max_daily_loss_sigma=_cfg("risk_max_daily_loss_sigma", 3.0),
             risk_daily_loss_mode=_cfg("risk_daily_loss_mode", "pct"),
             risk_use_consec_loss=_cfg("risk_use_consec_loss", False),
@@ -694,6 +696,10 @@ def compute_full_evaluation_metrics(
         )
 
         record_cost_columns = bool(_cfg("eval_record_cost_columns", False)) or bool(debug_costs)
+
+        confidence_arr = None
+        if bool(_cfg("eval_use_conviction_sizing", False)) and "confidence" in df.columns:
+            confidence_arr = pd.to_numeric(df["confidence"], errors="coerce").fillna(0.5).astype(float).to_numpy(copy=False)
 
         result = run_execution_loop(
             df=df,
@@ -707,10 +713,12 @@ def compute_full_evaluation_metrics(
             slippage_factor=slippage_factor,
             session_flag_arr=session_flag_arr,
             record_cost_columns=record_cost_columns,
+            confidence=confidence_arr,
         )
 
         pos_actual = result.pos_actual
         strat = result.strat
+        stop_fill_price = getattr(result, "stop_fill_price", None)
         tp1_hits = result.tp1_hits
         stop_hits = result.stop_hits
         timeouts = result.timeouts
@@ -738,6 +746,8 @@ def compute_full_evaluation_metrics(
     df["position"] = pd.Series(pos_actual, index=df.index)
     df["position_exec"] = df["position"]
     df["strategy"] = pd.Series(strat, index=df.index)
+    if stop_fill_price is not None and len(stop_fill_price) == len(df):
+        df["stop_fill_price"] = pd.Series(stop_fill_price, index=df.index)
     
     # Exec/trade audit (post-position) so month_eval logs reflect executed state.
     if eval_print_causality:

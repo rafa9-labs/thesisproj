@@ -41,6 +41,14 @@ from pipeline.execution.position_sizing import (
     compute_size,
     update_state,
 )
+from pipeline.execution.stops import (
+    StopConfig,
+    StopLevels,
+    StopMethod,
+    compute_stop_levels,
+    check_stop_hit,
+)
+from trading.vol_tracker import VolTracker
 from trading.risk_controls import (
     LiveRiskConfig,
     LiveRiskState,
@@ -134,6 +142,9 @@ class CommitteeTradingEngine:
         self._instrument: str = ""
         self._stopped: bool = False
         self._session_start: float = 0.0
+        self._vol_tracker: VolTracker | None = None
+        self._stop_cfg: StopConfig | None = None
+        self._stop_levels: StopLevels | None = None
 
     # ── Lifecycle ──────────────────────────────────────────────
 
@@ -163,6 +174,21 @@ class CommitteeTradingEngine:
         self._sizing_config.trust_multiplier = max(0.0, min(1.0, trust_mult))
 
         self._sizing_state = SizingState(equity=initial_equity)
+
+        self._vol_tracker = VolTracker()
+
+        stop_cfg_raw = config.get("stop_config") or {}
+        self._stop_cfg = StopConfig(
+            method=str(stop_cfg_raw.get("method", StopMethod.NONE)),
+            sl_pips=float(stop_cfg_raw.get("sl_pips", 30.0)),
+            tp_pips=float(stop_cfg_raw.get("tp_pips", 60.0)),
+            sl_atr_mult=float(stop_cfg_raw.get("sl_atr_mult", 2.0)),
+            tp_atr_mult=float(stop_cfg_raw.get("tp_atr_mult", 3.0)),
+            sl_sigma_mult=float(stop_cfg_raw.get("sl_sigma_mult", 2.0)),
+            tp_sigma_mult=float(stop_cfg_raw.get("tp_sigma_mult", 3.0)),
+            pip_value=float(stop_cfg_raw.get("pip_value", 0.0001)),
+        )
+        self._stop_levels = None
 
         self._risk_config = LiveRiskConfig(initial_equity=initial_equity)
         if not isinstance(risk_overrides, dict):
@@ -310,6 +336,44 @@ class CommitteeTradingEngine:
 
         p.signal_count += 1
 
+        # Engine-side stop/TP check (mirrors backtest stops; server-side
+        # SL/TP is the primary defense in live mode).
+        if p.position != 0 and self._stop_levels is not None and self._stop_cfg is not None:
+            exit_quote = bid if p.position == 1 else ask
+            hit, hit_type = check_stop_hit(self._stop_levels, exit_quote, float(p.position))
+            if hit:
+                if hit_type == "sl":
+                    fill_price = self._stop_levels.sl_price
+                    reason_close = "stop_loss"
+                else:
+                    fill_price = (
+                        self._stop_levels.tp2_price if hit_type == "tp2"
+                        else self._stop_levels.tp_price
+                    )
+                    reason_close = "take_profit"
+                if p.open_trade is not None:
+                    closed_pnl = p.open_trade.close(fill_price, reason=reason_close, ts=now)
+                    p.realized_sum += closed_pnl
+                    p.closed_trades.append(p.open_trade)
+                    update_state(self._sizing_state, closed_pnl, closed_pnl > 0)
+                    events.append({
+                        "event": "trade_closed",
+                        "trade_id": p.open_trade.trade_id,
+                        "direction": _DIRECTION_REV[p.open_trade.direction],
+                        "entry_price": p.open_trade.entry_price,
+                        "exit_price": fill_price,
+                        "pnl": round(closed_pnl, 2),
+                        "is_win": closed_pnl > 0,
+                        "exit_reason": reason_close,
+                        "time": now,
+                    })
+                    p.open_trade = None
+                p.position = 0
+                p.size = 0.0
+                p.entry_price = 0.0
+                p.unrealized_pnl = 0.0
+                self._stop_levels = None
+
         if target == p.position and target != 0:
             p.unrealized_pnl = p.position * (mid - p.entry_price) * p.size
             p.equity = p.initial_equity + p.realized_sum + p.unrealized_pnl
@@ -383,7 +447,16 @@ class CommitteeTradingEngine:
                 result["sub_events"] = events
             return result
 
-        size = float(compute_size(self._sizing_state, 0.0, 0.0, self._sizing_config))
+        # Volatility inputs: prefer the runner's bar-buffer values (real OHLC),
+        # fall back to the engine's mid-price tracker.
+        bar_vol = float(getattr(signal, "bar_vol", 0.0) or 0.0)
+        atr = float(getattr(signal, "atr", 0.0) or 0.0)
+        if bar_vol <= 0.0 or atr <= 0.0:
+            t_vol, t_atr = self._vol_tracker.update(mid) if self._vol_tracker else (0.0, 0.0)
+            bar_vol = bar_vol if bar_vol > 0.0 else t_vol
+            atr = atr if atr > 0.0 else t_atr
+
+        size = float(compute_size(self._sizing_state, bar_vol, atr, self._sizing_config))
         if size <= 0:
             size = 1.0
         size = size * conviction_multiplier
@@ -429,8 +502,27 @@ class CommitteeTradingEngine:
         if self._mode == "live" and oanda_client is not None:
             try:
                 instrument = self._instrument
-                units = max(1, int(round(size)))
-                order_result = oanda_client.place_market_order(instrument, units)
+                # Backtest sizes are lots (contract_size=100_000); OANDA units
+                # are 1/100_000 of a lot.
+                units = max(1, int(round(size * float(self._sizing_config.contract_size))))
+
+                stop_loss = None
+                take_profit = None
+                if self._stop_cfg is not None and self._stop_cfg.method != StopMethod.NONE:
+                    entry_ref = ask if target == 1 else bid
+                    self._stop_levels = compute_stop_levels(
+                        self._stop_cfg, entry_ref, float(target),
+                        atr=atr, bar_vol=bar_vol,
+                    )
+                    if self._stop_levels.sl_price > 0:
+                        stop_loss = self._stop_levels.sl_price
+                    if self._stop_levels.tp_price > 0:
+                        take_profit = self._stop_levels.tp_price
+
+                order_result = oanda_client.place_market_order(
+                    instrument, units,
+                    stop_loss=stop_loss, take_profit=take_profit,
+                )
                 fill_price = 0.0
                 result_body = order_result.get("orderFillTransaction", order_result)
                 if isinstance(result_body, dict):
@@ -466,6 +558,15 @@ class CommitteeTradingEngine:
                 }
         else:
             entry_price = ask if target == 1 else bid
+            self._stop_levels = None
+            if self._stop_cfg is not None and self._stop_cfg.method != StopMethod.NONE:
+                try:
+                    self._stop_levels = compute_stop_levels(
+                        self._stop_cfg, entry_price, float(target),
+                        atr=atr, bar_vol=bar_vol,
+                    )
+                except Exception:
+                    self._stop_levels = None
 
         trade = CommitteeTrade(
             trade_id=self._next_trade_id(),

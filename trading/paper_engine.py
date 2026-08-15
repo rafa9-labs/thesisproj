@@ -32,6 +32,16 @@ from pipeline.execution.position_sizing import (
     update_state,
 )
 
+from pipeline.execution.stops import (
+    StopConfig,
+    StopLevels,
+    StopMethod,
+    compute_stop_levels,
+    check_stop_hit,
+)
+
+from trading.vol_tracker import VolTracker
+
 _DIRECTION_MAP = {"LONG": 1, "SHORT": -1, "FLAT": 0}
 _DIRECTION_REV = {1: "LONG", -1: "SHORT", 0: "FLAT"}
 
@@ -105,6 +115,9 @@ class PaperEngine:
         self._sizing_state: SizingState | None = None
         self._session_start: float = 0.0
         self._stopped: bool = False
+        self._vol_tracker: VolTracker | None = None
+        self._stop_cfg: StopConfig | None = None
+        self._stop_levels: StopLevels | None = None
 
     # ── Lifecycle ──────────────────────────────────────────────
 
@@ -122,6 +135,21 @@ class PaperEngine:
         if not (trust_mult >= 0 and trust_mult <= 1.0):
             trust_mult = 0.0
         self._sizing_config.trust_multiplier = trust_mult
+
+        self._vol_tracker = VolTracker()
+
+        stop_cfg_raw = config.get("stop_config") or {}
+        self._stop_cfg = StopConfig(
+            method=str(stop_cfg_raw.get("method", StopMethod.NONE)),
+            sl_pips=float(stop_cfg_raw.get("sl_pips", 30.0)),
+            tp_pips=float(stop_cfg_raw.get("tp_pips", 60.0)),
+            sl_atr_mult=float(stop_cfg_raw.get("sl_atr_mult", 2.0)),
+            tp_atr_mult=float(stop_cfg_raw.get("tp_atr_mult", 3.0)),
+            sl_sigma_mult=float(stop_cfg_raw.get("sl_sigma_mult", 2.0)),
+            tp_sigma_mult=float(stop_cfg_raw.get("tp_sigma_mult", 3.0)),
+            pip_value=float(stop_cfg_raw.get("pip_value", 0.0001)),
+        )
+        self._stop_levels = None
 
         self._sizing_state = SizingState(equity=initial_equity)
         self._session_start = time.time()
@@ -178,6 +206,36 @@ class PaperEngine:
 
     # ── Core signal processing ─────────────────────────────────
 
+    def _close_open_position(self, exit_price: float, reason: str, now: float, events: list) -> None:
+        """Close the open trade at the given price and record the event."""
+        p = self.portfolio
+        if p is None or p.open_trade is None or p.position == 0:
+            return
+        p.open_trade.close(exit_price, reason=reason, ts=now)
+        is_win = p.open_trade.pnl > 0
+        p.realized_sum += p.open_trade.pnl
+        p.closed_trades.append(p.open_trade)
+        update_state(self._sizing_state, p.open_trade.pnl, is_win)
+
+        events.append({
+            "event": "trade_closed",
+            "trade_id": p.open_trade.trade_id,
+            "direction": _DIRECTION_REV[p.open_trade.direction],
+            "entry_price": p.open_trade.entry_price,
+            "exit_price": exit_price,
+            "pnl": round(p.open_trade.pnl, 2),
+            "is_win": is_win,
+            "exit_reason": reason,
+            "time": now,
+        })
+
+        p.open_trade = None
+        p.position = 0
+        p.size = 0.0
+        p.entry_price = 0.0
+        p.unrealized_pnl = 0.0
+        self._stop_levels = None
+
     def process_signal(self, signal: dict, bid: float, ask: float, mid: float) -> dict:
         if self._stopped:
             return {"event": "already_stopped"}
@@ -190,6 +248,28 @@ class PaperEngine:
         target = _DIRECTION_MAP.get(direction_str, 0)
         now = time.time()
         events: list[dict] = []
+
+        # Track volatility/ATR so sizing and stops see real values (backtest-aligned)
+        bar_vol, atr = self._vol_tracker.update(mid)
+
+        # Stop/TP check against the exit-side quote (mirrors backtest stops)
+        if p.position != 0 and self._stop_levels is not None and self._stop_cfg is not None:
+            exit_quote = bid if p.position == 1 else ask
+            hit, hit_type = check_stop_hit(
+                self._stop_levels, exit_quote, float(p.position),
+            )
+            if hit:
+                if hit_type == "sl":
+                    fill_price = self._stop_levels.sl_price
+                    reason = "stop_loss"
+                else:
+                    fill_price = (
+                        self._stop_levels.tp2_price if hit_type == "tp2"
+                        else self._stop_levels.tp_price
+                    )
+                    reason = "take_profit"
+                self._close_open_position(fill_price, reason, now, events)
+                p = self.portfolio  # state may have been updated
 
         if target == p.position and p.position != 0:
             p.unrealized_pnl = p.position * (mid - p.entry_price) * p.size
@@ -212,35 +292,24 @@ class PaperEngine:
         if p.position != 0 and p.open_trade is not None:
             exit_price = bid if p.position == 1 else ask
             reason = "signal_reversal" if target != 0 else "signal_flat"
-            p.open_trade.close(exit_price, reason=reason, ts=now)
-            is_win = p.open_trade.pnl > 0
-            p.realized_sum += p.open_trade.pnl
-            p.closed_trades.append(p.open_trade)
-            update_state(self._sizing_state, p.open_trade.pnl, is_win)
-
-            events.append({
-                "event": "trade_closed",
-                "trade_id": p.open_trade.trade_id,
-                "direction": _DIRECTION_REV[p.open_trade.direction],
-                "entry_price": p.open_trade.entry_price,
-                "exit_price": exit_price,
-                "pnl": round(p.open_trade.pnl, 2),
-                "is_win": is_win,
-                "exit_reason": reason,
-                "time": now,
-            })
-
-            p.open_trade = None
-            p.position = 0
-            p.size = 0.0
-            p.entry_price = 0.0
-            p.unrealized_pnl = 0.0
+            self._close_open_position(exit_price, reason, now, events)
 
         if target != 0:
             entry_price = ask if target == 1 else bid
-            size = float(compute_size(self._sizing_state, 0.0, 0.0, self._sizing_config))
+            size = float(compute_size(self._sizing_state, bar_vol, atr, self._sizing_config))
             if size <= 0:
                 size = 1.0
+
+            # Backtest-consistent stop levels (anchored at the entry price)
+            self._stop_levels = None
+            if self._stop_cfg is not None and self._stop_cfg.method != StopMethod.NONE:
+                try:
+                    self._stop_levels = compute_stop_levels(
+                        self._stop_cfg, entry_price, float(target),
+                        atr=atr, bar_vol=bar_vol,
+                    )
+                except Exception:
+                    self._stop_levels = None
 
             trade = Trade(
                 trade_id=self._next_trade_id(),

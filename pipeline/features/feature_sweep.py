@@ -172,15 +172,17 @@ def expand_features(df: pd.DataFrame) -> pd.DataFrame:
 def _make_labels(df: pd.DataFrame, threshold: float = 0.0001) -> np.ndarray:
     """3-class labels from next-bar returns.
 
-    0 = sell (return < -threshold)
-    1 = neutral (|return| <= threshold)
-    2 = buy (return > threshold)
+    Convention (unified with boruta_sweep and the pipeline):
+    -1 = sell (return < -threshold)
+     0 = neutral (|return| <= threshold)
+    +1 = buy (return > threshold)
+    The last bar has no forward return and is labelled neutral (0); callers
+    should drop it before fitting.
     """
     fwd_returns = df["returns"].shift(-1).values
-    labels = np.ones(len(df), dtype=np.int32)
-    labels[fwd_returns > threshold] = 2
-    labels[fwd_returns < -threshold] = 0
-    labels[-1] = -1
+    labels = np.zeros(len(df), dtype=np.int32)
+    labels[fwd_returns > threshold] = 1
+    labels[fwd_returns < -threshold] = -1
     return labels
 
 
@@ -257,9 +259,10 @@ def sweep_features(
     df_feat = expand_features(df)
     labels = _make_labels(df_feat, threshold=label_threshold)
 
-    valid = labels != -1
-    df_feat = df_feat.loc[valid].copy()
-    labels = labels[valid]
+    # Drop only the last bar (no forward label exists for it). Neutral bars
+    # are kept so selection reflects the full 3-class problem.
+    df_feat = df_feat.iloc[:-1].copy()
+    labels = labels[:-1]
 
     exclude = {"returns", "time", "timestamp", "label",
                "mid_h", "mid_l", "mid_c", "mid_o",
@@ -289,11 +292,19 @@ def sweep_features(
     fold_importances: List[Dict[str, float]] = []
 
     for fi in range(n_folds):
-        train_end = min((fi + 1) * fold_size, n - fold_size)
-        test_start = train_end
+        split_at = min((fi + 1) * fold_size, n - fold_size)
+        # Purge 1 bar: labels are next-bar returns, so the last train bar's
+        # label window touches the test block.
+        train_end = max(0, split_at - 1)
+        test_start = split_at
         test_end = min(test_start + fold_size, n)
 
         if test_end - test_start < 50:
+            continue
+
+        if train_end < 50:
+            # Degenerate fold geometry (tiny datasets): not enough training
+            # history for a reliable fold — skip it.
             continue
 
         X_train, X_test = X[:train_end], X[test_start:test_end]

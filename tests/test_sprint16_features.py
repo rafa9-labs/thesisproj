@@ -365,13 +365,22 @@ class TestDSRThreshold:
         from pipeline.metrics.overfitting import _compute_dsr_min_sharpe
         threshold = _compute_dsr_min_sharpe(50, 24, 60)
         assert threshold is not None
-        assert 0.2 < threshold < 1.5
+        # Paper-consistent MinSR: (E[max_N] + z_0.95)/sqrt(n) * sqrt(12).
+        # With 50 trials and 24 OOS months this is ~2.7 (annualized), far
+        # above the old lenient Sidak heuristic (~0.5).
+        assert 1.0 < threshold < 5.0
 
     def test_dsr_more_trials_higher_threshold(self):
         from pipeline.metrics.overfitting import _compute_dsr_min_sharpe
         t1 = _compute_dsr_min_sharpe(10, 24, 60)
         t2 = _compute_dsr_min_sharpe(200, 24, 60)
         assert t2 > t1
+
+    def test_dsr_more_periods_lower_threshold(self):
+        from pipeline.metrics.overfitting import _compute_dsr_min_sharpe
+        t1 = _compute_dsr_min_sharpe(50, 24, 60)
+        t2 = _compute_dsr_min_sharpe(50, 96, 60)
+        assert t2 < t1
 
 
 # =====================================================================

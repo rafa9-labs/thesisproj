@@ -249,57 +249,25 @@ class DeepMixin:
         std_ret = mat.std(axis=0, ddof=1)
         sharpe_like = mean_ret / std_ret.replace(0.0, _np.nan)
 
-        # --- CSCV-style PBO estimate (Bailey et al.) ---
-        R = mat.to_numpy(dtype=float)
-        T, S = R.shape
+        # --- Proper CSCV PBO (Bailey et al. 2016) ---
+        # matrix: rows = configurations (strategies), columns = common periods.
+        from pipeline.metrics.pbo import compute_pbo
+        R = mat.to_numpy(dtype=float).T  # (n_strategies, n_months)
 
-        n_splits = min(200, max(20, T * 10))  # scale with #months, but cap for runtime
-        omegas = []
-
-        rng = _np.random.default_rng(seed=42)  # deterministic for reproducibility
-        for _ in range(n_splits):
-            # Random train/test split over months (roughly half-half)
-            if T < 4:
-                break
-            train_idx = _np.sort(rng.choice(T, size=max(2, T // 2), replace=False))
-            test_mask = _np.ones(T, dtype=bool)
-            test_mask[train_idx] = False
-            if test_mask.sum() < 2:
-                continue
-
-            train_mask = _np.zeros(T, dtype=bool)
-            train_mask[train_idx] = True
-
-            R_train = R[train_mask]
-            R_test = R[test_mask]
-
-            # In-sample mean per strategy; pick best
-            is_mean = _np.nanmean(R_train, axis=0)
-            if _np.all(~_np.isfinite(is_mean)):
-                continue
-            best_idx = int(_np.nanargmax(is_mean))
-
-            # Out-of-sample performance for all strategies
-            oos_mean = _np.nanmean(R_test, axis=0)
-            if not _np.isfinite(oos_mean[best_idx]):
-                continue
-
-            # Empirical OOS quantile of the chosen strategy
-            # rank 1=worst, S=best  -> quantile in (0,1)
-            ranks = _np.argsort(_np.argsort(oos_mean))  # 0-based rank
-            u = (ranks[best_idx] + 1) / float(S + 1e-9)
-            if u <= 0.0 or u >= 1.0 or not _np.isfinite(u):
-                continue
-
-            # Overfitting statistic omega = logit(u)
-            omega = _np.log(u / (1.0 - u))
-            omegas.append(omega)
-
-        if omegas:
-            omegas = _np.asarray(omegas, dtype=float)
-            pbo = float(_np.mean(omegas <= 0.0))
-        else:
-            pbo = float("nan")
+        # CSCV requires a complete matrix: keep only periods observed by every
+        # strategy, then require enough periods for the chosen number of subsets.
+        R_clean = R[:, ~_np.isnan(R).any(axis=0)]
+        n_configs, n_periods = R_clean.shape
+        pbo = float("nan")
+        if n_configs >= 2 and n_periods >= 4:
+            try:
+                pbo = float(compute_pbo(
+                    R_clean,
+                    S=min(16, n_periods),
+                    seed=42,
+                ))
+            except Exception:
+                pbo = float("nan")
 
         # --- Simple MCS proxy (NOT full Hansen-Lunde-Nason MCS) ---
         # Keep strategies whose mean return is within 1 std-error of the best.
@@ -330,7 +298,7 @@ class DeepMixin:
                 level="COMPACT",
             )
             log_print(
-                f"[PBO/MCS] Estimated PBO = {pbo:.3f} based on {len(omegas) if omegas else 0} splits.",
+                f"[PBO/MCS] Estimated PBO = {pbo:.3f} (CSCV, {n_configs} configs x {n_periods} periods).",
                 level="COMPACT",
             )
             log_print(

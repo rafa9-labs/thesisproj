@@ -103,8 +103,12 @@ def main() ->  None:
     elif _HURRY:
         TRIAL_COUNTS = dict(_TRIAL_COUNTS_FAST)
 
-    N_REAL_MONTHS = int(os.environ.get("N_MONTHS", "1" if _SMOKE else "3"))  # default 36 for full run
+    N_REAL_MONTHS = int(os.environ.get("N_MONTHS", "1" if _SMOKE else "12"))  # 12 OOS months minimum for a statistically meaningful default
     END_DATE = "2025-12-01 00:00:00"   # end-of-Aug 2025, inclusive-ish for bar data
+
+    # Trading costs are ON by default for headline runs; set TRADING_COSTS=0
+    # for the academic no-cost ablation (wsl_runner.py already exports this).
+    TRADING_COSTS = os.environ.get("TRADING_COSTS", "1").strip().lower() not in ("0", "false", "no")
 
     # 1) Load feature configuration
     with open("configs/feature_config.json", "r") as f:
@@ -209,6 +213,14 @@ def main() ->  None:
     ]
     
     print(f"\n[TEST] Models for real trading simulation: {MODEL_LIST}")
+
+    # Fresh, isolated config for the alternate modes below (and recreated per
+    # repeat in the main loop). Must exist BEFORE the dispatch blocks that
+    # consume it.
+    features_config_rep = deepcopy(features_config)
+    features_config_rep["run_seed"] = int(SEEDS[0])
+    features_config_rep.pop("eval_seed_sets", None)
+    features_config_rep.pop("test_warmup_bars", None)
 
     # ── PROFILE MODE: run ExpertProfiler instead of normal backtest ──
     _PROFILE = os.environ.get("PROFILE", "").strip().lower() in ("1", "true", "yes")
@@ -341,7 +353,7 @@ def main() ->  None:
                     symbol=PAIR,
                     start="2019-10-01 00:00:00",
                     end=END_DATE,
-                    trading_costs=False,
+                    trading_costs=TRADING_COSTS,
                     features_config=model_features_cfg,
                     use_oof=("ensemble" in model_type),
                 )

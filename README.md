@@ -117,6 +117,23 @@ A commercial-grade walk-forward backtesting engine for Forex trading strategies.
 - **Trailing Stops**: Standard (fixed pips), ATR trailing, Chandelier Exit
 - **Risk Management**: Max drawdown circuit breaker, consecutive loss limits, daily loss limits, cooloff periods
 - **Cost Modeling**: Spread + slippage modeled per bar, configurable via `ExecutionConfig`
+- **Stop-fill accounting**: stop/TP exits are booked at the stop price (clamped to the triggering bar's
+  high/low range) instead of skipping the exit bar's move — no optimism on losing exits
+- **Trading costs ON by default**: headline CLI runs include spread + slippage
+  (`TRADING_COSTS=0` for the academic no-cost ablation)
+
+### Validation & Anti-Overfitting
+- **Walk-forward optimization** with purged (de Prado AFML Ch. 7) and embargoed mini-block CV
+- **Probability of Backtest Overfitting (PBO)** — proper Bailey et al. (2016) CSCV over the
+  configurations × time matrix (balanced C(S, S/2) combinations, ω logits); reported as `NaN`
+  when the matrix is insufficient instead of fabricating inputs
+- **Deflated Sharpe Ratio (DSR)** — Bailey & López de Prado (2014) with non-normality,
+  selection-bias (E[max] across HPO trials) and sample-length corrections at the correct
+  observation frequency (`periods_per_year`)
+- **Probabilistic Sharpe (PSR)**, HAC (Newey-West) Sharpe, MinTRL-style reliability floors
+- **Deployment-refit guard**: the uncapped final refit is adopted only when it beats the
+  Optuna-validated snapshot on the same fold; ties prefer the validated result
+- **Trust score** with robust NaN handling over PBO / DSR / regime coverage / worst-fold Sharpe
 
 ### Feature Engineering
 - **80+ Technical Indicators**: RSI, MACD, Bollinger Bands, ATR, ADX, Stochastic, CCI, Williams %R, OBV, VWAP, Ichimoku, and more
@@ -455,10 +472,11 @@ Per-model HPO search spaces in `SEARCH_SPACE`:
 ### Environment Variables
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `MODEL_LIST` | all | Comma-separated model names to run |
-| `SEEDS` | 42 | Random seeds (comma-separated) |
+| `MODEL_LIST` | logistic,xgboost | Comma-separated model names to run |
+| `SEEDS` | 33333 | Random seeds (comma-separated) |
 | `REPEATS` | 1 | Number of repeat runs |
-| `N_MONTHS` | 3 | Walk-forward months |
+| `N_MONTHS` | 12 | Walk-forward months (12 = statistically meaningful minimum) |
+| `TRADING_COSTS` | 1 | Set to 0 for the no-cost academic ablation |
 | `SMOKE_TEST` | 0 | Set to 1 for fast smoke mode |
 | `NEWSAPI_KEY` | — | NewsAPI key (optional) |
 
