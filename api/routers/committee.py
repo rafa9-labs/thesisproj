@@ -562,6 +562,7 @@ class FullCycleResultsResponse(BaseModel):
     racecar_committee_config: Optional[Dict[str, Any]] = None
     racecar_backtest: Optional[Dict[str, Any]] = None
     phase3_fold_consistency_cv: float = 0.0
+    phase3_fold_consistency_pass: bool = False
     phase3_regime_coverage: Optional[Dict[str, Any]] = None
     phase3_seed_robustness_sharpe: float = 0.0
     phase3_seed_robustness_seeds: int = 3
@@ -1163,14 +1164,13 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
         # ──────────────────────────────────────────────────────────────
         hpo_base_config: Dict[str, Any] = {}
         hpo_status: Dict[str, str] = {}
+        from pipeline.models.model_families import ModelStatus, is_gpu_model
         if not req.enable_phase3:
             log_info(job_id, "Phase 2: skipped (disabled)", phase_number=2)
             hpo_model_params: Dict[str, dict] = {}
             for m in survivors:
                 hpo_status[m] = ModelStatus.SKIPPED.value
         else:
-            from pipeline.models.model_families import ModelStatus, is_gpu_model
-
             _update_full_cycle_status(job_dir, "phase1_hpo", phase_number=2,
                                        current_action="Starting Phase 2 HPO",
                                        phase_progress=f"0/{len(survivors)}")
@@ -1896,6 +1896,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                     "racecar_committee_config": cc_data,
                     "racecar_backtest": bt_result.to_summary_dict(),
                     "phase3_fold_consistency_cv": round(float(cv), 4),
+                    "phase3_fold_consistency_pass": False,
                     "phase3_regime_coverage": {r: dict(v) for r, v in coverage.items()},
                     "phase3_seed_robustness_sharpe": round(float(seed_avg), 4),
                     "phase3_seed_robustness_seeds": 3,

@@ -695,3 +695,15 @@ FREE_MODELS = frozenset({"logistic", "xgboost", "random_forest"})
 FREE_EXECUTION_TYPES = frozenset({"fixed_lot"})
 LICENSE_TRIAL_DAYS = 14
 LICENSE_GRACE_PERIOD_DAYS = 7
+
+
+# ---------------------------------------------------------------------------
+# v3.0 Three-Tier Hyperparameter Architecture (single source of truth)
+# ---------------------------------------------------------------------------
+# SEARCH_SPACE is derived from Tier-1 (HPO) params only; FIXED_DEFAULTS from
+# Tier-3 (hidden/fixed) params. Tier-2 params are user dropdowns injected via
+# UserFixedConfig. See pipeline/models/model_defaults.py for definitions.
+from pipeline.models.model_defaults import build_search_space, build_fixed_defaults
+
+SEARCH_SPACE = build_search_space()
+FIXED_DEFAULTS = build_fixed_defaults()

@@ -113,11 +113,44 @@ def generate_favicon_ico():
     print(f"  [OK] {dst}")
 
 
+def generate_svg():
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect x="0" y="0" width="1024" height="1024" rx="128" fill="#050608"/>
+  <polygon points="512,128 896,512 512,896 128,512" fill="#00E5FF"/>
+  <polygon points="512,256 768,512 512,768 256,512" fill="#050608"/>
+</svg>
+"""
+    path = BUILD_DIR / "icon.svg"
+    path.write_text(svg, encoding="utf-8")
+    print(f"  [OK] {path}")
+
+
+def generate_installer_bmps():
+    header = Image.new("RGBA", (150, 57), DARK)
+    hd = ImageDraw.Draw(header)
+    _draw_diamond(hd, size=57, margin=14, fill=CYAN)
+    _draw_diamond(hd, size=57, margin=21, fill=DARK)
+    header = header.convert("RGB")
+
+    sidebar = Image.new("RGBA", (164, 314), DARK)
+    sd = ImageDraw.Draw(sidebar)
+    _draw_diamond(sd, size=120, margin=30, fill=CYAN)
+    _draw_diamond(sd, size=120, margin=45, fill=DARK)
+    sidebar = sidebar.convert("RGB")
+
+    for name, img in (("installer-header.bmp", header), ("installer-sidebar.bmp", sidebar)):
+        path = BUILD_DIR / name
+        img.save(path, "BMP")
+        print(f"  [OK] {path}")
+
+
 def main():
     print("[generate_icons] KodaQuant icon pipeline")
     generate_png()
     generate_ico()
     generate_favicon_ico()
+    generate_svg()
+    generate_installer_bmps()
     print("[generate_icons] Done.")
 
 

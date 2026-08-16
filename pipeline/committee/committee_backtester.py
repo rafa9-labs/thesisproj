@@ -153,6 +153,14 @@ class CommitteeBacktestResult:
                 and data["sharpe"] > min_sharpe
             )
             report[rname] = {**data, "covered": covered}
+        # Include configured regimes that were never active: they are
+        # uncovered by definition (0 trades, 0 active folds).
+        for rname in getattr(self.config, "regimes", {}) or {}:
+            if rname not in report:
+                report[rname] = {
+                    "sharpe": 0.0, "trades": 0, "folds_active": 0,
+                    "covered": False,
+                }
         return report
 
     @property

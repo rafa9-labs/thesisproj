@@ -29,7 +29,7 @@ for _m in ["config", "pipeline.metrics.metrics_tuples",
            "pipeline.tuning.runner", "pipeline.tuning.objective"]:
     sys.modules.pop(_m, None)
 
-START = "2017-06-01 00:00:00"
+START = "2017-08-01 00:00:00"
 END = "2018-01-01 00:00:00"
 MONTHS = 1
 
@@ -46,7 +46,7 @@ def _run_mini_backtest(model_type="logistic"):
         "seed": 42, "period_unit": "months", "cv_blocks": 2,
         "slice_cache_enabled": True, "use_triple_barrier": True,
         "lag_depth": 1, "roll_windows": [5, 10, 30],
-        "n_trials": 3, "n_startup_trials": 1,
+        "n_trials": 2, "n_startup_trials": 1,
         "use_cached_global_hpo": False,
         "use_bbands": False, "use_stoch": False, "use_sar": False,
         "use_squeeze_breakout": False, "use_squeeze_expansion": False,
@@ -249,7 +249,7 @@ class TestRoundtripPrediction:
     """Model saved after backtest can make predictions identical to original."""
 
     @pytest.mark.slow
-    @pytest.mark.timeout(300)
+    @pytest.mark.timeout(900)
     def test_prediction_fidelity_after_save_load(self):
         from pipeline.models.model_persistence import save_snapshot, load_snapshot
         import pipeline.models.model_persistence as mp

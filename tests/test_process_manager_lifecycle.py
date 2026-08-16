@@ -67,33 +67,38 @@ class TestRouting:
 
     def test_gpu_models_routed_to_gpu_pool(self, pm):
         mock_cpu_exec = MagicMock()
+        mock_cpu_exec._max_workers = 1
         mock_gpu_exec = MagicMock()
+        mock_gpu_exec._max_workers = 1
 
         with patch("api.process_manager.ProcessPoolExecutor") as mock_cls:
             mock_cls.side_effect = [mock_cpu_exec, mock_gpu_exec]
             pm.initialize(max_cpu=1, max_gpu=1, gpu_enabled=True)
-            pm.submit("gpu-job", {"models": ["lstm"]})
+            pm.submit_or_queue("gpu-job", {"models": ["lstm"]})
             mock_gpu_exec.submit.assert_called_once()
             mock_cpu_exec.submit.assert_not_called()
 
     def test_cpu_models_routed_to_cpu_pool(self, pm):
         mock_cpu_exec = MagicMock()
+        mock_cpu_exec._max_workers = 1
         mock_gpu_exec = MagicMock()
+        mock_gpu_exec._max_workers = 1
 
         with patch("api.process_manager.ProcessPoolExecutor") as mock_cls:
             mock_cls.side_effect = [mock_cpu_exec, mock_gpu_exec]
             pm.initialize(max_cpu=1, max_gpu=1, gpu_enabled=True)
-            pm.submit("cpu-job", {"models": ["logistic"]})
+            pm.submit_or_queue("cpu-job", {"models": ["logistic"]})
             mock_cpu_exec.submit.assert_called_once()
             mock_gpu_exec.submit.assert_not_called()
 
     def test_gpu_models_fallback_to_cpu_when_gpu_disabled(self, pm):
         mock_cpu = MagicMock()
+        mock_cpu._max_workers = 1
 
         with patch("api.process_manager.ProcessPoolExecutor") as mock_cls:
             mock_cls.return_value = mock_cpu
             pm.initialize(max_cpu=1, gpu_enabled=False)
-            pm.submit("gpu-fallback", {"models": ["lstm"]})
+            pm.submit_or_queue("gpu-fallback", {"models": ["lstm"]})
             mock_cpu.submit.assert_called_once()
 
 
@@ -101,16 +106,20 @@ class TestActiveState:
 
     def test_active_count(self, pm):
         with patch("api.process_manager.ProcessPoolExecutor") as mock_cls:
-            mock_cls.return_value = MagicMock()
-            pm.initialize(max_cpu=1, gpu_enabled=False)
-            pm.submit("job-1", {"models": ["logistic"]})
-            pm.submit("job-2", {"models": ["xgboost"]})
+            mock_pool = MagicMock()
+            mock_pool._max_workers = 2
+            mock_cls.return_value = mock_pool
+            pm.initialize(max_cpu=2, gpu_enabled=False)
+            pm.submit_or_queue("job-1", {"models": ["logistic"]})
+            pm.submit_or_queue("job-2", {"models": ["xgboost"]})
             assert pm.active_count == 2
 
     def test_active_job_ids(self, pm):
         with patch("api.process_manager.ProcessPoolExecutor") as mock_cls:
-            mock_cls.return_value = MagicMock()
-            pm.initialize(max_cpu=1, gpu_enabled=False)
-            pm.submit("job-a", {"models": ["logistic"]})
+            mock_pool = MagicMock()
+            mock_pool._max_workers = 2
+            mock_cls.return_value = mock_pool
+            pm.initialize(max_cpu=2, gpu_enabled=False)
+            pm.submit_or_queue("job-a", {"models": ["logistic"]})
             ids = pm.active_job_ids
             assert "job-a" in ids

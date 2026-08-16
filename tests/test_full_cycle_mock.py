@@ -155,7 +155,9 @@ def test_full_pipeline_direct(mock_ohlc_df, tmp_path):
     assert results["locked_features_count"] > 0, "Phase 1 did not produce features"
     assert results.get("pruned_features_count", 0) >= 0
     assert len(results.get("phase0_survivors", [])) == 2
-    assert results.get("racecar_profile_matrix") is not None, "Phase 2 matrix not saved"
+    # Phase 2 pre-screening was removed; the racecar profile matrix only exists
+    # when Phase 3+ runs (all phases disabled in this fast smoke).
+    assert results.get("racecar_profile_matrix") is None
 
     # Verify lock file is job-scoped
     lock_path = job_dir / "locked_features.json"
@@ -163,6 +165,8 @@ def test_full_pipeline_direct(mock_ohlc_df, tmp_path):
 
     with open(lock_path) as f:
         lock_data = json.load(f)
+    if isinstance(lock_data, dict):
+        lock_data = lock_data.get("locked_features", [])
     assert isinstance(lock_data, list)
     assert len(lock_data) >= 3
 

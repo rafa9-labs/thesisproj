@@ -27,12 +27,11 @@ _EXPECTED_TOTAL = 18  # registry-compatible models
 _CLASSICAL_MODELS = {"logistic", "svm", "random_forest", "decision_tree", "xgboost", "lightgbm", "catboost"}
 _DEEP_MODELS = {"cnn", "lstm", "transformer", "gru", "gru_lstm"}
 _RL_MODELS = {"dqn"}
-_ENSEMBLE_MODELS = {"ensemble_adaptive_regime", "meta_ensemble", "stacking_ensemble", "regime_classifier"}
+_ENSEMBLE_MODELS = {"ensemble_adaptive_regime", "ensemble_cnn_lstm_xgboost", "meta_ensemble", "stacking_ensemble", "regime_classifier"}
 _ALL_DESC_EXPECTED = _CLASSICAL_MODELS | _DEEP_MODELS | _RL_MODELS | _ENSEMBLE_MODELS
 
-# ensemble_cnn_lstm_xgboost is a special model with non-standard interface
-# It is in PAID_MODELS (pre-existing) but not in MODEL_REGISTRY or MODEL_DESCRIPTIONS
-_SPECIAL_MODELS = {"ensemble_cnn_lstm_xgboost"}
+# No special (non-registry) models: every model is registered and described.
+_SPECIAL_MODELS = set()
 
 
 class TestModelDescriptionsCompleteness:
@@ -220,7 +219,6 @@ class TestModelApiEndpoint:
             assert name in names, f"API missing: {name}"
         for name in _SPECIAL_MODELS:
             assert name not in names, f"API should NOT include special model: {name}"
-        assert "ensemble_cnn_lstm_xgboost" not in names, "non-registry model leaked into API"
 
     def test_get_models_each_has_category(self):
         resp = client.get(f"{_API_PREFIX}/models")

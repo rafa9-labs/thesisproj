@@ -214,7 +214,7 @@ class TestInitializeEdgeCases:
     def test_submit_before_initialize_raises(self):
         pm = ProcessManager()
         with pytest.raises(RuntimeError, match="not initialized"):
-            pm.submit("test-id-123", {"models": ["logistic"]})
+            pm.submit_or_queue("test-id-123", {"models": ["logistic"]})
 
     def test_atexit_handler_registered(self, monkeypatch):
         from unittest.mock import patch

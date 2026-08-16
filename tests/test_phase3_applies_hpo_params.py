@@ -136,7 +136,7 @@ def _make_synthetic_df(n):
     }, index=idx)
     df["returns"] = np.log(df["mid_c"] / df["mid_c"].shift(1)).fillna(0.0)
     # Add indicator columns needed by _prepare_features
-    df["sma_20"] = df["mid_c"].rolling(20).mean().fillna(method="bfill")
+    df["sma_20"] = df["mid_c"].rolling(20).mean().bfill()
     df["ema_20"] = df["mid_c"].ewm(span=20).mean()
     df["adx_14"] = 20.0
     df["rsi_14"] = 50.0

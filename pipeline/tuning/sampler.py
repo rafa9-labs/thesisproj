@@ -14,7 +14,7 @@ import optuna
 from joblib import parallel_backend
 from threadpoolctl import threadpool_limits
 
-from config import PIPELINE_CONSTANTS as _PC, SEARCH_SPACE, CV_SEARCH_SPACE
+from config import PIPELINE_CONSTANTS as _PC, SEARCH_SPACE, CV_SEARCH_SPACE, FIXED_DEFAULTS
 from utilsNoWFO import (
     TRAIN_TEST_MONTHS,
     TRAIN_TEST_MONTHS_DEBUG,
@@ -41,7 +41,7 @@ from pipeline.tuning.helpers import (
     MLB_TA_MODE,
 )
 
-def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, stage_config=None):
+def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, stage_config=None, user_config=None):
     """
     Drop-in replacement tuned for your model zoo, now strategy-gated.
 
@@ -220,13 +220,31 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
 
 
     # === Strategy family & TA backbone (profiled via MLB_TA_MODE) ===
-    ta_mode = os.environ.get("MLB_TA_MODE", "").strip().lower() or MLB_TA_MODE or "legacy"
-    if ta_mode == "fixed":
+    _uc_toggles = None
+    if user_config is not None:
+        _uc_toggles = dict(getattr(user_config, "feature_toggles", None) or {})
+
+    if _uc_toggles is not None:
+        # User-locked mode: feature toggles come from the user verbatim.
+        # Optuna must NEVER sample boolean feature toggles in this mode.
         _apply_ta_profile_fixed(trial, params)
-    elif ta_mode == "tuned":
-        _apply_ta_profile_tuned(trial, params)
+        params.update(_uc_toggles)
+        params.pop("strategy_type", None)
     else:
-        _apply_ta_profile_legacy(trial, params)
+        ta_mode = os.environ.get("MLB_TA_MODE", "").strip().lower() or MLB_TA_MODE or "legacy"
+        if ta_mode == "fixed":
+            _apply_ta_profile_fixed(trial, params)
+        elif ta_mode == "tuned":
+            _apply_ta_profile_tuned(trial, params)
+        else:
+            _apply_ta_profile_legacy(trial, params)
+        import warnings as _warnings
+        _warnings.warn(
+            "UserFixedConfig not provided to sample_param_set; feature toggles "
+            "are being sampled by Optuna. Provide user_config to lock them.",
+            FutureWarning,
+            stacklevel=2,
+        )
 
     # --- Guard ---
     if not models_to_test:
@@ -266,52 +284,102 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
         params["calibrate_method"] = trial.suggest_categorical("calibrate_method", ["sigmoid"])
 
     # === Feature engineering toggles ===
-    params["use_fracdiff"]     = trial.suggest_categorical("use_fracdiff", [False, True])
-    # P4: ADF floor prevents sub-stationarity d values (de Prado AFML Ch.5)
-    if params["use_fracdiff"]:
-        d_floor = 0.4
-        if train_data is not None and hasattr(train_data, "columns"):
-            price_col = None
-            for candidate in ("mid_c", "price", "close"):
-                if candidate in train_data.columns:
-                    price_col = candidate
-                    break
-            if price_col is not None:
-                try:
-                    from pipeline.features.feature_utils import find_min_stationary_d
-                    d_floor = find_min_stationary_d(train_data[price_col])
-                except Exception:
-                    pass
-        params["fracdiff_d"] = trial.suggest_float("fracdiff_d", max(0.1, d_floor), 0.9, step=0.05)
+    if _uc_toggles is not None:
+        # ---- User-locked conditional thresholds: sample only what the user enabled ----
+        params["use_fracdiff"] = bool(_uc_toggles.get("use_fracdiff", False))
+        if params["use_fracdiff"]:
+            params["fracdiff_d"] = trial.suggest_float("fracdiff_d", 0.1, 0.9, step=0.05)
+        else:
+            params["fracdiff_d"] = 0.0
+
+        params["use_rv_features"] = bool(_uc_toggles.get("use_rv_features", False))
+        if params["use_rv_features"]:
+            params["rv_window_short"] = trial.suggest_int("rv_window_short", 20, 60, step=10)
+            params["rv_window_long"] = trial.suggest_int("rv_window_long", 80, 240, step=20)
+
+        params["use_indicator_states"] = bool(_uc_toggles.get("use_indicator_states", False))
+        if params["use_indicator_states"]:
+            params["rsi_overbought_level"] = trial.suggest_int("rsi_overbought_level", 65, 80, step=5)
+            params["rsi_oversold_level"] = trial.suggest_int("rsi_oversold_level", 20, 35, step=5)
+            params["stoch_overbought_level"] = trial.suggest_int("stoch_overbought_level", 75, 90, step=5)
+            params["stoch_oversold_level"] = trial.suggest_int("stoch_oversold_level", 10, 30, step=5)
+            params["bbw_compress_threshold"] = trial.suggest_float("bbw_compress_threshold", 0.02, 0.15)
+            params["bbw_expand_threshold"] = trial.suggest_float("bbw_expand_threshold", 0.10, 0.40)
+
+        params["use_donchian"] = bool(_uc_toggles.get("use_donchian", False))
+        if params["use_donchian"]:
+            params["donchian_window_short"] = trial.suggest_int("donchian_window_short", 20, 60, step=10)
+            params["donchian_window_long"] = trial.suggest_int("donchian_window_long", 80, 240, step=20)
+
+        if bool(_uc_toggles.get("use_squeeze_expansion", False)):
+            params["squeeze_window"] = trial.suggest_int("squeeze_window", 150, 600, step=50)
+            params["squeeze_quantile"] = trial.suggest_float("squeeze_quantile", 0.80, 0.99, step=0.01)
+            params["adx_slope_window"] = trial.suggest_int("adx_slope_window", 5, 20, step=5)
+
+        # Indicator windows: sampled only for families the user enabled.
+        _iw = {}
+        _iw_ranges = {
+            "sma": (10, 100, 10), "ema": (10, 50, 5), "rsi": (7, 21, 7),
+            "macd_fast": (5, 15, 5), "macd_slow": (20, 40, 5),
+            "atr": (10, 30, 5), "adx": (14, 30, 7),
+        }
+        for _fam, (_lo, _hi, _step) in _iw_ranges.items():
+            _fam_toggle = "use_macd" if _fam.startswith("macd_") else f"use_{_fam}"
+            if bool(_uc_toggles.get(_fam_toggle, False)):
+                _iw[_fam] = trial.suggest_int(f"iw_{_fam}", _lo, _hi, step=_step)
+        if bool(_uc_toggles.get("use_bbands", False)):
+            _iw["bb_window"] = trial.suggest_int("iw_bb_window", 15, 30, step=5)
+            _iw["bb_dev"] = trial.suggest_float("iw_bb_dev", 1.5, 3.0, step=0.25)
+        params["indicator_windows"] = _iw
+
+        params["use_triple_barrier"] = bool(_uc_toggles.get("use_triple_barrier", False))
     else:
-        params["fracdiff_d"] = 0.0
-    params["use_rv_features"]  = trial.suggest_categorical("use_rv_features", [False, True])
-    params["rv_window_short"]  = trial.suggest_int("rv_window_short", 20, 60, step=10)
-    params["rv_window_long"]   = trial.suggest_int("rv_window_long", 80, 240, step=20)
-    
-    # Indicator state features (oscillator & volatility regimes)
-    #     # These capture overbought/oversold (RSI, Stoch) and BB-width-based
-    # compression/expansion without hard-wiring trading rules.
-    params["use_indicator_states"]   = trial.suggest_categorical("use_indicator_states", [False, True])
+        params["use_fracdiff"]     = trial.suggest_categorical("use_fracdiff", [False, True])
+        # P4: ADF floor prevents sub-stationarity d values (de Prado AFML Ch.5)
+        if params["use_fracdiff"]:
+            d_floor = 0.4
+            if train_data is not None and hasattr(train_data, "columns"):
+                price_col = None
+                for candidate in ("mid_c", "price", "close"):
+                    if candidate in train_data.columns:
+                        price_col = candidate
+                        break
+                if price_col is not None:
+                    try:
+                        from pipeline.features.feature_utils import find_min_stationary_d
+                        d_floor = find_min_stationary_d(train_data[price_col])
+                    except Exception:
+                        pass
+            params["fracdiff_d"] = trial.suggest_float("fracdiff_d", max(0.1, d_floor), 0.9, step=0.05)
+        else:
+            params["fracdiff_d"] = 0.0
+        params["use_rv_features"]  = trial.suggest_categorical("use_rv_features", [False, True])
+        params["rv_window_short"]  = trial.suggest_int("rv_window_short", 20, 60, step=10)
+        params["rv_window_long"]   = trial.suggest_int("rv_window_long", 80, 240, step=20)
 
-    # Oscillator thresholds: we search around common practitioner ranges.
-    params["rsi_overbought_level"]   = trial.suggest_int("rsi_overbought_level", 65, 80, step=5)
-    params["rsi_oversold_level"]     = trial.suggest_int("rsi_oversold_level", 20, 35, step=5)
-    params["stoch_overbought_level"] = trial.suggest_int("stoch_overbought_level", 75, 90, step=5)
-    params["stoch_oversold_level"]   = trial.suggest_int("stoch_oversold_level", 10, 30, step=5)
+        # Indicator state features (oscillator & volatility regimes)
+        #     # These capture overbought/oversold (RSI, Stoch) and BB-width-based
+        # compression/expansion without hard-wiring trading rules.
+        params["use_indicator_states"]   = trial.suggest_categorical("use_indicator_states", [False, True])
 
-    # Bollinger-band width thresholds (dimensionless):
-    # compress ~ low width (squeeze); expand ~ high width (volatility expansion).
-    params["bbw_compress_threshold"] = trial.suggest_float("bbw_compress_threshold", 0.02, 0.15)
-    params["bbw_expand_threshold"]   = trial.suggest_float("bbw_expand_threshold", 0.10, 0.40)
-    
-    # Donchian channel / breakout features:
-    #  - use_donchian toggles the family on/off;
-    #  - windows are chosen from ranges that roughly correspond to short/medium
-    #    trend horizons on 30-minute bars (Brock et al. 1992 style tests).
-    params["use_donchian"]            = trial.suggest_categorical("use_donchian", [False, True])
-    params["donchian_window_short"]   = trial.suggest_int("donchian_window_short", 20, 60, step=10)
-    params["donchian_window_long"]    = trial.suggest_int("donchian_window_long", 80, 240, step=20)
+        # Oscillator thresholds: we search around common practitioner ranges.
+        params["rsi_overbought_level"]   = trial.suggest_int("rsi_overbought_level", 65, 80, step=5)
+        params["rsi_oversold_level"]     = trial.suggest_int("rsi_oversold_level", 20, 35, step=5)
+        params["stoch_overbought_level"] = trial.suggest_int("stoch_overbought_level", 75, 90, step=5)
+        params["stoch_oversold_level"]   = trial.suggest_int("stoch_oversold_level", 10, 30, step=5)
+
+        # Bollinger-band width thresholds (dimensionless):
+        # compress ~ low width (squeeze); expand ~ high width (volatility expansion).
+        params["bbw_compress_threshold"] = trial.suggest_float("bbw_compress_threshold", 0.02, 0.15)
+        params["bbw_expand_threshold"]   = trial.suggest_float("bbw_expand_threshold", 0.10, 0.40)
+
+        # Donchian channel / breakout features:
+        #  - use_donchian toggles the family on/off;
+        #  - windows are chosen from ranges that roughly correspond to short/medium
+        #    trend horizons on 30-minute bars (Brock et al. 1992 style tests).
+        params["use_donchian"]            = trial.suggest_categorical("use_donchian", [False, True])
+        params["donchian_window_short"]   = trial.suggest_int("donchian_window_short", 20, 60, step=10)
+        params["donchian_window_long"]    = trial.suggest_int("donchian_window_long", 80, 240, step=20)
 
     # -------- Coverage-anchored gating + adaptive nudges (Optuna-optimized) --------
 
@@ -407,7 +475,7 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
         "random_forest": "rf", "decision_tree": "dt",
         "lstm": "lstm", "cnn": "cnn", "transformer": "transformer",
         "gru": "gru", "gru_lstm": "gru_lstm",
-        "lightgbm": "lightgbm", "catboost": "catboost",
+        "lightgbm": "lgbm", "catboost": "cb",
         "stacking_ensemble": "stack", "meta_ensemble": "meta",
         "ensemble_adaptive_regime": "", "ensemble_cnn_lstm_xgboost": "",
     }
@@ -450,50 +518,38 @@ def sample_param_set(trial, models_to_test, train_data=None, vol_stats=None, sta
     else:
         _suggest_from_search_space(trial, model_type)
 
-    # === Model-specific fixed defaults (not in SEARCH_SPACE) ===
-    if model_type == "svm":
-        params["svm_kernel"] = "rbf"
-        params["svm_class_weight"] = "balanced"
-    elif model_type == "logistic":
-        params["logit_max_iter"] = 500
-        params["logit_tol"] = 0.0001
-    elif model_type == "xgboost":
-        params["xgb_gamma"] = 0.0
-        params["xgb_min_child_weight"] = 1
-        params["xgb_reg_lambda"] = 1.0
-        params["xgb_reg_alpha"] = 0.0
-        params["xgb_device"] = "cuda"
-    elif model_type == "lightgbm":
-        params["lightgbm_boosting_type"] = "gbdt"
-        params["lightgbm_min_child_samples"] = 20
-    elif model_type == "catboost":
-        params["catboost_border_count"] = 128
-        params["catboost_loss_function"] = "MultiClass"
-    elif model_type == "random_forest":
-        params["rf_bootstrap"] = True
-        params["rf_class_weight"] = "balanced"
-        params["rf_n_jobs"] = -1
-    elif model_type == "decision_tree":
-        params["dt_class_weight"] = "balanced"
+    # === Model-specific fixed defaults: Tier-3 from the three-tier architecture ===
+    for _fk, _fv in FIXED_DEFAULTS.get(model_type, {}).items():
+        params.setdefault(_fk, _fv)
+
+    # === Runtime constants not part of the tunable architecture ===
+    if model_type == "xgboost":
+        params.setdefault("xgb_device", "cuda")
     elif model_type in ("lstm", "cnn", "gru"):
-        params[f"{model_type}_dense_units"] = 64
-        params[f"{model_type}_batch_size"] = 256
-        params[f"{model_type}_use_seq_windows"] = False
-        if model_type in ("lstm", "gru"):
-            params[f"{model_type}_bidirectional"] = False
-            params[f"{model_type}_clipnorm"] = 1.0
+        params.setdefault(f"{model_type}_batch_size", 256)
+        params.setdefault(f"{model_type}_use_seq_windows", False)
     elif model_type == "gru_lstm":
-        params["gru_lstm_dense_units"] = 64
-        params["gru_lstm_batch_size"] = 256
+        params.setdefault("gru_lstm_batch_size", 256)
+        params.setdefault("gru_lstm_use_seq_windows", False)
     elif model_type == "transformer":
-        params["transformer_num_blocks"] = 1
-        params["transformer_ff_multiple"] = 2
-        params["transformer_dense_units"] = 128
-        params["transformer_pooling"] = "cls"
-        params["transformer_use_time2vec"] = False
-        params["transformer_batch_size"] = 256
+        params.setdefault("transformer_batch_size", 256)
+        params.setdefault("transformer_use_time2vec", False)
     elif model_type == "cnn":
-        params["cnn_dropout"] = 0.3
+        params.setdefault("cnn_dropout", 0.3)
+    elif model_type == "random_forest":
+        params.setdefault("rf_n_jobs", -1)
+
+    # === User-locked HPO ranges (UserFixedConfig.model_param_ranges) ===
+    if user_config is not None:
+        _user_ranges = getattr(user_config, "model_param_ranges", None) or {}
+        for _uk, _ur in _user_ranges.items():
+            if _uk not in params:
+                continue
+            try:
+                _lo, _hi = float(_ur[0]), float(_ur[1])
+                params[_uk] = min(max(params[_uk], _lo), _hi)
+            except (TypeError, ValueError, IndexError):
+                continue
 
     # === Runtime guards for deep models (no wall-clock limits, just shapes) ===
     # LSTM/CNN/GRU: if we use sequence windows, do not allow stride=1 (window explosion).

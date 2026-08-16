@@ -82,10 +82,17 @@ def list_models():
 @router.get("/hyperparams", response_model=ModelHyperparamsResponse)
 def get_hyperparams():
     """Return SEARCH_SPACE metadata so the frontend can build per-model hyperparameter UIs."""
+    from pipeline.models.model_defaults import MODEL_PARAMS
+
     result = []
     for name, (display, category, _) in MODEL_DESCRIPTIONS.items():
         space = SEARCH_SPACE.get(name, {})
         params = {k: _parse_param(k, v) for k, v in space.items()}
+        # Tier-2 params are user dropdowns (not HPO-sampled) but still tunable
+        # in the frontend UI — include them so T2-only models report tunable.
+        for p in MODEL_PARAMS.get(name, []):
+            if p.tier == 2 and p.range is not None:
+                params.setdefault(p.hpo_key, _parse_param(p.hpo_key, p.range))
         result.append(ModelHyperparams(
             model=name,
             display_name=display,
