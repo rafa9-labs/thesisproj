@@ -1381,3 +1381,149 @@ export function useCancelFullCycle() {
     },
   });
 }
+
+// ── Vast.ai GPU rental ──────────────────────────────────────────────
+
+export interface VastSettings {
+  vast_enabled: boolean;
+  vast_min_gpu_class: string;
+  vast_min_vram_gb: number;
+  vast_max_dph: number;
+  vast_disk_gb: number;
+  vast_image: string;
+  vast_repo_url: string;
+  vast_remote_api_url: string;
+  has_api_key: boolean;
+}
+
+export interface VastOffer {
+  ask_id: number;
+  machine_id: number | null;
+  gpu_name: string;
+  gpu_ram_gb: number;
+  dph_total: number;
+  dlperf: number | null;
+  num_gpus: number;
+  cpu_cores: number | null;
+  reliability: number | null;
+}
+
+export interface VastInstance {
+  id: number;
+  actual_status: string;
+  status_msg: string | null;
+  gpu_name: string;
+  dph_total: number;
+  ssh_host: string | null;
+  ssh_port: number | null;
+  public_ipaddr: string | null;
+  remote_api_url: string | null;
+}
+
+export function useVastSettings() {
+  return useQuery({
+    queryKey: ["vast", "settings"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<VastSettings>("/vast/settings");
+      return data;
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function useSaveVastSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (settings: Partial<VastSettings>) => {
+      const { data } = await apiClient.put("/vast/settings", settings);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vast", "settings"] });
+    },
+  });
+}
+
+export function useStoreVastApiKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (value: string) => {
+      const { data } = await apiClient.post("/vast/api-key", { value });
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vast", "settings"] });
+    },
+  });
+}
+
+export function useVastOffers(filters: {
+  gpu_class?: string;
+  min_vram_gb?: number;
+  max_dph?: number;
+} | null) {
+  return useQuery({
+    queryKey: ["vast", "offers", filters],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters?.gpu_class) params.set("gpu_class", filters.gpu_class);
+      if (filters?.min_vram_gb != null) params.set("min_vram_gb", String(filters.min_vram_gb));
+      if (filters?.max_dph != null) params.set("max_dph", String(filters.max_dph));
+      const qs = params.toString();
+      const { data } = await apiClient.get<{ offers: VastOffer[] }>(
+        `/vast/offers${qs ? `?${qs}` : ""}`,
+      );
+      return data.offers;
+    },
+    enabled: !!filters,
+    staleTime: 30_000,
+  });
+}
+
+export function useLaunchVastInstance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      ask_id?: number;
+      image?: string;
+      disk_gb?: number;
+      gpu_class?: string;
+    }) => {
+      const { data } = await apiClient.post<{
+        success: boolean;
+        instance_id: number;
+        ask_id: number;
+      }>("/vast/instances", payload);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vast", "instances"] });
+    },
+  });
+}
+
+export function useVastInstances() {
+  return useQuery({
+    queryKey: ["vast", "instances"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ instances: VastInstance[] }>(
+        "/vast/instances",
+      );
+      return data.instances;
+    },
+    refetchInterval: 20_000,
+  });
+}
+
+export function useDestroyVastInstance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (instanceId: number) => {
+      const { data } = await apiClient.delete(`/vast/instances/${instanceId}`);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vast", "instances"] });
+    },
+  });
+}

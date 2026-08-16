@@ -47,6 +47,7 @@ npm run dev
 | `SMOKE_TEST` | 0 | Fast smoke mode |
 | `OANDA_ACCESS_TOKEN` | — | Live trading (optional) |
 | `OANDA_ACCOUNT_ID` | — | Live trading (optional) |
+| `VAST_API_KEY` | — | Vast.ai GPU rental (optional; also storable via Settings → GPU Rental) |
 
 ## Running tests
 
