@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    model_config = {"env_file": ".env", "env_prefix": "API_", "extra": "ignore"}
+    model_config = {"env_file": (".env", ".env.local"), "env_prefix": "API_", "extra": "ignore"}
 
     app_name: str = "KodaQuant API"
     version: str = "1.0.0"
@@ -41,14 +41,7 @@ class Settings(BaseSettings):
     app_secret: str = ""
     license_db_path: str = ""
 
-    vast_enabled: bool = False
-    vast_min_gpu_class: str = "RTX 3090"
-    vast_min_vram_gb: float = 16.0
-    vast_max_dph: float = 0.5
-    vast_disk_gb: int = 60
-    vast_image: str = "nvidia/cuda:12.2.0-base-ubuntu22.04"
-    vast_repo_url: str = ""
-    vast_remote_api_url: str = ""
+    vast_remote_port: int = 8000
 
     @property
     def db_full_path(self) -> str:
@@ -91,14 +84,7 @@ def load_persisted_execution_settings() -> None:
         settings.max_concurrent_backtests = data.get("max_concurrent_backtests", 4)
         settings.gpu_enabled = data.get("gpu_enabled", False)
         settings.max_concurrent_gpu = data.get("max_concurrent_gpu", 4)
-        settings.vast_enabled = data.get("vast_enabled", False)
-        settings.vast_min_gpu_class = data.get("vast_min_gpu_class", "RTX 3090")
-        settings.vast_min_vram_gb = data.get("vast_min_vram_gb", 16.0)
-        settings.vast_max_dph = data.get("vast_max_dph", 0.5)
-        settings.vast_disk_gb = data.get("vast_disk_gb", 60)
-        settings.vast_image = data.get("vast_image", settings.vast_image)
-        settings.vast_repo_url = data.get("vast_repo_url", "")
-        settings.vast_remote_api_url = data.get("vast_remote_api_url", "")
+        settings.vast_remote_port = data.get("vast_remote_port", 8000)
         print(f"[Config] Loaded execution settings from {path}", flush=True)
     except Exception:
         pass

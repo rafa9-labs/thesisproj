@@ -5,6 +5,8 @@ __pycache__/
 
 # Secrets
 .env
+.env.local
+.env.*.local
 oanda.cfg
 *.key
 
@@ -23,6 +25,7 @@ artifacts/
 data/*.db
 data/*.db-wal
 data/*.db-shm
+data/.app_secret
 
 # Smoke test outputs
 smoke_output*.txt

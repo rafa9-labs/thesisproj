@@ -12,8 +12,8 @@ import {
   Layers,
   AlertTriangle,
   Server,
-  Search,
-  Trash2,
+  RefreshCw,
+  Play,
 } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import {
@@ -30,11 +30,11 @@ import {
   useVastSettings,
   useSaveVastSettings,
   useStoreVastApiKey,
-  useVastOffers,
-  useLaunchVastInstance,
   useVastInstances,
-  useDestroyVastInstance,
+  useRunVastBacktest,
+  useVastRunStatus,
 } from "@/api/queries";
+import { useBacktestStore } from "@/stores/useBacktestStore";
 import { GpuStatusCard } from "@/components/GpuStatusCard";
 import { DataManager } from "@/components/DataManager";
 
@@ -149,64 +149,32 @@ function SavedBadge({ show }: { show: boolean }) {
   );
 }
 
-const VAST_GPU_CLASSES = [
-  "H100",
-  "A100",
-  "RTX 6000 ADA",
-  "L40S",
-  "RTX 4090",
-  "A6000",
-  "RTX 4080",
-  "RTX 3090 Ti",
-  "RTX 3090",
-  "A5000",
-  "RTX 4070",
-  "RTX 3080",
-  "RTX 3070",
-];
+const TERMINAL_RUN_STATUSES = ["completed", "failed", "cancelled", "error"];
+
+function _metric(metrics: Record<string, unknown>[] | undefined, index: number): Record<string, any> {
+  const m = (metrics ?? [])[index] ?? {};
+  return m as Record<string, any>;
+}
 
 function VastSection() {
   const { data: vastSettings } = useVastSettings();
   const saveVast = useSaveVastSettings();
   const storeKey = useStoreVastApiKey();
-  const launch = useLaunchVastInstance();
-  const destroy = useDestroyVastInstance();
-  const { data: instances } = useVastInstances();
+  const toPayload = useBacktestStore((s) => s.toRequestPayload);
 
   const [apiKey, setApiKey] = useState("");
   const [keySaved, setKeySaved] = useState(false);
-  const [vastSaved, setVastSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [offerFilters, setOfferFilters] = useState<{
-    gpu_class?: string;
-    min_vram_gb?: number;
-    max_dph?: number;
-  } | null>(null);
-  const offersQuery = useVastOffers(offerFilters);
+  const [fetchEnabled, setFetchEnabled] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [activeRun, setActiveRun] = useState<{ jobId: string; instanceId: number } | null>(null);
 
-  const [form, setForm] = useState({
-    vast_enabled: false,
-    vast_min_gpu_class: "RTX 3090",
-    vast_min_vram_gb: 16,
-    vast_max_dph: 0.5,
-    vast_disk_gb: 60,
-  });
-  const [formReady, setFormReady] = useState(false);
+  const instancesQuery = useVastInstances(fetchEnabled);
+  const runMutation = useRunVastBacktest();
+  const runStatus = useVastRunStatus(activeRun?.jobId ?? null, activeRun?.instanceId ?? null);
 
-  useEffect(() => {
-    if (vastSettings && !formReady) {
-      setForm({
-        vast_enabled: vastSettings.vast_enabled,
-        vast_min_gpu_class: vastSettings.vast_min_gpu_class,
-        vast_min_vram_gb: vastSettings.vast_min_vram_gb,
-        vast_max_dph: vastSettings.vast_max_dph,
-        vast_disk_gb: vastSettings.vast_disk_gb,
-      });
-      setFormReady(true);
-    }
-  }, [vastSettings, formReady]);
-
-  const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
+  const instances = instancesQuery.data ?? [];
+  const selected = instances.find((i) => i.id === selectedId) ?? null;
 
   const handleSaveKey = () => {
     if (!apiKey.trim()) return;
@@ -221,50 +189,46 @@ function VastSection() {
     });
   };
 
-  const handleSaveVast = () => {
+  const handleFetchInstances = () => {
     setError(null);
-    saveVast.mutate(form, {
-      onSuccess: () => {
-        setVastSaved(true);
-        setTimeout(() => setVastSaved(false), 3000);
-      },
-      onError: (e) => setError(e.message),
-    });
+    setFetchEnabled(true);
+    instancesQuery.refetch();
   };
 
-  const handleSearchOffers = () => {
+  const handleRunBacktest = () => {
+    if (selectedId == null) {
+      setError("Select a target instance first");
+      return;
+    }
     setError(null);
-    setOfferFilters({
-      gpu_class: form.vast_min_gpu_class,
-      min_vram_gb: form.vast_min_vram_gb,
-      max_dph: form.vast_max_dph,
-    });
-  };
-
-  const handleRent = (askId?: number) => {
-    setError(null);
-    launch.mutate(
-      askId != null
-        ? { ask_id: askId, disk_gb: form.vast_disk_gb }
-        : { gpu_class: form.vast_min_gpu_class, disk_gb: form.vast_disk_gb },
+    const config = toPayload();
+    runMutation.mutate(
+      { instance_id: selectedId, config },
       {
-        onSuccess: () => setOfferFilters(null),
+        onSuccess: (data) => {
+          setActiveRun({ jobId: data.job_id, instanceId: selectedId });
+        },
         onError: (e) => setError(e.message),
       },
     );
   };
+
+  const status = runStatus.data;
+  const isTerminal = status ? TERMINAL_RUN_STATUSES.includes(status.status) : false;
+  const metrics = status?.results?.metrics;
 
   return (
     <SectionCard icon={<Server size={14} strokeWidth={1.5} />} title="GPU Rental (Vast.ai)">
       {!vastSettings?.has_api_key && (
         <div className="mb-4 rounded-md border border-(--color-accent-warning) bg-(color-mix(in srgb, var(--color-accent-warning) 8%, transparent)) px-3 py-2">
           <p className="text-[10px] leading-relaxed text-(--color-accent-warning)">
-            No Vast.ai API key configured. Add your key to search offers and rent GPUs.
+            No Vast.ai API key configured. Add your key to control the machines you
+            rent on the Vast.ai dashboard.
           </p>
         </div>
       )}
 
-      <FieldRow label="Vast.ai API Key" hint="Stored encrypted; used to search offers and rent instances">
+      <FieldRow label="Vast.ai API Key" hint="Stored encrypted; used to fetch your active instances">
         <div className="flex items-center gap-3">
           <TextInput
             value={apiKey}
@@ -283,224 +247,125 @@ function VastSection() {
         </div>
       </FieldRow>
 
-      <FieldRow label="Enable Rented GPU" hint="Offload GPU model training to a rented Vast.ai instance">
-        <Toggle value={form.vast_enabled} onChange={(v) => set({ vast_enabled: v })} />
-      </FieldRow>
-
-      <FieldRow label="Minimum GPU Class" hint="Offers below this class are filtered out">
-        <select
-          value={form.vast_min_gpu_class}
-          onChange={(e) => set({ vast_min_gpu_class: e.target.value })}
-          className="w-full rounded-md border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 text-xs text-(--color-text-primary) sm:w-64"
-        >
-          {VAST_GPU_CLASSES.map((g) => (
-            <option key={g} value={g}>
-              {g} or better
-            </option>
-          ))}
-        </select>
-      </FieldRow>
-
-      <FieldRow label="Minimum VRAM (GB)">
+      <FieldRow label="Remote API Port" hint="Container port the KodaQuant API listens on inside the instance">
         <div className="flex items-center gap-3">
-          <input
-            type="range"
-            min={8}
-            max={48}
-            step={4}
-            value={form.vast_min_vram_gb}
-            onChange={(e) => set({ vast_min_vram_gb: Number(e.target.value) })}
-            className="w-28"
-            style={{ accentColor: "var(--color-brand)" }}
+          <TextInput
+            value={String(vastSettings?.vast_remote_port ?? 8000)}
+            onChange={(v) => {
+              const port = Number(v);
+              if (!Number.isNaN(port)) {
+                saveVast.mutate({ vast_remote_port: port });
+              }
+            }}
+            placeholder="8000"
           />
-          <span className="w-10 text-right font-mono text-xs font-semibold text-(--color-brand)">
-            {form.vast_min_vram_gb} GB
-          </span>
+          <SavedBadge show={saveVast.isSuccess} />
         </div>
       </FieldRow>
 
-      <FieldRow label="Max Hourly Price ($)">
-        <div className="flex items-center gap-3">
-          <input
-            type="range"
-            min={0.05}
-            max={2}
-            step={0.05}
-            value={form.vast_max_dph}
-            onChange={(e) => set({ vast_max_dph: Number(e.target.value) })}
-            className="w-28"
-            style={{ accentColor: "var(--color-brand)" }}
-          />
-          <span className="w-10 text-right font-mono text-xs font-semibold text-(--color-brand)">
-            ${form.vast_max_dph.toFixed(2)}
-          </span>
-        </div>
-      </FieldRow>
-
-      <FieldRow label="Instance Disk (GB)" hint="Disk size for the rented instance">
-        <div className="flex items-center gap-3">
-          <input
-            type="range"
-            min={20}
-            max={200}
-            step={10}
-            value={form.vast_disk_gb}
-            onChange={(e) => set({ vast_disk_gb: Number(e.target.value) })}
-            className="w-28"
-            style={{ accentColor: "var(--color-brand)" }}
-          />
-          <span className="w-10 text-right font-mono text-xs font-semibold text-(--color-brand)">
-            {form.vast_disk_gb} GB
-          </span>
-        </div>
-      </FieldRow>
-
-      <div className="mt-4 flex items-center justify-between border-t border-(--color-glass-border) pt-4">
-        {error && (
-          <span className="text-[10px] text-(--color-accent-danger)">{error}</span>
-        )}
-        <div className="ml-auto flex items-center gap-3">
-          {vastSaved && (
-            <span className="flex items-center gap-1 text-[10px] font-medium text-(--color-brand)">
-              <Check size={11} />
-              Saved
-            </span>
-          )}
-          <button
-            onClick={handleSaveVast}
-            disabled={saveVast.isPending}
-            className="rounded-md border border-(--color-brand) bg-(--color-brand-glow) px-4 py-1.5 text-[10px] font-semibold tracking-[0.08em] text-(--color-brand) uppercase transition hover:brightness-110"
-          >
-            {saveVast.isPending ? "Saving…" : "Save Rental Settings"}
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-6 border-t border-(--color-glass-border) pt-5">
+      <div className="mt-5 border-t border-(--color-glass-border) pt-5">
         <div className="flex items-center justify-between">
           <h4 className="text-[10px] font-semibold tracking-[0.1em] text-(--color-text-primary) uppercase">
-            Available Offers
+            Dedicated Compute Node
           </h4>
           <button
-            onClick={handleSearchOffers}
-            disabled={offersQuery.isFetching || !vastSettings?.has_api_key}
+            onClick={handleFetchInstances}
+            disabled={instancesQuery.isFetching || !vastSettings?.has_api_key}
             className="flex items-center gap-1.5 rounded-md border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 text-[10px] font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase transition hover:border-(--color-brand)"
           >
-            <Search size={11} />
-            {offersQuery.isFetching ? "Searching…" : "Search Offers"}
+            <RefreshCw size={11} className={instancesQuery.isFetching ? "animate-spin" : ""} />
+            {instancesQuery.isFetching ? "Fetching…" : "Fetch Active Instances"}
           </button>
         </div>
 
-        {offersQuery.data && offersQuery.data.length === 0 && (
+        {fetchEnabled && !instancesQuery.isFetching && instances.length === 0 && (
           <p className="pt-3 text-[10px] text-(--color-text-muted)">
-            No offers match the current filters.
+            No running Vast.ai instances found. Rent a machine on the Vast.ai
+            dashboard, then fetch again.
           </p>
         )}
 
-        {offersQuery.data && offersQuery.data.length > 0 && (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-left text-[10px]">
-              <thead>
-                <tr className="text-[9px] tracking-[0.1em] text-(--color-text-muted) uppercase">
-                  <th className="pb-2 pr-3 font-medium">GPU</th>
-                  <th className="pb-2 pr-3 font-medium">VRAM</th>
-                  <th className="pb-2 pr-3 font-medium">$/hr</th>
-                  <th className="pb-2 pr-3 font-medium">Reliability</th>
-                  <th className="pb-2 font-medium"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {offersQuery.data.slice(0, 6).map((o) => (
-                  <tr key={o.ask_id} className="border-t border-(--color-glass-border)">
-                    <td className="py-2 pr-3 font-mono text-(--color-text-primary)">
-                      {o.gpu_name}
-                    </td>
-                    <td className="py-2 pr-3 font-mono text-(--color-text-secondary)">
-                      {o.gpu_ram_gb} GB
-                    </td>
-                    <td className="py-2 pr-3 font-mono text-(--color-text-secondary)">
-                      ${o.dph_total.toFixed(2)}
-                    </td>
-                    <td className="py-2 pr-3 font-mono text-(--color-text-secondary)">
-                      {o.reliability != null ? `${(o.reliability * 100).toFixed(0)}%` : "—"}
-                    </td>
-                    <td className="py-2 text-right">
-                      <button
-                        onClick={() => handleRent(o.ask_id)}
-                        disabled={launch.isPending}
-                        className="rounded-md border border-(--color-brand) bg-(--color-brand-glow) px-3 py-1 text-[9px] font-semibold tracking-[0.08em] text-(--color-brand) uppercase transition hover:brightness-110"
-                      >
-                        Rent
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button
-              onClick={() => handleRent()}
-              disabled={launch.isPending}
-              className="mt-3 rounded-md border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 text-[10px] font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase transition hover:border-(--color-brand)"
-            >
-              {launch.isPending ? "Launching…" : "Rent Cheapest Match"}
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6 border-t border-(--color-glass-border) pt-5">
-        <h4 className="text-[10px] font-semibold tracking-[0.1em] text-(--color-text-primary) uppercase">
-          Active Instances
-        </h4>
-        {(!instances || instances.length === 0) && (
-          <p className="pt-3 text-[10px] text-(--color-text-muted)">
-            No active Vast.ai instances.
-          </p>
-        )}
-        {instances && instances.length > 0 && (
-          <div className="mt-3 space-y-2">
+        <FieldRow label="Select Target Instance" hint="Your currently running Vast.ai machines">
+          <select
+            value={selectedId ?? ""}
+            onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}
+            disabled={instances.length === 0}
+            className="w-full rounded-md border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 text-xs text-(--color-text-primary) disabled:opacity-40 sm:w-96"
+          >
+            <option value="">— select an instance —</option>
             {instances.map((inst) => (
-              <div
-                key={inst.id}
-                className="flex items-center justify-between rounded-md border border-(--color-glass-border) bg-(--color-glass-hover) px-3 py-2"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-[11px] text-(--color-text-primary)">
-                    #{inst.id}
-                  </span>
-                  <span className="font-mono text-[10px] text-(--color-text-secondary)">
-                    {inst.gpu_name}
-                  </span>
-                  <span className="rounded-full border border-(--color-brand) bg-(--color-brand-glow) px-2 py-0.5 text-[9px] font-medium tracking-[0.08em] text-(--color-brand) uppercase">
-                    {inst.actual_status}
-                  </span>
-                  {inst.remote_api_url && (
-                    <a
-                      href={inst.remote_api_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-[10px] text-(--color-brand) hover:underline"
-                    >
-                      <ExternalLink size={10} />
-                      Remote API
-                    </a>
-                  )}
-                </div>
-                <button
-                  onClick={() => {
-                    setError(null);
-                    destroy.mutate(inst.id, {
-                      onError: (e) => setError(e.message),
-                    });
-                  }}
-                  disabled={destroy.isPending}
-                  className="flex items-center gap-1 rounded-md border border-(--color-accent-danger) px-3 py-1 text-[9px] font-semibold tracking-[0.08em] text-(--color-accent-danger) uppercase transition hover:brightness-110"
-                >
-                  <Trash2 size={10} />
-                  Destroy
-                </button>
-              </div>
+              <option key={inst.id} value={inst.id}>
+                #{inst.id} · {inst.gpu_name} · {inst.api_url ?? "no mapped API port"}
+              </option>
             ))}
+          </select>
+        </FieldRow>
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={handleRunBacktest}
+            disabled={runMutation.isPending || selectedId == null || !vastSettings?.has_api_key}
+            className="flex items-center gap-1.5 rounded-md border border-(--color-brand) bg-(--color-brand-glow) px-4 py-1.5 text-[10px] font-semibold tracking-[0.08em] text-(--color-brand) uppercase transition hover:brightness-110 disabled:opacity-40"
+          >
+            <Play size={11} />
+            {runMutation.isPending ? "Submitting…" : "Run Backtest"}
+          </button>
+          {selected && (
+            <span className="text-[10px] text-(--color-text-muted)">
+              Target: <span className="font-mono text-(--color-text-secondary)">{selected.api_url ?? "—"}</span>
+            </span>
+          )}
+        </div>
+
+        {error && (
+          <p className="mt-3 text-[10px] text-(--color-accent-danger)">{error}</p>
+        )}
+
+        {(runStatus.isFetching || runStatus.data) && (
+          <div className="mt-5 rounded-md border border-(--color-glass-border) bg-(--color-glass-hover) p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold tracking-[0.1em] text-(--color-text-primary) uppercase">
+                Remote Run
+              </span>
+              <span className="rounded-full border border-(--color-brand) bg-(--color-brand-glow) px-2 py-0.5 text-[9px] font-medium tracking-[0.08em] text-(--color-brand) uppercase">
+                {status?.status ?? "submitting…"}
+              </span>
+            </div>
+            {status?.job_id && (
+              <p className="pt-1 font-mono text-[10px] text-(--color-text-secondary)">
+                job: {status.job_id}
+              </p>
+            )}
+            {isTerminal && status?.status !== "completed" && status?.error && (
+              <p className="pt-2 text-[10px] text-(--color-accent-danger)">
+                {status.error}
+              </p>
+            )}
+            {isTerminal && status?.status === "completed" && metrics && metrics.length > 0 && (
+              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[
+                  { label: "Sharpe", value: _metric(metrics, 0).sharpe },
+                  { label: "Return %", value: _metric(metrics, 0).total_return_pct ?? _metric(metrics, 0).return_pct },
+                  { label: "Trades", value: _metric(metrics, 0).trades ?? _metric(metrics, 0).total_trades },
+                  { label: "Max DD %", value: _metric(metrics, 0).max_drawdown_pct ?? _metric(metrics, 0).max_dd_pct },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex flex-col gap-0.5">
+                    <span className="text-[9px] tracking-[0.1em] text-(--color-text-muted) uppercase">
+                      {label}
+                    </span>
+                    <span className="font-mono text-[12px] font-medium text-(--color-text-primary)">
+                      {value != null ? (typeof value === "number" ? value.toFixed(2) : String(value)) : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {isTerminal && status?.status === "completed" && (
+              <p className="pt-3 text-[10px] text-(--color-text-muted)">
+                Full metrics, trades, and charts are available on the Results page
+                (job mirrored locally).
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -508,7 +373,6 @@ function VastSection() {
   );
 }
 
-/* ─────────────────────── license sub-section ─────────────────────── */
 
 function LicenseSection() {
   const { data: license, isLoading } = useLicenseStatus();

@@ -1382,42 +1382,33 @@ export function useCancelFullCycle() {
   });
 }
 
-// ── Vast.ai GPU rental ──────────────────────────────────────────────
+// ── Vast.ai dedicated compute node ──────────────────────────────────
 
 export interface VastSettings {
-  vast_enabled: boolean;
-  vast_min_gpu_class: string;
-  vast_min_vram_gb: number;
-  vast_max_dph: number;
-  vast_disk_gb: number;
-  vast_image: string;
-  vast_repo_url: string;
-  vast_remote_api_url: string;
+  vast_remote_port: number;
   has_api_key: boolean;
-}
-
-export interface VastOffer {
-  ask_id: number;
-  machine_id: number | null;
-  gpu_name: string;
-  gpu_ram_gb: number;
-  dph_total: number;
-  dlperf: number | null;
-  num_gpus: number;
-  cpu_cores: number | null;
-  reliability: number | null;
 }
 
 export interface VastInstance {
   id: number;
-  actual_status: string;
-  status_msg: string | null;
   gpu_name: string;
   dph_total: number;
-  ssh_host: string | null;
-  ssh_port: number | null;
   public_ipaddr: string | null;
-  remote_api_url: string | null;
+  api_url: string | null;
+}
+
+export interface VastRunStatus {
+  job_id: string;
+  instance_id: number;
+  status: string;
+  error: string | null;
+  progress: Record<string, unknown> | null;
+  results: {
+    job_id: string;
+    pair: string;
+    models: string[];
+    metrics: Record<string, unknown>[];
+  } | null;
 }
 
 export function useVastSettings() {
@@ -1457,52 +1448,7 @@ export function useStoreVastApiKey() {
   });
 }
 
-export function useVastOffers(filters: {
-  gpu_class?: string;
-  min_vram_gb?: number;
-  max_dph?: number;
-} | null) {
-  return useQuery({
-    queryKey: ["vast", "offers", filters],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (filters?.gpu_class) params.set("gpu_class", filters.gpu_class);
-      if (filters?.min_vram_gb != null) params.set("min_vram_gb", String(filters.min_vram_gb));
-      if (filters?.max_dph != null) params.set("max_dph", String(filters.max_dph));
-      const qs = params.toString();
-      const { data } = await apiClient.get<{ offers: VastOffer[] }>(
-        `/vast/offers${qs ? `?${qs}` : ""}`,
-      );
-      return data.offers;
-    },
-    enabled: !!filters,
-    staleTime: 30_000,
-  });
-}
-
-export function useLaunchVastInstance() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: {
-      ask_id?: number;
-      image?: string;
-      disk_gb?: number;
-      gpu_class?: string;
-    }) => {
-      const { data } = await apiClient.post<{
-        success: boolean;
-        instance_id: number;
-        ask_id: number;
-      }>("/vast/instances", payload);
-      return data;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["vast", "instances"] });
-    },
-  });
-}
-
-export function useVastInstances() {
+export function useVastInstances(enabled: boolean) {
   return useQuery({
     queryKey: ["vast", "instances"],
     queryFn: async () => {
@@ -1511,19 +1457,49 @@ export function useVastInstances() {
       );
       return data.instances;
     },
-    refetchInterval: 20_000,
+    enabled,
+    staleTime: 15_000,
   });
 }
 
-export function useDestroyVastInstance() {
+export function useRunVastBacktest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (instanceId: number) => {
-      const { data } = await apiClient.delete(`/vast/instances/${instanceId}`);
+    mutationFn: async (payload: { instance_id: number; config: unknown }) => {
+      const { data } = await apiClient.post<{
+        success: boolean;
+        job_id: string;
+        instance_id: number;
+        api_url: string;
+        status: string;
+      }>("/vast/run-backtest", payload);
       return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["vast", "instances"] });
+    },
+  });
+}
+
+export function useVastRunStatus(
+  jobId: string | null,
+  instanceId: number | null,
+) {
+  return useQuery({
+    queryKey: ["vast", "run", jobId, instanceId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<VastRunStatus>(
+        `/vast/runs/${jobId}?instance_id=${instanceId}`,
+      );
+      return data;
+    },
+    enabled: !!jobId && instanceId != null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (!status) return 3_000;
+      return ["completed", "failed", "cancelled", "error"].includes(status)
+        ? false
+        : 3_000;
     },
   });
 }

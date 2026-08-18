@@ -31,6 +31,7 @@ def _load_credentials() -> tuple[str, str]:
     try:
         from dotenv import load_dotenv
         load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+        load_dotenv(Path(__file__).resolve().parent.parent / ".env.local")
     except ImportError:
         pass
 

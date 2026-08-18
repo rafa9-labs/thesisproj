@@ -191,6 +191,7 @@ AdaptiveRegimeStrategy = _LazyModule("models.ensemble_adaptive_regime").Adaptive
 try:
     from dotenv import load_dotenv
     load_dotenv(dotenv_path=".env", override=False)
+    load_dotenv(dotenv_path=".env.local", override=False)
 except Exception:
     pass
 

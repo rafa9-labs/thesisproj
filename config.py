@@ -89,6 +89,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 try:
     from dotenv import load_dotenv
     load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=False)
+    load_dotenv(dotenv_path=PROJECT_ROOT / ".env.local", override=False)
 except ImportError:
     pass
 

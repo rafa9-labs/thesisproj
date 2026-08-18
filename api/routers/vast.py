@@ -1,8 +1,8 @@
-"""Vast.ai GPU rental endpoints.
+"""Vast.ai dedicated compute-node endpoints.
 
-Manages rented GPU instances: offer search, one-click launch of the
-KodaQuant stack, status, and teardown. The API key is stored encrypted
-via SecureStorage (never returned by any endpoint).
+The user rents machines on the Vast.ai dashboard; KodaQuant only lists
+running instances and dispatches backtest payloads to them. The API key
+is stored encrypted via SecureStorage (never returned by any endpoint).
 """
 from __future__ import annotations
 
@@ -18,8 +18,14 @@ from api.config import settings
 from api.services.vast_client import (
     VastClient,
     VastError,
-    build_kodaquant_onstart,
-    filter_offers_by_gpu_class,
+    resolve_api_url,
+)
+from api.services.vast_executor import (
+    TERMINAL_STATUSES,
+    VastExecError,
+    fetch_remote_results,
+    poll_remote_status,
+    submit_remote_backtest,
 )
 
 router = APIRouter(prefix="/vast", tags=["vast"])
@@ -32,41 +38,16 @@ _VAST_KEY_NAME = "vast"
 
 
 class VastSettingsPayload(BaseModel):
-    vast_enabled: Optional[bool] = None
-    vast_min_gpu_class: Optional[str] = None
-    vast_min_vram_gb: Optional[float] = None
-    vast_max_dph: Optional[float] = None
-    vast_disk_gb: Optional[int] = None
-    vast_image: Optional[str] = None
-    vast_repo_url: Optional[str] = None
-    vast_remote_api_url: Optional[str] = None
+    vast_remote_port: Optional[int] = None
 
 
 class ApiKeyPayload(BaseModel):
     value: str
 
 
-class LaunchPayload(BaseModel):
-    ask_id: Optional[int] = None
-    image: Optional[str] = None
-    disk_gb: Optional[int] = None
-    label: str = "kodaquant-worker"
-    gpu_class: Optional[str] = None
-    min_vram_gb: Optional[float] = None
-    max_dph: Optional[float] = None
-    onstart: Optional[str] = None
-
-
-class OfferSummary(BaseModel):
-    ask_id: int
-    machine_id: Optional[int] = None
-    gpu_name: str
-    gpu_ram_gb: float
-    dph_total: float
-    dlperf: Optional[float] = None
-    num_gpus: int = 1
-    cpu_cores: Optional[float] = None
-    reliability: Optional[float] = None
+class RunBacktestPayload(BaseModel):
+    instance_id: int
+    config: Dict[str, Any] = {}
 
 
 # ── Key + settings helpers ───────────────────────────────────────────
@@ -93,7 +74,7 @@ def _get_client() -> VastClient:
         raise HTTPException(400, str(e))
 
 
-def _persist_vast_settings(payload: Dict[str, Any]) -> None:
+def _persist_settings(payload: Dict[str, Any]) -> None:
     data: Dict[str, Any] = {}
     if _EXEC_PATH.exists():
         try:
@@ -104,33 +85,26 @@ def _persist_vast_settings(payload: Dict[str, Any]) -> None:
     _EXEC_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def _current_vast_settings() -> Dict[str, Any]:
-    return {
-        "vast_enabled": settings.vast_enabled,
-        "vast_min_gpu_class": settings.vast_min_gpu_class,
-        "vast_min_vram_gb": settings.vast_min_vram_gb,
-        "vast_max_dph": settings.vast_max_dph,
-        "vast_disk_gb": settings.vast_disk_gb,
-        "vast_image": settings.vast_image,
-        "vast_repo_url": settings.vast_repo_url,
-        "vast_remote_api_url": settings.vast_remote_api_url,
-        "has_api_key": bool(_get_api_key()),
-    }
+def _get_instance_or_404(client: VastClient, instance_id: int) -> Dict[str, Any]:
+    try:
+        inst = client.get_instance(instance_id)
+    except VastError as e:
+        raise HTTPException(502, f"Vast.ai instance lookup failed: {e}")
+    if inst is None:
+        raise HTTPException(404, f"Instance {instance_id} not found")
+    return inst
 
 
-def _summarize_offer(offer: Dict[str, Any]) -> OfferSummary:
-    gpu_ram = float(offer.get("gpu_ram", 0) or 0)
-    return OfferSummary(
-        ask_id=int(offer["id"]),
-        machine_id=offer.get("machine_id"),
-        gpu_name=str(offer.get("gpu_name", "")),
-        gpu_ram_gb=round(gpu_ram / 1024.0, 1),
-        dph_total=float(offer.get("dph_total", 0) or 0),
-        dlperf=offer.get("dlperf"),
-        num_gpus=int(offer.get("num_gpus", 1) or 1),
-        cpu_cores=offer.get("cpu_cores"),
-        reliability=offer.get("reliability"),
-    )
+def _mirror_local_job(remote_job_id: str, config: Dict[str, Any]) -> None:
+    """Record the remote run in the local jobs table so the Results page lists it."""
+    try:
+        from api.services import JobManager
+        from pipeline.data.data_sqlite import DataStore
+        jm = JobManager(DataStore(settings.db_full_path))
+        jm.create_job(remote_job_id, "backtest", config)
+        jm.update_status(remote_job_id, "running")
+    except Exception:
+        pass
 
 
 # ── Endpoints ────────────────────────────────────────────────────────
@@ -138,7 +112,10 @@ def _summarize_offer(offer: Dict[str, Any]) -> OfferSummary:
 
 @router.get("/settings")
 def get_vast_settings():
-    return _current_vast_settings()
+    return {
+        "vast_remote_port": settings.vast_remote_port,
+        "has_api_key": bool(_get_api_key()),
+    }
 
 
 @router.put("/settings")
@@ -147,7 +124,7 @@ def update_vast_settings(payload: VastSettingsPayload):
     for k, v in updates.items():
         setattr(settings, k, v)
     try:
-        _persist_vast_settings(updates)
+        _persist_settings(updates)
     except OSError as e:
         raise HTTPException(500, f"Failed to save vast settings: {e}")
     return {"status": "ok", **updates}
@@ -176,94 +153,9 @@ def delete_api_key():
     return {"status": "ok", "has_api_key": False}
 
 
-@router.get("/offers")
-def get_offers(
-    gpu_class: Optional[str] = None,
-    min_vram_gb: Optional[float] = None,
-    max_dph: Optional[float] = None,
-    per_page: int = 30,
-    include_unknown: bool = False,
-):
-    gpu_class = gpu_class or settings.vast_min_gpu_class
-    min_vram_gb = min_vram_gb if min_vram_gb is not None else settings.vast_min_vram_gb
-    max_dph = max_dph if max_dph is not None else settings.vast_max_dph
-    client = _get_client()
-    try:
-        offers = client.search_offers(
-            min_vram_gb=min_vram_gb,
-            per_page=max(1, min(int(per_page), 100)),
-        )
-        filtered = filter_offers_by_gpu_class(
-            offers,
-            min_class=gpu_class,
-            min_vram_gb=min_vram_gb,
-            max_dph=max_dph,
-            include_unknown=include_unknown,
-        )
-    except VastError as e:
-        raise HTTPException(502, f"Vast.ai offers lookup failed: {e}")
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    finally:
-        client.close()
-    return {"offers": [_summarize_offer(o) for o in filtered]}
-
-
-@router.post("/instances")
-def launch_instance(payload: LaunchPayload):
-    client = _get_client()
-    try:
-        ask_id = payload.ask_id
-        if ask_id is None:
-            gpu_class = payload.gpu_class or settings.vast_min_gpu_class
-            min_vram_gb = (
-                payload.min_vram_gb
-                if payload.min_vram_gb is not None
-                else settings.vast_min_vram_gb
-            )
-            max_dph = payload.max_dph if payload.max_dph is not None else settings.vast_max_dph
-            offers = client.search_offers(min_vram_gb=min_vram_gb, per_page=50)
-            candidates = filter_offers_by_gpu_class(
-                offers,
-                min_class=gpu_class,
-                min_vram_gb=min_vram_gb,
-                max_dph=max_dph,
-            )
-            if not candidates:
-                raise HTTPException(
-                    404,
-                    f"No Vast.ai offers match gpu_class={gpu_class}, "
-                    f"min_vram_gb={min_vram_gb}, max_dph={max_dph}",
-                )
-            candidates.sort(key=lambda o: float(o.get("dph_total", 0) or 0))
-            ask_id = int(candidates[0]["id"])
-
-        onstart = payload.onstart
-        if onstart is None:
-            if not settings.vast_repo_url:
-                raise HTTPException(
-                    400,
-                    "vast_repo_url must be configured in rental settings "
-                    "(or pass an explicit onstart script)",
-                )
-            onstart = build_kodaquant_onstart(settings.vast_repo_url)
-
-        instance_id = client.launch_instance(
-            ask_id=ask_id,
-            image=payload.image or settings.vast_image,
-            disk_gb=payload.disk_gb or settings.vast_disk_gb,
-            label=payload.label,
-            onstart=onstart,
-        )
-    except VastError as e:
-        raise HTTPException(502, f"Vast.ai launch failed: {e}")
-    finally:
-        client.close()
-    return {"success": True, "instance_id": instance_id, "ask_id": ask_id}
-
-
 @router.get("/instances")
-def list_instances():
+def list_running_instances():
+    """Active (running) instances rented on the user's Vast.ai account."""
     client = _get_client()
     try:
         instances = client.list_instances()
@@ -271,63 +163,109 @@ def list_instances():
         raise HTTPException(502, f"Vast.ai instances lookup failed: {e}")
     finally:
         client.close()
-    return {
-        "instances": [
+    running = []
+    for inst in instances:
+        if str(inst.get("actual_status", "")).lower() != "running":
+            continue
+        running.append(
             {
                 "id": inst.get("id"),
-                "actual_status": inst.get("actual_status"),
-                "status_msg": inst.get("status_msg"),
                 "gpu_name": inst.get("gpu_name"),
                 "dph_total": inst.get("dph_total"),
-                "ssh_host": inst.get("ssh_host"),
-                "ssh_port": inst.get("ssh_port"),
                 "public_ipaddr": inst.get("public_ipaddr"),
-                "remote_api_url": client.remote_api_url(inst),
+                "api_url": resolve_api_url(inst, settings.vast_remote_port),
             }
-            for inst in instances
-        ]
-    }
+        )
+    return {"instances": running}
 
 
-@router.get("/instances/{instance_id}")
-def get_instance(instance_id: int):
+@router.post("/run-backtest")
+def run_backtest(payload: RunBacktestPayload):
+    """Submit the backtest config to the selected instance's KodaQuant API."""
     client = _get_client()
     try:
-        inst = client.get_instance(instance_id)
+        inst = _get_instance_or_404(client, payload.instance_id)
+        if str(inst.get("actual_status", "")).lower() != "running":
+            raise HTTPException(400, f"Instance {payload.instance_id} is not running")
+        api_url = resolve_api_url(inst, settings.vast_remote_port)
+        if not api_url:
+            raise HTTPException(
+                400,
+                f"Instance {payload.instance_id} has no reachable API port "
+                f"({settings.vast_remote_port})",
+            )
+        remote = submit_remote_backtest(api_url, payload.config)
+    except HTTPException:
+        raise
+    except VastExecError as e:
+        raise HTTPException(502, str(e))
     except VastError as e:
-        raise HTTPException(502, f"Vast.ai instance lookup failed: {e}")
+        raise HTTPException(502, str(e))
     finally:
         client.close()
-    if inst is None:
-        raise HTTPException(404, f"Instance {instance_id} not found")
+
+    remote_job_id = remote["job_id"]
+    _mirror_local_job(remote_job_id, payload.config)
     return {
-        "id": inst.get("id"),
-        "actual_status": inst.get("actual_status"),
-        "status_msg": inst.get("status_msg"),
-        "gpu_name": inst.get("gpu_name"),
-        "dph_total": inst.get("dph_total"),
-        "ssh_host": inst.get("ssh_host"),
-        "ssh_port": inst.get("ssh_port"),
-        "public_ipaddr": inst.get("public_ipaddr"),
-        "remote_api_url": client.remote_api_url(inst),
+        "success": True,
+        "job_id": remote_job_id,
+        "instance_id": payload.instance_id,
+        "api_url": api_url,
+        "status": remote.get("status", "pending"),
     }
 
 
-@router.delete("/instances/{instance_id}")
-def destroy_instance(instance_id: int):
+@router.get("/runs/{job_id}")
+def get_run_status(job_id: str, instance_id: int):
+    """Proxy the remote run's status; attach results once terminal."""
     client = _get_client()
     try:
-        ok = client.destroy_instance(instance_id)
+        inst = _get_instance_or_404(client, instance_id)
+        api_url = resolve_api_url(inst, settings.vast_remote_port)
+        if not api_url:
+            raise HTTPException(
+                400,
+                f"Instance {instance_id} has no reachable API port "
+                f"({settings.vast_remote_port})",
+            )
+        status_data = poll_remote_status(api_url, job_id)
+    except HTTPException:
+        raise
+    except VastExecError as e:
+        raise HTTPException(502, str(e))
     except VastError as e:
-        raise HTTPException(502, f"Vast.ai destroy failed: {e}")
+        raise HTTPException(502, str(e))
     finally:
         client.close()
-    if not ok:
-        raise HTTPException(500, "Vast.ai reported failure destroying the instance")
-    if settings.vast_remote_api_url:
-        settings.vast_remote_api_url = ""
+
+    status = str(status_data.get("status", "")).lower()
+    results: Optional[Dict[str, Any]] = None
+    if status in TERMINAL_STATUSES and status == "completed":
         try:
-            _persist_vast_settings({"vast_remote_api_url": ""})
-        except OSError:
-            pass
-    return {"success": True}
+            results = fetch_remote_results(api_url, job_id)
+        except VastExecError as e:
+            raise HTTPException(502, str(e))
+        _update_local_mirror(job_id, "completed", results)
+    elif status in TERMINAL_STATUSES:
+        _update_local_mirror(job_id, "failed", None, status_data.get("error"))
+
+    return {
+        "job_id": job_id,
+        "instance_id": instance_id,
+        "status": status_data.get("status"),
+        "error": status_data.get("error"),
+        "progress": status_data.get("progress"),
+        "results": results,
+    }
+
+
+def _update_local_mirror(
+    job_id: str, status: str, results: Optional[Dict[str, Any]], error: Optional[str] = None
+) -> None:
+    try:
+        from api.services import JobManager
+        from pipeline.data.data_sqlite import DataStore
+        jm = JobManager(DataStore(settings.db_full_path))
+        jm.update_status(job_id, status, result=results, error=error)
+    except Exception:
+        pass
