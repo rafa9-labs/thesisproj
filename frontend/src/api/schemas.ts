@@ -310,7 +310,7 @@ export interface RuntimeEstimateResponse {
 export interface JobSummary {
   job_id: string;
   type: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "queued";
   pair: string | null;
   models: string[] | null;
   created_at: string;
@@ -334,7 +334,7 @@ export interface BacktestSummaryItem {
 export interface JobStatus {
   job_id: string;
   type: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "queued";
   created_at: string;
   updated_at: string;
   error: string | null;

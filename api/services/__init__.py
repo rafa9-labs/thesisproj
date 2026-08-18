@@ -2,12 +2,18 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from pipeline.data.data_sqlite import DataStore
 
 _STALE_TIMEOUT_MINUTES = 90
+
+# Serializes the check-and-insert sequence in create_job_atomic. Each
+# connection reads its own SQLite snapshot, so without this lock the
+# max_active limit can be violated by concurrent submissions.
+_ATOMIC_CREATE_LOCK = threading.Lock()
 
 
 class JobManager:
@@ -33,7 +39,7 @@ class JobManager:
         with self.store._cursor() as (conn, cur):
             cur.execute(
                 "SELECT id, status, task_id FROM jobs "
-                "WHERE status IN ('pending', 'running') AND updated_at < ?",
+                "WHERE status IN ('pending', 'running', 'queued') AND updated_at < ?",
                 (threshold,),
             )
             stale_rows = cur.fetchall()
@@ -55,7 +61,7 @@ class JobManager:
         with self.store._cursor() as (conn, cur):
             for jid in stale_ids:
                 cur.execute(
-                    "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'running')",
+                    "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'running', 'queued')",
                     ("failed", f"Job orphaned -- no update for {_STALE_TIMEOUT_MINUTES}+ min", now, jid),
                 )
                 count += cur.rowcount
@@ -74,39 +80,38 @@ class JobManager:
 
     def create_job_atomic(self, job_id: str, job_type: str, config: Dict[str, Any], max_active: int = 1) -> Dict:
         now = self._now()
-        with self.store._cursor() as (conn, cur):
-            self._cleanup_stale_jobs()
-            cur.execute(
-                "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running')",
-                (job_type,),
-            )
-            active_count = cur.fetchone()[0]
-            if active_count >= max_active:
-                raise RuntimeError("Maximum concurrent backtest jobs reached")
-            # Per-model dedup: reject identical model+pair combo
-            pair = str(config.get("pair", "")).upper()
-            models_key = ",".join(sorted(config.get("models", [])))
-            cur.execute(
-                "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running') "
-                "AND json_extract(config, '$.pair') = ? "
-                "AND json_extract(config, '$.models') = ?",
-                (job_type, pair, json.dumps(config.get("models", []))),
-            )
-            dup_count = cur.fetchone()[0]
-            if dup_count > 0:
-                raise RuntimeError(
-                    f"A backtest for {models_key} on {pair} is already running or pending. "
-                    f"Wait for it to complete before submitting an identical run."
+        with _ATOMIC_CREATE_LOCK:
+            with self.store._cursor() as (conn, cur):
+                self._cleanup_stale_jobs()
+                cur.execute(
+                    "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running', 'queued')",
+                    (job_type,),
                 )
-            cur.execute(
-                "INSERT INTO jobs (id, type, status, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (job_id, job_type, "pending", json.dumps(config), now, now),
-            )
+                active_count = cur.fetchone()[0]
+                if max_active > 0 and active_count >= max_active:
+                    raise RuntimeError("Maximum concurrent backtest jobs reached")
+                # Full-config dedup: only reject if an identical job is already active/queued
+                config_json = json.dumps(config, sort_keys=True)
+                cur.execute(
+                    "SELECT COUNT(*) FROM jobs WHERE type = ? AND status IN ('pending', 'running', 'queued') "
+                    "AND config = ?",
+                    (job_type, config_json),
+                )
+                dup_count = cur.fetchone()[0]
+                if dup_count > 0:
+                    raise RuntimeError(
+                        "An identical backtest is already running or queued. "
+                        "Wait for it to complete or change a parameter before resubmitting."
+                    )
+                cur.execute(
+                    "INSERT INTO jobs (id, type, status, config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (job_id, job_type, "pending", json.dumps(config), now, now),
+                )
         return {"id": job_id, "type": job_type, "status": "pending", "created_at": now}
 
     def get_active_jobs(self, job_type: Optional[str] = None) -> List[Dict]:
         self._cleanup_stale_jobs()
-        sql = "SELECT * FROM jobs WHERE status IN ('pending', 'running')"
+        sql = "SELECT * FROM jobs WHERE status IN ('pending', 'running', 'queued')"
         params: list = []
         if job_type:
             sql += " AND type = ?"
@@ -129,7 +134,7 @@ class JobManager:
         now = self._now()
         with self.store._cursor() as (conn, cur):
             cur.execute(
-                "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'running')",
+                "UPDATE jobs SET status = ?, error = ?, updated_at = ? WHERE id = ? AND status IN ('pending', 'running', 'queued')",
                 ("failed", "Force stopped by user", now, job_id),
             )
             return cur.rowcount > 0
@@ -140,7 +145,7 @@ class JobManager:
         with self.store._cursor() as (conn, cur):
             cur.execute(
                 "UPDATE jobs SET status = ?, error = ?, updated_at = ? "
-                "WHERE status IN ('pending', 'running')",
+                "WHERE status IN ('pending', 'running', 'queued')",
                 ("failed", "Queue cleared by cancellation or restart", now),
             )
             count = cur.rowcount

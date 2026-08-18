@@ -35,33 +35,47 @@ if HAS_SHAP:
 
 
 def _make_labels(df: pd.DataFrame, threshold: float = 0.0001) -> np.ndarray:
+    """3-class labels from next-bar returns.
+
+    Convention (unified with feature_sweep and the pipeline):
+    -1 = sell (next return < -threshold)
+     0 = neutral (|next return| <= threshold)
+    +1 = buy (next return > threshold)
+    The last bar has no forward return and is labelled neutral (0); callers
+    should drop it before fitting.
+    """
     prices = df["mid_c"].to_numpy(dtype=np.float64)
     rets = np.zeros_like(prices)
     rets[1:] = np.log(prices[1:] / prices[:-1])
-    labels = np.ones(len(rets), dtype=np.int32) * -1
+    labels = np.zeros(len(rets), dtype=np.int32)
     labels[:-1] = np.where(
         rets[1:] > threshold, 1,
-        np.where(rets[1:] < -threshold, 0, -1),
+        np.where(rets[1:] < -threshold, -1, 0),
     )
-    labels[-1] = 1
     return labels
 
 
 def _chronological_fold_indices(
-    n_samples: int, n_folds: int,
+    n_samples: int,
+    n_folds: int,
+    purge_bars: int = 1,
+    embargo_bars: int = 0,
 ) -> List[Tuple[np.ndarray, np.ndarray]]:
+    """Purged expanding-window time-series folds.
+
+    ``purge_bars`` drops the trailing train observations whose forward label
+    window (1 bar for next-bar labels) would overlap the test block;
+    ``embargo_bars`` adds an explicit gap between train and test.
+    """
     fold_size = n_samples // (n_folds + 1)
     if fold_size < 100:
         fold_size = max(50, n_samples // 3)
     indices = []
     for i in range(n_folds):
-        train_end = (i + 1) * fold_size
-        test_start = train_end
-        test_end = test_start + fold_size
-        if test_end > n_samples:
-            test_end = n_samples
-        if train_end >= test_start:
-            train_end = test_start - 1
+        split_at = (i + 1) * fold_size
+        train_end = max(0, split_at - int(purge_bars))
+        test_start = min(split_at + int(embargo_bars), n_samples - 1)
+        test_end = min(split_at + fold_size + int(embargo_bars), n_samples)
         train_idx = np.arange(0, train_end)
         test_idx = np.arange(test_start, test_end)
         if len(train_idx) >= 50 and len(test_idx) >= 20:
@@ -147,6 +161,7 @@ class BorutaSHAPSelector:
         confirmation_counts = np.zeros(n_features, dtype=np.int32)
         rejection_counts = np.zeros(n_features, dtype=np.int32)
         per_feature_shap: Dict[str, float] = {}
+        per_fold_importance: Dict[int, Dict[str, float]] = {}
         iteration = 0
 
         for iteration in range(1, self.max_iter + 1):
@@ -212,6 +227,13 @@ class BorutaSHAPSelector:
                     if real_importance[j] < np.median(shadow_importance):
                         rejection_counts[j] += 1
 
+                # Keep the final iteration's per-fold importances (overwrite
+                # prior iterations for the same fold index).
+                per_fold_importance[fold_idx] = {
+                    feature_names[j]: float(real_importance[j])
+                    for j in range(n_features)
+                }
+
                 del shadow, X_combined, shap_values, real_shap_raw, real_shap_2d
 
             folds_required_for_confirmation = max(
@@ -262,6 +284,10 @@ class BorutaSHAPSelector:
             "n_tentative_forced": 0,
             "confirmed": confirmed_names,
             "rejected": rejected_names,
+            "fold_reports": [
+                {f"fold_{i}": dict(sorted(fi.items(), key=lambda x: x[1], reverse=True)[:20])}
+                for i, fi in sorted(per_fold_importance.items())
+            ],
         }
 
         return confirmed_names, [], rejected_names, report
@@ -319,9 +345,10 @@ def boruta_sweep_features(
     df_feat = expand_features(df)
     labels = _make_labels(df_feat, threshold=label_threshold)
 
-    valid = labels != -1
-    df_feat = df_feat.loc[valid].copy()
-    labels = labels[valid]
+    # Drop only the last bar (no forward label exists for it). Neutral bars
+    # are kept so selection reflects the full 3-class problem.
+    df_feat = df_feat.iloc[:-1].copy()
+    labels = labels[:-1]
 
     exclude = {
         "returns", "time", "timestamp", "label",
@@ -396,6 +423,14 @@ def boruta_sweep_features(
 
     report = {
         "method": "boruta_shap",
+        # Unified schema (same keys as the legacy sweep_features report):
+        "total_features": len(feature_names),
+        "pruned_count": len(feature_names) - len(locked),
+        "locked_count": len(locked),
+        "pruned_features": [f for f in feature_names if f not in set(locked)],
+        "locked_features": locked,
+        "fold_reports": boruta_report.get("fold_reports", []),
+        # Boruta-specific details:
         "features_expanded": len(numeric_cols),
         "features_confirmed": len(confirmed),
         "features_rejected": len(rejected),

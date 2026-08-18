@@ -14,6 +14,7 @@ const STATUS_COLORS: Record<string, string> = {
   running: "var(--color-brand)",
   completed: "var(--color-accent-success)",
   failed: "var(--color-accent-danger)",
+  queued: "var(--color-accent-warning)",
 };
 
 function _safeGet(store: unknown, id: string) {

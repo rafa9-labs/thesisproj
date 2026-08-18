@@ -37,6 +37,7 @@ function StatusPill({ status }: { status: string }) {
     running: { bg: "rgba(0,229,255,0.10)", text: "var(--color-brand)", label: "running" },
     failed: { bg: "rgba(242,54,69,0.15)", text: "var(--color-accent-danger)", label: "failed" },
     pending: { bg: "rgba(245,158,11,0.12)", text: "var(--color-accent-warning)", label: "pending" },
+    queued: { bg: "rgba(245,158,11,0.12)", text: "var(--color-accent-warning)", label: "queued" },
   };
   const s = map[status] ?? {
     bg: "rgba(255,255,255,0.05)",

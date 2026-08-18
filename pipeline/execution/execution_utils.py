@@ -192,6 +192,16 @@ def build_trade_log_from_df(df, bar_minutes=None, price_col="close", pip_multipl
     else:
         prices = None
 
+    # Optional per-bar stop/TP fill prices (from the execution loop): when a
+    # trade exits on a bar with a stop fill, the exit price is the actual
+    # fill price, not the bar close.
+    stop_fill_prices = None
+    if "stop_fill_price" in df.columns:
+        try:
+            stop_fill_prices = pd.to_numeric(df["stop_fill_price"]).fillna(0.0).values.astype(float)
+        except Exception:
+            stop_fill_prices = None
+
     if df is None or len(df) == 0:
         return pd.DataFrame(columns=cols)
 
@@ -242,10 +252,14 @@ def build_trade_log_from_df(df, bar_minutes=None, price_col="close", pip_multipl
         entry_price = None
         exit_price = None
         pips = None
+        barrier_reason = reason
         if prices is not None:
             try:
                 entry_price = float(prices[entry_i])
                 exit_price = float(prices[exit_i])
+                if stop_fill_prices is not None and stop_fill_prices[exit_i] > 0.0:
+                    exit_price = float(stop_fill_prices[exit_i])
+                    barrier_reason = "stop"
                 raw_pips = (exit_price - entry_price) * pip_multiplier
                 pips = raw_pips if current_side > 0 else -raw_pips
             except Exception:
@@ -269,7 +283,7 @@ def build_trade_log_from_df(df, bar_minutes=None, price_col="close", pip_multipl
                 "entry_price": entry_price,
                 "exit_price": exit_price,
                 "pips": pips,
-                "barrier_hit": reason,
+                "barrier_hit": barrier_reason,
             }
         )
         current_side = 0.0

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/config", tags=["config"])
 
 _CONFIG_PATH = Path(os.environ.get("FX_CONFIG_PATH", "fx_ui_config.json"))
+_EXEC_PATH = Path(os.environ.get("FX_EXEC_CONFIG_PATH", "fx_exec_config.json"))
 
 
 class ConfigPayload(BaseModel):
@@ -93,15 +94,25 @@ class ExecutionSettingsPayload(BaseModel):
     max_concurrent_gpu: int = 1
 
 
+def _save_execution_settings(payload: ExecutionSettingsPayload) -> None:
+    data = {
+        "max_concurrent_backtests": payload.max_concurrent_backtests,
+        "gpu_enabled": payload.gpu_enabled,
+        "max_concurrent_gpu": payload.max_concurrent_gpu,
+    }
+    _EXEC_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
 @router.get("/execution")
 def get_execution():
     try:
-        from pipeline.runtime import get_thread_budget, _GPU_AVAILABLE
-        budget = get_thread_budget()
+        from api.process_manager import get_process_manager
+        from api.config import settings
+        pm = get_process_manager()
         return {
-            "max_concurrent_backtests": budget.get("cv_n_jobs", 1),
-            "gpu_enabled": bool(_GPU_AVAILABLE),
-            "max_concurrent_gpu": budget.get("batch_size", 1),
+            "max_concurrent_backtests": settings.max_concurrent_backtests,
+            "gpu_enabled": settings.gpu_enabled,
+            "max_concurrent_gpu": settings.max_concurrent_gpu,
         }
     except Exception:
         return {
@@ -114,7 +125,15 @@ def get_execution():
 @router.put("/execution")
 def update_execution(payload: ExecutionSettingsPayload):
     from api.config import settings
+    from api.process_manager import get_process_manager
     settings.max_concurrent_backtests = payload.max_concurrent_backtests
     settings.gpu_enabled = payload.gpu_enabled
     settings.max_concurrent_gpu = payload.max_concurrent_gpu
-    return {"status": "ok", "message": "Execution settings applied for this session"}
+    _save_execution_settings(payload)
+    try:
+        pm = get_process_manager()
+        pm.resize_pools(payload.max_concurrent_backtests,
+                        payload.max_concurrent_gpu, payload.gpu_enabled)
+    except Exception:
+        pass
+    return {"status": "ok", "message": "Execution settings applied and persisted"}

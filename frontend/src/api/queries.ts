@@ -1381,3 +1381,125 @@ export function useCancelFullCycle() {
     },
   });
 }
+
+// ── Vast.ai dedicated compute node ──────────────────────────────────
+
+export interface VastSettings {
+  vast_remote_port: number;
+  has_api_key: boolean;
+}
+
+export interface VastInstance {
+  id: number;
+  gpu_name: string;
+  dph_total: number;
+  public_ipaddr: string | null;
+  api_url: string | null;
+}
+
+export interface VastRunStatus {
+  job_id: string;
+  instance_id: number;
+  status: string;
+  error: string | null;
+  progress: Record<string, unknown> | null;
+  results: {
+    job_id: string;
+    pair: string;
+    models: string[];
+    metrics: Record<string, unknown>[];
+  } | null;
+}
+
+export function useVastSettings() {
+  return useQuery({
+    queryKey: ["vast", "settings"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<VastSettings>("/vast/settings");
+      return data;
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function useSaveVastSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (settings: Partial<VastSettings>) => {
+      const { data } = await apiClient.put("/vast/settings", settings);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vast", "settings"] });
+    },
+  });
+}
+
+export function useStoreVastApiKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (value: string) => {
+      const { data } = await apiClient.post("/vast/api-key", { value });
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vast", "settings"] });
+    },
+  });
+}
+
+export function useVastInstances(enabled: boolean) {
+  return useQuery({
+    queryKey: ["vast", "instances"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ instances: VastInstance[] }>(
+        "/vast/instances",
+      );
+      return data.instances;
+    },
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useRunVastBacktest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { instance_id: number; config: unknown }) => {
+      const { data } = await apiClient.post<{
+        success: boolean;
+        job_id: string;
+        instance_id: number;
+        api_url: string;
+        status: string;
+      }>("/vast/run-backtest", payload);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vast", "instances"] });
+    },
+  });
+}
+
+export function useVastRunStatus(
+  jobId: string | null,
+  instanceId: number | null,
+) {
+  return useQuery({
+    queryKey: ["vast", "run", jobId, instanceId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<VastRunStatus>(
+        `/vast/runs/${jobId}?instance_id=${instanceId}`,
+      );
+      return data;
+    },
+    enabled: !!jobId && instanceId != null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (!status) return 3_000;
+      return ["completed", "failed", "cancelled", "error"].includes(status)
+        ? false
+        : 3_000;
+    },
+  });
+}

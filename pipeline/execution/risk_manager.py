@@ -60,14 +60,16 @@ class RiskConfig:
     """
 
     # --- Drawdown circuit breaker ---
+    # Thresholds mirror trading/risk_controls.LiveRiskConfig (M1/M2) so a
+    # backtest with risk enabled sees the same limits as live trading.
     risk_use_dd_breaker: bool = False
-    risk_max_drawdown_pct: float = 0.20
+    risk_max_drawdown_pct: float = 0.15
     risk_dd_resume: str = "session_end"
     risk_dd_cooloff_bars: int = 48
 
     # --- Daily loss limit ---
     risk_use_daily_loss: bool = False
-    risk_max_daily_loss_pct: float = 0.03
+    risk_max_daily_loss_pct: float = 0.05
     risk_max_daily_loss_sigma: float = 3.0
     risk_daily_loss_mode: str = "pct"
 

@@ -55,9 +55,18 @@ def trigger_download(req: DownloadRequest, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
     jm.create_job(job_id, "download", {"pair": pair, "years": req.years})
 
-    # Run synchronously in-process (no Celery dependency)
+    # Run synchronously in-process (no Celery dependency). The impl marks the
+    # job failed on error; swallow the exception here so a failed download
+    # never crashes the request cycle.
     from api.tasks import _download_data_impl
-    background_tasks.add_task(_download_data_impl, job_id, pair, req.years, req.base_timeframe)
+
+    def _run_download():
+        try:
+            _download_data_impl(job_id, pair, req.years, req.base_timeframe)
+        except Exception:
+            pass
+
+    background_tasks.add_task(_run_download)
 
     return DownloadResponse(job_id=job_id, pair=pair, status="running")
 

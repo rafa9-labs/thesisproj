@@ -29,7 +29,7 @@ interface JobState {
   jobId: string;
   pair: string;
   models: string[];
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "queued";
   progress: number;
   progressText: string;
   completedModels: string[];
@@ -755,7 +755,7 @@ export const useJobStore = create<JobStore>()(
   onRehydrateStorage: () => (state) => {
     if (state && state.activeJobs instanceof Map) {
       state.activeJobs.forEach((job) => {
-        if (job.status === "pending" || job.status === "running") {
+        if (job.status === "pending" || job.status === "running" || job.status === "queued") {
           job.status = "stale";
         }
       });

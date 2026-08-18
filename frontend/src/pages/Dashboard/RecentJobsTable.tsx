@@ -30,6 +30,12 @@ const STATUS_STYLES: Record<string, { dot: string; bg: string; text: string; lab
     text: "var(--color-accent-danger)",
     label: "Failed",
   },
+  queued: {
+    dot: "var(--color-accent-warning)",
+    bg: "rgba(245,158,11,0.10)",
+    text: "var(--color-accent-warning)",
+    label: "Queued",
+  },
 };
 
 interface RecentJobsTableProps {

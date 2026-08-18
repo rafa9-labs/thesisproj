@@ -222,7 +222,10 @@ def _simulate_execution(
     ]).dropna()
 
     if len(ret_series) > 1 and ret_series.std() > 0:
-        sharpe = float(ret_series.mean() / ret_series.std() * np.sqrt(252))
+        # Annualize with the actual bar frequency (M30/H1/...), not daily 252.
+        from pipeline.metrics.metrics_eval import estimate_frequency_per_year
+        freq = float(estimate_frequency_per_year(prediction_df.index))
+        sharpe = float(ret_series.mean() / ret_series.std() * np.sqrt(max(freq, 1.0)))
     else:
         sharpe = 0.0
 
@@ -297,6 +300,22 @@ def run_forward_test(
 
     raw_data = _load_m30_data(pair, start_date, end_date, timeframe=timeframe)
 
+    # Overlap guard: the forward window must start AFTER the snapshot's
+    # training range (plus feature warm-up) or the test is not out-of-sample.
+    if start_date and train_end and train_end != "?":
+        try:
+            train_end_ts = pd.to_datetime(train_end, utc=True)
+            fwd_start_ts = pd.to_datetime(start_date, utc=True)
+            if fwd_start_ts <= train_end_ts:
+                import warnings
+                warnings.warn(
+                    f"Forward window starts at {start_date}, which overlaps the "
+                    f"snapshot train range (train_end={train_end}). Results are "
+                    "NOT out-of-sample."
+                )
+        except Exception:
+            pass
+
     features_df, _computed_names = _compute_features_from_data(raw_data, features_config, pair=pair, start_date=start_date, end_date=end_date, base_timeframe=timeframe)
 
     exclude_cols = {"time", "target", "side", "returns", "spread", "label"}
@@ -320,16 +339,26 @@ def run_forward_test(
     else:
         X = features_df[feature_cols].fillna(0.0).astype(np.float64)
 
+    if imputer is not None:
+        try:
+            X = pd.DataFrame(
+                imputer.transform(X.values), index=X.index, columns=X.columns
+            )
+        except Exception:
+            pass
+
     if scaler is not None:
         try:
             X_scaled = scaler.transform(X)
         except Exception:
-            try:
-                from sklearn.preprocessing import StandardScaler
-                temp_scaler = StandardScaler()
-                X_scaled = temp_scaler.fit_transform(X)
-            except Exception:
-                X_scaled = X.values
+            # NEVER fit a scaler on forward data (look-ahead). Fall back to
+            # unscaled features with a loud warning.
+            import warnings
+            warnings.warn(
+                "Saved scaler failed to transform forward features; using "
+                "unscaled inputs. Predictions may be unreliable."
+            )
+            X_scaled = X.values
     else:
         X_scaled = X.values
 

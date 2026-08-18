@@ -186,9 +186,9 @@ def test_exception_block_has_traceback():
 def test_no_duplicate_factory_while_loop():
     """There must be exactly one factory while loop (not two)."""
     func_src = _get_run_full_cycle_source()
-    phase4_start = func_src.find("PHASE 6: FACTORY OPTIMIZATION")
+    phase4_start = func_src.find("PHASE 5: FACTORY OPTIMIZATION")
     final_start = func_src.find("FINAL VALIDATION:")
-    assert phase4_start != -1, "Could not find PHASE 6 section"
+    assert phase4_start != -1, "Could not find PHASE 5 section"
     assert final_start != -1, "Could not find FINAL VALIDATION section"
     factory_section = func_src[phase4_start:final_start]
     count = factory_section.count("while True:")
@@ -200,9 +200,9 @@ def test_no_duplicate_factory_while_loop():
 def test_no_duplicate_factory_executor():
     """There must be exactly one FactoryExecutor instantiation."""
     func_src = _get_run_full_cycle_source()
-    phase4_start = func_src.find("PHASE 6: FACTORY OPTIMIZATION")
+    phase4_start = func_src.find("PHASE 5: FACTORY OPTIMIZATION")
     final_start = func_src.find("FINAL VALIDATION:")
-    assert phase4_start != -1, "Could not find PHASE 6 section"
+    assert phase4_start != -1, "Could not find PHASE 5 section"
     assert final_start != -1, "Could not find FINAL VALIDATION section"
     factory_section = func_src[phase4_start:final_start]
     count = factory_section.count("FactoryExecutor(")
@@ -212,14 +212,16 @@ def test_no_duplicate_factory_executor():
 
 
 def test_no_duplicate_proposer_creation():
-    """There must be exactly one proposer creation in the factory section."""
+    """Proposer creation must be branch-guarded (llm/hybrid_llm_ucb1/ucb1) — exactly
+    one proposer is created per request, never two sequential creations."""
     func_src = _get_run_full_cycle_source()
-    phase4_start = func_src.find("PHASE 6: FACTORY OPTIMIZATION")
+    phase4_start = func_src.find("PHASE 5: FACTORY OPTIMIZATION")
     final_start = func_src.find("FINAL VALIDATION:")
-    assert phase4_start != -1, "Could not find PHASE 6 section"
+    assert phase4_start != -1, "Could not find PHASE 5 section"
     assert final_start != -1, "Could not find FINAL VALIDATION section"
     factory_section = func_src[phase4_start:final_start]
-    count = factory_section.count("create_llm_proposer")
-    assert count <= 1, (
-        f"Found {count} create_llm_proposer calls in factory section, expected 0-1"
+    # One create_llm_proposer import+call pair per LLM branch (llm, hybrid) is fine.
+    count = factory_section.count("create_llm_proposer(")
+    assert count <= 2, (
+        f"Found {count} create_llm_proposer() calls in factory section, expected 0-2"
     )

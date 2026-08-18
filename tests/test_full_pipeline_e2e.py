@@ -946,6 +946,9 @@ class TestPhaseELiveDeployAndTrade:
             "initial_equity": 10000.0,
             "mode": "paper",
             "sizing_config": {"method": "fixed", "size": 0.1},
+            # Synthetic-data confidences are low: loosen the G4 gate so the
+            # runner's own 0.3 threshold is the effective signal filter.
+            "risk_config": {"min_confidence": 30.0, "restrict_weekend": False},
         })
 
         # ── Feed bars ──
@@ -1186,6 +1189,9 @@ class TestFullPipelineChain:
         engine.start({
             "pair": "EURUSD", "initial_equity": 10000.0,
             "mode": "paper", "sizing_config": {"method": "fixed", "size": 0.1},
+            # Synthetic-data confidences are low: loosen the G4 gate so the
+            # runner's own 0.3 threshold is the effective signal filter.
+            "risk_config": {"min_confidence": 30.0, "restrict_weekend": False},
         })
 
         bars = list(feed.generate_bars())

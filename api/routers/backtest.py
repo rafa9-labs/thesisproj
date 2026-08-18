@@ -194,19 +194,30 @@ def submit_backtest(req: BacktestRequest):
     from pipeline.resource_budget import get_resource_budget
     from pipeline.runtime import GPU_RECOMMENDED_MODELS
     from api.process_manager import get_process_manager
+    import os as _os
+
+    RESERVE_CORES = 2
+    GPU_CPU_WEIGHT = 2
+
     has_gpu = any(m.lower() in GPU_RECOMMENDED_MODELS for m in req.models)
     pm = get_process_manager()
+
+    try:
+        budget = get_resource_budget()
+        effective = budget.effective_cores
+    except Exception:
+        effective = max(2, (_os.cpu_count() or 8) - RESERVE_CORES)
+
+    available = max(2, effective - RESERVE_CORES)
+    gpu_active = pm.active_gpu_count()
+    cpu_active = pm.active_cpu_count()
+
     if has_gpu:
-        config["thread_budget"] = 1
+        config["thread_budget"] = max(1, GPU_CPU_WEIGHT)
     else:
-        try:
-            budget = get_resource_budget()
-            effective = budget.effective_cores
-        except Exception:
-            import os
-            effective = max(2, (os.cpu_count() or 8) // 2)
-        limit = max(1, settings.max_concurrent_backtests)
-        config["thread_budget"] = max(2, effective // limit)
+        reserved_for_gpu = gpu_active * GPU_CPU_WEIGHT
+        remaining = max(2, available - reserved_for_gpu)
+        config["thread_budget"] = max(1, remaining // (cpu_active + 1))
 
     vram_budget_mb = 0
     env_vars: dict[str, str] = {}
@@ -224,19 +235,22 @@ def submit_backtest(req: BacktestRequest):
     env_vars["BLAS_THREADS_PER_TRIAL"] = str(config["thread_budget"])
 
     try:
-        jm.create_job_atomic(job_id, "backtest", config, max_active=settings.max_concurrent_backtests)
-    except RuntimeError:
+        jm.create_job_atomic(job_id, "backtest", config, max_active=0)
+    except RuntimeError as e:
         if vram_budget_mb > 0:
             pm.release_vram(vram_budget_mb)
-        raise HTTPException(status_code=409, detail="A backtest is already running. Please wait for completion.")
+        raise HTTPException(status_code=409, detail=str(e))
 
     if IS_DESKTOP:
         try:
-            pm.submit(job_id, config, env_vars=env_vars, vram_budget_mb=vram_budget_mb)
-        except Exception:
+            dispatch_status = pm.submit_or_queue(job_id, config, env_vars=env_vars, vram_budget_mb=vram_budget_mb)
+        except RuntimeError as e:
             if vram_budget_mb > 0:
                 pm.release_vram(vram_budget_mb)
-            raise HTTPException(status_code=500, detail="Failed to dispatch backtest process.")
+            raise HTTPException(status_code=409, detail=str(e))
+
+        if dispatch_status == "queued":
+            jm.update_status(job_id, "queued")
 
         return BacktestSubmitResponse(
             job_id=job_id,

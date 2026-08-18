@@ -11,6 +11,9 @@ import {
   Unlock,
   Layers,
   AlertTriangle,
+  Server,
+  RefreshCw,
+  Play,
 } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import {
@@ -24,7 +27,14 @@ import {
   useDeactivateLicense,
   useExecutionSettings,
   useSaveExecutionSettings,
+  useVastSettings,
+  useSaveVastSettings,
+  useStoreVastApiKey,
+  useVastInstances,
+  useRunVastBacktest,
+  useVastRunStatus,
 } from "@/api/queries";
+import { useBacktestStore } from "@/stores/useBacktestStore";
 import { GpuStatusCard } from "@/components/GpuStatusCard";
 import { DataManager } from "@/components/DataManager";
 
@@ -139,7 +149,230 @@ function SavedBadge({ show }: { show: boolean }) {
   );
 }
 
-/* ─────────────────────── license sub-section ─────────────────────── */
+const TERMINAL_RUN_STATUSES = ["completed", "failed", "cancelled", "error"];
+
+function _metric(metrics: Record<string, unknown>[] | undefined, index: number): Record<string, any> {
+  const m = (metrics ?? [])[index] ?? {};
+  return m as Record<string, any>;
+}
+
+function VastSection() {
+  const { data: vastSettings } = useVastSettings();
+  const saveVast = useSaveVastSettings();
+  const storeKey = useStoreVastApiKey();
+  const toPayload = useBacktestStore((s) => s.toRequestPayload);
+
+  const [apiKey, setApiKey] = useState("");
+  const [keySaved, setKeySaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchEnabled, setFetchEnabled] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [activeRun, setActiveRun] = useState<{ jobId: string; instanceId: number } | null>(null);
+
+  const instancesQuery = useVastInstances(fetchEnabled);
+  const runMutation = useRunVastBacktest();
+  const runStatus = useVastRunStatus(activeRun?.jobId ?? null, activeRun?.instanceId ?? null);
+
+  const instances = instancesQuery.data ?? [];
+  const selected = instances.find((i) => i.id === selectedId) ?? null;
+
+  const handleSaveKey = () => {
+    if (!apiKey.trim()) return;
+    storeKey.mutate(apiKey.trim(), {
+      onSuccess: () => {
+        setKeySaved(true);
+        setApiKey("");
+        setError(null);
+        setTimeout(() => setKeySaved(false), 3000);
+      },
+      onError: (e) => setError(e.message),
+    });
+  };
+
+  const handleFetchInstances = () => {
+    setError(null);
+    setFetchEnabled(true);
+    instancesQuery.refetch();
+  };
+
+  const handleRunBacktest = () => {
+    if (selectedId == null) {
+      setError("Select a target instance first");
+      return;
+    }
+    setError(null);
+    const config = toPayload();
+    runMutation.mutate(
+      { instance_id: selectedId, config },
+      {
+        onSuccess: (data) => {
+          setActiveRun({ jobId: data.job_id, instanceId: selectedId });
+        },
+        onError: (e) => setError(e.message),
+      },
+    );
+  };
+
+  const status = runStatus.data;
+  const isTerminal = status ? TERMINAL_RUN_STATUSES.includes(status.status) : false;
+  const metrics = status?.results?.metrics;
+
+  return (
+    <SectionCard icon={<Server size={14} strokeWidth={1.5} />} title="GPU Rental (Vast.ai)">
+      {!vastSettings?.has_api_key && (
+        <div className="mb-4 rounded-md border border-(--color-accent-warning) bg-(color-mix(in srgb, var(--color-accent-warning) 8%, transparent)) px-3 py-2">
+          <p className="text-[10px] leading-relaxed text-(--color-accent-warning)">
+            No Vast.ai API key configured. Add your key to control the machines you
+            rent on the Vast.ai dashboard.
+          </p>
+        </div>
+      )}
+
+      <FieldRow label="Vast.ai API Key" hint="Stored encrypted; used to fetch your active instances">
+        <div className="flex items-center gap-3">
+          <TextInput
+            value={apiKey}
+            onChange={setApiKey}
+            placeholder="Enter Vast.ai API key…"
+            type="password"
+          />
+          <button
+            onClick={handleSaveKey}
+            disabled={storeKey.isPending || !apiKey.trim()}
+            className="rounded-md border border-(--color-brand) bg-(--color-brand-glow) px-4 py-1.5 text-[10px] font-semibold tracking-[0.08em] text-(--color-brand) uppercase transition hover:brightness-110 disabled:opacity-40"
+          >
+            {storeKey.isPending ? "Saving…" : "Save Key"}
+          </button>
+          <SavedBadge show={keySaved} />
+        </div>
+      </FieldRow>
+
+      <FieldRow label="Remote API Port" hint="Container port the KodaQuant API listens on inside the instance">
+        <div className="flex items-center gap-3">
+          <TextInput
+            value={String(vastSettings?.vast_remote_port ?? 8000)}
+            onChange={(v) => {
+              const port = Number(v);
+              if (!Number.isNaN(port)) {
+                saveVast.mutate({ vast_remote_port: port });
+              }
+            }}
+            placeholder="8000"
+          />
+          <SavedBadge show={saveVast.isSuccess} />
+        </div>
+      </FieldRow>
+
+      <div className="mt-5 border-t border-(--color-glass-border) pt-5">
+        <div className="flex items-center justify-between">
+          <h4 className="text-[10px] font-semibold tracking-[0.1em] text-(--color-text-primary) uppercase">
+            Dedicated Compute Node
+          </h4>
+          <button
+            onClick={handleFetchInstances}
+            disabled={instancesQuery.isFetching || !vastSettings?.has_api_key}
+            className="flex items-center gap-1.5 rounded-md border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 text-[10px] font-semibold tracking-[0.08em] text-(--color-text-secondary) uppercase transition hover:border-(--color-brand)"
+          >
+            <RefreshCw size={11} className={instancesQuery.isFetching ? "animate-spin" : ""} />
+            {instancesQuery.isFetching ? "Fetching…" : "Fetch Active Instances"}
+          </button>
+        </div>
+
+        {fetchEnabled && !instancesQuery.isFetching && instances.length === 0 && (
+          <p className="pt-3 text-[10px] text-(--color-text-muted)">
+            No running Vast.ai instances found. Rent a machine on the Vast.ai
+            dashboard, then fetch again.
+          </p>
+        )}
+
+        <FieldRow label="Select Target Instance" hint="Your currently running Vast.ai machines">
+          <select
+            value={selectedId ?? ""}
+            onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}
+            disabled={instances.length === 0}
+            className="w-full rounded-md border border-(--color-glass-border) bg-(--color-elevated) px-3 py-1.5 text-xs text-(--color-text-primary) disabled:opacity-40 sm:w-96"
+          >
+            <option value="">— select an instance —</option>
+            {instances.map((inst) => (
+              <option key={inst.id} value={inst.id}>
+                #{inst.id} · {inst.gpu_name} · {inst.api_url ?? "no mapped API port"}
+              </option>
+            ))}
+          </select>
+        </FieldRow>
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={handleRunBacktest}
+            disabled={runMutation.isPending || selectedId == null || !vastSettings?.has_api_key}
+            className="flex items-center gap-1.5 rounded-md border border-(--color-brand) bg-(--color-brand-glow) px-4 py-1.5 text-[10px] font-semibold tracking-[0.08em] text-(--color-brand) uppercase transition hover:brightness-110 disabled:opacity-40"
+          >
+            <Play size={11} />
+            {runMutation.isPending ? "Submitting…" : "Run Backtest"}
+          </button>
+          {selected && (
+            <span className="text-[10px] text-(--color-text-muted)">
+              Target: <span className="font-mono text-(--color-text-secondary)">{selected.api_url ?? "—"}</span>
+            </span>
+          )}
+        </div>
+
+        {error && (
+          <p className="mt-3 text-[10px] text-(--color-accent-danger)">{error}</p>
+        )}
+
+        {(runStatus.isFetching || runStatus.data) && (
+          <div className="mt-5 rounded-md border border-(--color-glass-border) bg-(--color-glass-hover) p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold tracking-[0.1em] text-(--color-text-primary) uppercase">
+                Remote Run
+              </span>
+              <span className="rounded-full border border-(--color-brand) bg-(--color-brand-glow) px-2 py-0.5 text-[9px] font-medium tracking-[0.08em] text-(--color-brand) uppercase">
+                {status?.status ?? "submitting…"}
+              </span>
+            </div>
+            {status?.job_id && (
+              <p className="pt-1 font-mono text-[10px] text-(--color-text-secondary)">
+                job: {status.job_id}
+              </p>
+            )}
+            {isTerminal && status?.status !== "completed" && status?.error && (
+              <p className="pt-2 text-[10px] text-(--color-accent-danger)">
+                {status.error}
+              </p>
+            )}
+            {isTerminal && status?.status === "completed" && metrics && metrics.length > 0 && (
+              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[
+                  { label: "Sharpe", value: _metric(metrics, 0).sharpe },
+                  { label: "Return %", value: _metric(metrics, 0).total_return_pct ?? _metric(metrics, 0).return_pct },
+                  { label: "Trades", value: _metric(metrics, 0).trades ?? _metric(metrics, 0).total_trades },
+                  { label: "Max DD %", value: _metric(metrics, 0).max_drawdown_pct ?? _metric(metrics, 0).max_dd_pct },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex flex-col gap-0.5">
+                    <span className="text-[9px] tracking-[0.1em] text-(--color-text-muted) uppercase">
+                      {label}
+                    </span>
+                    <span className="font-mono text-[12px] font-medium text-(--color-text-primary)">
+                      {value != null ? (typeof value === "number" ? value.toFixed(2) : String(value)) : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {isTerminal && status?.status === "completed" && (
+              <p className="pt-3 text-[10px] text-(--color-text-muted)">
+                Full metrics, trades, and charts are available on the Results page
+                (job mirrored locally).
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </SectionCard>
+  );
+}
+
 
 function LicenseSection() {
   const { data: license, isLoading } = useLicenseStatus();
@@ -634,7 +867,10 @@ export function SettingsPage() {
         </SectionCard>
       </div>
 
-      {/* ── Row 4: About ── */}
+      {/* ── Row 4: GPU Rental ── */}
+      <VastSection />
+
+      {/* ── Row 5: About ── */}
       <SectionCard icon={<Info size={14} strokeWidth={1.5} />} title="About">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {[

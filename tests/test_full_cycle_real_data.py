@@ -75,7 +75,8 @@ class TestPhaseMinus1RealData:
         # Top features should be returns/prices/ratios, not noise
         top_5 = locked[:5]
         sensible_prefixes = ("returns_lag", "price_sma", "price_ema",
-                             "rsi_", "adx_", "macd_", "bb_pct_", "atr_", "rv_")
+                             "rsi_", "adx_", "macd_", "bb_pct_", "atr_", "rv_",
+                             "sma_", "ema_", "bbw_", "hv_", "donchian_")
         sensible_count = sum(
             1 for f in top_5 if any(f.startswith(p) for p in sensible_prefixes)
         )

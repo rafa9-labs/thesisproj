@@ -6,7 +6,16 @@ a single 0-1 score with action thresholds.
 """
 from __future__ import annotations
 
+import math
 from typing import Dict
+
+
+def _is_nan(x) -> bool:
+    """NaN check that also catches plain Python floats (not only numpy scalars)."""
+    try:
+        return bool(math.isnan(float(x)))
+    except (TypeError, ValueError):
+        return False
 
 
 def compute_trust_score(
@@ -44,10 +53,18 @@ def compute_trust_score(
             }
         }
     """
-    pbo = max(0.0, min(1.0, pbo)) if not (hasattr(pbo, '__isnan__') and pbo != pbo) else 1.0
-    dsr = max(0.0, min(1.0, dsr)) if not (hasattr(dsr, '__isnan__') and dsr != dsr) else 0.0
-    regime_coverage_ratio = max(0.0, min(1.0, regime_coverage_ratio))
-    min_fold_sharpe = min_fold_sharpe if not (hasattr(min_fold_sharpe, '__isnan__') and min_fold_sharpe != min_fold_sharpe) else -float("inf")
+    # NaN/infeasible handling: an uncomputable PBO is treated as worst-case
+    # overfitting (zero contribution), an uncomputable DSR as no evidence
+    # (zero contribution). +inf/-inf clamp to the bounds.
+    if _is_nan(pbo):
+        pbo = 1.0
+    if _is_nan(dsr):
+        dsr = 0.0
+    pbo = float(max(0.0, min(1.0, pbo)))
+    dsr = float(max(0.0, min(1.0, dsr)))
+    regime_coverage_ratio = float(max(0.0, min(1.0, regime_coverage_ratio)))
+    if _is_nan(min_fold_sharpe):
+        min_fold_sharpe = -float("inf")
 
     # Component contributions
     pbo_contrib = 0.35 * (1.0 - pbo)          # lower PBO = higher trust

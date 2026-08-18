@@ -67,10 +67,13 @@ class TestParentEnvNotMutated:
         pm = ProcessManager()
         env_before = {k: os.environ.get(k) for k in ["MLB_THREADS", "CUDA_VRAM_LIMIT_MB"]}
 
-        with patch("api.process_manager.ProcessPoolExecutor", autospec=True):
+        with patch("api.process_manager.ProcessPoolExecutor") as mock_cls:
+            mock_pool = MagicMock()
+            mock_pool._max_workers = 1
+            mock_cls.return_value = mock_pool
             pm.initialize(max_cpu=1, gpu_enabled=False)
-            pm.submit("test-id", {"models": ["logistic"]},
-                       env_vars={"MLB_THREADS": "4"})
+            pm.submit_or_queue("test-id", {"models": ["logistic"]},
+                               env_vars={"MLB_THREADS": "4"})
 
         for k in env_before:
             assert os.environ.get(k) == env_before[k]
@@ -81,9 +84,12 @@ class TestParentEnvNotMutated:
         pm = ProcessManager()
         parent_has_cuda = "CUDA_VRAM_LIMIT_MB" in os.environ
 
-        with patch("api.process_manager.ProcessPoolExecutor", autospec=True):
+        with patch("api.process_manager.ProcessPoolExecutor") as mock_cls:
+            mock_pool = MagicMock()
+            mock_pool._max_workers = 1
+            mock_cls.return_value = mock_pool
             pm.initialize(max_cpu=1, gpu_enabled=False)
-            pm.submit("test-gpu", {"models": ["lstm"]},
-                       env_vars={"CUDA_VRAM_LIMIT_MB": "4096"})
+            pm.submit_or_queue("test-gpu", {"models": ["lstm"]},
+                               env_vars={"CUDA_VRAM_LIMIT_MB": "4096"})
 
         assert ("CUDA_VRAM_LIMIT_MB" in os.environ) == parent_has_cuda

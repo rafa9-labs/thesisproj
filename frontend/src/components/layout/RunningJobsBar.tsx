@@ -62,7 +62,7 @@ export function RunningJobsBar() {
   // ── Backtest items ──
   const rawJobs = activeJobs instanceof Map ? activeJobs : new Map();
   const backtestRunning = [...rawJobs.values()]
-    .filter((j) => j.status === "pending" || j.status === "running")
+    .filter((j) => j.status === "pending" || j.status === "running" || j.status === "queued")
     .map<BarItem>((j) => ({
       kind: "backtest",
       jobId: j.jobId,

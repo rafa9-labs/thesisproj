@@ -81,8 +81,9 @@ class TestCancelIsolation:
         with patch("api.process_manager.ProcessPoolExecutor") as mock_pool:
             mock_pool.return_value = MagicMock()
             pm._cpu_pool = MagicMock()
-            pm.submit("job-a", {"models": ["logistic"]})
-            pm.submit("job-b", {"models": ["xgboost"]})
+            pm._cpu_pool._max_workers = 2
+            pm.submit_or_queue("job-a", {"models": ["logistic"]})
+            pm.submit_or_queue("job-b", {"models": ["xgboost"]})
 
             future_a = pm._active_futures.get("job-a")
             if future_a:

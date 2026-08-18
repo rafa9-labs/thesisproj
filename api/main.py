@@ -6,6 +6,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env.local", override=False)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +15,7 @@ from fastapi.responses import FileResponse
 
 from api.config import settings
 from api.middleware import install_security_middleware
-from api.routers import backtest, committee, config, data, health, hardware, license, live, live_metrics, models, news, pairs, prices, trading, ws
+from api.routers import backtest, committee, config, data, health, hardware, license, live, live_metrics, models, news, pairs, prices, trading, vast, ws
 
 IS_DESKTOP = os.environ.get("FX_APP_MODE", "") == "desktop"
 
@@ -37,6 +38,9 @@ async def lifespan(app: FastAPI):
             print("[Hardware] No GPU detected — VRAM gate disabled")
     except Exception:
         pass
+
+    from api.config import load_persisted_execution_settings
+    load_persisted_execution_settings()
 
     try:
         from api.process_manager import get_process_manager
@@ -189,6 +193,7 @@ app.include_router(live.router, prefix="/api/v1")
 app.include_router(live_metrics.router, prefix="/api/v1")
 app.include_router(trading.router, prefix="/api/v1")
 app.include_router(trading.live_router, prefix="/api/v1")
+app.include_router(vast.router, prefix="/api/v1")
 
 
 if IS_DESKTOP:
@@ -203,7 +208,7 @@ if IS_DESKTOP:
             _frontend_dist = _candidate
             break
 
-    if os.path.isdir(_frontend_dist):
+    if _frontend_dist is not None and os.path.isdir(_frontend_dist):
         app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dist, "assets")), name="static-assets")
 
         @app.get("/favicon.svg")

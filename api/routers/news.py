@@ -342,7 +342,7 @@ def get_live_sentiment(
                 from pipeline.llm.sentiment import LLMSentimentEngine
                 from config import PIPELINE_CONSTANTS
                 llm_config = {
-                    "llm_sentiment_enabled": True,
+                    "llm_sentiment_enabled": PIPELINE_CONSTANTS.get("llm_sentiment_enabled", False),
                     "llm_backend": PIPELINE_CONSTANTS.get("llm_backend", "ollama"),
                     "llm_model": PIPELINE_CONSTANTS.get("llm_model", "llama3"),
                     "llm_api_key": PIPELINE_CONSTANTS.get("llm_api_key", ""),

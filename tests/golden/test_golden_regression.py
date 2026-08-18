@@ -11,6 +11,12 @@ import json
 import pytest
 import numpy as np
 
+# Golden outputs must be reproducible across machines: pin XGBoost to a
+# single thread (hist splits are thread-count sensitive) and cap OpenMP.
+os.environ.setdefault("XGB_JOBS", "1")
+os.environ.setdefault("XGB_USE_GPU", "0")
+os.environ.setdefault("OMP_NUM_THREADS", "2")
+
 _GOLDEN_DIR = os.path.dirname(os.path.abspath(__file__))
 _RNG_SEED = 99
 _N_SAMPLES = 60

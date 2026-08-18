@@ -40,9 +40,19 @@ except Exception:
 def deflated_sharpe_ratio(sr: float, n_eff: int, sr_max: float = 0.0,
                           skew: float = 0.0, kurt: float = 3.0,
                           n_trials: int = 1) -> float:
+    """Backward-compatible wrapper.
+
+    The canonical implementation lives in ``pipeline.metrics.dsr``
+    (Bailey & Lopez de Prado 2014). Here ``n_eff`` is treated as the number
+    of observations and ``sr`` as the Sharpe at that same frequency.
+    """
+    from pipeline.metrics.dsr import deflated_sharpe_ratio as _dsr
     if n_eff is None or n_eff < 2 or not (sr == sr):
         return -1.0
-    return (sr - sr_max) * sqrt(max(n_eff, 1))
+    return float(_dsr(
+        sr_hat=sr, T=int(n_eff), N_trials=max(1, int(n_trials)),
+        skew=skew, kurt=kurt, sr_star=sr_max, periods_per_year=None,
+    ))
 
     
 import re

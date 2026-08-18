@@ -473,64 +473,65 @@ def final_refit_if_deep(backtester, best_params,
                         overrides=None,
                         select_metric="cstrategy", tolerance=0.01):
     """
-    For deep/ensemble models: run a SINGLE uncapped refit with tuned params (+ overrides)
-    and return its metrics. We DO NOT compare against the original snapshot here.
-    
+    For deep/ensemble models: run an uncapped deployment refit with the tuned
+    params (+ overrides) AND re-run the original (Optuna-validated) snapshot on
+    the same fold. The refit is adopted only if it beats the validated snapshot
+    by ``tolerance``; otherwise (or on ties) the ORIGINAL metrics are reported.
+    This guarantees the reported WFO numbers correspond to a protocol the
+    validation actually saw.
+
     For classical models: just re-run the original (no-refit) evaluation and
     return its metrics.
-
-    This keeps the pipeline simple:
-        Optuna best params -> (optional) one deployment refit -> trade.
     """
     # Lock tuned keys so overrides cannot silently clobber them
     setattr(backtester, "_optuna_locked_keys", set(best_params.keys()))
     m = best_params.get("model_type", getattr(backtester, "model_type", None))
 
-    # --- Deep single models: one-shot uncapped refit ---
+    # --- Deep single models: compare uncapped refit vs validated snapshot ---
     if m == "cnn":
-        return refit_cnn_with_overrides(
-            backtester=backtester,
-            best_params=best_params,
+        return _select_better_result(
+            backtester=backtester, best_params=best_params,
             train_start=train_start, train_end=train_end,
-            test_start=test_start,   test_end=test_end,
-            overrides=overrides,
+            test_start=test_start, test_end=test_end,
+            refit_func=refit_cnn_with_overrides,
+            select_metric=select_metric, tolerance=tolerance, overrides=overrides,
         )
 
     if m == "lstm":
-        return refit_lstm_with_overrides(
-            backtester=backtester,
-            best_params=best_params,
+        return _select_better_result(
+            backtester=backtester, best_params=best_params,
             train_start=train_start, train_end=train_end,
-            test_start=test_start,   test_end=test_end,
-            overrides=overrides,
+            test_start=test_start, test_end=test_end,
+            refit_func=refit_lstm_with_overrides,
+            select_metric=select_metric, tolerance=tolerance, overrides=overrides,
         )
 
     if m == "transformer":
-        return refit_transformer_with_overrides(
-            backtester=backtester,
-            best_params=best_params,
+        return _select_better_result(
+            backtester=backtester, best_params=best_params,
             train_start=train_start, train_end=train_end,
-            test_start=test_start,   test_end=test_end,
-            overrides=overrides,
+            test_start=test_start, test_end=test_end,
+            refit_func=refit_transformer_with_overrides,
+            select_metric=select_metric, tolerance=tolerance, overrides=overrides,
         )
 
-    # --- Deep ensembles: one-shot uncapped refit ---
+    # --- Deep ensembles: compare uncapped refit vs validated snapshot ---
     if m == "ensemble_cnn_lstm_xgboost":
-        return refit_ensemble_cnn_lstm_xgb_with_overrides(
-            backtester=backtester,
-            best_params=best_params,
+        return _select_better_result(
+            backtester=backtester, best_params=best_params,
             train_start=train_start, train_end=train_end,
-            test_start=test_start,   test_end=test_end,
-            overrides=overrides,
+            test_start=test_start, test_end=test_end,
+            refit_func=refit_ensemble_cnn_lstm_xgb_with_overrides,
+            select_metric=select_metric, tolerance=tolerance, overrides=overrides,
         )
 
     if m == "ensemble_adaptive_regime":
-        return refit_ensemble_adaptive_regime_with_overrides(
-            backtester=backtester,
-            best_params=best_params,
+        return _select_better_result(
+            backtester=backtester, best_params=best_params,
             train_start=train_start, train_end=train_end,
-            test_start=test_start,   test_end=test_end,
-            overrides=overrides,
+            test_start=test_start, test_end=test_end,
+            refit_func=refit_ensemble_adaptive_regime_with_overrides,
+            select_metric=select_metric, tolerance=tolerance, overrides=overrides,
         )
 
     # --- Classical / unknown: just re-run original snapshot once ---

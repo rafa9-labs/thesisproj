@@ -562,6 +562,7 @@ class FullCycleResultsResponse(BaseModel):
     racecar_committee_config: Optional[Dict[str, Any]] = None
     racecar_backtest: Optional[Dict[str, Any]] = None
     phase3_fold_consistency_cv: float = 0.0
+    phase3_fold_consistency_pass: bool = False
     phase3_regime_coverage: Optional[Dict[str, Any]] = None
     phase3_seed_robustness_sharpe: float = 0.0
     phase3_seed_robustness_seeds: int = 3
@@ -1163,14 +1164,13 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
         # ──────────────────────────────────────────────────────────────
         hpo_base_config: Dict[str, Any] = {}
         hpo_status: Dict[str, str] = {}
+        from pipeline.models.model_families import ModelStatus, is_gpu_model
         if not req.enable_phase3:
             log_info(job_id, "Phase 2: skipped (disabled)", phase_number=2)
             hpo_model_params: Dict[str, dict] = {}
             for m in survivors:
                 hpo_status[m] = ModelStatus.SKIPPED.value
         else:
-            from pipeline.models.model_families import ModelStatus, is_gpu_model
-
             _update_full_cycle_status(job_dir, "phase1_hpo", phase_number=2,
                                        current_action="Starting Phase 2 HPO",
                                        phase_progress=f"0/{len(survivors)}")
@@ -1336,6 +1336,28 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                 profiler._attach_regime_distributions(matrix.raw_folds, first_df_wfo)
                 matrix = profiler._build_matrix(matrix.raw_folds)
 
+            # Persist raw per-model fold results so Phase 4 CSCV/PBO can
+            # rebuild the configurations x time matrix even if `matrix` is lost.
+            try:
+                if hasattr(matrix, 'raw_folds') and matrix.raw_folds:
+                    hpo_dir = job_dir / "hpo_results"
+                    hpo_dir.mkdir(parents=True, exist_ok=True)
+                    raw_folds_payload = []
+                    for fr in matrix.raw_folds:
+                        raw_folds_payload.append({
+                            "model": fr.model,
+                            "fold_idx": fr.fold_idx,
+                            "test_start": str(fr.test_start),
+                            "test_end": str(fr.test_end),
+                            "sharpe": float(fr.sharpe) if fr.sharpe == fr.sharpe else None,
+                            "return_val": float(fr.return_val) if fr.return_val == fr.return_val else None,
+                            "trades": int(fr.trades or 0),
+                        })
+                    with open(hpo_dir / "raw_folds.json", "w") as f:
+                        json.dump(raw_folds_payload, f, indent=2, default=str)
+            except Exception:
+                log_warn(job_id, "Failed to persist raw fold results for CSCV/PBO")
+
             if hasattr(matrix, 'to_dict') and matrix.models:
                 matrix_data = matrix.to_dict()
                 with open(job_dir / "regime_matrix_tuned.json", "w") as f:
@@ -1444,23 +1466,55 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                 all_covered = all(c["covered"] for c in coverage.values())
                 log_info(job_id, f"Phase 4: WFO complete -- CV={cv:.4f}, covered={all_covered}", phase_number=4)
 
-                # -- Compute PBO from fold returns --
-                pbo = 1.0
+                # -- Compute PBO via proper CSCV from per-model fold results --
+                # matrix: rows = candidate configurations (models), columns =
+                # common WFO fold periods; values = per-fold OOS return.
+                pbo = float("nan")
+                try:
+                    from pipeline.metrics.pbo import compute_pbo
+
+                    raw_folds = None
+                    if matrix is not None and hasattr(matrix, "raw_folds"):
+                        raw_folds = matrix.raw_folds
+                    if not raw_folds:
+                        # Fall back to the persisted Phase 2 fold results
+                        raw_folds_path = job_dir / "hpo_results" / "raw_folds.json"
+                        if raw_folds_path.exists():
+                            from types import SimpleNamespace
+                            with open(raw_folds_path) as f:
+                                raw_folds = json.load(f)
+                            raw_folds = [SimpleNamespace(**r) for r in raw_folds]
+
+                    if raw_folds:
+                        models = sorted({str(f.model) for f in raw_folds if getattr(f, "model", None)})
+                        periods = sorted({
+                            (str(getattr(f, "test_start", None)), str(getattr(f, "test_end", None)))
+                            for f in raw_folds
+                        })
+                        period_map = {p: i for i, p in enumerate(periods)}
+                        M = np.full((len(models), len(periods)), np.nan)
+                        for f in raw_folds:
+                            key = (str(getattr(f, "test_start", None)), str(getattr(f, "test_end", None)))
+                            rv = float(getattr(f, "return_val", np.nan) or np.nan)
+                            if key in period_map and np.isfinite(rv):
+                                M[models.index(str(f.model)), period_map[key]] = rv
+                        # CSCV needs a complete matrix: drop periods missing any config
+                        M = M[:, ~np.isnan(M).any(axis=0)]
+                        if M.shape[0] >= 2 and M.shape[1] >= 4:
+                            pbo = compute_pbo(M, S=min(16, M.shape[1]), seed=42)
+                            log_info(job_id, f"Phase 4: CSCV PBO over {M.shape[0]} configs x {M.shape[1]} periods", phase_number=4)
+                        else:
+                            log_warn(job_id, f"Phase 4: insufficient fold matrix for CSCV ({M.shape}): PBO set to NaN")
+                    else:
+                        log_warn(job_id, "Phase 4: no per-model fold results available: PBO set to NaN")
+                except Exception:
+                    log_warn(job_id, "Phase 4: PBO computation failed: PBO set to NaN")
+                log_info(job_id, f"Phase 4: PBO={pbo:.4f}", phase_number=4)
+
+                # -- Per-fold committee Sharpe series (used by DSR / trust score) --
                 fold_sharpes = []
                 if hasattr(bt_result, "folds") and bt_result.folds:
                     fold_sharpes = [f.sharpe for f in bt_result.folds if not np.isnan(f.sharpe)]
-                    # Build approximate fold returns matrix for PBO
-                    try:
-                        from pipeline.metrics.pbo import compute_pbo
-                        # Use fold Sharpes * sqrt(approx bars) to approximate returns
-                        approx_bars = len(df) // max(1, len(bt_result.folds))
-                        fold_rets = np.array([[s / np.sqrt(approx_bars * 6) for _ in range(10)]
-                                              for s in fold_sharpes if np.isfinite(s)])
-                        if fold_rets.shape[0] >= 4:
-                            pbo = compute_pbo(fold_rets, S=min(8, fold_rets.shape[0]))
-                    except Exception:
-                        pass
-                log_info(job_id, f"Phase 4: PBO={pbo:.4f}", phase_number=4)
 
                 # -- Compute DSR --
                 dsr = 0.0
@@ -1475,6 +1529,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                     dsr = deflated_sharpe_ratio(
                         sr_hat=max(0.0, avg_sharpe),
                         T=T_obs, N_trials=max(1, total_hpo_trials),
+                        periods_per_year=21 * 24 * 12,  # H1 bars per year
                     )
                 except Exception:
                     pass
@@ -1841,6 +1896,7 @@ def _run_full_cycle(job_dir: Path, job_id: str, req: FullCycleRequest, started_a
                     "racecar_committee_config": cc_data,
                     "racecar_backtest": bt_result.to_summary_dict(),
                     "phase3_fold_consistency_cv": round(float(cv), 4),
+                    "phase3_fold_consistency_pass": False,
                     "phase3_regime_coverage": {r: dict(v) for r, v in coverage.items()},
                     "phase3_seed_robustness_sharpe": round(float(seed_avg), 4),
                     "phase3_seed_robustness_seeds": 3,

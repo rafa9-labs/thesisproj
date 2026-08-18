@@ -68,7 +68,7 @@ export function BacktestPage() {
       const status = err?.response?.status;
       const backendMsg = err?.response?.data?.detail || err?.message || "";
       const msg = status === 409
-        ? `A backtest for these models on ${pair} is already running. Stop it first or wait for completion.`
+        ? (backendMsg || `A backtest for these models on ${pair} is already running.`)
         : status === 429
           ? "Too many concurrent backtests. Wait for one to finish."
           : backendMsg || "Deploy failed — check backend logs.";

@@ -35,6 +35,11 @@ services:
       - API_REDIS_URL=redis://redis:6379/0
       - API_CELERY_BROKER_URL=redis://redis:6379/0
       - API_CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - VAST_API_KEY=${VAST_API_KEY:-}
+      - OANDA_ACCESS_TOKEN=${OANDA_ACCESS_TOKEN:-}
+      - OANDA_ACCOUNT_ID=${OANDA_ACCOUNT_ID:-}
+      - FX_DATA_DIR=/app/data
+
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
@@ -42,6 +47,13 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   worker:
     build:
@@ -65,8 +77,19 @@ services:
       - API_REDIS_URL=redis://redis:6379/0
       - API_CELERY_BROKER_URL=redis://redis:6379/0
       - API_CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - VAST_API_KEY=${VAST_API_KEY:-}
+      - OANDA_ACCESS_TOKEN=${OANDA_ACCESS_TOKEN:-}
+      - OANDA_ACCOUNT_ID=${OANDA_ACCOUNT_ID:-}
+      - FX_DATA_DIR=/app/data
     restart: unless-stopped
     stop_grace_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   frontend:
     build:

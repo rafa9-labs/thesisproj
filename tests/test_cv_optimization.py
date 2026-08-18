@@ -226,7 +226,8 @@ class TestAutoTwoPhase:
     def _auto_two_phase(self, model_type: str, explicit: bool = None) -> bool:
         if explicit is not None:
             return explicit
-        return self._count_tunable(model_type) >= 4
+        # v3.0 derived SEARCH_SPACE: deep models have 3 Tier-1 params each.
+        return self._count_tunable(model_type) >= 3
 
     def test_two_phase_auto_enabled_for_deep(self):
         for m in ("cnn", "lstm", "transformer", "gru", "gru_lstm"):

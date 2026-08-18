@@ -69,6 +69,8 @@ def _make_mock_pm(vram_available=8192, allocate_ok=True):
     pm.allocate_vram.return_value = allocate_ok
     pm.submit.return_value = MagicMock()
     pm.release_vram.return_value = None
+    pm.active_gpu_count.return_value = 0
+    pm.active_cpu_count.return_value = 0
     return pm
 
 
@@ -83,7 +85,7 @@ class TestGatekeeperVRAMFlow:
                 data = resp.json()
                 assert data["status"] == "pending"
                 mock_pm.allocate_vram.assert_not_called()
-                call_args = mock_pm.submit.call_args
+                call_args = mock_pm.submit_or_queue.call_args
                 env_vars = call_args[1].get("env_vars", {})
                 assert "CUDA_VRAM_LIMIT_MB" not in env_vars
 
@@ -101,7 +103,7 @@ class TestGatekeeperVRAMFlow:
                 )
                 assert resp.status_code == 202
                 mock_pm.allocate_vram.assert_called_once()
-                call_args = mock_pm.submit.call_args
+                call_args = mock_pm.submit_or_queue.call_args
                 env_vars = call_args[1].get("env_vars", {})
                 assert "CUDA_VRAM_LIMIT_MB" in env_vars
 
@@ -146,7 +148,7 @@ class TestGatekeeperVRAMFlow:
                 resp = client.post("/api/v1/backtest", json=_valid_payload())
                 assert resp.status_code == 202
 
-    def test_max_concurrent_cpu_blocked(self, client):
+    def test_max_active_zero_bypasses_jobmanager_limit(self, client):
         from api.dependencies import get_data_store
         from api.services import JobManager
         import api.config
@@ -161,7 +163,7 @@ class TestGatekeeperVRAMFlow:
         with patch("api.routers.backtest.IS_DESKTOP", True):
             with patch("api.process_manager.get_process_manager", return_value=mock_pm):
                 resp = client.post("/api/v1/backtest", json=_valid_payload())
-                assert resp.status_code == 409
+                assert resp.status_code == 202
         api.config.settings.max_concurrent_backtests = 4
 
 

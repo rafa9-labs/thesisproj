@@ -78,7 +78,12 @@ class TestWALConcurrentWrites:
         assert results["reads_ok"] > 0
 
     def test_concurrent_create_job_atomic_race(self, store):
-        max_active = 2
+        """Identical-config submissions dedup to exactly one active job.
+
+        create_job_atomic rejects an identical config while one is
+        active/queued, so racing threads submitting the same backtest must
+        yield a single success regardless of interleaving.
+        """
         successes = []
         failures = []
 
@@ -89,6 +94,34 @@ class TestWALConcurrentWrites:
                     f"race-{idx}-{uuid.uuid4().hex[:6]}",
                     "backtest_race2",
                     {"pair": "EURUSD"},
+                    max_active=2,
+                )
+                successes.append(1)
+            except RuntimeError:
+                failures.append(1)
+
+        threads = [threading.Thread(target=try_create, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(successes) == 1
+        assert len(failures) == 9
+
+    def test_concurrent_create_job_max_active_limit(self, store):
+        """Unique configs: the max_active limit admits exactly that many jobs."""
+        max_active = 2
+        successes = []
+        failures = []
+
+        def try_create(idx):
+            jm = JobManager(store)
+            try:
+                jm.create_job_atomic(
+                    f"race-{idx}-{uuid.uuid4().hex[:6]}",
+                    "backtest_race3",
+                    {"pair": "EURUSD", "run_idx": idx},
                     max_active=max_active,
                 )
                 successes.append(1)
@@ -101,8 +134,8 @@ class TestWALConcurrentWrites:
         for t in threads:
             t.join()
 
-        assert len(successes) >= max_active
-        assert len(failures) > 0
+        assert len(successes) == max_active
+        assert len(failures) == 10 - max_active
 
 
 class TestWALPragmaSettings:
