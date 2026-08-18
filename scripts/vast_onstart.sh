@@ -7,7 +7,7 @@
 # firewall opens port 8000 only for you. If left empty, ufw is skipped and
 # the API port is PUBLIC — anyone who scans the instance can use it.
 set -e
-ALLOW_IP="${ALLOW_IP:-}"
+ALLOW_IP="89.180.47.218"
 log() { echo "[KodaQuant] $(date -u +%H:%M:%S) $*"; }
 
 log "bootstrapping dedicated compute node"
@@ -67,8 +67,8 @@ for attempt in 1 2 3 4 5; do
   sleep 20
 done
 
-# 6. Wait for the API to become healthy
-for i in $(seq 1 36); do
+# 6. Wait for the API to become healthy (first boot may need up to ~8 min)
+for i in $(seq 1 96); do
   if curl -sf http://localhost:8000/api/v1/health >/dev/null; then
     log "API healthy on port 8000"
     exit 0
@@ -76,5 +76,5 @@ for i in $(seq 1 36); do
   sleep 5
 done
 
-log "WARNING: API not healthy within 180s — check 'docker compose logs api'"
+log "WARNING: API not healthy within 480s — check 'docker compose logs api'"
 exit 1

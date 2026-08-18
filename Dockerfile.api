@@ -1,4 +1,6 @@
-FROM python:3.12-slim
+# Pre-built TF GPU image: TensorFlow + CUDA bundled, so image builds
+# are fast on rented nodes (no ~30 min pip TF install at boot).
+FROM tensorflow/tensorflow:2.21.0-gpu
 
 WORKDIR /app
 
