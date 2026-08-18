@@ -132,7 +132,7 @@ export function HpoTrialFeed({ trials }: Props) {
               #
             </th>
             <th className="px-2 py-1 text-right text-[9px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
-              Score
+              Objective<span className="hidden sm:inline"> (penalized CV)</span>
             </th>
             <th className="px-2 py-1 text-left text-[9px] font-medium tracking-[0.06em] text-(--color-text-muted) uppercase">
               Parameters
@@ -144,12 +144,13 @@ export function HpoTrialFeed({ trials }: Props) {
         </thead>
         <tbody>
           {trials.map(({ model, trial }) => {
+            // Objective values are penalized CV scores (capped Sharpe minus
+            // trade-floor/activity/turnover penalties); negative values are
+            // normal and do NOT mean "negative Sharpe".
             const scoreColor =
-              (trial.score ?? 0) >= 0.5
-                ? "var(--color-accent-success)"
-                : (trial.score ?? 0) >= 0
-                  ? "var(--color-accent-warning)"
-                  : "var(--color-accent-danger)";
+              trial.score == null
+                ? "var(--color-text-muted)"
+                : "var(--color-text-secondary)";
             return (
               <tr
                 key={`${model}-${trial.trial_number}`}

@@ -82,7 +82,8 @@ class ModelHealth:
     total_signals: int = 0
     wins: int = 0
     losses: int = 0
-    last_sharpe: float = np.nan
+    last_sharpe: float = np.nan          # kill-switch signal (legacy scale; internal)
+    last_sharpe_display: float = np.nan  # honest per-trade Sharpe for UI (no fabricated annualization)
     last_hit_rate: float = np.nan
     is_healthy: bool = True
 
@@ -100,7 +101,14 @@ class ModelHealth:
             trades_arr = np.array(self.recent_trades)
             mean_ret = np.mean(trades_arr)
             std_ret = np.std(trades_arr, ddof=1)
+            # Kill-switch signal (unchanged scale so risk behavior is not altered).
             self.last_sharpe = float(mean_ret / std_ret * np.sqrt(252 * 24)) if std_ret > 0 else 0.0
+            # Honest display value: raw per-trade mean/std, no annualization,
+            # requires >= 10 closed trades to be meaningful.
+            if len(self.recent_trades) >= 10 and std_ret > 0:
+                self.last_sharpe_display = float(mean_ret / std_ret)
+            else:
+                self.last_sharpe_display = np.nan
             self.last_hit_rate = float((trades_arr > 0).mean())
 
 
@@ -535,7 +543,7 @@ class LiveCommitteeRunner:
             "total_signals": h.total_signals,
             "wins": h.wins,
             "losses": h.losses,
-            "rolling_sharpe": round(h.last_sharpe, 3) if not np.isnan(h.last_sharpe) else None,
+            "rolling_sharpe": round(h.last_sharpe_display, 3) if not np.isnan(h.last_sharpe_display) else None,
             "rolling_hit_rate": round(h.last_hit_rate, 3) if not np.isnan(h.last_hit_rate) else None,
             "is_healthy": h.is_healthy,
         }

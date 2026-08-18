@@ -10,8 +10,9 @@ export function MonthlyHeatmap({ periods }: Props) {
   return (
     <div className="flex h-6 gap-0.5 overflow-x-auto rounded border border-(--color-glass-border) bg-(--color-glass-hover) px-1">
       {periods.map((p, idx) => {
-        const hasData = p.sharpe != null;
-        const sharpe = p.sharpe ?? 0;
+        const hasData = p.sharpe_ann != null;
+        const sharpe = p.sharpe_ann ?? 0;
+        const lowSample = (p.trades ?? 0) < 30;
         const color = !hasData
           ? "var(--color-glass-border)"
           : sharpe >= 1
@@ -29,7 +30,7 @@ export function MonthlyHeatmap({ periods }: Props) {
             key={`${p.period}-${p.model ?? idx}`}
             className="flex h-full min-w-[14px] items-center justify-center rounded-sm transition-opacity hover:opacity-80"
             style={{ backgroundColor: color, opacity: hasData ? 1 : 0.2 }}
-            title={`M${p.period}: Sharpe ${sharpe.toFixed(2)}, Return ${(p.return_pct ?? 0).toFixed(1)}%`}
+            title={`M${p.period}: Sharpe (monthly ann.) ${sharpe.toFixed(2)}, Return ${(p.return_pct ?? 0).toFixed(2)}%${lowSample ? " — fewer than 30 trades" : ""}`}
           >
             <span className="font-mono text-[7px] font-bold text-white/70">{p.period}</span>
           </div>

@@ -321,3 +321,89 @@ class TestEdgeCases:
         result = compute_full_evaluation_metrics(df)
         assert isinstance(result, tuple)
         assert len(result) == 16
+
+
+class TestHonestPeriodSharpe:
+    """Display-layer honest Sharpe: all bars (flat included), sqrt(12) monthly
+    annualization, gated on minimum trade count."""
+
+    def test_uses_all_bars_including_flat(self):
+        from pipeline.metrics.metrics_eval import compute_honest_period_sharpe
+
+        n = 26280  # ~one month of 5-min bars
+        rets = np.full(n, 1e-5)
+        rets[:42] = np.random.default_rng(7).normal(0.0002, 0.002, 42)
+        s = pd.Series(rets)
+        h = compute_honest_period_sharpe(s, trades=10, periods_per_year=12.0, min_trades=10)
+        # Spec: mean/std over ALL bars (flat included) annualized with sqrt(12),
+        # not sqrt(bars_per_year) ~ 162.
+        expected = float((s.mean() / s.std(ddof=0)) * np.sqrt(12.0))
+        assert h == pytest.approx(expected, abs=1e-4)
+        assert abs(h) < 2.0
+
+    def test_nan_when_too_few_trades(self):
+        from pipeline.metrics.metrics_eval import compute_honest_period_sharpe
+
+        rets = pd.Series(np.random.default_rng(0).normal(0.0001, 0.001, 500))
+        assert np.isnan(compute_honest_period_sharpe(rets, trades=5, periods_per_year=12.0, min_trades=30))
+        assert np.isnan(compute_honest_period_sharpe(rets, trades=30, periods_per_year=12.0, min_trades=31))
+        assert np.isfinite(compute_honest_period_sharpe(rets, trades=30, periods_per_year=12.0, min_trades=30))
+
+    def test_flat_series_is_nan(self):
+        from pipeline.metrics.metrics_eval import compute_honest_period_sharpe
+
+        rets = pd.Series(np.full(1000, 1e-5))
+        # No variance -> no risk to price -> NaN, never a fabricated Sharpe.
+        assert np.isnan(compute_honest_period_sharpe(rets, trades=10, periods_per_year=12.0, min_trades=1))
+
+    def test_constant_momentum_month(self):
+        from pipeline.metrics.metrics_eval import compute_honest_period_sharpe
+
+        rng = np.random.default_rng(3)
+        rets = pd.Series(0.0002 + rng.normal(0, 0.0001, 3000))
+        h = compute_honest_period_sharpe(rets, trades=50, periods_per_year=12.0, min_trades=30)
+        assert np.isfinite(h) and h > 1.0
+
+
+class TestHonestSessionMetrics:
+    """Paper/live session honest Sharpe from equity curve points."""
+
+    def test_empty_session(self):
+        from pipeline.metrics.metrics_eval import honest_session_metrics
+
+        out = honest_session_metrics([], periods_per_year=252.0, min_samples=30)
+        assert out == {"sharpe": None, "sortino": None, "n_days": 0}
+
+    def test_too_short_session_is_none(self):
+        from pipeline.metrics.metrics_eval import honest_session_metrics
+
+        pts = [{"time": np.datetime64("2026-01-01") + np.timedelta64(i, "D"), "equity": 1.0} for i in range(10)]
+        out = honest_session_metrics(pts, periods_per_year=252.0, min_samples=30)
+        assert out["sharpe"] is None
+        assert out["sortino"] is None
+        assert out["n_days"] == 9
+
+    def test_valid_session(self):
+        from pipeline.metrics.metrics_eval import honest_session_metrics
+
+        rng = np.random.default_rng(7)
+        n = 40
+        pts = [
+            {
+                "time": np.datetime64("2026-01-01") + np.timedelta64(i, "D"),
+                "equity": float(np.cumprod(1 + rng.normal(0.001, 0.01, n))[i]),
+            }
+            for i in range(n)
+        ]
+        out = honest_session_metrics(pts, periods_per_year=252.0, min_samples=30)
+        assert out["n_days"] >= 30
+        assert isinstance(out["sharpe"], float)
+        assert isinstance(out["sortino"], float)
+
+    def test_flat_session_is_none(self):
+        from pipeline.metrics.metrics_eval import honest_session_metrics
+
+        pts = [{"time": np.datetime64("2026-01-01") + np.timedelta64(i, "D"), "equity": 1.0} for i in range(40)]
+        out = honest_session_metrics(pts, periods_per_year=252.0, min_samples=30)
+        assert out["sharpe"] is None
+        assert out["n_days"] == 39

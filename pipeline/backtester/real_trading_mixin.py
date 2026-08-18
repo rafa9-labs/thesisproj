@@ -2,6 +2,7 @@
 from config import PIPELINE_CONSTANTS as _PC
 from pipeline._imports import *  # noqa: F401,F403
 from pipeline.models.dqn_config import HPO_CONFIG_DIR  # noqa: F811
+from pipeline.metrics.metrics_eval import compute_honest_period_sharpe
 
 
 class RealTradingMixin:
@@ -14,6 +15,28 @@ class RealTradingMixin:
     _news_blend_timer: float = 0.0
     _news_blend_cached_score: float = 0.0
     _news_blend_cached_pair: str = ""
+
+    @staticmethod
+    def _safe_factor_pct(factor) -> float | None:
+        """Convert a monthly equity FACTOR (e.g. 1.0123) to a true percent return."""
+        try:
+            f = float(factor)
+        except Exception:
+            return None
+        if not np.isfinite(f):
+            return None
+        return round((f - 1.0) * 100.0, 4)
+
+    @staticmethod
+    def _safe_diff_pct(diff) -> float | None:
+        """Convert a factor DIFFERENCE (perf - creturns) to percent points."""
+        try:
+            d = float(diff)
+        except Exception:
+            return None
+        if not np.isfinite(d):
+            return None
+        return round(d * 100.0, 4)
 
     @staticmethod
     def _blend_news_sentiment(
@@ -385,6 +408,19 @@ class RealTradingMixin:
                 prev_position_out = float(df_flat.attrs.get("last_position", prev_position))
                 monthly_bh_factor  = float(creturns)
 
+            # --- Honest short-window reporting metrics (display only; scoring untouched) ---
+            _sharpe_ann_flat = float("nan")
+            _wins_flat = 0
+            try:
+                _sharpe_ann_flat = compute_honest_period_sharpe(
+                    df_flat["strategy"] if ("strategy" in df_flat.columns) else pd.Series(dtype=float),
+                    trades=trades,
+                    periods_per_year=12.0,
+                )
+                _wins_flat = int(df_flat.attrs.get("num_wins", 0) or 0)
+            except Exception:
+                pass
+
             result = {
                 "month": period_idx,
                 "model": model_type,
@@ -396,6 +432,8 @@ class RealTradingMixin:
                 "creturns": creturns,
                 "outperformance": outperf,
                 "sharpe": sharpe,
+                "sharpe_ann": float(round(_sharpe_ann_flat, 4)) if np.isfinite(_sharpe_ann_flat) else float("nan"),
+                "wins": int(_wins_flat),
                 "drawdown": drawdown,
                 "trades": trades,
                 "geo_mean_ann": geo_mean_ann,
@@ -2376,6 +2414,8 @@ class RealTradingMixin:
                             "period": period_idx + 1,
                             "total_periods": n_periods,
                             "sharpe": 0.0,
+                            "sharpe_ann": None,
+                            "wins": 0,
                             "trades": 0,
                             "equity_strategy": prev_eq_strategy,
                             "equity_bh": prev_eq_bh,
@@ -2386,6 +2426,7 @@ class RealTradingMixin:
                             "return_pct": 0.0,
                             "directional_accuracy": 0.0,
                             "active_rate": 0.0,
+                            "outperformance": 0.0,
                             "flat": True,
                         })
                     continue
@@ -2599,6 +2640,35 @@ class RealTradingMixin:
                     print("[WARN] No self.results to build bar DF from.")
 
 
+                # --- Honest short-window reporting metrics (display only; CV/HPO scoring untouched) ---
+                # sharpe_ann: all bars (flat included), annualized with sqrt(12) per month,
+                # NaN when trades < min_trades_for_reliability (default 30).
+                # wins: per-trade wins this month for aggregate win-rate reporting.
+                _sharpe_ann = float("nan")
+                _wins_month = 0
+                try:
+                    _cfg_f = getattr(self, "features_config", {}) or {}
+                    _min_tr = int(_cfg_f.get("min_trades_for_reliability", 30))
+                except Exception:
+                    _min_tr = 30
+                try:
+                    _ev = locals().get("eval_df_cont", None)
+                    if _ev is not None and isinstance(_ev, pd.DataFrame) and ("strategy" in _ev.columns):
+                        _sharpe_ann = compute_honest_period_sharpe(
+                            _ev["strategy"],
+                            trades=trades,
+                            periods_per_year=12.0,
+                            min_trades=_min_tr,
+                        )
+                        _wins_month = int(_ev.attrs.get("num_wins", -1) or -1)
+                        if _wins_month < 0:
+                            try:
+                                _wins_month = int(round(float(win_rate) * float(trades)))
+                            except Exception:
+                                _wins_month = 0
+                except Exception:
+                    pass
+
                 # Carry-over equities are already updated just above (prev_eq_strategy / prev_eq_bh)
                 monthly_bh_factor = float(ret)                  # BH factor this month (continuous)
                 equity_strategy   = float(prev_eq_strategy)     # carried strategy equity
@@ -2800,6 +2870,7 @@ class RealTradingMixin:
 
                     # S16.1: Overfitting detection — in-sample metrics from CV
                     "train_sharpe": _safe_get_cv_value(best_combo),
+                    "train_sharpe_is_objective": True,   # value is the penalized HPO objective, not a raw CV Sharpe
                     "train_return": _safe_get_cv_return(best_combo),
                     "sharpe_gap_pct": 0.0,   # populated below after sharpe is computed
                     "return_gap_pct": 0.0,   # populated below
@@ -2814,6 +2885,10 @@ class RealTradingMixin:
 
                     # detailed metrics
                     "sharpe":              float(sharpe),
+                    # Honest short-window Sharpe: flat bars included, sqrt(12) annualization,
+                    # NaN below the reliability trade floor. Legacy "sharpe" kept for CSV/compat.
+                    "sharpe_ann":          float(round(_sharpe_ann, 4)) if np.isfinite(_sharpe_ann) else float("nan"),
+                    "wins":                int(_wins_month or 0),
                     "drawdown":            float(drawdown),
                     "trades":              int(trades) if trades == trades else 0,
                     "directional_accuracy":float(directional_accuracy),
@@ -2920,6 +2995,8 @@ class RealTradingMixin:
                         "period": i + 1,
                         "total_periods": n_periods,
                         "sharpe": result.get("sharpe"),
+                        "sharpe_ann": result.get("sharpe_ann"),
+                        "wins": result.get("wins", 0),
                         "trades": result.get("trades"),
                         "equity_strategy": result.get("equity_strategy"),
                         "equity_bh": result.get("equity_bh"),
@@ -2927,16 +3004,17 @@ class RealTradingMixin:
                         "win_rate": result.get("win_rate"),
                         "precision_macro": result.get("precision_macro"),
                         "f1_macro": result.get("f1_macro"),
-                        "return_pct": result.get("cstrategy"),
+                        "return_pct": self._safe_factor_pct(result.get("cstrategy")),
                         "directional_accuracy": result.get("directional_accuracy"),
                         "active_rate": result.get("active_rate"),
                         "train_sharpe": result.get("train_sharpe"),
+                        "train_sharpe_is_objective": bool(result.get("train_sharpe_is_objective", True)),
                         "sharpe_gap_pct": result.get("sharpe_gap_pct"),
                         "signals_raw": result.get("signals_raw"),
                         "signals_passed_gate": result.get("signals_passed_gate"),
                         "signal_coverage": result.get("signal_coverage"),
                         "profit_per_hit": result.get("profit_per_hit"),
-                        "outperformance": result.get("outperformance"),
+                        "outperformance": self._safe_diff_pct(result.get("outperformance")),
                     })
                 
                 # PBO/MCS monthly bookkeeping (does not affect trading logic)

@@ -187,13 +187,17 @@ export interface DefinePairResponse {
 
 export interface Metrics {
   model: string;
+  metrics_version?: number;
   sharpe: number | null;
+  sharpe_min_months?: number;
+  sharpe_min_trades?: number;
   sortino: number | null;
   max_drawdown: number | null;
   total_return_pct: number | null;
   cagr: number | null;
   calmar_ratio: number | null;
   win_rate: number | null;
+  positive_months_rate?: number | null;
   total_trades: number | null;
   profit_factor: number | null;
   avg_trade: number | null;
@@ -329,6 +333,8 @@ export interface BacktestSummaryItem {
   total_trades: number | null;
   status: string;
   error: string | null;
+  metrics_version?: number;
+  legacy?: boolean;
 }
 
 export interface JobStatus {
@@ -359,7 +365,9 @@ export interface MonthlyResult {
   return_pct: number;
   win_rate: number;
   trades: number;
+  wins?: number;
   sharpe: number | null;
+  sharpe_legacy?: number | null;
 }
 
 export interface EquityPoint {
@@ -506,6 +514,8 @@ export type WsEvent =
       equity: number | null;
       equity_bh: number | null;
       sharpe: number | null;
+      sharpe_ann?: number | null;
+      wins?: number;
       return_pct: number | null;
       trades: number | null;
       drawdown: number | null;
@@ -516,6 +526,7 @@ export type WsEvent =
       active_rate: number | null;
       flat?: boolean;
       train_sharpe?: number | null;
+      train_sharpe_is_objective?: boolean;
       sharpe_gap_pct?: number | null;
       signals_raw?: number;
       signals_passed_gate?: number;
@@ -558,6 +569,8 @@ export interface OosPeriodResult {
   equity: number | null;
   equity_bh: number | null;
   sharpe: number | null;
+  sharpe_ann?: number | null;
+  wins?: number;
   return_pct: number | null;
   trades: number | null;
   drawdown: number | null;
@@ -566,6 +579,7 @@ export interface OosPeriodResult {
   f1: number | null;
   flat?: boolean;
   train_sharpe?: number | null;
+  train_sharpe_is_objective?: boolean;
   sharpe_gap_pct?: number | null;
   signals_raw?: number;
   signals_passed_gate?: number;

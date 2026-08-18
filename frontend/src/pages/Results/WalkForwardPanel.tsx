@@ -73,7 +73,7 @@ function WalkForwardKpiCards({ data }: { data: PeriodData[] }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <KpiCard label="Avg Sharpe" value={avgSharpe.toFixed(2)} />
+      <KpiCard label="Avg Sharpe (mo.)" value={avgSharpe.toFixed(2)} />
       <KpiCard label="Total Trades" value={String(totalTrades)} />
       <KpiCard label="Avg Return" value={`${avgReturn >= 0 ? "+" : ""}${avgReturn.toFixed(1)}%`} />
       <KpiCard label="Positive" value={`${positive}/${cnt}`} />
@@ -104,9 +104,9 @@ function WalkForwardCompactChart({ data }: { data: PeriodData[] }) {
   }, [data, viewMode]);
 
   const viewLabel =
-    viewMode === "sharpe" ? "Test Sharpe" : viewMode === "return" ? "Return %" : "Signal Gate %";
+    viewMode === "sharpe" ? "Test Sharpe (monthly ann.)" : viewMode === "return" ? "Return %" : "Signal Gate %";
   const viewLabel2 =
-    viewMode === "sharpe" ? "Train Sharpe" : viewMode === "return" ? "B&H Return %" : null;
+    viewMode === "sharpe" ? "Train (HPO CV objective)" : viewMode === "return" ? "B&H Return %" : null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -218,7 +218,7 @@ function WalkForwardCompactChart({ data }: { data: PeriodData[] }) {
       {/* Summary stats */}
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         <div className="rounded-sm bg-(--color-elevated) px-2 py-1.5">
-          <span className="block text-[9px] tracking-[0.06em] text-(--color-text-muted) uppercase">Avg Sharpe</span>
+          <span className="block text-[9px] tracking-[0.06em] text-(--color-text-muted) uppercase">Avg Sharpe (mo.)</span>
           <span className="font-mono text-[13px] font-semibold">
             {formatMetric(data.reduce((s, d) => s + (d.testSharpe ?? 0), 0) / data.length)}
           </span>

@@ -135,6 +135,7 @@ export function ResultsHistoryPage() {
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [hideLegacy, setHideLegacy] = useState(true);
 
   const { data, isLoading } = useResultsHistory({
     pair: pairFilter,
@@ -145,14 +146,16 @@ export function ResultsHistoryPage() {
   });
 
   const results = data?.results ?? [];
-  const filtered = search
-    ? results.filter(
-        (r) =>
-          r.job_id.toLowerCase().includes(search.toLowerCase()) ||
-          r.pair?.toLowerCase().includes(search.toLowerCase()) ||
-          r.models?.some((m) => m.toLowerCase().includes(search.toLowerCase())),
-      )
-    : results;
+  const filtered = (
+    search
+      ? results.filter(
+          (r) =>
+            r.job_id.toLowerCase().includes(search.toLowerCase()) ||
+            r.pair?.toLowerCase().includes(search.toLowerCase()) ||
+            r.models?.some((m) => m.toLowerCase().includes(search.toLowerCase())),
+        )
+      : results
+  ).filter((r) => !(hideLegacy && r.legacy));
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -350,6 +353,15 @@ export function ResultsHistoryPage() {
             </button>
           </div>
         )}
+
+        <button
+          onClick={() => setHideLegacy((v) => !v)}
+          className="rounded-sm border border-(--color-glass-border) px-2.5 py-1 text-[10px] font-medium transition-colors hover:bg-[var(--color-glass-hover)]"
+          title="Legacy results were computed with inflated short-window Sharpe annualization"
+          style={{ color: hideLegacy ? "var(--color-text-dim)" : "var(--color-accent-warning)" }}
+        >
+          {hideLegacy ? "Show legacy" : "Hide legacy"}
+        </button>
       </div>
 
       {/* ── table ── */}
@@ -500,6 +512,14 @@ export function ResultsHistoryPage() {
                       <div className="flex flex-col gap-0.5">
                         <span className="font-mono text-[12px] font-semibold text-(--color-text-primary)">
                           {row.pair}
+                          {row.legacy && (
+                            <span
+                              className="ml-1.5 rounded-sm border border-[rgba(245,158,11,0.4)] px-1 py-0.5 align-middle font-mono text-[8px] tracking-wider text-(--color-accent-warning) uppercase"
+                              title="Computed with inflated short-window Sharpe annualization (legacy metric format)"
+                            >
+                              Legacy
+                            </span>
+                          )}
                         </span>
                         {row.timeframe && (
                           <span className="font-mono text-[9px] text-(--color-text-muted)">

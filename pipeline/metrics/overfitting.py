@@ -46,6 +46,7 @@ class OverfittingReport:
     dsr_min_sharpe: float | None = None
     psr: float | None = None
     dsr_value: float | None = None
+    train_gap_vs_objective: bool = False
     interaction_effects: List[Dict[str, Any]] | None = None
 
 
@@ -215,6 +216,24 @@ def _classify_risk(score: float) -> Tuple[str, str]:
     return ("high", "red")
 
 
+def _honest_monthly_sharpe(r: dict) -> float:
+    """Prefer the honest monthly Sharpe (sharpe_ann: flat bars included,
+    sqrt(12) annualization, NaN below the reliability trade floor).
+
+    Falls back to the legacy inflated 'sharpe' for records produced before
+    the honest-metrics rollout.
+    """
+    v = r.get("sharpe_ann", None)
+    if v is not None:
+        try:
+            f = float(v)
+            if np.isfinite(f):
+                return f
+        except Exception:
+            pass
+    return float(r.get("sharpe", np.nan))
+
+
 def compute_overfitting_report(
     monthly_records: List[dict],
     model_type: str = "",
@@ -247,7 +266,7 @@ def compute_overfitting_report(
     if not monthly_records:
         return report
 
-    sharpes_arr = np.array([r.get("sharpe", np.nan) for r in monthly_records], dtype=float)
+    sharpes_arr = np.array([_honest_monthly_sharpe(r) for r in monthly_records], dtype=float)
     returns_arr = np.array([r.get("strategy_return", np.nan) for r in monthly_records], dtype=float)
     trades_arr = np.array([r.get("trades", 0) or 0 for r in monthly_records], dtype=int)
 
@@ -299,6 +318,12 @@ def compute_overfitting_report(
         r.get("train_sharpe", np.nan) for r in monthly_records
     ], dtype=float)
     train_sharpes_finite = train_sharpes[np.isfinite(train_sharpes)]
+    try:
+        report.train_gap_vs_objective = bool(
+            any(bool(r.get("train_sharpe_is_objective", True)) for r in monthly_records)
+        )
+    except Exception:
+        report.train_gap_vs_objective = True
 
     if len(train_sharpes_finite) >= 3 and len(sharpes_finite) >= 3:
         ts_mean = float(np.nanmean(train_sharpes_finite))
@@ -451,16 +476,20 @@ def compute_period_breakdown(monthly_records: List[dict]) -> List[dict]:
     """
     out = []
     for r in monthly_records:
+        _sharpe_ann = float(r.get("sharpe_ann", float("nan")))
         entry = {
             "period_start": str(r.get("test_start", "")),
             "period_end": str(r.get("test_end", "")),
             "train_start": str(r.get("train_start", "")) if r.get("train_start") is not None and str(r.get("train_start")) != "nan" else None,
             "train_end": str(r.get("train_end", "")) if r.get("train_end") is not None and str(r.get("train_end")) != "nan" else None,
-            "test_sharpe": float(r.get("sharpe", float("nan"))),
+            "test_sharpe": _honest_monthly_sharpe(r),
+            "test_sharpe_legacy": float(r.get("sharpe", float("nan"))),
             "train_sharpe": float(r.get("train_sharpe", float("nan"))),
+            "train_sharpe_is_objective": bool(r.get("train_sharpe_is_objective", True)),
             "strategy_return": float(r.get("strategy_return", float("nan"))),
             "bh_return": float(r.get("bh_return", float("nan"))),
             "trades": int(r.get("trades", 0) or 0),
+            "wins": int(r.get("wins", 0) or 0),
             "signals_raw": int(r.get("signals_raw", 0) or 0),
             "signals_passed_gate": int(r.get("signals_passed_gate", 0) or 0),
             "pct_sideways": float(r.get("pct_sideways", float("nan"))),

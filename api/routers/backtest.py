@@ -451,6 +451,7 @@ def get_results_summary(
             ))
         else:
             for m in raw_metrics:
+                _mv = m.get("metrics_version", 1) if isinstance(m, dict) else 1
                 results.append(BacktestSummaryItem(
                     job_id=job["id"],
                     created_at=job["created_at"],
@@ -465,6 +466,8 @@ def get_results_summary(
                     status=job_status,
                     error=job_error,
                     study_meta=_study_meta_obj,
+                    metrics_version=int(_mv or 1),
+                    legacy=bool(int(_mv or 1) < 2),
                 ))
 
     valid_sort_cols = {
@@ -1112,6 +1115,7 @@ def get_studies(
 
         raw_metrics = (result.get("metrics", [])) if isinstance(result, dict) else []
         for m in raw_metrics:
+            _mv = m.get("metrics_version", 1) if isinstance(m, dict) else 1
             results.append(StudySummaryItem(
                 job_id=job["id"],
                 created_at=job["created_at"],
@@ -1125,6 +1129,8 @@ def get_studies(
                 total_trades=m.get("total_trades"),
                 status=job["status"],
                 study_meta=_study_meta_obj,
+                metrics_version=int(_mv or 1),
+                legacy=bool(int(_mv or 1) < 2),
             ))
 
     valid_sort_cols = {

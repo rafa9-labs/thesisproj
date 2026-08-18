@@ -127,7 +127,10 @@ class TestPaperEngine:
         summary = engine.get_summary()
 
         assert summary["total_trades"] == 0
-        assert summary["sharpe"] == 0.0
+        # Honest reporting: no trades => Sharpe is None (insufficient data),
+        # not a fabricated 0.0.
+        assert summary["sharpe"] is None
+        assert summary["sortino"] is None
         assert summary["total_return_pct"] == 0.0
 
     def test_summary_metrics_with_trades(self, paper_engine_config, long_signal):
@@ -161,7 +164,9 @@ class TestPaperEngine:
 
         assert "sharpe" in comparison
         assert "total_return_pct" in comparison
-        assert isinstance(comparison["sharpe"]["paper"], (int, float))
+        # Honest reporting: a 1-trade session has insufficient data -> paper
+        # Sharpe is None rather than a fabricated number.
+        assert comparison["sharpe"]["paper"] is None or isinstance(comparison["sharpe"]["paper"], (int, float))
         assert comparison["sharpe"]["backtest"] == 1.5
 
     def test_get_trades_pagination(self, paper_engine_config, long_signal):

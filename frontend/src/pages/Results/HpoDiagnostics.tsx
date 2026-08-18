@@ -181,7 +181,7 @@ export function BestStudyCard({ bestStudy }: { bestStudy: BestStudy | null }) {
           </div>
           <div>
             <span className="block text-[10px] font-semibold tracking-wide text-(--color-text-muted) uppercase">
-              Best Value
+              Objective (penalized CV)
             </span>
             <span className="font-mono text-sm text-(--color-accent-success)">
               {bestStudy.best_value != null ? bestStudy.best_value.toFixed(4) : "—"}

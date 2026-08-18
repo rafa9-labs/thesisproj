@@ -22,6 +22,11 @@ import pandas as pd
 from api.config import settings
 from pipeline.data.data_sqlite import DataStore
 
+# Metrics format version. v2 = honest metrics (monthly sqrt(12) Sharpe with flat
+# bars, per-trade win rate, true-% returns). Rows without this key (or v1) are
+# legacy results computed with inflated short-window annualization.
+METRICS_VERSION = 2
+
 HYPERPARAM_ALIASES: Dict[str, Dict[str, str]] = {
     "logistic": {
         "C": "logit_C",
@@ -234,6 +239,8 @@ def _make_progress_callback(job_id: str, total_work: int, jm):
                 "equity": detail.get("equity_strategy"),
                 "equity_bh": detail.get("equity_bh"),
                 "sharpe": detail.get("sharpe"),
+                "sharpe_ann": detail.get("sharpe_ann"),
+                "wins": detail.get("wins", 0),
                 "return_pct": detail.get("return_pct"),
                 "trades": detail.get("trades"),
                 "drawdown": detail.get("drawdown"),
@@ -243,6 +250,7 @@ def _make_progress_callback(job_id: str, total_work: int, jm):
                 "directional_accuracy": detail.get("directional_accuracy"),
                 "active_rate": detail.get("active_rate"),
                 "train_sharpe": detail.get("train_sharpe"),
+                "train_sharpe_is_objective": bool(detail.get("train_sharpe_is_objective", True)),
                 "sharpe_gap_pct": detail.get("sharpe_gap_pct"),
                 "signals_raw": detail.get("signals_raw"),
                 "signals_passed_gate": detail.get("signals_passed_gate"),
@@ -952,7 +960,8 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                     months=months,
                 )
 
-                metrics_row = {"model": model_type, "rep": rep, "seed": rep_seed}
+                metrics_row = {"model": model_type, "rep": rep, "seed": rep_seed,
+                               "metrics_version": METRICS_VERSION}
                 equity_series = pd.Series(dtype=np.float64)
                 buyhold_series = pd.Series(dtype=np.float64)
                 bar_concat = getattr(bt, "bar_concat", None)
@@ -1024,7 +1033,13 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
 
                 if "strategy_return" in df_sim.columns:
                     rets = df_sim["strategy_return"].dropna().values
-                    if len(rets) > 2:
+                    total_trades = metrics_row.get("total_trades", 0)
+                    # --- Honest reporting guards: don't publish hero Sharpes from
+                    # tiny samples (few months or few trades). Values become None
+                    # so the UI renders "insufficient data" instead of a number.
+                    _min_months = 6
+                    _min_trades = 30
+                    if len(rets) >= _min_months and total_trades >= _min_trades and len(rets) > 2:
                         ann_ret = np.mean(rets) * 12
                         ann_vol = np.std(rets, ddof=1) * np.sqrt(12)
                         metrics_row["sharpe"] = float(ann_ret / ann_vol) if ann_vol > 0 else 0.0
@@ -1037,9 +1052,22 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                         else:
                             metrics_row["sortino"] = 0.0
                     else:
-                        metrics_row["sharpe"] = 0.0
-                        metrics_row["sortino"] = 0.0
-                    metrics_row["win_rate"] = float((rets > 0).mean()) if len(rets) > 0 else 0.0
+                        metrics_row["sharpe"] = None
+                        metrics_row["sortino"] = None
+                    metrics_row["sharpe_min_months"] = _min_months
+                    metrics_row["sharpe_min_trades"] = _min_trades
+                    # --- Per-trade win rate (aggregate across months); the previous
+                    # metric was the fraction of positive months, which is a different
+                    # quantity and is now exposed separately.
+                    try:
+                        if ("wins" in df_sim.columns) and (total_trades > 0):
+                            _wins_tot = int(df_sim["wins"].fillna(0).astype(int).sum())
+                            metrics_row["win_rate"] = float(_wins_tot) / float(total_trades)
+                        else:
+                            metrics_row["win_rate"] = float((rets > 0).mean()) if len(rets) > 0 else 0.0
+                    except Exception:
+                        metrics_row["win_rate"] = float((rets > 0).mean()) if len(rets) > 0 else 0.0
+                    metrics_row["positive_months_rate"] = float((rets > 0).mean()) if len(rets) > 0 else 0.0
                     gross_wins = float(np.sum(rets[rets > 0])) if np.any(rets > 0) else 0.0
                     gross_losses = abs(float(np.sum(rets[rets < 0]))) if np.any(rets < 0) else 0.0
                     metrics_row["profit_factor"] = gross_wins / gross_losses if gross_losses > 1e-9 else (float('inf') if gross_wins > 0 else 0.0)
@@ -1057,12 +1085,15 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 months_out = []
                 for _, row in df_sim.iterrows():
                     month_label = str(row.get("test_start", ""))[:7] if pd.notna(row.get("test_start")) else ""
+                    _sann = row.get("sharpe_ann", np.nan)
                     months_out.append({
                         "month": month_label,
                         "return_pct": float(row.get("strategy_return", 0)) if pd.notna(row.get("strategy_return")) else None,
                         "win_rate": float(row.get("win_rate", 0)) if pd.notna(row.get("win_rate")) else None,
                         "trades": int(row.get("trades", 0)) if pd.notna(row.get("trades")) else 0,
-                        "sharpe": float(row.get("sharpe", 0)) if pd.notna(row.get("sharpe")) else None,
+                        "wins": int(row.get("wins", 0)) if pd.notna(row.get("wins")) else 0,
+                        "sharpe": float(_sann) if pd.notna(_sann) else None,
+                        "sharpe_legacy": float(row.get("sharpe", 0)) if pd.notna(row.get("sharpe")) else None,
                         "max_drawdown": float(row.get("drawdown", 0)) if pd.notna(row.get("drawdown")) else None,
                         "active_rate": float(row.get("active_rate", 0)) if pd.notna(row.get("active_rate")) else None,
                     })
@@ -1074,13 +1105,14 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                 metrics_row["monthly_results"] = []
                 metrics_row["total_return_pct"] = 0.0
                 metrics_row["max_drawdown"] = 0.0
-                metrics_row["sharpe"] = 0.0
-                metrics_row["sortino"] = 0.0
+                metrics_row["sharpe"] = None
+                metrics_row["sortino"] = None
                 metrics_row["profit_factor"] = 0.0
                 metrics_row["cagr"] = 0.0
                 metrics_row["calmar_ratio"] = 0.0
                 metrics_row["total_trades"] = 0
-                metrics_row["win_rate"] = 0.0
+                metrics_row["win_rate"] = None
+                metrics_row["positive_months_rate"] = None
                 metrics_row["active_rate"] = 0.0
 
             if trade_log is not None and not trade_log.empty:
@@ -1339,6 +1371,7 @@ def _run_backtest_impl(job_id: str, config: Dict[str, Any]):
                     "dsr_min_sharpe": overfit.dsr_min_sharpe,
                     "psr": overfit.psr,
                     "dsr_value": overfit.dsr_value,
+                    "train_gap_vs_objective": bool(overfit.train_gap_vs_objective),
                     "interaction_effects": overfit.interaction_effects,
                 }
                 metrics_row["walkforward_periods"] = compute_period_breakdown(wfo_records)

@@ -411,6 +411,8 @@ class BacktestSummaryItem(BaseModel):
     status: str = "completed"
     error: Optional[str] = None
     study_meta: Optional[StudyMetaResponse] = None
+    metrics_version: int = 1
+    legacy: bool = False
 
 
 class BacktestSummaryResponse(BaseModel):
@@ -489,6 +491,8 @@ class StudySummaryItem(BaseModel):
     total_trades: Optional[int] = None
     status: str = "completed"
     study_meta: Optional[StudyMetaResponse] = None
+    metrics_version: int = 1
+    legacy: bool = False
 
 
 class StudyListResponse(BaseModel):

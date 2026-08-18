@@ -35,7 +35,7 @@ function CustomTooltip({
         Trial <span className="text-(--color-brand)">#{d.trial}</span>
       </div>
       <div>
-        Score <span className="text-(--color-accent-success)">{d.score.toFixed(4)}</span>
+        Objective (penalized CV) <span className="text-(--color-accent-success)">{d.score.toFixed(4)}</span>
       </div>
     </div>
   );

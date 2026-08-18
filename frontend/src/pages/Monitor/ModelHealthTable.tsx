@@ -16,7 +16,7 @@ export function ModelHealthTable({ job }: Props) {
     const testMonths = lastCycle?.testMonths ?? [];
     const avgSharpe =
       testMonths.length > 0
-        ? testMonths.reduce((s, m) => s + (m.sharpe ?? 0), 0) / testMonths.length
+        ? testMonths.reduce((s, m) => s + (m.sharpe_ann ?? 0), 0) / testMonths.length
         : null;
     const totalTrades = testMonths.reduce((s, m) => s + (m.trades ?? 0), 0);
     const avgWinRate =

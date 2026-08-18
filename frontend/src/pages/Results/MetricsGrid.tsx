@@ -166,7 +166,7 @@ export function MetricsGrid({
       },
       {
         key: "win_rate",
-        label: "Win Rate",
+        label: "Win Rate (trades)",
         value: formatPercent(metrics.win_rate, 1),
         sub:
           metrics.win_rate !== null
@@ -177,6 +177,13 @@ export function MetricsGrid({
                 : "Below avg"
             : null,
         subType: getSubType(metrics.win_rate, [0.55, 0.5]),
+      },
+      {
+        key: "positive_months",
+        label: "Pos. Months",
+        value: formatPercent(metrics.positive_months_rate ?? null, 1),
+        sub: null,
+        subType: (metrics.positive_months_rate ?? 0) >= 0.5 ? "positive" : "neutral",
       },
       {
         key: "total_trades",
@@ -271,7 +278,7 @@ export function MetricsGrid({
         <div
           className="grid min-w-[780px]"
           style={{
-            gridTemplateColumns: "repeat(13, minmax(0, 1fr))",
+            gridTemplateColumns: "repeat(14, minmax(0, 1fr))",
           }}
         >
         {kpis.map((kpi) => (

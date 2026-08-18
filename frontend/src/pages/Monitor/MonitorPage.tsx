@@ -597,7 +597,10 @@ export function MonitorPage() {
                               {isPositive ? "+" : ""}{(p.return_pct ?? 0).toFixed(2)}%
                             </span>
                             <span className="w-14 shrink-0 text-right font-mono tabular-nums" style={{ color: dirColor }}>
-                              {p.sharpe != null ? p.sharpe.toFixed(2) : "\u2014"}
+                              {p.sharpe_ann != null ? p.sharpe_ann.toFixed(2) : "\u2014"}
+                              {(p.trades ?? 0) < 30 && p.sharpe_ann != null ? (
+                                <span className="ml-1 text-(--color-text-dim)" title="Fewer than 30 trades this month — Sharpe is unreliable">*</span>
+                              ) : null}
                             </span>
                             <span className="w-8 shrink-0 text-right font-mono tabular-nums text-(--color-text-dim)">
                               {p.trades ?? 0}
@@ -660,7 +663,7 @@ export function MonitorPage() {
                                 <span className="text-right" style={{
                                   color: (p.outperformance ?? 0) >= 0 ? "var(--color-accent-success)" : "var(--color-accent-danger)",
                                 }}>
-                                  {p.outperformance != null ? `${p.outperformance.toFixed(4)}%` : "\u2014"}
+                                  {p.outperformance != null ? `${p.outperformance.toFixed(2)}%` : "\u2014"}
                                 </span>
                               </div>
                             </div>

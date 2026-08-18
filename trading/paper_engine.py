@@ -367,8 +367,8 @@ class PaperEngine:
         closed = p.closed_trades
         if not closed:
             return {
-                "sharpe": 0.0,
-                "sortino": 0.0,
+                "sharpe": None,
+                "sortino": None,
                 "total_return_pct": 0.0,
                 "max_drawdown_pct": 0.0,
                 "win_rate": 0.0,
@@ -382,23 +382,21 @@ class PaperEngine:
         curve = p.equity_curve
         if curve and len(curve) > 1:
             eq = pd.Series([d["equity"] for d in curve], dtype=float)
-            rets = eq.pct_change().dropna()
-            rets = rets[rets.abs() > 1e-12]
+            # Honest session metrics: daily-resampled returns, flat days included,
+            # annualized with sqrt(252); None when the session is too short.
+            try:
+                from pipeline.metrics.metrics_eval import honest_session_metrics
+                _hm = honest_session_metrics(curve, periods_per_year=252.0, min_samples=30)
+                sharpe = _hm["sharpe"]
+                sortino = _hm["sortino"]
+            except Exception:
+                _hm = {}
+                sharpe, sortino = None, None
 
-            if len(rets) > 1 and rets.std() > 1e-8:
-                ann_factor = np.sqrt(min(252, len(rets)))
-                sharpe = float(rets.mean() / rets.std() * ann_factor)
-
-                downside = rets[rets < 0]
-                sortino_std = float(downside.std()) if len(downside) > 1 else rets.std()
-                sortino = float(rets.mean() / max(sortino_std, 1e-8) * ann_factor)
-
-                peak = eq.cummax()
-                max_dd = float(abs((eq / peak - 1).min()) * 100)
-            else:
-                sharpe, sortino, max_dd = 0.0, 0.0, 0.0
+            peak = eq.cummax()
+            max_dd = float(abs((eq / peak - 1).min()) * 100)
         else:
-            sharpe, sortino, max_dd = 0.0, 0.0, 0.0
+            sharpe, sortino, max_dd = None, None, 0.0
 
         total_return = (p.equity - p.initial_equity) / p.initial_equity * 100
         wins = [t for t in closed if t.pnl > 0]
@@ -410,8 +408,8 @@ class PaperEngine:
         avg_trade_pnl = sum(t.pnl for t in closed) / len(closed)
 
         return {
-            "sharpe": round(sharpe, 4),
-            "sortino": round(sortino, 4),
+            "sharpe": round(sharpe, 4) if sharpe is not None else None,
+            "sortino": round(sortino, 4) if sortino is not None else None,
             "total_return_pct": round(total_return, 2),
             "max_drawdown_pct": round(max_dd, 2),
             "win_rate": round(win_rate, 4),
@@ -433,7 +431,8 @@ class PaperEngine:
             pv = paper.get(key, 0)
             bv = bm.get(key)
             if bv is not None and bv != 0:
-                comparison[key] = {"paper": pv, "backtest": bv, "delta": round(pv - bv, 4)}
+                delta = round(pv - bv, 4) if pv is not None else None
+                comparison[key] = {"paper": pv, "backtest": bv, "delta": delta}
             else:
                 comparison[key] = {"paper": pv, "backtest": None, "delta": None}
         return comparison

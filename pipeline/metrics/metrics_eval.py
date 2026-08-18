@@ -163,6 +163,135 @@ def compute_metrics(
     return round(sharpe, 2), round(drawdown, 4), trades
 
 
+def compute_honest_period_sharpe(
+    bar_returns,
+    trades=None,
+    periods_per_year: float = 12.0,
+    min_trades: int = 30,
+    std_floor: float = 1e-10,
+) -> float:
+    """Honest short-window Sharpe for a single evaluation period (e.g. one walk-forward month).
+
+    Unlike compute_metrics, this:
+      - includes FLAT bars in both mean and std (no active-only filtering),
+      - annualizes with `periods_per_year` (sqrt(12) for monthly records) instead of
+        the bars-per-year estimate (sqrt(~6500)) that inflates 1-month samples,
+      - returns NaN when the sample has too few trades to be statistically meaningful.
+
+    Reporting-only helper: CV/HPO/committee scoring is NOT routed through this.
+    """
+    import numpy as np
+    r = bar_returns
+    try:
+        r = pd.Series(r).dropna()
+    except Exception:
+        r = pd.Series(list(r) if hasattr(r, "__iter__") else [], dtype=float).dropna()
+    if r.size < 2:
+        return float("nan")
+    if trades is not None:
+        try:
+            if int(trades) < int(min_trades):
+                return float("nan")
+        except Exception:
+            return float("nan")
+    mean = float(r.mean())
+    std = float(r.std(ddof=0))
+    if not np.isfinite(std) or std < std_floor:
+        return float("nan")
+    return float((mean / std) * np.sqrt(max(1.0, float(periods_per_year))))
+
+
+def honest_session_metrics(
+    equity_points,
+    periods_per_year: float = 252.0,
+    min_samples: int = 30,
+) -> dict:
+    """Honest Sharpe/Sortino for paper/live sessions from equity curve points.
+
+    equity_points: iterable of {"time": ..., "equity": ...} dicts (or a
+    pandas Series indexed by timestamps).
+
+    Returns {"sharpe": float|None, "sortino": float|None, "n_days": int}
+    with None when the session is too short to be statistically meaningful.
+    """
+    import numpy as np
+    import pandas as pd
+    out = {"sharpe": None, "sortino": None, "n_days": 0}
+    try:
+        if hasattr(equity_points, "index") and not isinstance(equity_points, (list, tuple)):
+            eq = pd.Series(equity_points).astype(float).dropna()
+        else:
+            pts = list(equity_points or [])
+            if not pts:
+                return out
+            eq = pd.Series([p["equity"] for p in pts], dtype=float)
+            try:
+                eq.index = pd.to_datetime([p["time"] for p in pts], utc=True)
+            except Exception:
+                eq.index = pd.RangeIndex(len(eq))
+        eq = eq.dropna()
+        if eq.size < 2:
+            return out
+        try:
+            daily = eq.resample("D").last().ffill()
+        except Exception:
+            daily = eq
+        rets = daily.pct_change().dropna()
+        n_days = int(rets.size)
+        out["n_days"] = n_days
+        if n_days < max(2, int(min_samples)):
+            return out
+        mean = float(rets.mean())
+        std = float(rets.std(ddof=0))
+        ann = np.sqrt(max(1.0, float(periods_per_year)))
+        if not np.isfinite(std) or std <= 1e-10:
+            return out
+        out["sharpe"] = round(float((mean / std) * ann), 4)
+        downside = rets[rets < 0]
+        d_std = float(downside.std(ddof=0)) if downside.size > 1 else std
+        if np.isfinite(d_std) and d_std > 1e-10:
+            out["sortino"] = round(float((mean / d_std) * ann), 4)
+        return out
+    except Exception:
+        return out
+
+
+def honest_session_sharpe(
+    equity_curve,
+    periods_per_year: float = 252.0,
+    min_samples: int = 30,
+    daily_resample: bool = True,
+    std_floor: float = 1e-10,
+) -> float:
+    """Honest Sharpe for paper/live trading sessions.
+
+    Resamples the equity curve to daily observations (flat days included) and
+    annualizes with sqrt(periods_per_year). Returns NaN below `min_samples`
+    daily returns so short sessions never produce fabricated Sharpes.
+    """
+    import numpy as np
+    import pandas as pd
+    try:
+        s = pd.Series(equity_curve).astype(float).dropna()
+    except Exception:
+        return float("nan")
+    if s.size < 2:
+        return float("nan")
+    if daily_resample:
+        try:
+            s = s.resample("D").last().ffill()
+        except Exception:
+            pass
+    r = s.pct_change().dropna()
+    if r.size < max(2, int(min_samples)):
+        return float("nan")
+    mean = float(r.mean())
+    std = float(r.std(ddof=0))
+    if not np.isfinite(std) or std < std_floor:
+        return float("nan")
+    return float((mean / std) * np.sqrt(max(1.0, float(periods_per_year))))
+
+
 def compute_geometric_mean_annualized(returns):
     """Geometric mean annualized from per-period log returns."""
     import numpy as np
@@ -1018,6 +1147,14 @@ def compute_full_evaluation_metrics(
     trade_returns = df["strategy"][trade_edge]
     num_wins = int((trade_returns > 0).sum())
     win_rate = float(num_wins) / float(trades) if trades > 0 else 0.0
+
+    # Expose per-trade win/loss counts for honest aggregation downstream
+    # (e.g. headline win rate = sum(wins) / sum(trades) across months).
+    try:
+        df.attrs["num_wins"] = int(num_wins)
+        df.attrs["num_trades_eval"] = int(trades)
+    except Exception:
+        pass
 
     volatility = float(np.std(df["strategy"]))
     excess_kurtosis = float(kurtosis(df["strategy"], fisher=True))
