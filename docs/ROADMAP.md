@@ -1164,6 +1164,43 @@
 
 ---
 
+## Sprint 22: Vast.ai GPU Rental ⏸ DEFERRED (2026-08-18)
+
+Dedicated GPU compute-node integration for running backtests on rented Vast.ai instances (RTX 3090+). Postponed after two failed instance bootstraps. **Code is complete and merged to main — only instance provisioning needs debugging.**
+
+### What's DONE (merged to main)
+- `api/routers/vast.py` — endpoints: `/api/v1/vast/settings`, `/vast/api-key`, `/vast/instances`, `/vast/run-backtest`, `/vast/runs/{job_id}`
+- `api/services/vast_client.py` — VastClient (list/get instances, `resolve_api_url()` maps container port → HostPort)
+- `api/services/vast_executor.py` — remote submit/status/results proxy
+- `scripts/vast_onstart.sh` — instance bootstrap: docker + NVIDIA toolkit + ufw (API port 8000 restricted to `ALLOW_IP`) + repo clone + `docker compose up` with retries + 480s health poll; logs every step to `/var/log/onstart.log` with ERR trap line numbers
+- `Dockerfile.api` — base image `tensorflow/tensorflow:2.21.0-gpu` (prebuilt TF wheel, avoids ~30 min pip build)
+- `docker-compose.yml` — GPU reservations (nvidia driver) on api + worker
+- `.env.local` fallback loading at 5 sites (`api/main.py`, `api/config.py`, `config.py`, `pipeline/_imports.py`, `pipeline/data/data_downloader.py`)
+- Keys: `VAST_API_KEY` in `.env.local` + encrypted in `data/secure.db`
+- Tests: `tests/test_vast_client.py` + `tests/test_vast_router.py` — 26/26 pass; 31/31 GPU-adjacent tests pass
+- Verified end-to-end locally: API boots with `has_api_key: true` from `.env.local`
+
+### BLOCKERS / LEARNINGS (2026-08-18)
+1. **Instance 1** (`48038686`, RTX 3090): stuck "loading" 30+ min, destroyed. Cloned the repo at boot before the TF-base-image change → old Dockerfile pip-installed TF for ~30 min; never produced containers.
+2. **Instance 2** (`48044229`): status "running" but API never responded on mapped port; SSH refused **even after adding the key to the account + reboot** — Vast injects account SSH keys **only at instance creation**. Web terminal (port 1111) was also dead → no visibility at all.
+3. Root cause of the second failure unknown (no SSH, no logs). Hardened onstart (log file + ERR trap) never got to run on a fresh instance.
+4. Vast API has no instance logs/restart endpoints (`/logs`, `/restart` → 404).
+
+### NEXT STEPS (to resume)
+1. SSH key (`~/.ssh/id_ed25519`, ed25519 ending `raf.plamadeala@gmail.com`) is already on the Vast account.
+2. Rent a fresh instance: CUDA image, RTX 3090+, ≥20 GB disk, open TCP port 8000. Paste the **current** `scripts/vast_onstart.sh` (do NOT reuse old templates — they embed the stale script).
+3. SSH in immediately (`ssh -i ~/.ssh/id_ed25519 -p <ssh_port> root@<ip>`) and `tail -f /var/log/onstart.log` to diagnose bootstrap live.
+4. If the docker path fails again: fall back to running the stack **natively** on the instance (python venv + uvicorn + `redis-server` via apt) — Vast hosts already have GPU drivers, TF sees the GPU directly.
+5. Verify GPU: `docker compose exec worker python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"`.
+6. E2E: `POST /api/v1/vast/run-backtest` with small lstm config (`{pair: EURUSD, models: [lstm], months: 1-2}`) → confirm results mirror locally via `GET /api/v1/vast/runs/{job_id}`.
+
+### Notes
+- `ALLOW_IP` in `vast_onstart.sh` is the user's dynamic public IP — update before pasting (was `89.180.47.218` on 2026-08-18).
+- Remote API is unauthenticated; ufw restricts port 8000 to `ALLOW_IP` only.
+- Instances are billed hourly — always destroy/stop when idle.
+
+---
+
 ## Superseded Phases
 
 The following phases from the original roadmap are **superseded** by the desktop app strategy (Sprints 7-13):
