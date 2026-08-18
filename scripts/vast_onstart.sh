@@ -2,7 +2,12 @@
 # KodaQuant dedicated compute node — Vast.ai onstart script.
 # Paste this into the Vast.ai launch dialog ("On-start script" field).
 # Idempotent (safe on re-start) and retries Docker Hub pulls (flaky on Vast).
+#
+# REQUIRED: fill ALLOW_IP with your public IP (curl ifconfig.me) so the
+# firewall opens port 8000 only for you. If left empty, ufw is skipped and
+# the API port is PUBLIC — anyone who scans the instance can use it.
 set -e
+ALLOW_IP="${ALLOW_IP:-}"
 log() { echo "[KodaQuant] $(date -u +%H:%M:%S) $*"; }
 
 log "bootstrapping dedicated compute node"
@@ -30,6 +35,17 @@ if ! docker info >/dev/null 2>&1; then
 fi
 docker info >/dev/null 2>&1 || { log "dockerd failed to start"; exit 1; }
 log "docker daemon up"
+
+# 3b. Firewall — keep SSH open, restrict API port 8000 to your IP
+if [ -n "$ALLOW_IP" ]; then
+  apt-get install -y -qq ufw || true
+  ufw allow 22/tcp
+  ufw allow from "$ALLOW_IP" to any port 8000 proto tcp
+  ufw --force enable || true
+  log "ufw enabled: ssh + port 8000 from $ALLOW_IP"
+else
+  log "WARNING: ALLOW_IP empty — skipping ufw (API port 8000 is PUBLIC)"
+fi
 
 # 4. Repo (idempotent — onstart re-runs on every instance start)
 if [ -d /root/thesisproj/.git ]; then
